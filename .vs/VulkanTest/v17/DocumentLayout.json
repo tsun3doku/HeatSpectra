@@ -1,0 +1,105 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\Main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|solutionrelative:VulkanTest\\Main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.frag||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|solutionrelative:VulkanTest\\shaders\\grid.frag||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.vert||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|solutionrelative:VulkanTest\\shaders\\grid.vert||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.vert||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|solutionrelative:VulkanTest\\shaders\\shader.vert||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.frag||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{9BFE6F85-D71F-4073-8E49-92DF29DA8EC3}|VulkanTest\\VulkanTest.vcxproj|solutionrelative:VulkanTest\\shaders\\shader.frag||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Main.cpp",
+              "DocumentMoniker": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\Main.cpp",
+              "RelativeDocumentMoniker": "VulkanTest\\Main.cpp",
+              "ToolTip": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\Main.cpp",
+              "RelativeToolTip": "VulkanTest\\Main.cpp",
+              "ViewState": "AQIAAM4FAAAAAAAAAAAEwDQGAAAvAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2024-08-24T03:10:18.653Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "grid.frag",
+              "DocumentMoniker": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.frag",
+              "RelativeDocumentMoniker": "VulkanTest\\shaders\\grid.frag",
+              "ToolTip": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.frag",
+              "RelativeToolTip": "VulkanTest\\shaders\\grid.frag",
+              "ViewState": "AQIAAAMAAAAAAAAAAAAAABIAAABKAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2024-10-30T08:14:56.565Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "grid.vert",
+              "DocumentMoniker": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.vert",
+              "RelativeDocumentMoniker": "VulkanTest\\shaders\\grid.vert",
+              "ToolTip": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\grid.vert",
+              "RelativeToolTip": "VulkanTest\\shaders\\grid.vert",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAABIAAAAAAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2024-10-30T08:14:52.7Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "shader.vert",
+              "DocumentMoniker": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.vert",
+              "RelativeDocumentMoniker": "VulkanTest\\shaders\\shader.vert",
+              "ToolTip": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.vert",
+              "RelativeToolTip": "VulkanTest\\shaders\\shader.vert",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAABMAAAABAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2024-09-22T05:12:37.947Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "shader.frag",
+              "DocumentMoniker": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.frag",
+              "RelativeDocumentMoniker": "VulkanTest\\shaders\\shader.frag",
+              "ToolTip": "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\VulkanTest\\shaders\\shader.frag",
+              "RelativeToolTip": "VulkanTest\\shaders\\shader.frag",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAwAAAABAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2024-09-22T05:12:37.14Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

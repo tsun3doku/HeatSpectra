@@ -1,0 +1,8 @@
+﻿  Main.cpp
+  GLM_GTX_hash requires C++11 standard library support
+  Generating code
+  0 of 3128 functions ( 0.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  VulkanTest.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\VulkanTest\x64\Release\VulkanTest.exe
