@@ -159,8 +159,10 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="vulkan_device.cpp" />
     <ClCompile Include="file_utils.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="UniformBufferUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.frag" />
@@ -169,7 +171,11 @@
     <None Include="shaders\shader.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="vulkan_device.hpp" />
+    <ClInclude Include="Camera.hpp" />
     <ClInclude Include="file_utils.h" />
+    <ClInclude Include="Structs.hpp" />
+    <ClInclude Include="UniformBufferUtils.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
