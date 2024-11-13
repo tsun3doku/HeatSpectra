@@ -33,6 +33,8 @@ public:
     void init(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions,
         const std::vector<const char*>& validationLayers, bool enableValidationLayers);
 
+    void cleanup();
+
     VkPhysicalDevice getPhysicalDevice() const {
         return physicalDevice;
     }
@@ -48,10 +50,11 @@ public:
     VkSurfaceKHR getSurface() const {
         return surface;
     }
-
+  
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
-
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    VkBuffer createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory& bufferMemory);
 
 private:
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -64,8 +67,8 @@ private:
     std::vector<const char*> deviceExtensions;
     std::vector<const char*> validationLayers;
     
-    bool enableValidationLayers = false;
-
+    bool enableValidationLayers = true;
+  
     void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface);
     bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);

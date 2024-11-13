@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <vector>
 #include <set>
+#include <iostream>
 
 void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions,
     const std::vector<const char*>& validationLayers, bool enableValidationLayers) {
@@ -9,19 +10,38 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     this->deviceExtensions = deviceExtensions;
     this->validationLayers = validationLayers;
     this->enableValidationLayers = enableValidationLayers;
-    // Pick a physical device
+    
     pickPhysicalDevice(instance, surface);
+    //query and print the physical device name
+    if (physicalDevice != VK_NULL_HANDLE) {
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+        std::cout << "Picked physical device: " << deviceProperties.deviceName << std::endl;
+        std::cout << "Physical device handle: " << physicalDevice << std::endl;
+    }
+    else {
+        std::cerr << "Failed to pick a suitable physical device" << std::endl;
+    }
 
-    // Create logical device
     createLogicalDevice(surface);
+}
+
+void VulkanDevice::cleanup() {
+    std::cout << "Cleaning up Vulkan device..." << std::endl;
+
+    if (device != VK_NULL_HANDLE) {
+        vkDestroyDevice(device, nullptr);
+        std::cout << "Destroyed Vulkan device." << std::endl;
+    }
+    device = VK_NULL_HANDLE;
 }
 
 void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
+   
     if (deviceCount == 0) {
-        throw std::runtime_error("failed to find GPUs with Vulkan support");
+        throw std::runtime_error("Failed to find GPUs with Vulkan support");
     }
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
@@ -35,8 +55,57 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     }
 
     if (physicalDevice == VK_NULL_HANDLE) {
-        throw std::runtime_error("failed to find a suitable GPU");
+        throw std::runtime_error("Failed to find a suitable GPU");
     }
+}
+uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    std::cout << "Searching for memory type in physical device: " << physicalDevice << std::endl;
+    if (physicalDevice == VK_NULL_HANDLE) {
+        throw std::runtime_error("PhysicalDevice is not initialized");
+    }
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("Failed to find suitable memory type");
+}
+
+VkBuffer VulkanDevice::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory& bufferMemory) {
+    VkBuffer buffer;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    //create the buffer
+    if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create buffer");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    //allocate memory for the buffer
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate buffer memory");
+    }
+
+    //bind memory to the buffer
+    vkBindBufferMemory(device, buffer, bufferMemory, 0);
+
+    return buffer;
 }
 
 void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
@@ -56,7 +125,7 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     }
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;  // Enable sampler anisotropy if supported
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -78,7 +147,7 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     }
 
     if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create logical device");
+        throw std::runtime_error("Failed to create logical device");
     }
 
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
@@ -141,6 +210,7 @@ bool VulkanDevice::checkDeviceExtensionSupport(VkPhysicalDevice device) {
 
     return requiredExtensions.empty();
 }
+
 
 QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     QueueFamilyIndices indices;

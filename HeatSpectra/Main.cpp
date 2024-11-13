@@ -1,10 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "file_utils.h"
+#include "File_utils.h"
 
-#define GLM_FORCE_LEFT_HANDED
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -18,6 +16,7 @@
 #include <glm/gtx/hash.hpp>
 
 #include "vulkan_device.hpp"
+#include "UniformBufferUtils.hpp"        
 
 #include <iostream>
 #include <fstream>
@@ -39,7 +38,6 @@ const uint32_t HEIGHT = 600;
 
 const std::string MODEL_PATH = "models/bb.obj";
 const std::string TEXTURE_PATH = "textures/texture.jpg";
-//const std::string BACKGROUND_PATH = "textures/background.jpg";
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -47,10 +45,6 @@ const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
 };
 
-/*const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
-*/
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
@@ -123,18 +117,6 @@ namespace std {
     };
 }
 
-struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-};
-
-struct GridUniformBufferObject {
-    glm::mat4 view;
-    glm::mat4 proj;
-    glm::vec3 pos;
-};
-
 uint32_t gridVertexCount = 6;
 
 class App {
@@ -153,13 +135,7 @@ private:
     VkDebugUtilsMessengerEXT debugMessenger{};
     VkSurfaceKHR surface{};
 
-    //VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    //VkDevice device{};
-
     VulkanDevice vulkanDevice;
-
-    VkQueue graphicsQueue{};
-    VkQueue presentQueue{};
 
     VkSwapchainKHR swapChain{};
     std::vector<VkImage> swapChainImages;
@@ -196,13 +172,7 @@ private:
     VkBuffer indexBuffer{};
     VkDeviceMemory indexBufferMemory{};
 
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
-    std::vector<VkBuffer> gridUniformBuffers;
-    std::vector<VkDeviceMemory> gridUniformBuffersMemory;
-    std::vector<void*> gridUniformBuffersMapped;
-   
+    UniformBufferManager uniformBufferManager;
 
     VkDescriptorPool descriptorPool{};
     VkDescriptorPool gridDescriptorPool{};
@@ -234,6 +204,7 @@ private:
     }
 
     void initVulkan() {
+        std::cout << "Initializing Vulkan..." << std::endl;
         createInstance();
         setupDebugMessenger();
         createSurface();
@@ -242,9 +213,9 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-        createGridDescriptorSetLayout(); //
+        createGridDescriptorSetLayout(); 
         createGraphicsPipeline();
-        createGridGraphicsPipeline(); //
+        createGridGraphicsPipeline(); 
         createCommandPool();
         createDepthResources();
         createFramebuffers();
@@ -254,8 +225,7 @@ private:
         loadModel();
         createVertexBuffer();
         createIndexBuffer();
-        createUniformBuffers();
-        createGridUniformBuffers();
+        uniformBufferManager.init(vulkanDevice, swapChainExtent);
         createDescriptorPool();
         createGridDescriptorPool();
         createDescriptorSets();
@@ -300,14 +270,9 @@ private:
         vkDestroyPipelineLayout(vulkanDevice.getDevice(), gridPipelineLayout, nullptr);
         vkDestroyRenderPass(vulkanDevice.getDevice(), renderPass, nullptr);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroyBuffer(vulkanDevice.getDevice(), uniformBuffers[i], nullptr);
-            vkFreeMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], nullptr);
-            vkDestroyBuffer(vulkanDevice.getDevice(), gridUniformBuffers[i], nullptr);
-            vkFreeMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], nullptr);
-        }
-        
-        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
+        uniformBufferManager.cleanup();
+
+;        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
         vkDestroyDescriptorPool(vulkanDevice.getDevice(), gridDescriptorPool, nullptr);
 
         vkDestroySampler(vulkanDevice.getDevice(), textureSampler, nullptr);
@@ -332,13 +297,13 @@ private:
         }
 
         vkDestroyCommandPool(vulkanDevice.getDevice(), commandPool, nullptr);
-
-        vkDestroyDevice(vulkanDevice.getDevice(), nullptr);
-       
+        
+        vulkanDevice.cleanup();
+     
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
-
+        
         vkDestroySurfaceKHR(instance, vulkanDevice.getSurface(), nullptr);
         vkDestroyInstance(instance, nullptr);
         
@@ -372,14 +337,14 @@ private:
     void createInstance() {
 
         if (enableValidationLayers && !checkValidationLayerSupport()) {
-            throw std::runtime_error("validation layers requested, but not available");
+            throw std::runtime_error("Validation layers requested, but not available");
         }
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "t-dsim";
+        appInfo.pApplicationName = "HeatSpectra";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "ThermoV";
+        appInfo.pEngineName = "Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
@@ -406,10 +371,9 @@ private:
         } 
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create instance");
+            throw std::runtime_error("Failed to create instance");
         }
     }
-
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
@@ -427,13 +391,13 @@ private:
         populateDebugMessengerCreateInfo(createInfo);
 
         if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-            throw std::runtime_error("failed to set up debug messenger");
+            throw std::runtime_error("Failed to set up debug messenger");
         }
     }
 
     void createSurface() {
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create window surface");
+            throw std::runtime_error("Failed to create window surface");
         }
     }
 
@@ -479,7 +443,7 @@ private:
 
 
         if (vkCreateSwapchainKHR(vulkanDevice.getDevice(), &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create swap chain");
+            throw std::runtime_error("Failed to create swap chain");
         }
 
         vkGetSwapchainImagesKHR(vulkanDevice.getDevice(), swapChain, &imageCount, nullptr);
@@ -554,7 +518,7 @@ private:
         renderPassInfo.pDependencies = &dependency;
 
         if (vkCreateRenderPass(vulkanDevice.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create render pass");
+            throw std::runtime_error("Failed to create render pass");
         }
     }
 
@@ -585,39 +549,35 @@ private:
 
         // Create the descriptor set layout
         if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create descriptor set layout");
+            throw std::runtime_error("Failed to create descriptor set layout");
         }
     }
 
     void createGridDescriptorSetLayout() {
-        // Binding for a uniform buffer (e.g., for model-view-projection matrix)
+        
         VkDescriptorSetLayoutBinding gridUboLayoutBinding{};
         gridUboLayoutBinding.binding = 0;
-        gridUboLayoutBinding.descriptorCount = 1; // Use 1 for static or dynamic offsets
+        gridUboLayoutBinding.descriptorCount = 1; 
         gridUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        gridUboLayoutBinding.pImmutableSamplers = nullptr; // Not applicable for buffers
+        gridUboLayoutBinding.pImmutableSamplers = nullptr; 
         gridUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-        // Binding for a texture sampler (if your grid shader uses one)
+      
         VkDescriptorSetLayoutBinding gridSamplerLayoutBinding{};
         gridSamplerLayoutBinding.binding = 1;
-        gridSamplerLayoutBinding.descriptorCount = 1; // Assuming one sampler
+        gridSamplerLayoutBinding.descriptorCount = 1; 
         gridSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        gridSamplerLayoutBinding.pImmutableSamplers = nullptr; // Not applicable for buffers
+        gridSamplerLayoutBinding.pImmutableSamplers = nullptr; 
         gridSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        // Create an array of bindings
+      
         std::array<VkDescriptorSetLayoutBinding, 2> gridBindings = { gridUboLayoutBinding, gridSamplerLayoutBinding };
-
-        // Create the descriptor set layout
+      
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(gridBindings.size());
         layoutInfo.pBindings = gridBindings.data();
 
-        // Create the descriptor set layout
         if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &gridDescriptorSetLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create grid descriptor set layout");
+            throw std::runtime_error("Failed to create grid descriptor set layout");
         }
     }
 
@@ -628,8 +588,7 @@ private:
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
-        // Create graphics pipeline for the main model
+   
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -643,8 +602,7 @@ private:
         fragShaderStageInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-        // Define vertex input state
+       
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -655,8 +613,7 @@ private:
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
         vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-        // Input assembly state
+       
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -729,7 +686,7 @@ private:
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 
         if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout");
+            throw std::runtime_error("Failed to create pipeline layout");
         }
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -752,7 +709,7 @@ private:
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
         if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create graphics pipeline");
+            throw std::runtime_error("Failed to create graphics pipeline");
         }
 
         vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
@@ -766,8 +723,7 @@ private:
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
-
-        // Define shader stages
+      
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -781,8 +737,7 @@ private:
         fragShaderStageInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-        // Setup vertex input state (assuming it’s similar to your main pipeline)
+       
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -793,9 +748,6 @@ private:
         vertexInputInfo.vertexAttributeDescriptionCount = 0;
         vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
         vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-        // Define the rest of the pipeline states (input assembly, viewport, rasterization, etc.)
-        // Similar to how you did in createGraphicsPipeline
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -862,18 +814,15 @@ private:
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        // Create the pipeline layout if you haven't already done so
-        // (make sure it’s compatible with the shaders you are using)
         VkPipelineLayoutCreateInfo gridPipelineLayoutInfo{};
         gridPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        gridPipelineLayoutInfo.setLayoutCount = 1; // If you're using descriptor sets
-        gridPipelineLayoutInfo.pSetLayouts = &gridDescriptorSetLayout; // Adjust as needed
+        gridPipelineLayoutInfo.setLayoutCount = 1;
+        gridPipelineLayoutInfo.pSetLayouts = &gridDescriptorSetLayout; 
 
         if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &gridPipelineLayoutInfo, nullptr, &gridPipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create grid pipeline layout");
+            throw std::runtime_error("Failed to create grid pipeline layout");
         }
 
-        // Create the graphics pipeline
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -886,21 +835,19 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = gridPipelineLayout; // Use the layout for the grid pipeline
-        pipelineInfo.renderPass = renderPass; // Use the same render pass
+        pipelineInfo.layout = gridPipelineLayout; 
+        pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
         if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &gridPipeline) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create grid graphics pipeline");
+            throw std::runtime_error("Failed to create grid graphics pipeline");
         }
 
         vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
         vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
     }
   
-
-
     void createFramebuffers() {
         swapChainFramebuffers.resize(swapChainImageViews.size());
 
@@ -921,7 +868,7 @@ private:
             framebufferInfo.layers = 1;
 
             if (vkCreateFramebuffer(vulkanDevice.getDevice(), &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create framebuffer");
+                throw std::runtime_error("Failed to create framebuffer");
             }
         }
     }
@@ -935,7 +882,7 @@ private:
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
         if (vkCreateCommandPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create graphics command pool");
+            throw std::runtime_error("Failed to create graphics command pool");
         }
     }
 
@@ -959,7 +906,7 @@ private:
             }
         }
 
-        throw std::runtime_error("failed to find supported format");
+        throw std::runtime_error("Failed to find supported format");
     }
 
     VkFormat findDepthFormat() {
@@ -980,12 +927,17 @@ private:
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels) {
-            throw std::runtime_error("failed to load texture image");
+            throw std::runtime_error("Failed to load texture image");
         }
         
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        stagingBuffer = vulkanDevice.createBuffer(
+            imageSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBufferMemory
+        );
 
         void* data;
         vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, imageSize, 0, &data);
@@ -1030,10 +982,9 @@ private:
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
         if (vkCreateSampler(vulkanDevice.getDevice(), &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create texture sampler");
+            throw std::runtime_error("Failed to create texture sampler");
         }
     }
-
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
         VkImageViewCreateInfo viewInfo{};
@@ -1049,13 +1000,12 @@ private:
 
         VkImageView imageView;
         if (vkCreateImageView(vulkanDevice.getDevice(), &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create texture image view!");
+            throw std::runtime_error("Failed to create texture image view");
         }
 
         return imageView;
     }
 
-    
     void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1073,7 +1023,7 @@ private:
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         if (vkCreateImage(vulkanDevice.getDevice(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create image");
+            throw std::runtime_error("Failed to create image");
         }
 
         VkMemoryRequirements memRequirements;
@@ -1082,10 +1032,10 @@ private:
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+        allocInfo.memoryTypeIndex = vulkanDevice.findMemoryType(memRequirements.memoryTypeBits, properties);
 
         if (vkAllocateMemory(vulkanDevice.getDevice(), &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate image memory");
+            throw std::runtime_error("Failed to allocate image memory");
         }
 
         vkBindImageMemory(vulkanDevice.getDevice(), image, imageMemory, 0);
@@ -1125,7 +1075,7 @@ private:
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         }
         else {
-            throw std::invalid_argument("unsupported layout transition");
+            throw std::invalid_argument("Unsupported layout transition");
         }
 
         vkCmdPipelineBarrier(
@@ -1200,7 +1150,6 @@ private:
                 indices.push_back(uniqueVertices[vertex]);
             }
         }
-
     }
 
     void createVertexBuffer() {
@@ -1208,15 +1157,24 @@ private:
 
         VkBuffer stagingBuffer{};
         VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        stagingBuffer = vulkanDevice.createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBufferMemory
+        );
         
         void* data;
         vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, vertices.data(), (size_t) bufferSize);
         vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-        
+        vertexBuffer = vulkanDevice.createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            vertexBufferMemory
+        );
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
         vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
@@ -1228,55 +1186,30 @@ private:
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        stagingBuffer = vulkanDevice.createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBufferMemory
+        );
 
         void* data;
         vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, indices.data(), (size_t)bufferSize);
         vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+        indexBuffer = vulkanDevice.createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            indexBufferMemory
+        );
 
         copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
         vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
         vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
     }
-
-
-    void createUniformBuffers() {
-        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
-
-            vkMapMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
-        }
-    }
-
-    void createGridUniformBuffers() {
-        VkDeviceSize bufferSize = sizeof(GridUniformBufferObject); // Use the size of your GridUniformBufferObject
-
-        gridUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        gridUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        gridUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT); // Optional, if you want to keep track of mapped memory
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            createBuffer(bufferSize,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                gridUniformBuffers[i],
-                gridUniformBuffersMemory[i]);
-
-            // If you want to map the memory for easy access
-            vkMapMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], 0, bufferSize, 0, &gridUniformBuffersMapped[i]);
-        }
-    }
-
 
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
@@ -1294,7 +1227,7 @@ private:
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create descriptor pool");
+            throw std::runtime_error("Failed to create descriptor pool");
         }
     }
 
@@ -1315,7 +1248,7 @@ private:
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &gridDescriptorPool) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create grid descriptor pool");
+            throw std::runtime_error("Failed to create grid descriptor pool");
         }
     }
 
@@ -1329,12 +1262,12 @@ private:
 
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate descriptor sets");
+            throw std::runtime_error("Failed to allocate descriptor sets");
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffers[i];
+            bufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
@@ -1368,25 +1301,25 @@ private:
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, gridDescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = gridDescriptorPool; // Use the grid descriptor pool
+        allocInfo.descriptorPool = gridDescriptorPool; 
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         allocInfo.pSetLayouts = layouts.data();
 
         gridDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, gridDescriptorSets.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate grid descriptor sets");
+            throw std::runtime_error("Failed to allocate grid descriptor sets");
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = gridUniformBuffers[i]; // Use the appropriate uniform buffer for the grid
+            bufferInfo.buffer = uniformBufferManager.getGridUniformBuffers()[i];
             bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(GridUniformBufferObject); // Adjust to your grid's uniform struct
+            bufferInfo.range = sizeof(GridUniformBufferObject); 
 
             std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = gridDescriptorSets[i]; // Use grid descriptor sets
-            descriptorWrites[0].dstBinding = 0; // Binding for the uniform buffer
+            descriptorWrites[0].dstSet = gridDescriptorSets[i]; 
+            descriptorWrites[0].dstBinding = 0; 
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptorWrites[0].descriptorCount = 1;
@@ -1396,33 +1329,6 @@ private:
         }
     }
 
-
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        if (vkCreateBuffer(vulkanDevice.getDevice(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create buffer");
-        }
-
-        VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(vulkanDevice.getDevice(), buffer, &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-        if (vkAllocateMemory(vulkanDevice.getDevice(), &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate buffer memory");
-        }
-
-        vkBindBufferMemory(vulkanDevice.getDevice(), buffer, bufferMemory, 0);
-    }
-    
     VkCommandBuffer beginSingleTimeCommands() {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1466,20 +1372,6 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
     
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-        VkPhysicalDeviceMemoryProperties memProperties;
-        vkGetPhysicalDeviceMemoryProperties(vulkanDevice.getPhysicalDevice(), &memProperties);
-
-        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-                return i;
-            }
-        }
-
-        throw std::runtime_error("failed to find suitable memory type");
-
-    }
-
     void createCommandBuffers() {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -1490,7 +1382,7 @@ private:
         allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
         if (vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create command buffer");
+            throw std::runtime_error("Failed to create command buffer");
         }
     }
 
@@ -1499,7 +1391,7 @@ private:
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer");
+            throw std::runtime_error("Failed to begin recording command buffer");
         }
 
         VkRenderPassBeginInfo renderPassInfo{};
@@ -1534,25 +1426,24 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // Draw the main model
+        //draw main model
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0); // Draw indexed vertices
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-        // Now draw the grid
+        //draw grid
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
-        // Since the grid is generated in the shader, there's no need to bind a vertex buffer for the grid
-        // Simply issue the draw call. Update gridVertexCount to the number of vertices your shader generates.
+       
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipelineLayout, 0, 1, &gridDescriptorSets[currentFrame], 0, nullptr);
         vkCmdDraw(commandBuffer, gridVertexCount, 1, 0, 0);
         
         vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer");
+            throw std::runtime_error("Failed to record command buffer");
         }
         
     }
@@ -1573,33 +1464,9 @@ private:
             if (vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create synchronization objects for a frame");
+                throw std::runtime_error("Failed to create synchronization objects for a frame");
             }
         }
-    }
-    void updateUniformBuffer(uint32_t currentImage, UniformBufferObject& ubo) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
-        float angle = time * glm::radians(90.0f);
-
-        ubo.model = glm::rotate(ubo.model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, -2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        ubo.proj = glm::perspective(glm::radians(40.0f), (float)(swapChainExtent.width / -(float)swapChainExtent.height), 0.05f, 100.0f); //flip height
-        ubo.proj[1][1] *= -1;
-
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-    }
-
-    void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
-        gridUbo.view = ubo.view;  // Use the updated view matrix
-        gridUbo.proj = ubo.proj;  // Use the updated projection matrix
-        gridUbo.pos = glm::vec3(0.0f, 0.0f, 0.0f); // Set grid position
-        memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
     }
     
     void drawFrame() {
@@ -1613,17 +1480,17 @@ private:
             return;
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            throw std::runtime_error("failed to acquire swap chain image");
+            throw std::runtime_error("Failed to acquire swap chain image");
         }
         UniformBufferObject ubo{};
-        updateUniformBuffer(currentFrame, ubo);
+        uniformBufferManager.updateUniformBuffer(currentFrame, ubo);
 
         GridUniformBufferObject gridUbo{};
-        updateGridUniformBuffer(currentFrame, ubo, gridUbo);
+        uniformBufferManager.updateGridUniformBuffer(currentFrame, ubo, gridUbo);
         
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 
-        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         VkSubmitInfo submitInfo{};
@@ -1643,7 +1510,7 @@ private:
         submitInfo.pSignalSemaphores = signalSemaphores;
 
         if (vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit draw command buffer");
+            throw std::runtime_error("Failed to submit draw command buffer");
         }
 
         VkPresentInfoKHR presentInfo{};
@@ -1665,7 +1532,7 @@ private:
             recreateSwapChain();
         }
         else if (result != VK_SUCCESS) {
-            throw std::runtime_error("failed to presnet swap chain image");
+            throw std::runtime_error("Failed to presnet swap chain image");
         }
         
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1679,7 +1546,7 @@ private:
 
         VkShaderModule shaderModule;
         if (vkCreateShaderModule(vulkanDevice.getDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shader module");
+            throw std::runtime_error("Failed to create shader module");
         }
 
         return shaderModule;
@@ -1773,7 +1640,6 @@ private:
     }
 
 };
-
 
 int main() {
     App app;
