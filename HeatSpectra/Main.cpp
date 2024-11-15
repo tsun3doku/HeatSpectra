@@ -16,7 +16,8 @@
 #include <glm/gtx/hash.hpp>
 
 #include "vulkan_device.hpp"
-#include "UniformBufferUtils.hpp"        
+#include "UniformBufferUtils.hpp" 
+#include "Camera.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -33,8 +34,8 @@
 #include <set>
 #include <unordered_map>
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 960;
+const uint32_t HEIGHT = 540;
 
 const std::string MODEL_PATH = "models/bb.obj";
 const std::string TEXTURE_PATH = "textures/texture.jpg";
@@ -186,6 +187,8 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
 
+    Camera camera;
+ 
     bool framebufferResized = false;
 
     void initWindow() {
@@ -194,13 +197,23 @@ private:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-        glfwSetWindowUserPointer(window, this);
+        glfwSetWindowUserPointer(window, &camera);
+        glfwSetScrollCallback(window, scroll_callback);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+        
+
+        //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); //fix this so its disabled only when window active
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
+    }
+
+    static void scroll_callback(GLFWwindow* window, double xOffset, double yOffset) {
+        Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+        camera->processMouseScroll(xOffset, yOffset);  // Pass scroll data to the camera
     }
 
     void initVulkan() {
@@ -235,9 +248,16 @@ private:
     
     }
 
-    void mainLoop() {
-        while (!glfwWindowShouldClose(window)) {
-            glfwPollEvents();
+    void mainLoop() {    
+        
+        while (!glfwWindowShouldClose(window)) {                   
+            glfwPollEvents(); 
+            float deltaTime = 0.016f;
+            camera.processKeyInput(window);
+            camera.processMouseMovement(window);
+
+            camera.update(deltaTime);
+
             drawFrame();
         }
 
@@ -1483,10 +1503,10 @@ private:
             throw std::runtime_error("Failed to acquire swap chain image");
         }
         UniformBufferObject ubo{};
-        uniformBufferManager.updateUniformBuffer(currentFrame, ubo);
+        uniformBufferManager.updateUniformBuffer(currentFrame, camera, ubo);
 
         GridUniformBufferObject gridUbo{};
-        uniformBufferManager.updateGridUniformBuffer(currentFrame, ubo, gridUbo);
+        uniformBufferManager.updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
         
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 

@@ -8,6 +8,7 @@
 #include <vector>
 #include "Structs.hpp"
 #include "vulkan_device.hpp"
+#include "Camera.hpp"
 
 
 class UniformBufferManager {
@@ -15,8 +16,8 @@ public:
 	UniformBufferManager() = default;
 
 	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent);
-	void updateUniformBuffer(uint32_t currentImage, UniformBufferObject& ubo);
-	void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
+	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
+	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
 
 	void createUniformBuffers();
 	void createGridUniformBuffers();

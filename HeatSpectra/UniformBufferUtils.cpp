@@ -85,7 +85,7 @@ void UniformBufferManager::createGridUniformBuffers() {
     }
 }
 
-void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, UniformBufferObject& ubo) {
+void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -97,15 +97,15 @@ void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, UniformBuf
     ubo.model = glm::rotate(ubo.model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
     //(camera position, look-at, and up vector)
-    ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, -2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    ubo.view = camera.getViewMatrix();
 
-    ubo.proj = glm::perspective(glm::radians(40.0f), (float)(swapChainExtent.width / -(float)swapChainExtent.height), 0.05f, 100.0f); // flip height
+    ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
     ubo.proj[1][1] *= -1; 
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
-void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
+void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
     //grid ubo shares same matrices as main ubo
    
     gridUbo.view = ubo.view;

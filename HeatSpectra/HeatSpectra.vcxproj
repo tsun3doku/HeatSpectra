@@ -159,6 +159,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="vulkan_device.cpp" />
     <ClCompile Include="file_utils.cpp" />
     <ClCompile Include="Main.cpp" />

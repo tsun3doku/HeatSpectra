@@ -2,35 +2,44 @@
 #define CAMERA_HPP
 
 #include <glm/glm.hpp>
+#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
 
 class Camera {
 public:
-	Camera(float fov, float aspectRatio, glm::vec3 position, glm::vec3 up, glm::vec3 front);
+    void update(float deltaTime);  // Update position based on velocity
+    void processKeyInput(GLFWwindow* window);  // Process key input
+    void processMouseMovement(GLFWwindow* window);
+    void processMouseScroll(double xOffset, double yOffset);// Process mouse movement
+    bool isMousePressed;
+    glm::mat4 getViewMatrix() const;  // Get the view matrix for the camera
+    glm::mat4 getProjectionMatrix(float aspectRatio) const;  // Get the projection matrix for the camera
 
-	void setPosition(glm::vec3 position);
-	void setOrientation(glm::vec3 front, glm::vec3 up);
+    float radius = 2.0f; // Camera distance from origin
 
-	glm::mat4 getViewMatrix() const;
-	glm::mat4 getProjectionMatrix() const;
-
-	void update(float deltaTime);
+    float sensitivity = 0.25f;  // Mouse interaction speed
 
 private:
-	glm::vec3 position;
-	glm::vec3 front;
-	glm::vec3 up;
+    glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);  // Starting position
+    glm::vec3 lookAt = glm::vec3(0.0f, 0.0f, 0.0f);     // Looking at the origin
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);         // Up vector
 
-	float fov;
-	float aspectRatio;
-	float nearPlane;
-	float farPlane;
+    glm::vec3 velocity = glm::vec3(0.0f);  // Movement velocity (WASD)
 
-	glm::mat4 view;
-	glm::mat4 projection;
+    void updateLookAt();  // Update lookAt based on pitch and yaw
+    glm::mat4 getRotationMatrix() const;  // Rotation matrix based on pitch and yaw
 
-	void updateViewMatrix();
-	void updateProjectionMatrix();
+    float pitch = 0.0f;
+    float yaw = -90.0f;
+    float roll = 0.0f;
+
+    float nearPlane = 0.1f, farPlane = 100.0f;
+
+    float fovVelocity = 0.0f;
+    float dampingFactor = 0.1f;
+    float currentFov = 45.0f;
+    float maxVelocity = 100.0f;
 };
 
 #endif
