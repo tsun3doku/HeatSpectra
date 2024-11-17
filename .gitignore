@@ -1,6 +1,8 @@
 .vs/
 .vscode/
 .idea/
+*.pdb
+*.ilk
 *.ipch
 *.suo
 *.user
