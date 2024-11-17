@@ -33,6 +33,8 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <thread>
+#include <mutex>
 
 const uint32_t WIDTH = 960;
 const uint32_t HEIGHT = 540;
@@ -186,8 +188,10 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
+    uint32_t frameRate = 144;
 
     Camera camera;
+    std::mutex cameraMutex;
  
     bool framebufferResized = false;
 
@@ -248,21 +252,48 @@ private:
     
     }
 
-    void mainLoop() {    
-        
-        while (!glfwWindowShouldClose(window)) {                   
-            glfwPollEvents(); 
-            float deltaTime = 0.016f;
+    void mainLoop() {
+    std::thread renderThread(&App::renderLoop, this);
+
+    auto lastTime = std::chrono::high_resolution_clock::now();
+    float targetFrameTime = 1.0f / frameRate;
+
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+
+        if (deltaTime > targetFrameTime) {
+            std::lock_guard<std::mutex> lock(cameraMutex);
             camera.processKeyInput(window);
             camera.processMouseMovement(window);
-
             camera.update(deltaTime);
+            lastTime = currentTime;
+        }
+    }
 
+    renderThread.join();
+}
+void renderLoop() {
+    float targetFrameTime = 1.0f / frameRate;
+
+    while (!glfwWindowShouldClose(window)) {
+        {
+            std::lock_guard<std::mutex> lock(cameraMutex);
             drawFrame();
         }
+        auto startTime = std::chrono::high_resolution_clock::now();
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto frameDuration = std::chrono::duration<float>(endTime - startTime).count();
 
-        vkDeviceWaitIdle(vulkanDevice.getDevice());
+        if (frameDuration < targetFrameTime) {
+            std::this_thread::sleep_for(std::chrono::duration<float>(targetFrameTime - frameDuration));
+
+        }
+        std::this_thread::sleep_for(std::chrono::duration<float>(targetFrameTime));
     }
+    vkDeviceWaitIdle(vulkanDevice.getDevice());
+}
 
     void cleanupSwapChain() {
         vkDestroyImageView(vulkanDevice.getDevice(), depthImageView, nullptr);
