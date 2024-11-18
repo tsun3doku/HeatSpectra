@@ -100,7 +100,7 @@ void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& ca
     ubo.view = camera.getViewMatrix();
 
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
-    ubo.proj[1][1] *= -1; 
+    ubo.proj[1][1] *= -1;
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }

@@ -16,6 +16,10 @@ public:
     glm::mat4 getViewMatrix() const;  // Get the view matrix for the camera
     glm::mat4 getProjectionMatrix(float aspectRatio) const;  // Get the projection matrix for the camera
 
+    glm::vec3 getPosition() const {
+        return position;  // Return the camera's position
+    }
+
     float radius = 2.0f; // Camera distance from origin
 
     float sensitivity = 0.25f;  // Mouse interaction speed
