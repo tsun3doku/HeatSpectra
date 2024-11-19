@@ -6,6 +6,12 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 proj;
 } ubo;
 
+layout(set = 0, binding = 2) uniform LightUniformBufferObject {
+    vec3 lightPos_Key;
+    vec3 lightPos_Rim;
+    vec3 lightAmbient;
+} lightUbo;
+
 layout(location = 0) in vec3 fragColor;     // Color passed from vertex shader
 layout(location = 1) in vec3 fragPosition;  // Position in world space passed from vertex shader
 layout(location = 2) in vec3 fragNormal;    // Normal passed from vertex shader

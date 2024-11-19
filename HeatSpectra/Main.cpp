@@ -39,8 +39,8 @@
 const uint32_t WIDTH = 960;
 const uint32_t HEIGHT = 540;
 
-const std::string MODEL_PATH = "models/bb.obj";
-const std::string TEXTURE_PATH = "textures/texture.jpg";
+const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
+const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -590,21 +590,28 @@ void renderLoop() {
     void createDescriptorSetLayout() {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorCount = 1; // Use 1 for dynamic offsets
+        uboLayoutBinding.descriptorCount = 1; 
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.pImmutableSamplers = nullptr; // Not applicable for buffers
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        uboLayoutBinding.pImmutableSamplers = nullptr; 
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        // Binding for a texture sampler (if you are using one)
+        // Binding for a texture sampler
         VkDescriptorSetLayoutBinding samplerLayoutBinding{};
         samplerLayoutBinding.binding = 1;
-        samplerLayoutBinding.descriptorCount = 1; // Assuming one sampler
+        samplerLayoutBinding.descriptorCount = 1; 
         samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr; // Not applicable for buffers
+        samplerLayoutBinding.pImmutableSamplers = nullptr; 
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
+        
+        // Binding for the light UBO
+        VkDescriptorSetLayoutBinding lightUboLayoutBinding{};
+        lightUboLayoutBinding.binding = 2; 
+        lightUboLayoutBinding.descriptorCount = 1;
+        lightUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        lightUboLayoutBinding.pImmutableSamplers = nullptr;
+        lightUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Staged to the vertex shader
         // Create an array of bindings
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+        std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uboLayoutBinding, samplerLayoutBinding, lightUboLayoutBinding };
 
         // Create the descriptor set layout
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -612,7 +619,6 @@ void renderLoop() {
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
-        // Create the descriptor set layout
         if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create descriptor set layout");
         }
@@ -648,8 +654,8 @@ void renderLoop() {
 
     void createGraphicsPipeline() {
         // Load the main model shaders
-        auto vertShaderCode = readFile("shaders/vert.spv");
-        auto fragShaderCode = readFile("shaders/frag.spv");
+        auto vertShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/vert.spv"); //change
+        auto fragShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/frag.spv"); //change
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -783,8 +789,8 @@ void renderLoop() {
     }
 
     void createGridGraphicsPipeline() {
-        auto vertShaderCode = readFile("shaders/grid_vert.spv");
-        auto fragShaderCode = readFile("shaders/grid_frag.spv");
+        auto vertShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/grid_vert.spv"); //change
+        auto fragShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/grid_frag.spv"); //change
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1292,11 +1298,13 @@ void renderLoop() {
     }
 
     void createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        std::array<VkDescriptorPoolSize, 3> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1351,12 +1359,17 @@ void renderLoop() {
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
+            VkDescriptorBufferInfo lightBufferInfo{};
+            lightBufferInfo.buffer = uniformBufferManager.getLightBuffers()[i]; 
+            lightBufferInfo.offset = 0;
+            lightBufferInfo.range = sizeof(LightUniformBufferObject);
+
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = textureImageView;
             imageInfo.sampler = textureSampler;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
@@ -1372,6 +1385,14 @@ void renderLoop() {
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[1].descriptorCount = 1;
             descriptorWrites[1].pImageInfo = &imageInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;  // Binding location for the Light UBO
+            descriptorWrites[2].dstArrayElement = 0;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pBufferInfo = &lightBufferInfo;
 
             vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -1506,7 +1527,7 @@ void renderLoop() {
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        //draw main model
+        // Draw main model
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -1514,7 +1535,7 @@ void renderLoop() {
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
-        //draw grid
+        // Draw grid
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
        
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipelineLayout, 0, 1, &gridDescriptorSets[currentFrame], 0, nullptr);
@@ -1524,8 +1545,7 @@ void renderLoop() {
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("Failed to record command buffer");
-        }
-        
+        }  
     }
 
     void createSyncObjects() {
@@ -1567,6 +1587,9 @@ void renderLoop() {
 
         GridUniformBufferObject gridUbo{};
         uniformBufferManager.updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
+
+        LightUniformBufferObject lightUbo{};
+        uniformBufferManager.updateLightUniformBuffer(currentFrame, lightUbo);
         
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 

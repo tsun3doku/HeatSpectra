@@ -1,4 +1,0 @@
-﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(531,5): warning MSB8028: The intermediate directory (x64\Debug\) contains files shared from another project (VulkanTest.vcxproj).  This can lead to incorrect clean and rebuild behavior.
-  Main.cpp
-  GLM_GTX_hash requires C++11 standard library support
-  HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Debug\HeatSpectra.exe

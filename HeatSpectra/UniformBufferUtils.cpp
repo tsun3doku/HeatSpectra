@@ -18,7 +18,7 @@ void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChain
     
     createUniformBuffers();
     createGridUniformBuffers();
- 
+    createLightUniformBuffers();
 }
 
 void UniformBufferManager::cleanup() {
@@ -45,6 +45,19 @@ void UniformBufferManager::cleanup() {
              
             std::cout << "Freed grid uniform buffer memory " << gridUniformBuffersMemory[i] << std::endl;
         }
+
+        if (lightBuffers[i] != VK_NULL_HANDLE) {
+            vkDestroyBuffer(vulkanDevice->getDevice(), lightBuffers[i], nullptr);
+
+            std::cout << "Destroyed light buffer " << lightBuffers[i] << std::endl;
+        }
+
+        if (lightBuffersMemory[i] != VK_NULL_HANDLE) {
+            vkFreeMemory(vulkanDevice->getDevice(), lightBuffersMemory[i], nullptr);
+
+            std::cout << "Freed light buffer memory " << lightBuffersMemory[i] << std::endl;
+        }
+
     }
 }
 
@@ -85,18 +98,34 @@ void UniformBufferManager::createGridUniformBuffers() {
     }
 }
 
+void UniformBufferManager::createLightUniformBuffers() {
+    VkDeviceSize bufferSize = sizeof(LightUniformBufferObject); 
+    
+    lightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    lightBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    lightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        lightBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            lightBuffersMemory[i]);
+
+        vkMapMemory(vulkanDevice->getDevice(), lightBuffersMemory[i], 0, bufferSize, 0, &lightBuffersMapped[i]);
+    }
+}
+
 void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    //time dependent rotation 
+    // Time dependent rotation 
     ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     float angle = time * glm::radians(90.0f);
     ubo.model = glm::rotate(ubo.model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
-    //(camera position, look-at, and up vector)
+    // (Camera position, look-at, and up vector)
     ubo.view = camera.getViewMatrix();
 
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
@@ -106,8 +135,8 @@ void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& ca
 }
 
 void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
-    //grid ubo shares same matrices as main ubo
-   
+    
+    // Grid ubo shares same matrices as main ubo   
     gridUbo.view = ubo.view;
     gridUbo.proj = ubo.proj;
     gridUbo.pos = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -115,3 +144,9 @@ void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera&
     memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
 }
 
+void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo) {
+    lightUbo.lightPos_Key = glm::vec3(1.0f, 3.0f, -1.0f);
+    lightUbo.lightPos_Rim = glm::vec3(-1.0f, 1.0f, 2.0f);
+    lightUbo.lightAmbient = glm::vec3(0.1f, 0.1f, 0.1f);
+    memcpy(lightBuffersMapped[currentImage], &lightUbo, sizeof(lightUbo));
+}

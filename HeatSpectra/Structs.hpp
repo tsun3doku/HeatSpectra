@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-//main UBO
+// Main UBO
 struct UniformBufferObject {
     alignas(16) glm::mat4 model;  
     alignas(16) glm::mat4 view;  
@@ -12,11 +12,19 @@ struct UniformBufferObject {
    
 };
 
-//grid UBO
+// Grid UBO
 struct GridUniformBufferObject {
-    glm::mat4 view; 
-    glm::mat4 proj; 
-    glm::vec3 pos; 
+    alignas(16) glm::mat4 view; 
+    alignas(16) glm::mat4 proj; 
+    alignas(16) glm::vec3 pos; 
+};
+
+// Light UBO
+struct LightUniformBufferObject {
+    alignas(16) glm::vec3 lightPos_Key;
+    alignas(16) glm::vec3 lightPos_Rim;
+    alignas(16) glm::vec3 lightAmbient;
+    
 };
 
 #endif
