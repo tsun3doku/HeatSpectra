@@ -1,3 +1,4 @@
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -34,7 +35,7 @@
 #include <set>
 #include <unordered_map>
 #include <thread>
-#include <mutex>
+#include <atomic>
 
 const uint32_t WIDTH = 960;
 const uint32_t HEIGHT = 540;
@@ -202,24 +203,23 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
-    uint32_t frameRate = 144;
+    uint32_t frameRate = 120;
 
     Camera camera;
-    std::mutex cameraMutex;
  
     bool framebufferResized = false;
+    std::atomic<bool> isCameraUpdated{ false };
 
     void initWindow() {
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwSwapInterval(0);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, &camera);
         glfwSetScrollCallback(window, scroll_callback);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-
-        
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);   
 
         //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); //fix this so its disabled only when window active
     }
@@ -265,49 +265,56 @@ private:
         createSyncObjects();
     
     }
-
     void mainLoop() {
-    std::thread renderThread(&App::renderLoop, this);
+        std::thread renderThread(&App::renderLoop, this);  // Separate render loop thread
 
-    auto lastTime = std::chrono::high_resolution_clock::now();
-    float targetFrameTime = 1.0f / frameRate;
+        auto lastTime = std::chrono::high_resolution_clock::now();
+        float targetFrameTime = 1.0f / frameRate;
 
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+        while (!glfwWindowShouldClose(window)) {
+            glfwPollEvents(); 
 
-        if (deltaTime > targetFrameTime) {
-            std::lock_guard<std::mutex> lock(cameraMutex);
-            camera.processKeyInput(window);
-            camera.processMouseMovement(window);
-            camera.update(deltaTime);
-            lastTime = currentTime;
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+
+            if (deltaTime > targetFrameTime) {
+                
+                camera.processKeyInput(window);
+                camera.processMouseMovement(window);
+
+                isCameraUpdated.store(true, std::memory_order_release);
+
+                lastTime = currentTime;
+            }
         }
+        
+        renderThread.join();  // Wait for render thread to finish
     }
 
-    renderThread.join();
-}
-void renderLoop() {
-    float targetFrameTime = 1.0f / frameRate;
-
-    while (!glfwWindowShouldClose(window)) {
-        {
-            std::lock_guard<std::mutex> lock(cameraMutex);
-            drawFrame();
-        }
+    void renderLoop() {
+        float targetFrameTime = 1.0f / frameRate;
         auto startTime = std::chrono::high_resolution_clock::now();
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto frameDuration = std::chrono::duration<float>(endTime - startTime).count();
 
-        if (frameDuration < targetFrameTime) {
-            std::this_thread::sleep_for(std::chrono::duration<float>(targetFrameTime - frameDuration));
+        while (!glfwWindowShouldClose(window)) {
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentTime - startTime).count();
 
-        }
-        std::this_thread::sleep_for(std::chrono::duration<float>(targetFrameTime));
+            if (isCameraUpdated.load(std::memory_order_acquire)) {
+             
+                camera.update(deltaTime);
+                isCameraUpdated.store(false, std::memory_order_release);
+            }
+
+            drawFrame();
+
+            auto endTime = std::chrono::high_resolution_clock::now();
+            auto frameDuration = std::chrono::duration<float>(endTime - startTime).count();
+           
+        } ////////// implement some fps limiter
+
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
-    vkDeviceWaitIdle(vulkanDevice.getDevice());
-}
+
 
     void cleanupSwapChain() {
         vkDestroyImageView(vulkanDevice.getDevice(), depthImageView, nullptr);
@@ -1666,7 +1673,7 @@ void renderLoop() {
 
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
         for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR) { //MAILBOX FOR HIGHER GPU USAGE FIFO FOR LOWER GPU USAGE
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) { // VK_PRESENT_MODE_MAILBOX_KHR or VK_PRESENT_MODE_FIFO_KHR
                 return availablePresentMode;
             }
         }

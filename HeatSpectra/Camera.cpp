@@ -18,7 +18,7 @@ void Camera::update(float deltaTime) {
 
     fovVelocity *= (1.0f - dampingFactor); 
 
-    currentFov += fovVelocity * deltaTime;  // Accumulate change in fov over time
+    currentFov += fovVelocity;  // Accumulate change in fov over time
 
     float minFov = 1.0f;
     float maxFov = 60.0f;
@@ -91,7 +91,7 @@ void Camera::processMouseMovement(GLFWwindow* window) {
 }
 
 void Camera::processMouseScroll(double xOffset, double yOffset) {
-    float zoomSpeed = 20.0f;  
+    float zoomSpeed = 0.25f;  
     fovVelocity += (float)(-yOffset) * zoomSpeed;
 
     if (fovVelocity > maxVelocity) fovVelocity = maxVelocity;
