@@ -20,6 +20,15 @@ public:
         return position;  // Return the camera's position
     }
 
+    glm::vec3 getForwardDirection() const {
+        // Calculate the forward direction based on pitch and yaw
+        glm::vec3 forward;
+        forward.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw));
+        forward.y = sin(glm::radians(pitch));
+        forward.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
+        return forward;  // Normalize to ensure it's a unit vector
+    }
+
     float radius = 2.0f; // Camera distance from origin
 
     float sensitivity = 0.25f;  // Mouse interaction speed

@@ -18,7 +18,7 @@ public:
 	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent);
 	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
 	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
-	void updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo);
+	void updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo);
 
 	void createUniformBuffers();
 	void createGridUniformBuffers();

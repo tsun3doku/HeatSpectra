@@ -25,7 +25,8 @@ layout(location = 3) out vec3 fragTexture;
 
 vec3 lightDir_Key = normalize(lightUbo.lightPos_Key - vec3(ubo.model * vec4(inPosition, 1.0)));
 vec3 lightDir_Rim = normalize(lightUbo.lightPos_Rim - vec3(ubo.model * vec4(inPosition, 1.0))); 
-const float lightIntensity = 2.0f;
+const float lightIntensity_Rim = 1.0f;
+const float lightIntensity_Key = 2.0f;
 
 
 void main() {
@@ -35,10 +36,10 @@ void main() {
     float Diffuse_Key = pow(((max(dot(normalWorldSpace, lightDir_Key) , 0.0))/2) + (1/2) , 2.0);
     float Diffuse_Rim = (max(dot(normalWorldSpace, lightDir_Rim) , 0.0));
 
-    vec3 lightOut_Key = lightUbo.lightAmbient + Diffuse_Key * lightIntensity;
-    vec3 lightOut_Rim = lightUbo.lightAmbient + Diffuse_Rim * lightIntensity;
+    vec3 lightOut_Key = lightUbo.lightAmbient + Diffuse_Key * lightIntensity_Key;
+    vec3 lightOut_Rim = lightUbo.lightAmbient * 0.1 + Diffuse_Rim * lightIntensity_Rim;
 
     vec3 totalLight = lightOut_Key + lightOut_Rim;
 
-    fragColor = lightOut_Rim * inColor;
+    fragColor = totalLight * inColor;
 }

@@ -144,9 +144,11 @@ void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera&
     memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
 }
 
-void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo) {
+void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo) {
+    glm::vec3 cameraPosition = camera.getPosition();
+    glm::vec3 cameraForward = camera.getForwardDirection();
     lightUbo.lightPos_Key = glm::vec3(1.0f, 3.0f, -1.0f);
-    lightUbo.lightPos_Rim = glm::vec3(-1.0f, 1.0f, 2.0f);
-    lightUbo.lightAmbient = glm::vec3(0.1f, 0.1f, 0.1f);
+    lightUbo.lightPos_Rim = cameraForward - cameraPosition;
+    lightUbo.lightAmbient = glm::vec3(0.05f, 0.05f, 0.05f);
     memcpy(lightBuffersMapped[currentImage], &lightUbo, sizeof(lightUbo));
 }

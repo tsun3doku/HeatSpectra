@@ -1596,7 +1596,7 @@ private:
         uniformBufferManager.updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
 
         LightUniformBufferObject lightUbo{};
-        uniformBufferManager.updateLightUniformBuffer(currentFrame, lightUbo);
+        uniformBufferManager.updateLightUniformBuffer(currentFrame, camera, lightUbo);
         
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 
