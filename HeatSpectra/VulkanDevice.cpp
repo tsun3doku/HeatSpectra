@@ -8,7 +8,7 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     this->enableValidationLayers = enableValidationLayers;
     
     pickPhysicalDevice(instance, surface);
-    //query and print the physical device name
+    // Query and print the physical device name
     if (physicalDevice != VK_NULL_HANDLE) {
         VkPhysicalDeviceProperties deviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
@@ -84,7 +84,7 @@ VkBuffer VulkanDevice::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    //create the buffer
+    // Create the buffer
     if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create buffer");
     }
@@ -97,12 +97,12 @@ VkBuffer VulkanDevice::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
-    //allocate memory for the buffer
+    // Allocate memory for the buffer
     if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate buffer memory");
     }
 
-    //bind memory to the buffer
+    // Bind memory to the buffer
     vkBindBufferMemory(device, buffer, bufferMemory, 0);
 
     return buffer;

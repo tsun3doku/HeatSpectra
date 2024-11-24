@@ -3,8 +3,9 @@
 
 #include "Model.hpp"
 
-void Model::init(VulkanDevice& device) {
-    vulkanDevice = &device;
+void Model::init(VulkanDevice& vulkanDevice) {
+    this->vulkanDevice = &vulkanDevice; // Reference to VulkanDevice class
+
     loadModel();
     createVertexBuffer();
     createIndexBuffer();
@@ -20,8 +21,8 @@ void Model::cleanup() {
 
 glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
     // Initialize min and max bounding box values
-    minBound = glm::vec3(FLT_MAX);  // Start with very large values
-    maxBound = glm::vec3(-FLT_MAX); // Start with very small values
+    minBound = glm::vec3(FLT_MAX);  
+    maxBound = glm::vec3(-FLT_MAX);
 
     // Iterate through all vertices to find the min and max coordinates
     for (const auto& vertex : vertices) {
@@ -35,7 +36,13 @@ glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::
     }
 
     // Return the center of the bounding box
-    return (minBound + maxBound) * 0.5f;
+    return (minBound + maxBound);
+    
+}
+
+glm::vec3 Model::getBoundingBoxCenter() {
+    glm::vec3 minBound, maxBound;
+    return calculateBoundingBox(vertices, minBound, maxBound) * 0.5f;
 }
 
 void Model::loadModel() {
@@ -96,11 +103,9 @@ void Model::loadModel() {
 }
 
 void Model::createVertexBuffer() {
-    // Retrieve the device, command pool, and graphics queue from VulkanDevice
    
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    // Create the staging buffer
     VkBuffer stagingBuffer{};
     VkDeviceMemory stagingBufferMemory;
     stagingBuffer = vulkanDevice->createBuffer(
@@ -110,7 +115,6 @@ void Model::createVertexBuffer() {
         stagingBufferMemory
     );
 
-    // Map memory and copy data to the staging buffer
     void* data;
     vkMapMemory(vulkanDevice->getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
     memcpy(data, vertices.data(), (size_t)bufferSize);
@@ -124,10 +128,8 @@ void Model::createVertexBuffer() {
         vertexBufferMemory
     );
 
-    // Now call copyBuffer using the device, commandPool, and graphicsQueue
     copyBuffer(*vulkanDevice, stagingBuffer, vertexBuffer, bufferSize);
 
-    // Clean up the staging buffer
     vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
 }
@@ -135,7 +137,6 @@ void Model::createVertexBuffer() {
 void Model::createIndexBuffer() {
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    // Create staging buffer
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     stagingBuffer = vulkanDevice->createBuffer(
@@ -145,7 +146,6 @@ void Model::createIndexBuffer() {
         stagingBufferMemory
     );
 
-    // Map memory and copy data to the staging buffer
     void* data;
     vkMapMemory(vulkanDevice->getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
     memcpy(data, indices.data(), (size_t)bufferSize);
@@ -159,10 +159,9 @@ void Model::createIndexBuffer() {
         indexBufferMemory
     );
 
-    // Now call copyBuffer using the device, commandPool, and graphicsQueue
     copyBuffer(*vulkanDevice, stagingBuffer, indexBuffer, bufferSize);
 
-    // Clean up the staging buffer
+    
     vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
 }

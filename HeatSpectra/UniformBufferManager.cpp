@@ -1,7 +1,7 @@
 #include "UniformBufferManager.hpp"
 
 void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent) {
-    this->vulkanDevice = &vulkanDevice; //reference to VulkanDevice class
+    this->vulkanDevice = &vulkanDevice; // Reference to VulkanDevice class
     this->swapChainExtent = swapChainExtent;
 
     std::cout << "Logical device in UniformBufferManager: " << vulkanDevice.getDevice() << std::endl;

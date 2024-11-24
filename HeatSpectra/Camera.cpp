@@ -14,8 +14,6 @@ void Camera::update(float deltaTime) {
     up = glm::normalize(glm::mat3(rollMat) * up); 
     roll = 0.0f; // Reset roll
 
-    updateLookAt();
-
     fovVelocity *= (1.0f - dampingFactor); 
 
     currentFov += fovVelocity;  // Accumulate change in fov over time
@@ -24,6 +22,10 @@ void Camera::update(float deltaTime) {
     float maxFov = 60.0f;
     if (currentFov < minFov) currentFov = minFov;
     if (currentFov > maxFov) currentFov = maxFov;
+}
+
+void Camera::setLookAt(const glm::vec3& center) {
+    lookAt = center;
 }
 
 void Camera::processKeyInput(GLFWwindow* window) {
@@ -112,9 +114,4 @@ glm::mat4 Camera::getRotationMatrix() const {
 
     glm::mat4 rotationMatrix = rotationYaw * rotationPitch;
     return rotationMatrix;
-}
-
-void Camera::updateLookAt() {
-    // Camera always looks at the origin
-    lookAt;
 }

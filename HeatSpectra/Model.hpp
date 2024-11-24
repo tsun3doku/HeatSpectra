@@ -19,6 +19,9 @@
 #include <vector>
 #include <array>
 
+const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
+const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
+
 struct Vertex {
     glm::vec3 pos;      // Vertex position
     glm::vec3 color;    // Vertex color
@@ -84,7 +87,7 @@ namespace std {
 class Model {
 public:
     Model() = default;
-    void init(VulkanDevice& device);
+    void init(VulkanDevice& vulkanDevice);
 
     void loadModel();
     void createVertexBuffer();
@@ -92,7 +95,7 @@ public:
 
     void cleanup();
 
-    glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
+    glm::vec3 getBoundingBoxCenter();
 
     std::vector<Vertex> getVertices() {
         return vertices;
@@ -119,9 +122,8 @@ public:
     }
 
 private:
-	const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
-	const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
-
+    glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
+	
     VulkanDevice* vulkanDevice;
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;

@@ -1,22 +1,13 @@
 #define GLFW_INCLUDE_VULKAN                       
 #include <GLFW/glfw3.h>                                                   
-
-#include "File_utils.h"                          
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
+                      
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/hash.hpp>
-
-#include "VulkanDevice.hpp"
 #include "Model.hpp"
 #include "UniformBufferManager.hpp" 
-#include "CommandBufferUtils.hpp"
 #include "Camera.hpp"
+#include "File_utils.h" 
 
 #include <iostream>
 #include <fstream>
@@ -31,15 +22,11 @@
 #include <array>
 #include <optional>
 #include <set>
-#include <unordered_map>
 #include <thread>
 #include <atomic>
 
 const uint32_t WIDTH = 960;
 const uint32_t HEIGHT = 540;
-
-const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
-const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -136,9 +123,11 @@ private:
     uint32_t frameRate = 120;
 
     Camera camera;
- 
+    
     bool framebufferResized = false;
     std::atomic<bool> isCameraUpdated{ false };
+
+    glm::vec3 center;
 
     void initWindow() {
         glfwInit();
@@ -183,7 +172,9 @@ private:
         createTextureImageView();
         createTextureSampler();
         model.init(vulkanDevice);
+        center = model.getBoundingBoxCenter();
         uniformBufferManager.init(vulkanDevice, swapChainExtent);
+        camera.setLookAt(center);
         createDescriptorPool();
         createGridDescriptorPool();
         createDescriptorSets();

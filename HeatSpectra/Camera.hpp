@@ -1,5 +1,4 @@
-#ifndef CAMERA_HPP
-#define CAMERA_HPP
+#pragma once 
 
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
@@ -8,16 +7,17 @@
 
 class Camera {
 public:
-    void update(float deltaTime);  // Update position based on velocity
-    void processKeyInput(GLFWwindow* window);  // Process key input
-    void processMouseMovement(GLFWwindow* window);
-    void processMouseScroll(double xOffset, double yOffset);// Process mouse movement
-    bool isMousePressed;
-    glm::mat4 getViewMatrix() const;  // Get the view matrix for the camera
-    glm::mat4 getProjectionMatrix(float aspectRatio) const;  // Get the projection matrix for the camera
+    void update(float deltaTime);   // Update position based on velocity
+    void processKeyInput(GLFWwindow* window);   // Process key input
+    void processMouseMovement(GLFWwindow* window);  // Process mouse movement
+    void processMouseScroll(double xOffset, double yOffset);    //Process mouse scroll
+    void setLookAt(const glm::vec3& target);
 
+    bool isMousePressed;
+    glm::mat4 getViewMatrix() const;  
+    glm::mat4 getProjectionMatrix(float aspectRatio) const; 
     glm::vec3 getPosition() const {
-        return position;  // Return the camera's position
+        return position;  
     }
 
     glm::vec3 getForwardDirection() const {
@@ -34,13 +34,12 @@ public:
     float sensitivity = 0.3f;  // Mouse interaction speed
 
 private:
-    glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);  // Starting position
-    glm::vec3 lookAt = glm::vec3(0.0f, 0.25f, 0.0f);     // Looking at the origin
-    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);         // Up vector
+    glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);   // Starting position    
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);    // Up vector     
+    glm::vec3 lookAt;
 
     glm::vec3 velocity = glm::vec3(0.0f);  // Movement velocity (WASD)
 
-    void updateLookAt();  // Update lookAt based on pitch and yaw
     glm::mat4 getRotationMatrix() const;  // Rotation matrix based on pitch and yaw
 
     float pitch = 0.0f;
@@ -54,5 +53,3 @@ private:
     float currentFov = 45.0f;
     float maxVelocity = 100.0f;
 };
-
-#endif
