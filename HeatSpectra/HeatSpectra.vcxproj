@@ -160,10 +160,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="vulkan_device.cpp" />
+    <ClCompile Include="CommandBufferUtils.cpp" />
+    <ClCompile Include="Model.cpp" />
+    <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="file_utils.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="UniformBufferUtils.cpp" />
+    <ClCompile Include="UniformBufferManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.frag" />
@@ -172,11 +174,13 @@
     <None Include="shaders\shader.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="vulkan_device.hpp" />
+    <ClInclude Include="CommandBufferUtils.hpp" />
+    <ClInclude Include="Model.hpp" />
+    <ClInclude Include="VulkanDevice.hpp" />
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="file_utils.h" />
     <ClInclude Include="Structs.hpp" />
-    <ClInclude Include="UniformBufferUtils.hpp" />
+    <ClInclude Include="UniformBufferManager.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

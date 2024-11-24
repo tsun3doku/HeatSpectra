@@ -27,13 +27,19 @@
     <ClCompile Include="file_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="UniformBufferUtils.cpp">
+    <ClCompile Include="UniformBufferManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan_device.cpp">
+    <ClCompile Include="VulkanDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CommandBufferUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -58,13 +64,19 @@
     <ClInclude Include="Camera.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="UniformBufferUtils.hpp">
+    <ClInclude Include="UniformBufferManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Structs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan_device.hpp">
+    <ClInclude Include="VulkanDevice.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CommandBufferUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -4,6 +4,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 model;
     mat4 view;
     mat4 proj;
+    vec3 color;
 } ubo;
 
 layout(location = 0) in vec3 fragColor;     // Color passed from vertex shader

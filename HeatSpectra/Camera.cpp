@@ -116,5 +116,5 @@ glm::mat4 Camera::getRotationMatrix() const {
 
 void Camera::updateLookAt() {
     // Camera always looks at the origin
-    lookAt = glm::vec3(0.0f, 0.0f, 0.0f);
+    lookAt;
 }

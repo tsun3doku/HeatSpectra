@@ -31,11 +31,11 @@ public:
 
     float radius = 2.0f; // Camera distance from origin
 
-    float sensitivity = 0.25f;  // Mouse interaction speed
+    float sensitivity = 0.3f;  // Mouse interaction speed
 
 private:
     glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);  // Starting position
-    glm::vec3 lookAt = glm::vec3(0.0f, 0.0f, 0.0f);     // Looking at the origin
+    glm::vec3 lookAt = glm::vec3(0.0f, 0.25f, 0.0f);     // Looking at the origin
     glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);         // Up vector
 
     glm::vec3 velocity = glm::vec3(0.0f);  // Movement velocity (WASD)

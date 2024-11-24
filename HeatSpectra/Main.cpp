@@ -1,8 +1,7 @@
+#define GLFW_INCLUDE_VULKAN                       
+#include <GLFW/glfw3.h>                                                   
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-#include "File_utils.h"
+#include "File_utils.h"                          
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,14 +9,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
-
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
-#include "vulkan_device.hpp"
-#include "UniformBufferUtils.hpp" 
+#include "VulkanDevice.hpp"
+#include "Model.hpp"
+#include "UniformBufferManager.hpp" 
+#include "CommandBufferUtils.hpp"
 #include "Camera.hpp"
 
 #include <iostream>
@@ -73,68 +71,6 @@ void static DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-struct Vertex {
-    glm::vec3 pos;      // Vertex position
-    glm::vec3 color;    // Vertex color
-    glm::vec3 normal;   // Vertex normal
-    glm::vec2 texCoord; // Texture coordinates
-
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
-
-        // Position attribute
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        // Color attribute
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        // Normal attribute 
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, normal);
-
-        // Texture coordinate attribute
-        attributeDescriptions[3].binding = 0;
-        attributeDescriptions[3].location = 3;
-        attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[3].offset = offsetof(Vertex, texCoord);
-
-        return attributeDescriptions;
-    }
-
-    bool operator==(const Vertex& other) const {
-        return pos == other.pos &&
-            color == other.color &&
-            normal == other.normal &&
-            texCoord == other.texCoord;
-    }
-};
-
-namespace std {
-    template<> struct hash<Vertex> {
-        size_t operator()(Vertex const& vertex) const {
-            return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1)
-                ^ ((hash<glm::vec3>()(vertex.normal) ^ (hash<glm::vec2>()(vertex.texCoord) << 1)) >> 1);
-        }
-    };
-}
-
 uint32_t gridVertexCount = 6;
 
 class App {
@@ -170,8 +106,6 @@ private:
     VkPipeline graphicsPipeline{};
     VkPipeline gridPipeline{};
 
-    VkCommandPool commandPool{};
-
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
@@ -181,14 +115,10 @@ private:
     VkImageView textureImageView;
     VkSampler textureSampler;
 
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
+    Model model;
+
     std::vector<Vertex> gridVertices;
     std::vector<uint32_t> gridIndices;
-    VkBuffer vertexBuffer{};
-    VkDeviceMemory vertexBufferMemory{};
-    VkBuffer indexBuffer{};
-    VkDeviceMemory indexBufferMemory{};
 
     UniformBufferManager uniformBufferManager;
 
@@ -247,15 +177,12 @@ private:
         createGridDescriptorSetLayout(); 
         createGraphicsPipeline();
         createGridGraphicsPipeline(); 
-        createCommandPool();
         createDepthResources();
         createFramebuffers();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
-        loadModel();
-        createVertexBuffer();
-        createIndexBuffer();
+        model.init(vulkanDevice);
         uniformBufferManager.init(vulkanDevice, swapChainExtent);
         createDescriptorPool();
         createGridDescriptorPool();
@@ -315,7 +242,6 @@ private:
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
 
-
     void cleanupSwapChain() {
         vkDestroyImageView(vulkanDevice.getDevice(), depthImageView, nullptr);
         vkDestroyImage(vulkanDevice.getDevice(), depthImage, nullptr);
@@ -344,7 +270,7 @@ private:
 
         uniformBufferManager.cleanup();
 
-;        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
+;       vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
         vkDestroyDescriptorPool(vulkanDevice.getDevice(), gridDescriptorPool, nullptr);
 
         vkDestroySampler(vulkanDevice.getDevice(), textureSampler, nullptr);
@@ -356,19 +282,13 @@ private:
         vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), descriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), gridDescriptorSetLayout, nullptr);
 
-        vkDestroyBuffer(vulkanDevice.getDevice(), indexBuffer, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), indexBufferMemory, nullptr);
-
-        vkDestroyBuffer(vulkanDevice.getDevice(), vertexBuffer, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), vertexBufferMemory, nullptr);
+        model.cleanup();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
         }
-
-        vkDestroyCommandPool(vulkanDevice.getDevice(), commandPool, nullptr);
         
         vulkanDevice.cleanup();
      
@@ -951,19 +871,6 @@ private:
         }
     }
 
-    void createCommandPool() {
-        QueueFamilyIndices queueFamilyIndices = vulkanDevice.findQueueFamilies(vulkanDevice.getPhysicalDevice(), vulkanDevice.getSurface());
-
-        VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-
-        if (vkCreateCommandPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create graphics command pool");
-        }
-    }
-
     void createDepthResources() {
         VkFormat depthFormat = findDepthFormat();
 
@@ -1120,7 +1027,7 @@ private:
     }
 
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1165,11 +1072,11 @@ private:
             1, &barrier
         );
 
-        endSingleTimeCommands(commandBuffer);
+        endSingleTimeCommands(vulkanDevice, commandBuffer);
     }
 
-    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    void copyBufferToImage( VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
 
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
@@ -1188,120 +1095,7 @@ private:
 
         vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-        endSingleTimeCommands(commandBuffer);
-    }
-
-    void loadModel() {
-        tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string warn, err;
-
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
-            throw std::runtime_error(warn + err);
-        }
-
-        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-        for (const auto& shape : shapes) {
-            for (const auto& index : shape.mesh.indices) {
-                Vertex vertex{};
-
-                // Load position data
-                vertex.pos = {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]
-                };
-
-                // Load texture coordinates
-                vertex.texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-
-                // Load normals
-                if (index.normal_index >= 0) {  
-                    vertex.normal = {
-                        attrib.normals[3 * index.normal_index + 0],
-                        attrib.normals[3 * index.normal_index + 1],
-                        attrib.normals[3 * index.normal_index + 2]
-                    };
-                }
-                else {
-                    
-                    vertex.normal = { 0.0f, 0.0f, 1.0f };
-                }
-
-                vertex.color = { 1.0f, 1.0f, 1.0f };
-
-                if (uniqueVertices.count(vertex) == 0) {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(vertex);
-                }
-
-                indices.push_back(uniqueVertices[vertex]);
-            }
-        }
-    }
-
-    void createVertexBuffer() {
-        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-        VkBuffer stagingBuffer{};
-        VkDeviceMemory stagingBufferMemory;
-        stagingBuffer = vulkanDevice.createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBufferMemory
-        );
-        
-        void* data;
-        vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, vertices.data(), (size_t) bufferSize);
-        vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
-
-        vertexBuffer = vulkanDevice.createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            vertexBufferMemory
-        );
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-        vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
-    }
-
-    void createIndexBuffer() {
-        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        stagingBuffer = vulkanDevice.createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBufferMemory
-        );
-
-        void* data;
-        vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-            memcpy(data, indices.data(), (size_t)bufferSize);
-        vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
-
-        indexBuffer = vulkanDevice.createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            indexBufferMemory
-        );
-
-        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-        vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
+        endSingleTimeCommands(vulkanDevice, commandBuffer);
     }
 
     void createDescriptorPool() {
@@ -1437,55 +1231,12 @@ private:
         }
     }
 
-    VkCommandBuffer beginSingleTimeCommands() {
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = commandPool;
-        allocInfo.commandBufferCount = 1;
-
-        VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo, &commandBuffer);
-
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-        return commandBuffer;
-    }
-
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer) {
-        vkEndCommandBuffer(commandBuffer);
-
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
-
-        vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(vulkanDevice.getGraphicsQueue());
-
-        vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool, 1, &commandBuffer);
-    }
-
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
-
-        VkBufferCopy copyRegion{};
-        copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-        endSingleTimeCommands(commandBuffer);
-    }
-    
     void createCommandBuffers() {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = commandPool;
+        allocInfo.commandPool = vulkanDevice.getCommandPool();
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
@@ -1535,12 +1286,12 @@ private:
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         // Draw main model
-        VkBuffer vertexBuffers[] = { vertexBuffer };
+        VkBuffer vertexBuffers[] = { model.getVertexBuffer()};
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, model.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getIndices().size()), 1, 0, 0, 0);
 
         // Draw grid
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
