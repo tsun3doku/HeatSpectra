@@ -35,7 +35,6 @@ void Camera::processKeyInput(GLFWwindow* window) {
     else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
         pitch -= 1.0f;   // Pitch down
     }
- 
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         yaw += 1.0f; // Rotate right around the model (clockwise around y-axis)
     }
@@ -80,8 +79,8 @@ void Camera::processMouseMovement(GLFWwindow* window) {
         yaw += dx * sensitivity;
         pitch += dy * sensitivity;
 
-        if (pitch > 89.0f) pitch = 89.0f;
-        if (pitch < -89.0f) pitch = -89.0f;
+        if (pitch > 86.0f) pitch = 86.0f;
+        if (pitch < -86.0f) pitch = -86.0f;
 
         // Update last positions
         lastX = xpos;

@@ -1,3 +1,4 @@
+
 #include "VulkanDevice.hpp"
 
 void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions,
@@ -58,7 +59,7 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
         throw std::runtime_error("Failed to find a suitable GPU");
     }
 }
-uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
     std::cout << "Searching for memory type in physical device: " << physicalDevice << std::endl;
     if (physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("PhysicalDevice is not initialized");

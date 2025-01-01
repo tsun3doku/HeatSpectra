@@ -1,22 +1,20 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Structs.hpp"
-#include "VulkanDevice.hpp"
-#include "Camera.hpp"
 
 #include <vector>
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <random>
 
+class VulkanDevice;
+class Camera;
 
 class UniformBufferManager {
 public: 
@@ -26,53 +24,64 @@ public:
 	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
 	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
 	void updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo);
+	void updateSSAOKernelBuffer(uint32_t currentImage, Camera& camera, SSAOKernelBufferObject& ssaoKernel);
 
 	void createUniformBuffers();
 	void createGridUniformBuffers();
 	void createLightUniformBuffers();
+	void createSSAOKernelBuffers(); //new
 	
 	void cleanup();
 
-	std::vector<VkBuffer>& getUniformBuffers() {
+	const std::vector<VkBuffer>& getUniformBuffers() const {
 		return uniformBuffers;
 	}
-
-	std::vector<VkBuffer>& getGridUniformBuffers() {
-		return gridUniformBuffers;
-	}
-
-	std::vector<VkBuffer>& getLightBuffers() {
-		return lightBuffers;
-	}
-
-	std::vector<void*>& getUniformBuffersMapped() {
+	const std::vector<void*>& getUniformBuffersMapped() const {
 		return uniformBuffersMapped;
 	}
-
-	std::vector<void*>& getGridUniformBuffersMapped() {
-		return gridUniformBuffersMapped;
-	}
-
-	std::vector<void*>& getLightBuffersMapped() {
-		return lightBuffersMapped;
-	}
-
-	std::vector<VkDeviceMemory>& getUniformBuffersMemory() {
+	const std::vector<VkDeviceMemory>& getUniformBuffersMemory() const {
 		return uniformBuffersMemory;
 	}
 
-	std::vector<VkDeviceMemory>& getGridUniformBuffersMemory() {
+	// Getter functions for Grid Uniform Buffers
+	const std::vector<VkBuffer>& getGridUniformBuffers() const {
+		return gridUniformBuffers;
+	}
+	const std::vector<void*>& getGridUniformBuffersMapped() const {
+		return gridUniformBuffersMapped;
+	}
+	const std::vector<VkDeviceMemory>& getGridUniformBuffersMemory() const {
 		return gridUniformBuffersMemory;
 	}
 
-	std::vector<VkDeviceMemory>& getLightBuffersMemory() {
+	// Getter functions for Light Buffers
+	const std::vector<VkBuffer>& getLightBuffers() const {
+		return lightBuffers;
+	}
+	const std::vector<void*>& getLightBuffersMapped() const {
+		return lightBuffersMapped;
+	}
+	const std::vector<VkDeviceMemory>& getLightBuffersMemory() const {
 		return lightBuffersMemory;
+	}
+
+	// Getter functions for SSAO Kernel Buffers
+	const std::vector<VkBuffer>& getSSAOKernelBuffers() const {
+		return SSAOKernelBuffers;
+	}
+	const std::vector<void*>& getSSAOKernelBuffersMapped() const {
+		return SSAOKernelBuffersMapped;
+	}
+	const std::vector<VkDeviceMemory>& getSSAOKernelBuffersMemory() const {
+		return SSAOKernelBuffersMemory;
 	}
 	
 private:
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 	
 	VulkanDevice* vulkanDevice;
+	Camera* camera;
+
 	VkExtent2D swapChainExtent;
 
 	std::vector<VkBuffer> uniformBuffers;
@@ -86,5 +95,9 @@ private:
 	std::vector<VkBuffer> lightBuffers;
 	std::vector<VkDeviceMemory> lightBuffersMemory;
 	std::vector<void*> lightBuffersMapped;
+
+	std::vector<VkBuffer> SSAOKernelBuffers;
+	std::vector<VkDeviceMemory> SSAOKernelBuffersMemory;
+	std::vector<void*> SSAOKernelBuffersMapped;
 	
 };

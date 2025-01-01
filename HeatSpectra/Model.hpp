@@ -1,8 +1,5 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -10,14 +7,14 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
-#include "VulkanDevice.hpp"
-#include "CommandBufferUtils.hpp"
 #include "File_utils.h" 
 
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <array>
+
+class VulkanDevice;
 
 const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
 const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
@@ -97,27 +94,27 @@ public:
 
     glm::vec3 getBoundingBoxCenter();
 
-    std::vector<Vertex> getVertices() {
+    const std::vector<Vertex> getVertices() const {
         return vertices;
     }
 
-    std::vector<uint32_t> getIndices() {
+    const std::vector<uint32_t> getIndices() const {
         return indices;
     }
 
-    VkBuffer getVertexBuffer() {
+    const VkBuffer getVertexBuffer() const {
         return vertexBuffer;
     }
 
-    VkDeviceMemory getVertexBufferMemory() {
+    const VkDeviceMemory getVertexBufferMemory() const {
         return vertexBufferMemory;
     }
 
-    VkBuffer getIndexBuffer() {
+    const VkBuffer getIndexBuffer() const {
         return indexBuffer;
     }
 
-    VkDeviceMemory getIndexBufferMemory() {
+    const VkDeviceMemory getIndexBufferMemory() const {
         return indexBufferMemory;
     }
 

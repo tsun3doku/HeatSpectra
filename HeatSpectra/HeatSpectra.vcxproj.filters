@@ -39,7 +39,19 @@
     <ClCompile Include="Model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CommandBufferUtils.cpp">
+    <ClCompile Include="CommandBufferManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HDR.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VulkanImage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Grid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -54,6 +66,18 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\grid.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\gbuffer.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\gbuffer.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\lighting.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\lighting.frag">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -76,7 +100,19 @@
     <ClInclude Include="Model.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CommandBufferUtils.hpp">
+    <ClInclude Include="CommandBufferManager.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HDR.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VulkanImage.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GBuffer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Grid.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

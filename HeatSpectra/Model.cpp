@@ -1,6 +1,11 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include "VulkanDevice.hpp"
+#include "CommandBufferManager.hpp"
 #include "Model.hpp"
 
 void Model::init(VulkanDevice& vulkanDevice) {
