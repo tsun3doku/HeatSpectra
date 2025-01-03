@@ -26,8 +26,7 @@ void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager&
         throw std::runtime_error("Width and height do not match swapchain extent");
     }
     createImageViews(vulkanDevice, swapchainExtent, maxFramesInFlight);
-    grid.createImageViews(vulkanDevice, swapchainExtent, maxFramesInFlight);
-
+    
     createGeometryDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGeometryDescriptorSetLayout(vulkanDevice);
     createGeometryDescriptorSets(vulkanDevice, maxFramesInFlight);
@@ -317,6 +316,48 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     }
 }
 
+void GBuffer::recreateFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, const std::vector<VkImageView>& swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
+    // Destroy existing framebuffers
+    for (auto framebuffer : framebuffers) {
+        vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
+    }
+
+    // Re-create framebuffers
+    size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
+    framebuffers.resize(totalFramebuffers);
+
+    if (gAlbedoImageViews.size() != swapChainImageViews.size()) {
+        throw std::runtime_error("A gbuffer's image view size does not match the swapchain's image view size.");
+    }
+
+    for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
+        for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
+            std::array<VkImageView, 5> attachments = {
+                gAlbedoImageViews[frameIndex],
+                gNormalImageViews[frameIndex],
+                gPositionImageViews[frameIndex],
+                gDepthImageViews[frameIndex],
+                swapChainImageViews[swapchainIndex],
+            };
+
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.width = extent.width;
+            framebufferInfo.height = extent.height;
+            framebufferInfo.layers = 1;
+
+            size_t framebufferIndex = frameIndex * swapChainImageViews.size() + swapchainIndex; // Calculate the framebuffer index
+            if (vkCreateFramebuffer(vulkanDevice.getDevice(), &framebufferInfo, nullptr, &framebuffers[framebufferIndex]) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to recreate G-buffer framebuffer");
+            }
+        }
+    }
+}
+
+
 void GBuffer::createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize uboPoolSize{};
     uboPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -353,6 +394,7 @@ void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice
     if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &geometryDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create G-buffer descriptor set layout!");
     }
+    std::cout << "Created geometry descriptor set layout: " << geometryDescriptorSetLayout << std::endl;
 }
 
 void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
@@ -434,6 +476,7 @@ void GBuffer::createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice
     if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &lightingDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create lighting descriptor set layout");
     }
+    std::cout << "Created lighting descriptor set layout: " << lightingDescriptorSetLayout << std::endl;
 }
 
 void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
@@ -662,7 +705,7 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = geometryPipelineLayout;
     pipelineInfo.renderPass = renderPass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.subpass = 0; // Geometry pass
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &geometryPipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
@@ -766,25 +809,6 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
-
-    // Create descriptor set layout for input attachments (subpass input) and UBOs
-    VkDescriptorSetLayoutBinding inputAttachmentBindings[5] = {
-        {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},   // Albedo input attachment 
-        {1, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},   // Normal input attachment
-        {2, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},   // Position input attachment       
-        //{3, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}, // Position input attachment
-        {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},     // Main UBO binding        
-        {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},     // Light UBO binding
-    };
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 5;
-    layoutInfo.pBindings = inputAttachmentBindings;
-
-    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &lightingDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout");
-    }
     
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -956,32 +980,39 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<
     }
 }
 
-void GBuffer::cleanup(uint32_t maxFramesInFlight) {
-    vkDestroyPipeline(vulkanDevice->getDevice(), geometryPipeline, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice->getDevice(), geometryPipelineLayout, nullptr);
-    vkDestroyPipeline(vulkanDevice->getDevice(), lightingPipeline, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice->getDevice(), lightingPipelineLayout, nullptr);
+void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), lightingPipelineLayout, nullptr);
 
-    vkDestroyRenderPass(vulkanDevice->getDevice(), renderPass, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), geometryDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), lightingDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
 
-    vkDestroyDescriptorPool(vulkanDevice->getDevice(), geometryDescriptorPool, nullptr);
-    vkDestroyDescriptorPool(vulkanDevice->getDevice(), lightingDescriptorPool, nullptr);
-
+    grid->cleanup(vulkanDevice, maxFramesInFlight);
+   
     for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        vkDestroyImageView(vulkanDevice->getDevice(), gAlbedoImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice->getDevice(), gNormalImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice->getDevice(), gPositionImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice->getDevice(), gDepthImageViews[i], nullptr);
+        vkDestroyImageView(vulkanDevice.getDevice(), gAlbedoImageViews[i], nullptr);
+        vkDestroyImageView(vulkanDevice.getDevice(), gNormalImageViews[i], nullptr);
+        vkDestroyImageView(vulkanDevice.getDevice(), gPositionImageViews[i], nullptr);
+        vkDestroyImageView(vulkanDevice.getDevice(), gDepthImageViews[i], nullptr);
 
-        vkDestroyImage(vulkanDevice->getDevice(), gAlbedoImages[i], nullptr);
-        vkDestroyImage(vulkanDevice->getDevice(), gNormalImages[i], nullptr);
-        vkDestroyImage(vulkanDevice->getDevice(), gPositionImages[i], nullptr);
-        vkDestroyImage(vulkanDevice->getDevice(), gDepthImages[i], nullptr);
+        vkDestroyImage(vulkanDevice.getDevice(), gAlbedoImages[i], nullptr);
+        vkDestroyImage(vulkanDevice.getDevice(), gNormalImages[i], nullptr);
+        vkDestroyImage(vulkanDevice.getDevice(), gPositionImages[i], nullptr);
+        vkDestroyImage(vulkanDevice.getDevice(), gDepthImages[i], nullptr);
 
-        vkFreeMemory(vulkanDevice->getDevice(), gAlbedoImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice->getDevice(), gNormalImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice->getDevice(), gPositionImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice->getDevice(), gDepthImageMemories[i], nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), gAlbedoImageMemories[i], nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), gNormalImageMemories[i], nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), gPositionImageMemories[i], nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), gDepthImageMemories[i], nullptr);
     }
 
+    for (VkFramebuffer framebuffer : framebuffers) {
+        vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
+    }
+
+    vkDestroyRenderPass(vulkanDevice.getDevice(), renderPass, nullptr);
 }

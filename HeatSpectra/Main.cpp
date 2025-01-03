@@ -33,7 +33,7 @@
 const uint32_t WIDTH = 960;
 const uint32_t HEIGHT = 540;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAXFRAMESINFLIGHT = 2;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation",
@@ -144,16 +144,16 @@ private:
         createSurface();
         vulkanDevice.init(instance, surface, deviceExtensions, validationLayers, enableValidationLayers);
         createSwapChain();
-        createImageViews();      
+        createImageViews();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
         model.init(vulkanDevice);
-        uniformBufferManager.init(vulkanDevice, swapChainExtent);
+        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
         center = model.getBoundingBoxCenter();
         camera.setLookAt(center);
         //hdr.init(vulkanDevice); 
-        gbuffer.init(vulkanDevice, uniformBufferManager, model, grid, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAX_FRAMES_IN_FLIGHT);        //composite.init(vulkanDevice, gbuffer, swapChainExtent, swapChainImageFormat, swapChainImageViews, MAX_FRAMES_IN_FLIGHT);       
+        gbuffer.init(vulkanDevice, uniformBufferManager, model, grid, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);          
         createSyncObjects();
     }
 
@@ -222,8 +222,8 @@ private:
     void cleanup() {
         cleanupSwapChain();
        
-        uniformBufferManager.cleanup();
-        gbuffer.cleanup(MAX_FRAMES_IN_FLIGHT);   
+        uniformBufferManager.cleanup(MAXFRAMESINFLIGHT);
+        gbuffer.cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
 
         vkDestroySampler(vulkanDevice.getDevice(), textureSampler, nullptr);
         vkDestroyImageView(vulkanDevice.getDevice(), textureImageView, nullptr);
@@ -233,7 +233,7 @@ private:
 
         model.cleanup();
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
@@ -249,7 +249,6 @@ private:
         vkDestroyInstance(instance, nullptr);
         
         glfwDestroyWindow(window);
-
         glfwTerminate();
 
     }
@@ -269,7 +268,8 @@ private:
         cleanupSwapChain();
         createSwapChain();
         createImageViews();
-        //lightingPass.recreateFramebuffers(vulkanDevice, swapChainImageViews, { static_cast<uint32_t>(width), static_cast<uint32_t>(height) });
+
+        gbuffer.recreateFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
     }
 
     void createInstance() {
@@ -465,9 +465,9 @@ private:
     }
 
     void createSyncObjects() {
-        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        imageAvailableSemaphores.resize(MAXFRAMESINFLIGHT);
+        renderFinishedSemaphores.resize(MAXFRAMESINFLIGHT);
+        inFlightFences.resize(MAXFRAMESINFLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -476,7 +476,7 @@ private:
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             if (vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
@@ -510,7 +510,7 @@ private:
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
         vkResetCommandBuffer(gbuffer.getCommandBuffers()[currentFrame], 0);
 
-        gbuffer.recordCommandBuffer(vulkanDevice, swapChainImageViews, imageIndex, MAX_FRAMES_IN_FLIGHT, swapChainExtent);
+        gbuffer.recordCommandBuffer(vulkanDevice, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
        
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -553,7 +553,7 @@ private:
             throw std::runtime_error("Failed to presnet swap chain image");
         }
         
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        currentFrame = (currentFrame + 1) % MAXFRAMESINFLIGHT;
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {

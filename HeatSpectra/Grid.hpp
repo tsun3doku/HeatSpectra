@@ -10,7 +10,8 @@ class Grid {
 public:
     Grid() = default;
 
-    void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight);
+    void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) const;
+    void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight); // Optional
 
     void createGridDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice);
@@ -54,12 +55,10 @@ private:
     const VulkanDevice* vulkanDevice;
     const UniformBufferManager* uniformBufferManager;
    
-    uint32_t currentFrame = 0;
-
-    std::vector<VkImage> gridImages;
-    std::vector<VkDeviceMemory> gridImageMemories;
-    std::vector<VkImageView> gridImageViews;
-    VkImageCreateInfo gridImageInfo;
+    std::vector<VkImage> gridImages; // Optional
+    std::vector<VkDeviceMemory> gridImageMemories; // Optional 
+    std::vector<VkImageView> gridImageViews; // Optional
+    VkImageCreateInfo gridImageInfo; // Optional
  
     VkDescriptorPool gridDescriptorPool;
     VkDescriptorSetLayout gridDescriptorSetLayout;

@@ -73,7 +73,8 @@ void Grid::createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
 
 void Grid::createGridDescriptorSets(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, gridDescriptorSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo{};
+    
+VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = gridDescriptorPool;
     allocInfo.descriptorSetCount = static_cast<uint32_t>(maxFramesInFlight);
@@ -230,52 +231,10 @@ void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass ren
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-/*void Grid::recordCommandBuffer(uint32_t imageIndex, VkExtent2D swapchainExtent) {
-    VkCommandBuffer commandBuffer = gridCommandBuffers[imageIndex];
-    
-    // Record command buffer to render the grid
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to begin recording command buffer");
-    }
+void Grid::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) const {
+    vkDestroyPipeline(vulkanDevice.getDevice(), gridPipeline, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), gridPipelineLayout, nullptr);
 
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = framebuffers[imageIndex];
-    renderPassInfo.renderArea.offset = { 0, 0 };
-    renderPassInfo.renderArea.extent = swapchainExtent;
-
-    std::array<VkClearValue, 2> clearValues = {}; 
-    clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f }; 
-    clearValues[1].depthStencil = { 1.0f, 0 }; 
-
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
-
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapchainExtent.width);
-    viewport.height = static_cast<float>(swapchainExtent.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-    VkRect2D scissor{};
-    scissor.offset = { 0, 0 };
-    scissor.extent = swapchainExtent;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridPipelineLayout, 0, 1, &gridDescriptorSets[currentFrame], 0, nullptr);
-    vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
-
-    vkCmdEndRenderPass(commandBuffer);
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to record command buffer");
-    }
-}*/
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), gridDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), gridDescriptorPool, nullptr);
+}

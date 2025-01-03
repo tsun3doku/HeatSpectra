@@ -19,6 +19,7 @@ public:
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
     void createFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
+    void recreateFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, const std::vector<VkImageView>& swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
 
     void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight);
 
@@ -36,7 +37,7 @@ public:
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
 
-    void cleanup(uint32_t maxFramesInFlight);
+    void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
     // Getters 
     std::vector<VkImageView> getAlbedoImageViews() const {

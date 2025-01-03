@@ -5,27 +5,27 @@
 #include "Camera.hpp"
 #include "UniformBufferManager.hpp"
 
-void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent) {
+void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice; // Reference to VulkanDevice class
     this->swapChainExtent = swapChainExtent;
 
     std::cout << "Logical device in UniformBufferManager: " << vulkanDevice.getDevice() << std::endl;
     
-    createUniformBuffers();
-    createGridUniformBuffers();
-    createLightUniformBuffers();
-    createSSAOKernelBuffers();
+    createUniformBuffers(maxFramesInFlight);
+    createGridUniformBuffers(maxFramesInFlight);
+    createLightUniformBuffers(maxFramesInFlight);
+    createSSAOKernelBuffers(maxFramesInFlight);
 }
 
-void UniformBufferManager::createUniformBuffers() {
+void UniformBufferManager::createUniformBuffers(uint32_t maxFramesInFlight) {
    
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-    uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffers.resize(maxFramesInFlight);
+    uniformBuffersMemory.resize(maxFramesInFlight);
+    uniformBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
         uniformBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             uniformBuffersMemory[i]);
@@ -36,14 +36,14 @@ void UniformBufferManager::createUniformBuffers() {
     }
 }
 
-void UniformBufferManager::createGridUniformBuffers() {
+void UniformBufferManager::createGridUniformBuffers(uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(GridUniformBufferObject);
 
-    gridUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    gridUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    gridUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    gridUniformBuffers.resize(maxFramesInFlight);
+    gridUniformBuffersMemory.resize(maxFramesInFlight);
+    gridUniformBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
         gridUniformBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
             gridUniformBuffersMemory[i]);
@@ -54,14 +54,14 @@ void UniformBufferManager::createGridUniformBuffers() {
     }
 }
 
-void UniformBufferManager::createLightUniformBuffers() {
+void UniformBufferManager::createLightUniformBuffers(uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(LightUniformBufferObject); 
     
-    lightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    lightBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    lightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    lightBuffers.resize(maxFramesInFlight);
+    lightBuffersMemory.resize(maxFramesInFlight);
+    lightBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
         lightBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             lightBuffersMemory[i]);
@@ -70,14 +70,14 @@ void UniformBufferManager::createLightUniformBuffers() {
     }
 }
 
-void UniformBufferManager::createSSAOKernelBuffers() {
+void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(SSAOKernelBufferObject);
 
-    SSAOKernelBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    SSAOKernelBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    SSAOKernelBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    SSAOKernelBuffers.resize(maxFramesInFlight);
+    SSAOKernelBuffersMemory.resize(maxFramesInFlight);
+    SSAOKernelBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
         SSAOKernelBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             SSAOKernelBuffersMemory[i]);
@@ -149,8 +149,8 @@ void UniformBufferManager::updateSSAOKernelBuffer(uint32_t currentImage, Camera&
     memcpy(SSAOKernelBuffersMapped[currentImage], &ssaoKernel, sizeof(ssaoKernel));
 }
 
-void UniformBufferManager::cleanup() {
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+void UniformBufferManager::cleanup(uint32_t maxFramesInFlight) {
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
         if (uniformBuffers[i] != VK_NULL_HANDLE) {
             vkDestroyBuffer(vulkanDevice->getDevice(), uniformBuffers[i], nullptr);
 

@@ -20,18 +20,18 @@ class UniformBufferManager {
 public: 
 	UniformBufferManager() = default;
 
-	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent);
+	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight);
 	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
 	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
 	void updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo);
 	void updateSSAOKernelBuffer(uint32_t currentImage, Camera& camera, SSAOKernelBufferObject& ssaoKernel);
 
-	void createUniformBuffers();
-	void createGridUniformBuffers();
-	void createLightUniformBuffers();
-	void createSSAOKernelBuffers(); //new
+	void createUniformBuffers(uint32_t maxFramesInFlight);
+	void createGridUniformBuffers(uint32_t maxFramesInFlight);
+	void createLightUniformBuffers(uint32_t maxFramesInFlight);
+	void createSSAOKernelBuffers(uint32_t maxFramesInFlight); //new
 	
-	void cleanup();
+	void cleanup(uint32_t maxFramesInFlight);
 
 	const std::vector<VkBuffer>& getUniformBuffers() const {
 		return uniformBuffers;
@@ -76,9 +76,7 @@ public:
 		return SSAOKernelBuffersMemory;
 	}
 	
-private:
-	const int MAX_FRAMES_IN_FLIGHT = 2;
-	
+private:	
 	VulkanDevice* vulkanDevice;
 	Camera* camera;
 
@@ -98,6 +96,5 @@ private:
 
 	std::vector<VkBuffer> SSAOKernelBuffers;
 	std::vector<VkDeviceMemory> SSAOKernelBuffersMemory;
-	std::vector<void*> SSAOKernelBuffersMapped;
-	
+	std::vector<void*> SSAOKernelBuffersMapped;	
 };
