@@ -63,6 +63,11 @@ void GBuffer::createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t ma
     }
 }
 
+void GBuffer::freeCommandBuffers(VulkanDevice& vulkanDevice) {
+    vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
+    gbufferCommandBuffers.clear();
+}
+        
 void GBuffer::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight) {
     // Resize the vectors for multiple frames
     gAlbedoImageViews.resize(maxFramesInFlight);
@@ -122,12 +127,11 @@ void GBuffer::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D exte
 }
 
 void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
-
     size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
     framebuffers.resize(totalFramebuffers);
 
-    if (gAlbedoImageViews.size() != swapChainImageViews.size()) {
-        throw std::runtime_error("A gbuffer's image view size does not match the swapchain's image view size.");
+    if (swapChainImageViews.empty()) {
+        throw std::runtime_error("Swapchain image views array is empty");
     }
 
     for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
@@ -316,47 +320,62 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     }
 }
 
-void GBuffer::recreateFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, const std::vector<VkImageView>& swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
-    // Destroy existing framebuffers
-    for (auto framebuffer : framebuffers) {
-        vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
-    }
+void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        // Update G-buffer descriptors (for input attachments)
+        VkDescriptorImageInfo albedoImageInfo{};
+        albedoImageInfo.imageView = gAlbedoImageViews[i]; // Updated albedo image view
+        albedoImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    // Re-create framebuffers
-    size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
-    framebuffers.resize(totalFramebuffers);
+        VkDescriptorImageInfo normalImageInfo{};
+        normalImageInfo.imageView = gNormalImageViews[i]; // Updated normal image view
+        normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    if (gAlbedoImageViews.size() != swapChainImageViews.size()) {
-        throw std::runtime_error("A gbuffer's image view size does not match the swapchain's image view size.");
-    }
+        VkDescriptorImageInfo positionImageInfo{};
+        positionImageInfo.imageView = gPositionImageViews[i]; // Updated position image view
+        positionImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
-        for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
-            std::array<VkImageView, 5> attachments = {
-                gAlbedoImageViews[frameIndex],
-                gNormalImageViews[frameIndex],
-                gPositionImageViews[frameIndex],
-                gDepthImageViews[frameIndex],
-                swapChainImageViews[swapchainIndex],
-            };
+        VkDescriptorImageInfo depthImageInfo{};
+        depthImageInfo.imageView = gDepthImageViews[i]; // Updated depth image view
+        depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = extent.width;
-            framebufferInfo.height = extent.height;
-            framebufferInfo.layers = 1;
+        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
-            size_t framebufferIndex = frameIndex * swapChainImageViews.size() + swapchainIndex; // Calculate the framebuffer index
-            if (vkCreateFramebuffer(vulkanDevice.getDevice(), &framebufferInfo, nullptr, &framebuffers[framebufferIndex]) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to recreate G-buffer framebuffer");
-            }
-        }
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = lightingDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0; // Albedo input binding
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &albedoImageInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = lightingDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1; // Normal input binding
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &normalImageInfo;
+
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = lightingDescriptorSets[i];
+        descriptorWrites[2].dstBinding = 2; // Position input binding
+        descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pImageInfo = &positionImageInfo;
+
+        //descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        //descriptorWrites[3].dstSet = lightingDescriptorSets[i];
+        //descriptorWrites[3].dstBinding = 3; // Depth input binding
+        //descriptorWrites[3].dstArrayElement = 0;
+        //descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        //descriptorWrites[3].descriptorCount = 1;
+        //descriptorWrites[3].pImageInfo = &depthImageInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 }
-
 
 void GBuffer::createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize uboPoolSize{};
@@ -902,7 +921,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(gbufferCommandBuffers[imageIndex], &beginInfo) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to begin recording G-buffer command buffer");
+        throw std::runtime_error("Failed to begin recording gbuffer command buffer");
     }
     // Log image layouts 
     /*std::cout << "Logging Albedo Image: " << gAlbedoImages[0] << std::endl;
@@ -980,6 +999,48 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<
     }
 }
 
+void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    vkDeviceWaitIdle(vulkanDevice.getDevice());
+    for (uint32_t i = 0; i < framebuffers.size(); ++i) {
+        if (framebuffers[i] != VK_NULL_HANDLE) { // Check if the framebuffer handle is valid
+            vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffers[i], nullptr);
+            framebuffers[i] = VK_NULL_HANDLE; // Set the handle to VK_NULL_HANDLE to prevent double destroy
+        }
+    }
+    framebuffers.clear();
+}
+
+void GBuffer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    vkDeviceWaitIdle(vulkanDevice.getDevice());
+
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        if (gAlbedoImageViews[i] != VK_NULL_HANDLE) {
+            vkDestroyImageView(vulkanDevice.getDevice(), gAlbedoImageViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), gNormalImageViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), gPositionImageViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), gDepthImageViews[i], nullptr);
+        }
+    }
+
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        if (gAlbedoImages[i] != VK_NULL_HANDLE) {
+            vkDestroyImage(vulkanDevice.getDevice(), gAlbedoImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), gNormalImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), gPositionImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), gDepthImages[i], nullptr);
+        }
+    }
+
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        if (gAlbedoImageMemories[i] != VK_NULL_HANDLE) {
+            vkFreeMemory(vulkanDevice.getDevice(), gAlbedoImageMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), gNormalImageMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), gPositionImageMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), gDepthImageMemories[i], nullptr);
+        }
+    }
+}
+
 void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
@@ -992,23 +1053,7 @@ void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
 
     grid->cleanup(vulkanDevice, maxFramesInFlight);
-   
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        vkDestroyImageView(vulkanDevice.getDevice(), gAlbedoImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice.getDevice(), gNormalImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice.getDevice(), gPositionImageViews[i], nullptr);
-        vkDestroyImageView(vulkanDevice.getDevice(), gDepthImageViews[i], nullptr);
-
-        vkDestroyImage(vulkanDevice.getDevice(), gAlbedoImages[i], nullptr);
-        vkDestroyImage(vulkanDevice.getDevice(), gNormalImages[i], nullptr);
-        vkDestroyImage(vulkanDevice.getDevice(), gPositionImages[i], nullptr);
-        vkDestroyImage(vulkanDevice.getDevice(), gDepthImages[i], nullptr);
-
-        vkFreeMemory(vulkanDevice.getDevice(), gAlbedoImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), gNormalImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), gPositionImageMemories[i], nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), gDepthImageMemories[i], nullptr);
-    }
+  
 
     for (VkFramebuffer framebuffer : framebuffers) {
         vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);

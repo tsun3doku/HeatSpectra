@@ -7,14 +7,37 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     this->deviceExtensions = deviceExtensions;
     this->validationLayers = validationLayers;
     this->enableValidationLayers = enableValidationLayers;
-    
+
     pickPhysicalDevice(instance, surface);
+
     // Query and print the physical device name
     if (physicalDevice != VK_NULL_HANDLE) {
         VkPhysicalDeviceProperties deviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+
         std::cout << "Picked physical device: " << deviceProperties.deviceName << std::endl;
         std::cout << "Physical device handle: " << physicalDevice << std::endl;
+
+        std::cout << "Device supports Vulkan version: "
+            << VK_API_VERSION_MAJOR(deviceProperties.apiVersion) << "."
+            << VK_API_VERSION_MINOR(deviceProperties.apiVersion) << "."
+            << VK_API_VERSION_PATCH(deviceProperties.apiVersion) << std::endl;
+
+        // Print requested Vulkan API version
+        uint32_t requestedApiVersion = VK_API_VERSION_1_3;
+        std::cout << "Requested Vulkan API version: "
+            << VK_API_VERSION_MAJOR(requestedApiVersion) << "."
+            << VK_API_VERSION_MINOR(requestedApiVersion) << "."
+            << VK_API_VERSION_PATCH(requestedApiVersion) << std::endl;
+
+        // Check if the device supports the requested version
+        if (deviceProperties.apiVersion < requestedApiVersion) {
+            std::cerr << "Warning: Device does not support the requested Vulkan API version. "
+            << "Supported version: "
+            << VK_API_VERSION_MAJOR(deviceProperties.apiVersion) << "."
+            << VK_API_VERSION_MINOR(deviceProperties.apiVersion) << "."
+            << VK_API_VERSION_PATCH(deviceProperties.apiVersion) << std::endl;
+        }
     }
     else {
         std::cerr << "Failed to pick a suitable physical device" << std::endl;
@@ -23,6 +46,7 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     createLogicalDevice(surface);
     createCommandPool();
 }
+
 
 void VulkanDevice::cleanup() {
 

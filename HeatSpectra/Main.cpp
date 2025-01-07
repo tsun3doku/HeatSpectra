@@ -86,8 +86,7 @@ private:
     VkFormat swapChainImageFormat{};
     VkExtent2D swapChainExtent{};
     std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
-
+    
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
@@ -120,7 +119,7 @@ private:
         glfwSwapInterval(0);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-        glfwSetWindowUserPointer(window, &camera);
+        glfwSetWindowUserPointer(window, this);
         glfwSetScrollCallback(window, scroll_callback);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);   
 
@@ -129,7 +128,7 @@ private:
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;
+        app->framebufferResized = true;       
     }
 
     static void scroll_callback(GLFWwindow* window, double xOffset, double yOffset) {
@@ -207,21 +206,68 @@ private:
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
 
-    void cleanupSwapChain() {
-        for (auto framebuffer : swapChainFramebuffers) {
-            vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
-        }
+    void cleanupSwapChain() {    
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
 
+        gbuffer.cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
+        gbuffer.cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
+        
         for (auto imageView : swapChainImageViews) {
+            std::cout << "Destroyed swapchain: " << imageView << std::endl;
             vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
         }
 
+        if (gbuffer.getCommandBuffers().size() != MAXFRAMESINFLIGHT) {
+            gbuffer.freeCommandBuffers(vulkanDevice);
+            gbuffer.createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+        }
+        swapChainImageViews.clear();
+        swapChainImages.clear();
         vkDestroySwapchainKHR(vulkanDevice.getDevice(), swapChain, nullptr);
+    }
+
+    void recreateSwapChain() {
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0) {
+            if (glfwWindowShouldClose(window))
+                return;
+            glfwWaitEvents();
+            glfwGetFramebufferSize(window, &width, &height);
+           
+        }
+
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
+
+        for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
+            vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
+            vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[i]);
+        }
+
+        vkResetCommandPool(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+
+        for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
+            vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
+            vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
+        }
+
+        cleanupSwapChain();
+
+        createSwapChain();
+        createImageViews();
+        gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
+        gbuffer.createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+
+        createSyncObjects();
+        
+        currentFrame = 0;
     }
 
     void cleanup() {
         cleanupSwapChain();
-       
+
         uniformBufferManager.cleanup(MAXFRAMESINFLIGHT);
         gbuffer.cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
 
@@ -238,38 +284,18 @@ private:
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
         }
-        
+
         vulkanDevice.cleanup();
-     
+
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
-        
+
         vkDestroySurfaceKHR(instance, vulkanDevice.getSurface(), nullptr);
         vkDestroyInstance(instance, nullptr);
-        
+
         glfwDestroyWindow(window);
         glfwTerminate();
-
-    }
-
-    void recreateSwapChain() {
-        int width = 0, height = 0;
-        glfwGetFramebufferSize(window, &width, &height);
-        while (width == 0 || height == 0) {
-            if (glfwWindowShouldClose(window))
-                return;
-            glfwGetFramebufferSize(window, &width, &height);
-            glfwWaitEvents();
-        }
-
-        vkDeviceWaitIdle(vulkanDevice.getDevice());
-
-        cleanupSwapChain();
-        createSwapChain();
-        createImageViews();
-
-        gbuffer.recreateFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
     }
 
     void createInstance() {
@@ -284,7 +310,7 @@ private:
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -360,7 +386,7 @@ private:
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         QueueFamilyIndices indices = vulkanDevice.findQueueFamilies(vulkanDevice.getPhysicalDevice(), vulkanDevice.getSurface());
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
@@ -486,73 +512,74 @@ private:
     }
   
     void drawFrame() {
+        // Wait for previous frame's fence
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
+        // Get next image
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(vulkanDevice.getDevice(), swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(vulkanDevice.getDevice(), swapChain, UINT64_MAX,
+            imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+            framebufferResized = false;
             recreateSwapChain();
             return;
         }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        else if (result != VK_SUCCESS) {
             throw std::runtime_error("Failed to acquire swap chain image");
         }
+
+        VkCommandBuffer commandBuffer = gbuffer.getCommandBuffers()[currentFrame];
+        vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
+        
         UniformBufferObject ubo{};
         uniformBufferManager.updateUniformBuffer(currentFrame, camera, ubo);
         GridUniformBufferObject gridUbo{};
         uniformBufferManager.updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
         LightUniformBufferObject lightUbo{};
         uniformBufferManager.updateLightUniformBuffer(currentFrame, camera, lightUbo);
-        //SSAOKernelBufferObject ssaoKernel{}; //new
-        //uniformBufferManager.updateSSAOKernelBuffer(currentFrame, camera, ssaoKernel); //new
-        
-        vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
-        vkResetCommandBuffer(gbuffer.getCommandBuffers()[currentFrame], 0);
 
         gbuffer.recordCommandBuffer(vulkanDevice, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
-       
+
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
-        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
 
-        VkCommandBuffer commandBuffersToSubmit[] = { gbuffer.getCommandBuffers()[currentFrame] };
-
-        submitInfo.commandBufferCount = 1; 
-        submitInfo.pCommandBuffers = commandBuffersToSubmit;
-
-        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to submit draw command buffer");
+        result = vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]);
+        if (result != VK_SUCCESS) {
+            vkDeviceWaitIdle(vulkanDevice.getDevice());
+            recreateSwapChain();
+            return;
         }
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
-        VkSwapchainKHR swapChains[] = {swapChain};
+        VkSwapchainKHR swapChains[] = { swapChain };
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(vulkanDevice.getPresentQueue(), &presentInfo);
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-            framebufferResized = false;
+        if (result != VK_SUCCESS) {
+            vkDeviceWaitIdle(vulkanDevice.getDevice());
             recreateSwapChain();
+            return;
         }
-        else if (result != VK_SUCCESS) {
-            throw std::runtime_error("Failed to presnet swap chain image");
-        }
-        
+
         currentFrame = (currentFrame + 1) % MAXFRAMESINFLIGHT;
     }
 

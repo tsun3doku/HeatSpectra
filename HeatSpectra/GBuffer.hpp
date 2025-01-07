@@ -19,7 +19,7 @@ public:
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
     void createFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
-    void recreateFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, const std::vector<VkImageView>& swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
+    void updateDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
     void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight);
 
@@ -35,49 +35,52 @@ public:
     void createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2D swapchainExtent);
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void freeCommandBuffers(VulkanDevice& vulkanDevice);
     void recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
 
+    void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
     // Getters 
-    std::vector<VkImageView> getAlbedoImageViews() const {
+    std::vector<VkImageView>& getAlbedoImageViews() {
         return gAlbedoImageViews;
     }
-    std::vector<VkImageView> getNormalImageViews() const {
+    std::vector<VkImageView>& getNormalImageViews() {
         return gNormalImageViews;
     }
-    std::vector<VkImageView> getPositionImageViews() const {
+    std::vector<VkImageView>& getPositionImageViews() {
         return gPositionImageViews;
     }
-    std::vector<VkImageView> getDepthImageViews() const {
+    std::vector<VkImageView>& getDepthImageViews() {
         return gDepthImageViews;
     }
 
-    std::vector<VkImage> getAlbedoImages() const {
+    std::vector<VkImage>& getAlbedoImages() {
         return gAlbedoImages;
     }
-    std::vector<VkImage> getNormalImages() const {
+    std::vector<VkImage>& getNormalImages() {
         return gNormalImages;
     }
-    std::vector<VkImage> getPositionImages() const {
+    std::vector<VkImage>& getPositionImages() {
         return gPositionImages;
     }
-    std::vector<VkImage> getDepthImages() const {
+    std::vector<VkImage>& getDepthImages() {
         return gDepthImages;
     }
 
-    VkRenderPass getRenderPass() const {
+    VkRenderPass& getRenderPass() {
         return renderPass;
     }
-    std::vector<VkFramebuffer> getFramebuffers() const {
+    std::vector<VkFramebuffer>& getFramebuffers() {
         return framebuffers;
     }
 
-    VkPipeline getGbufferPipeline() const {
+    VkPipeline& getGbufferPipeline() {
         return geometryPipeline;
     }
 
-    VkPipelineLayout getGbufferPipelineLayout() const {
+    VkPipelineLayout& getGbufferPipelineLayout() {
         return geometryPipelineLayout;
     }
 
