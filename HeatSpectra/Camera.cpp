@@ -19,7 +19,7 @@ void Camera::update(float deltaTime) {
     currentFov += fovVelocity;  // Accumulate change in fov over time
 
     float minFov = 1.0f;
-    float maxFov = 60.0f;
+    float maxFov = 30.0f;
     if (currentFov < minFov) currentFov = minFov;
     if (currentFov > maxFov) currentFov = maxFov;
 }

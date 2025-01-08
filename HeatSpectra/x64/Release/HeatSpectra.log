@@ -1,12 +1,10 @@
 ﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(531,5): warning MSB8028: The intermediate directory (x64\Release\) contains files shared from another project (VulkanTest.vcxproj).  This can lead to incorrect clean and rebuild behavior.
-  GBuffer.cpp
-  GLM_GTX_hash requires C++11 standard library support
   Main.cpp
   GLM_GTX_hash requires C++11 standard library support
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  10 of 3530 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
-    3 functions were new in current compilation
-    47 functions had inline decision re-evaluated but remain unchanged
+  3 of 3394 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    6 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe

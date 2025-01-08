@@ -29,7 +29,7 @@ public:
         return forward;  // Normalize to ensure it's a unit vector
     }
 
-    float radius = 2.0f; // Camera distance from origin
+    float radius = 3.0f; // Camera distance from origin
 
     float sensitivity = 0.3f;  // Mouse interaction speed
 

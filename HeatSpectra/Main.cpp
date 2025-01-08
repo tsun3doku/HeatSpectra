@@ -86,11 +86,6 @@ private:
     VkFormat swapChainImageFormat{};
     VkExtent2D swapChainExtent{};
     std::vector<VkImageView> swapChainImageViews;
-    
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
-    VkImageView textureImageView;
-    VkSampler textureSampler;
 
     Model model;
     //HDR hdr; 
@@ -103,7 +98,7 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
-    uint32_t frameRate = 120;
+    uint32_t frameRate = 240;
 
     Camera camera;
     
@@ -123,7 +118,6 @@ private:
         glfwSetScrollCallback(window, scroll_callback);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);   
 
-        //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); //fix this so its disabled only when window active
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
@@ -132,76 +126,74 @@ private:
     }
 
     static void scroll_callback(GLFWwindow* window, double xOffset, double yOffset) {
-        Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
-        camera->processMouseScroll(xOffset, yOffset);  // Pass scroll data to the camera
+        auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+        app->camera.processMouseScroll(xOffset, yOffset);
     }
 
-    void initVulkan() {
-        std::cout << "Initializing Vulkan..." << std::endl;
+    void initCore() {
         createInstance();
         setupDebugMessenger();
         createSurface();
         vulkanDevice.init(instance, surface, deviceExtensions, validationLayers, enableValidationLayers);
+    }
+
+    void initSwapChain() {
         createSwapChain();
         createImageViews();
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
+    }
+
+    void initScene() {
         model.init(vulkanDevice);
-        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
         center = model.getBoundingBoxCenter();
         camera.setLookAt(center);
-        //hdr.init(vulkanDevice); 
-        gbuffer.init(vulkanDevice, uniformBufferManager, model, grid, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);          
+    }
+
+    void initRenderResources() {
+        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer.init(vulkanDevice, uniformBufferManager, model, grid, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);
+    }
+
+    void initVulkan() {
+        std::cout << "Initializing Vulkan..." << std::endl;
+        initCore();
+        initSwapChain();
+        initScene();
+        initRenderResources();
         createSyncObjects();
     }
 
     void mainLoop() {
-        std::thread renderThread(&App::renderLoop, this);  // Separate render loop thread
-
-        auto lastTime = std::chrono::high_resolution_clock::now();
-        float targetFrameTime = 1.0f / frameRate;
+        std::thread renderThread(&App::renderLoop, this); 
 
         while (!glfwWindowShouldClose(window)) {
-            glfwPollEvents(); 
-
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
-
-            if (deltaTime > targetFrameTime) {
-                
-                camera.processKeyInput(window);
-                camera.processMouseMovement(window);
-
-                isCameraUpdated.store(true, std::memory_order_release);
-
-                lastTime = currentTime;
-            }
+            glfwPollEvents();
+            camera.processKeyInput(window);
+            camera.processMouseMovement(window);
+            isCameraUpdated.store(true, std::memory_order_release);
         }
-        
+
         renderThread.join();  // Wait for render thread to finish
     }
 
     void renderLoop() {
-        float targetFrameTime = 1.0f / frameRate;
-        auto startTime = std::chrono::high_resolution_clock::now();
+        const double targetFrameTime = 1.0 / frameRate;
+        auto lastFrameTime = std::chrono::high_resolution_clock::now();
 
         while (!glfwWindowShouldClose(window)) {
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            float deltaTime = std::chrono::duration<float>(currentTime - startTime).count();
-
             if (isCameraUpdated.load(std::memory_order_acquire)) {
-             
+                float deltaTime = std::chrono::duration<float>(
+                    std::chrono::high_resolution_clock::now() - lastFrameTime).count();
                 camera.update(deltaTime);
                 isCameraUpdated.store(false, std::memory_order_release);
             }
 
             drawFrame();
 
-            auto endTime = std::chrono::high_resolution_clock::now();
-            auto frameDuration = std::chrono::duration<float>(endTime - startTime).count();
-           
-        } ////////// implement some fps limiter
+            while (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - lastFrameTime).count() < targetFrameTime) {            
+            }
+
+            lastFrameTime = std::chrono::high_resolution_clock::now();
+        }
 
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
@@ -265,34 +257,43 @@ private:
         currentFrame = 0;
     }
 
-    void cleanup() {
-        cleanupSwapChain();
-
+    void cleanupRenderResources() {
         uniformBufferManager.cleanup(MAXFRAMESINFLIGHT);
         gbuffer.cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
+    }
 
-        vkDestroySampler(vulkanDevice.getDevice(), textureSampler, nullptr);
-        vkDestroyImageView(vulkanDevice.getDevice(), textureImageView, nullptr);
+    void cleanupTextures() {
+        
+    }
 
-        vkDestroyImage(vulkanDevice.getDevice(), textureImage, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), textureImageMemory, nullptr);
-
+    void cleanupScene() {
         model.cleanup();
+    }
 
+    void cleanupSyncObjects() {
         for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
         }
+    }
 
+    void cleanupCore() {
         vulkanDevice.cleanup();
-
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
-
         vkDestroySurfaceKHR(instance, vulkanDevice.getSurface(), nullptr);
         vkDestroyInstance(instance, nullptr);
+    }
+
+    void cleanup() {
+        cleanupSwapChain();
+        cleanupRenderResources();
+        cleanupTextures();
+        cleanupScene();
+        cleanupSyncObjects();
+        cleanupCore();
 
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -423,70 +424,6 @@ private:
 
         for (uint32_t i = 0; i < swapChainImages.size(); i++) {
             swapChainImageViews[i] = createImageView(vulkanDevice, swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-    }
-
-    void createTextureImage() {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-        if (!pixels) {
-            throw std::runtime_error("Failed to load texture image");
-        }
-        
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        stagingBuffer = vulkanDevice.createBuffer(
-            imageSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBufferMemory
-        );
-
-        void* data;
-        vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, imageSize, 0, &data);
-            memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
-
-        stbi_image_free(pixels);
-
-        createImage(vulkanDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
-
-        transitionImageLayout(vulkanDevice, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            copyBufferToImage(vulkanDevice, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight)); //modified
-        transitionImageLayout(vulkanDevice, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
-        vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
-    }
-    
-    void createTextureImageView() {
-        textureImageView = createImageView(vulkanDevice, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-    }
-
-    void createTextureSampler() { 
-        VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(vulkanDevice.getPhysicalDevice(), &properties);
-
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-
-        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-        if (vkCreateSampler(vulkanDevice.getDevice(), &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create texture sampler");
         }
     }
 
