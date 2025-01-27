@@ -16,11 +16,11 @@ struct SwapChainSupportDetails {
 };
 
 struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> graphicsAndComputeFamily;
     std::optional<uint32_t> presentFamily;
 
-    bool isComplete() const {
-        return graphicsFamily.has_value() && presentFamily.has_value();
+    bool isComplete() {
+        return graphicsAndComputeFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -49,6 +49,9 @@ public:
     VkQueue getPresentQueue() const { 
         return presentQueue; 
     }
+    VkQueue getComputeQueue() const {
+        return computeQueue;
+    }
     VkSurfaceKHR getSurface() const {
         return surface;
     }
@@ -67,6 +70,7 @@ private:
 
     VkQueue graphicsQueue = VK_NULL_HANDLE;
     VkQueue presentQueue = VK_NULL_HANDLE;
+    VkQueue computeQueue = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkCommandPool commandPool = VK_NULL_HANDLE;
 

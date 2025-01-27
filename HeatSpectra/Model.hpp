@@ -2,12 +2,12 @@
 
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
 
 #include "File_utils.h" 
+#include "Structs.hpp"
 
 #include <unordered_map>
 #include <string>
@@ -16,7 +16,7 @@
 
 class VulkanDevice;
 
-const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/bb.obj"; //change
+const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/teapot.obj"; //change
 const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
 
 struct Vertex {
@@ -25,43 +25,67 @@ struct Vertex {
     glm::vec3 normal;   // Vertex normal
     glm::vec2 texCoord; // Texture coordinates
 
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    static std::array<VkVertexInputBindingDescription, 2> getBindingDescriptions() {
+        std::array<VkVertexInputBindingDescription, 2> bindingDescriptions{};
 
-        return bindingDescription;
+        // Main vertex binding (positions, normals, texcoords)
+        VkVertexInputBindingDescription mainBinding{};
+        mainBinding.binding = 0;
+        mainBinding.stride = sizeof(Vertex); 
+        mainBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        bindingDescriptions[0] = mainBinding;
+
+        // Surface binding (dynamic color from compute shader)
+        VkVertexInputBindingDescription surfaceBinding{};
+        surfaceBinding.binding = 1;
+        surfaceBinding.stride = sizeof(SurfaceVertex); 
+        surfaceBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        bindingDescriptions[1] = surfaceBinding;
+
+        return bindingDescriptions;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+    // Separate attribute description functions
+    static std::array<VkVertexInputAttributeDescription, 4> getVertexAttributes() {
+        std::array<VkVertexInputAttributeDescription, 4> vertexAttributes{};
 
-        // Position attribute
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
+        vertexAttributes[0].binding = 0;
+        vertexAttributes[0].location = 0;
+        vertexAttributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[0].offset = offsetof(Vertex, pos);
 
-        // Color attribute
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
+        vertexAttributes[1].binding = 0;
+        vertexAttributes[1].location = 1;
+        vertexAttributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[1].offset = offsetof(Vertex, color);
 
-        // Normal attribute 
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, normal);
+        vertexAttributes[2].binding = 0;
+        vertexAttributes[2].location = 2;
+        vertexAttributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[2].offset = offsetof(Vertex, normal);
 
-        // Texture coordinate attribute
-        attributeDescriptions[3].binding = 0;
-        attributeDescriptions[3].location = 3;
-        attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[3].offset = offsetof(Vertex, texCoord);
+        vertexAttributes[3].binding = 0;
+        vertexAttributes[3].location = 3;
+        vertexAttributes[3].format = VK_FORMAT_R32G32_SFLOAT;
+        vertexAttributes[3].offset = offsetof(Vertex, texCoord);
 
-        return attributeDescriptions;
+        return vertexAttributes;
+    }
+
+    static std::array<VkVertexInputAttributeDescription, 2> getSurfaceVertexAttributes() {
+        std::array<VkVertexInputAttributeDescription, 2> surfaceVertexAttributes{};
+
+        surfaceVertexAttributes[0].binding = 1;
+        surfaceVertexAttributes[0].location = 4;
+        surfaceVertexAttributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        surfaceVertexAttributes[0].offset = offsetof(SurfaceVertex, position); 
+
+        surfaceVertexAttributes[1].binding = 1;
+        surfaceVertexAttributes[1].location = 5;
+        surfaceVertexAttributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        surfaceVertexAttributes[1].offset = offsetof(SurfaceVertex, color);
+
+        return surfaceVertexAttributes;
     }
 
     bool operator==(const Vertex& other) const {
@@ -75,8 +99,10 @@ struct Vertex {
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const& vertex) const {
-            return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1)
-                ^ ((hash<glm::vec3>()(vertex.normal) ^ (hash<glm::vec2>()(vertex.texCoord) << 1)) >> 1);
+            size_t h1 = std::hash<float>{}(vertex.pos.x) ^ std::hash<float>{}(vertex.pos.y) ^ std::hash<float>{}(vertex.pos.z);
+            size_t h2 = std::hash<float>{}(vertex.normal.x) ^ std::hash<float>{}(vertex.normal.y) ^ std::hash<float>{}(vertex.normal.z);
+            size_t h3 = std::hash<float>{}(vertex.texCoord.x) ^ std::hash<float>{}(vertex.texCoord.y);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
         }
     };
 }
@@ -93,37 +119,38 @@ public:
     void cleanup();
 
     glm::vec3 getBoundingBoxCenter();
+    glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
 
-    const std::vector<Vertex> getVertices() const {
+    HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
+
+    std::vector<Vertex> getVertices() {
         return vertices;
     }
-
-    const std::vector<uint32_t> getIndices() const {
+    size_t getVertexCount() {
+        return vertices.size();
+    }
+    std::vector<uint32_t> getIndices() {
         return indices;
     }
-
-    const VkBuffer getVertexBuffer() const {
+    VkBuffer getVertexBuffer() {
         return vertexBuffer;
     }
-
-    const VkDeviceMemory getVertexBufferMemory() const {
+    VkDeviceMemory getVertexBufferMemory() {
         return vertexBufferMemory;
     }
-
-    const VkBuffer getIndexBuffer() const {
+    VkBuffer getIndexBuffer() {
         return indexBuffer;
     }
-
-    const VkDeviceMemory getIndexBufferMemory() const {
+    VkDeviceMemory getIndexBufferMemory() {
         return indexBufferMemory;
     }
 
 private:
-    glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
-	
     VulkanDevice* vulkanDevice;
+
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
+
 	VkBuffer vertexBuffer{};
 	VkDeviceMemory vertexBufferMemory{};
 	VkBuffer indexBuffer{};

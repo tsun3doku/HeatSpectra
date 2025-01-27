@@ -12,6 +12,7 @@ public:
     void processMouseMovement(GLFWwindow* window);  // Process mouse movement
     void processMouseScroll(double xOffset, double yOffset);    //Process mouse scroll
     void setLookAt(const glm::vec3& target);
+    glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight);
 
     bool isMousePressed;
     glm::mat4 getViewMatrix() const;  

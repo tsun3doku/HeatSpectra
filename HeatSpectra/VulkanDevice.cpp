@@ -10,6 +10,10 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
 
     pickPhysicalDevice(instance, surface);
 
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
+    std::cout << "Graphics and Compute queue family index: " << indices.graphicsAndComputeFamily.value() << std::endl;
+    std::cout << "Present queue family index: " << indices.presentFamily.value() << std::endl;
+
     // Query and print the physical device name
     if (physicalDevice != VK_NULL_HANDLE) {
         VkPhysicalDeviceProperties deviceProperties;
@@ -43,10 +47,12 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
         std::cerr << "Failed to pick a suitable physical device" << std::endl;
     }
 
+    this->deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    this->deviceExtensions.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+
     createLogicalDevice(surface);
     createCommandPool();
 }
-
 
 void VulkanDevice::cleanup() {
 
@@ -137,7 +143,7 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice, surface);
 
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsAndComputeFamily.value(), indices.presentFamily.value() };
 
     float queuePriority = 1.0f;
     for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -175,7 +181,8 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
         throw std::runtime_error("Failed to create logical device");
     }
 
-    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.graphicsAndComputeFamily.value(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.graphicsAndComputeFamily.value(), 0, &computeQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
 
@@ -236,7 +243,6 @@ bool VulkanDevice::checkDeviceExtensionSupport(VkPhysicalDevice device) {
     return requiredExtensions.empty();
 }
 
-
 QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     QueueFamilyIndices indices;
 
@@ -248,8 +254,8 @@ QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSu
 
     int i = 0;
     for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = i;
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)) {
+            indices.graphicsAndComputeFamily = i;
         }
 
         VkBool32 presentSupport = false;
@@ -277,7 +283,7 @@ void VulkanDevice::createCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;  // Optional flag to reset command buffers
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
 
     // Create the command pool on the Vulkan device
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {

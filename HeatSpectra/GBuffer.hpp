@@ -5,8 +5,9 @@
 
 class VulkanDevice;
 class UniformBufferManager;
-class Grid;
 class Model;
+class Grid;
+class HeatSystem;
 
 const std::vector<float> clearColorValues = { {0.012f, 0.014f, 0.015f, 1.0f} };
 
@@ -14,7 +15,7 @@ class GBuffer {
 public:
     GBuffer() = default;
 
-    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, const Model& model, Grid& grid, uint32_t width, uint32_t height,
+    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
         VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
@@ -36,7 +37,7 @@ public:
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
-    void recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
+    void recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& model, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -91,8 +92,9 @@ public:
 private:
     const VulkanDevice* vulkanDevice;
     const UniformBufferManager* uniformBufferManager;
-    const Model* model;
-    const Grid* grid;
+    Model* model;
+    Grid* grid;
+    HeatSystem* heatSystem;
 
     uint32_t width, height;
     uint32_t currentFrame = 0;

@@ -9,7 +9,7 @@
 #include "Model.hpp"
 
 void Model::init(VulkanDevice& vulkanDevice) {
-    this->vulkanDevice = &vulkanDevice; // Reference to VulkanDevice class
+    this->vulkanDevice = &vulkanDevice; 
 
     loadModel();
     createVertexBuffer();
@@ -48,6 +48,50 @@ glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::
 glm::vec3 Model::getBoundingBoxCenter() {
     glm::vec3 minBound, maxBound;
     return calculateBoundingBox(vertices, minBound, maxBound) * 0.5f;
+}
+
+HitResult Model::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir) {
+    const float EPSILON = 0.0000001f;
+    HitResult result{ false, std::numeric_limits<float>::max(), 0, {0, 0, 0} };
+
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        glm::vec3 v0 = vertices[indices[i]].pos;
+        glm::vec3 v1 = vertices[indices[i + 1]].pos;
+        glm::vec3 v2 = vertices[indices[i + 2]].pos;
+
+        glm::vec3 edge1 = v1 - v0;
+        glm::vec3 edge2 = v2 - v0;
+        glm::vec3 h = glm::cross(rayDir, edge2);
+        float a = glm::dot(edge1, h);
+
+        if (a > -EPSILON && a < EPSILON)
+            continue;
+
+        float f = 1.0f / a;
+        glm::vec3 s = rayOrigin - v0;
+        float u = f * glm::dot(s, h);
+
+        if (u < 0.0f || u > 1.0f)
+            continue;
+
+        glm::vec3 q = glm::cross(s, edge1);
+        float v = f * glm::dot(rayDir, q);
+
+        if (v < 0.0f || u + v > 1.0f)
+            continue;
+
+        float t = f * glm::dot(edge2, q);
+
+        if (t > EPSILON && t < result.distance) {
+            result.hit = true;
+            result.distance = t;
+            result.vertexIndices[0] = indices[i];
+            result.vertexIndices[1] = indices[i + 1];
+            result.vertexIndices[2] = indices[i + 2];
+        }
+    }
+
+    return result;
 }
 
 void Model::loadModel() {

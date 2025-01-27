@@ -21,7 +21,10 @@ public:
 	UniformBufferManager() = default;
 
 	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight);
+
 	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
+	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
+
 	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
 	void updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo);
 	void updateSSAOKernelBuffer(uint32_t currentImage, Camera& camera, SSAOKernelBufferObject& ssaoKernel);
@@ -33,6 +36,7 @@ public:
 	
 	void cleanup(uint32_t maxFramesInFlight);
 
+	// Getter functions for Main Uniform Buffers
 	const std::vector<VkBuffer>& getUniformBuffers() const {
 		return uniformBuffers;
 	}
@@ -41,6 +45,9 @@ public:
 	}
 	const std::vector<VkDeviceMemory>& getUniformBuffersMemory() const {
 		return uniformBuffersMemory;
+	}
+	glm::vec3 getCurrentColor(UniformBufferObject& ubo) {
+		return ubo.color;
 	}
 
 	// Getter functions for Grid Uniform Buffers

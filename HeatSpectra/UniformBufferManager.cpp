@@ -6,7 +6,7 @@
 #include "UniformBufferManager.hpp"
 
 void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice; // Reference to VulkanDevice class
+    this->vulkanDevice = &vulkanDevice; 
     this->swapChainExtent = swapChainExtent;
 
     std::cout << "Logical device in UniformBufferManager: " << vulkanDevice.getDevice() << std::endl;
@@ -109,21 +109,33 @@ void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
     }
 }
 
-void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {
-    
-    ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    float constexpr angle =  glm::radians(90.0f);
-    ubo.model = glm::rotate(ubo.model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {   
+    // Get current time
+    static auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    // (Camera position, look-at, and up vector)
+    // Create rotation matrix with time-based angle
+    ubo.model = glm::mat4(1.0f);
+    ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // Camera matrices remain the same
     ubo.view = camera.getViewMatrix();
-
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
     ubo.proj[1][1] *= -1;
 
     ubo.color = glm::vec3(0.044f, 0.04f, 0.044f);
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
+void UniformBufferManager::setColor(glm::vec3 newColor, UniformBufferObject& ubo) {
+    ubo.color = newColor;
+    std::cout << "Color updated to: " << newColor.x << ", " << newColor.y << ", " << newColor.z << std::endl;
+    for (size_t i = 0; i < uniformBuffersMapped.size(); i++) {
+        UniformBufferObject* mappedUbo = (UniformBufferObject*)uniformBuffersMapped[i];
+        mappedUbo->color = newColor;
+    }
 }
 
 void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
@@ -139,9 +151,9 @@ void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera&
 void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo) {
     glm::vec3 cameraPosition = camera.getPosition();
     glm::vec3 cameraForward = camera.getForwardDirection();
-    lightUbo.lightPos_Key = glm::vec3(0.0f, 2.0f, 1.0f);
+    lightUbo.lightPos_Key = glm::vec3(0.0f, 2.0f, 0.0f);
     lightUbo.lightPos_Rim = cameraForward - cameraPosition;
-    lightUbo.lightAmbient = glm::vec3(0.015f, 0.015f, 0.015f);
+    lightUbo.lightAmbient = glm::vec3(0.01f, 0.01f, 0.01f);
     memcpy(lightBuffersMapped[currentImage], &lightUbo, sizeof(lightUbo));
 }
 

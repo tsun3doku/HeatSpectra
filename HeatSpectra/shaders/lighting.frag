@@ -45,7 +45,9 @@ void main() {
     vec3 diffuseLighting_Rim = diffuse_Rim * albedo * lightIntensity_Rim;
 
     vec3 totalLighting = ambientLight + diffuseLighting_Key + diffuseLighting_Rim;
+    float shadingStrength = 0.1;
+    vec3 finalColor = mix(albedo, totalLighting, shadingStrength);
 
     // Final fragment color
-    fragColor = vec4(totalLighting, 1.0);  // Output the calculated lighting
+    fragColor = vec4(finalColor, 1.0);  // Output the calculated lighting
 }

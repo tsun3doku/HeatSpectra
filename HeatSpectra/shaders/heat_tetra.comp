@@ -1,0 +1,71 @@
+#version 450
+#extension GL_EXT_debug_printf : enable
+
+layout(local_size_x = 256) in;
+
+struct TetraElement {
+    uint vertices[4];
+    float temperature;
+    float coolingRate;
+    float thermalConductivity;
+};
+
+layout(binding = 0) buffer TetraBuffer {
+    TetraElement elements[];
+} tetraBuffer;
+
+layout(binding = 4) buffer CenterBuffer {
+    vec4 centers[];
+} centerBuffer;
+
+layout(binding = 5) uniform TimeBuffer {
+    float deltaTime;
+    float totalTime;
+} timeBuffer;
+
+void main() {
+    uint tetraID = gl_GlobalInvocationID.x;
+    if (tetraID >= tetraBuffer.elements.length()) return;
+
+    // Get the current tetrahedron
+    TetraElement tetra = tetraBuffer.elements[tetraID];
+
+    // Linear cooling
+    tetra.temperature -= tetra.coolingRate * timeBuffer.deltaTime;
+
+    // Heat diffusion between neighbors
+    vec3 center = centerBuffer.centers[tetraID].xyz;
+    float heatTransfer = 0.0;
+    int neighborCount = 0;
+
+    for (uint t = 0; t < centerBuffer.centers.length(); t++) {
+        if (t == tetraID) continue;
+
+        vec3 neighborCenter = centerBuffer.centers[t].xyz;
+        float dist = distance(center, neighborCenter);
+
+        // Adjust interaction radius for a 0.2 x 0.2 x 0.2 model
+        if (dist < 0.05) { // Smaller radius for smaller model
+            float tempDiff = tetraBuffer.elements[t].temperature - tetra.temperature;
+            heatTransfer += tempDiff * tetra.thermalConductivity * timeBuffer.deltaTime;
+            neighborCount++;
+        }
+    }
+
+    // Normalize heat transfer by the number of neighbors
+    if (neighborCount > 0) {
+        heatTransfer /= neighborCount;
+    }
+
+    // Apply heat transfer
+    tetra.temperature += heatTransfer;
+
+    // Clamp temperature to avoid negative values
+    tetra.temperature = max(tetra.temperature, 0.0);
+
+    // Write back the updated temperature
+    tetraBuffer.elements[tetraID] = tetra;
+
+    // Debug print to verify the temperature is decreasing
+    //debugPrintfEXT("Tetra %d: Temperature = %f\n", tetraID, tetra.temperature);
+}

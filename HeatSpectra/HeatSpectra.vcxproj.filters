@@ -54,6 +54,15 @@
     <ClCompile Include="Grid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="HeatSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\TetGen\predicates.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\TetGen\tetgen.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\shader.frag">
@@ -78,6 +87,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\lighting.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_tetra.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_surface.comp">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -113,6 +128,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Grid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HeatSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\TetGen\tetgen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

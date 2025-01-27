@@ -2,9 +2,10 @@
 #include <GLFW/glfw3.h>
 
 #include "VulkanDevice.hpp"
+#include "VulkanImage.hpp"
 #include "UniformBufferManager.hpp"
 #include "Grid.hpp"
-#include "VulkanImage.hpp"
+#include "HeatSystem.hpp"
 #include "Model.hpp"
 #include "Structs.hpp"
 #include "File_utils.h"
@@ -14,14 +15,14 @@
 #include <array>
 #include <vector>
 
-void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, const Model& model, Grid& grid, uint32_t width, uint32_t height,
+void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
     VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice;
     this->uniformBufferManager = &uniformBufferManager;
     this->model = &model;
     this->grid = &grid;
+    this->heatSystem = &heatSystem;
 
-    // Ensure width and height match swapchainExtent
     if (width != swapchainExtent.width || height != swapchainExtent.height) {
         throw std::runtime_error("Width and height do not match swapchain extent");
     }
@@ -262,9 +263,10 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     lightingSubpass.colorAttachmentCount = 1;
     lightingSubpass.pColorAttachments = &lightingColorReference;
     lightingSubpass.pDepthStencilAttachment = &depthReference;
-
+    
+    // Third subpass: Grid subpass 
     VkAttachmentReference gridColorReference = {};
-    gridColorReference.attachment = 4; // Grid attachment index in the attachments array
+    gridColorReference.attachment = 4; // Using same attachment as lighting
     gridColorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription gridSubpass = {};
@@ -276,7 +278,6 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     // Subpass dependencies
     std::array<VkSubpassDependency, 3> dependencies = {};
 
-    // Synchronize external operations with geometry pass
     dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[0].dstSubpass = 0;
     dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -284,7 +285,6 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    // Synchronize geometry pass with lighting pass
     dependencies[1].srcSubpass = 0; // Geometry Pass
     dependencies[1].dstSubpass = 1; // Lighting Pass
     dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
@@ -293,7 +293,6 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
     dependencies[1].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    // Synchronize lighting pass with grid rendering
     dependencies[2].srcSubpass = 1; // Lighting Pass
     dependencies[2].dstSubpass = 2; // Grid Pass
     dependencies[2].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -303,7 +302,7 @@ void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapch
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    VkSubpassDescription subpasses[3] = { geometrySubpass, lightingSubpass, gridSubpass };
+    VkSubpassDescription subpasses[3] = { geometrySubpass, lightingSubpass, gridSubpass};
 
     // Render pass creation
     VkRenderPassCreateInfo renderPassInfo = {};
@@ -426,7 +425,6 @@ void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, uin
     allocInfo.pSetLayouts = layouts.data();
 
     geometryDescriptorSets.resize(maxFramesInFlight);
-
     if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, geometryDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate descriptor set!");
     }
@@ -508,7 +506,6 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, con
     allocInfo.pSetLayouts = layouts.data();
 
     lightingDescriptorSets.resize(maxFramesInFlight);
-
     if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, lightingDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate descriptor sets for lighting pass");
     }
@@ -621,11 +618,20 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+    auto bindingDescriptions = Vertex::getBindingDescriptions();
+    auto vertexAttributes = Vertex::getVertexAttributes();
+    auto surfaceVertexAttributes = Vertex::getSurfaceVertexAttributes();
 
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    // Set vertex binding descriptions
+    vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
+    vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
+
+    // Combine vertex and surface attributes into a single vector
+    std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+    attributeDescriptions.insert(attributeDescriptions.end(), vertexAttributes.begin(), vertexAttributes.end());
+    attributeDescriptions.insert(attributeDescriptions.end(), surfaceVertexAttributes.begin(), surfaceVertexAttributes.end());
+
+    // Set vertex attribute descriptions
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
@@ -913,7 +919,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
+void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& model, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -970,13 +976,15 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, std::vector<
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Geometry subpass 
-    VkBuffer vertexBuffers[] = { model->getVertexBuffer() };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, model->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+    VkBuffer vertexBuffers[] = { model.getVertexBuffer(), heatSystem->getSurfaceVertexBuffer() };
+    VkDeviceSize offsets[] = { 0,0 };
+    std::cout << "GBuffer::recordCommandBuffer - Binding vertex buffer: " << vertexBuffers[0] << std::endl;
+    std::cout << "GBuffer::recordCommandBuffer - Binding color buffer: " << vertexBuffers[1] << std::endl;
+    vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, model.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw geometry
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->getIndices().size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getIndices().size()), 1, 0, 0, 0);
 
     // Transition to lighting subpass
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
