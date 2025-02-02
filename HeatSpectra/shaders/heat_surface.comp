@@ -13,9 +13,9 @@ struct TetraElement {
     float thermalConductivity;
 };
 
-layout(binding = 0) buffer TetraBuffer {
-    TetraElement elements[];
-} tetraBuffer;
+layout(binding = 0) buffer TemperatureReadBuffer {
+    float temperatures[];
+} temperatureReadBuffer;
 
 layout(binding = 1) buffer SurfaceBuffer {
     SurfaceVertex vertices[];
@@ -51,7 +51,7 @@ void main() {
         
         if(dist < minDist) {
             minDist = dist;
-            nearestTemp = tetraBuffer.elements[t].temperature;
+            nearestTemp = temperatureReadBuffer.temperatures[t];
         }
     }
 

@@ -14,6 +14,14 @@ layout(binding = 0) buffer TetraBuffer {
     TetraElement elements[];
 } tetraBuffer;
 
+layout(binding = 1) buffer TemperatureWriteBuffer { // Temperature write buffer
+    float temperatures[];
+} temperatureWriteBuffer;
+
+layout(binding = 2) buffer TemperatureReadBuffer {  // Temperature read buffer
+    float temperatures[];
+} temperatureReadBuffer;
+
 layout(binding = 4) buffer CenterBuffer {
     vec4 centers[];
 } centerBuffer;
@@ -29,9 +37,12 @@ void main() {
 
     // Get the current tetrahedron
     TetraElement tetra = tetraBuffer.elements[tetraID];
+    float temperature = temperatureReadBuffer.temperatures[tetraID];
+    float coolingRate = tetra.coolingRate;
+    float thermalConductivity = tetra.thermalConductivity;
 
     // Linear cooling
-    tetra.temperature -= tetra.coolingRate * timeBuffer.deltaTime;
+    temperature -= coolingRate * timeBuffer.deltaTime;
 
     // Heat diffusion between neighbors
     vec3 center = centerBuffer.centers[tetraID].xyz;
@@ -39,15 +50,20 @@ void main() {
     int neighborCount = 0;
 
     for (uint t = 0; t < centerBuffer.centers.length(); t++) {
-        if (t == tetraID) continue;
+        if (t == tetraID) continue; // Skip self
 
         vec3 neighborCenter = centerBuffer.centers[t].xyz;
         float dist = distance(center, neighborCenter);
 
         // Adjust interaction radius for a 0.2 x 0.2 x 0.2 model
         if (dist < 0.05) { // Smaller radius for smaller model
-            float tempDiff = tetraBuffer.elements[t].temperature - tetra.temperature;
-            heatTransfer += tempDiff * tetra.thermalConductivity * timeBuffer.deltaTime;
+            float tempDiff = temperatureReadBuffer.temperatures[t] - temperature;
+            float absTempDiff = abs(tempDiff);
+            if (temperatureReadBuffer.temperatures[t] > temperature) {
+                heatTransfer += absTempDiff * thermalConductivity * timeBuffer.deltaTime;
+            } else {
+                heatTransfer -= absTempDiff * thermalConductivity * timeBuffer.deltaTime;
+            }
             neighborCount++;
         }
     }
@@ -58,14 +74,12 @@ void main() {
     }
 
     // Apply heat transfer
-    tetra.temperature += heatTransfer;
+    temperature += heatTransfer;
 
     // Clamp temperature to avoid negative values
-    tetra.temperature = max(tetra.temperature, 0.0);
+    temperature = max(temperature, 0.0);
 
     // Write back the updated temperature
-    tetraBuffer.elements[tetraID] = tetra;
-
-    // Debug print to verify the temperature is decreasing
-    //debugPrintfEXT("Tetra %d: Temperature = %f\n", tetraID, tetra.temperature);
+    temperatureWriteBuffer.temperatures[tetraID] = temperature;
+    //debugPrintfEXT("Tetra ID: %i, Updated Temp: %f\n", tetraID, temperature); 
 }

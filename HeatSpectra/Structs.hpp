@@ -70,4 +70,12 @@ struct FEAMesh {
     std::vector<float> nodeTemps;     
 };
 
+struct TetraFrameBuffers {
+    VkBuffer readBuffer;
+    VkDeviceMemory readBufferMemory;
+    VkBuffer writeBuffer;
+    VkDeviceMemory writeBufferMemory;
+    void* mappedReadData;
+    void* mappedWriteData;
+};
 

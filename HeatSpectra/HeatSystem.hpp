@@ -28,12 +28,13 @@ public:
 
     void generateTetrahedralMesh(Model& model);
     void createSurfaceBuffer(VulkanDevice& vulkanDevice);
-    void createTetraBuffer(VulkanDevice& vulkanDevice);
+    void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createProcessedBuffer(VulkanDevice& vulkanDevice);
     void createMeshBuffer(VulkanDevice& vulkanDevice);
     void createCenterBuffer(VulkanDevice& vulkanDevice);
     void createTimeBuffer(VulkanDevice& vulkanDevice);
 
+    void swapBuffers();
     void initializeTetra(VulkanDevice& vulkanDevice);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
@@ -103,6 +104,16 @@ private:
     VkBuffer timeBuffer;
     VkDeviceMemory timeBufferMemory;
     TimeUniform* mappedTimeData;
+
+    VkBuffer tetraWriteBuffer;
+    VkDeviceMemory tetraWriteBufferMemory;
+    uint32_t* mappedTetraWriteData;
+
+    VkBuffer tetraReadBuffer;
+    VkDeviceMemory tetraReadBufferMemory;
+    uint32_t* mappedTetraReadData;
+
+    TetraFrameBuffers tetraFrameBuffers;
 
     VkDescriptorPool tetraDescriptorPool;
     VkDescriptorSetLayout tetraDescriptorSetLayout;

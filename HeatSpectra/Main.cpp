@@ -252,12 +252,15 @@ private:
         }
 
         cleanupSwapChain();
+        heatSystem.cleanup(vulkanDevice);
 
         createSwapChain();
         createImageViews();
         gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
         gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
         gbuffer.createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+
+        heatSystem.init(vulkanDevice, uniformBufferManager, model, camera, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
         
@@ -516,7 +519,8 @@ private:
         computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
         vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
-   
+        heatSystem.swapBuffers();
+
         // Graphics pass
         gbuffer.recordCommandBuffer(vulkanDevice, model, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
 
