@@ -14,11 +14,11 @@ layout(binding = 0) buffer TetraBuffer {
     TetraElement elements[];
 } tetraBuffer;
 
-layout(binding = 1) buffer TemperatureWriteBuffer { // Temperature write buffer
+layout(binding = 1) buffer TemperatureWriteBuffer {
     float temperatures[];
 } temperatureWriteBuffer;
 
-layout(binding = 2) buffer TemperatureReadBuffer {  // Temperature read buffer
+layout(binding = 2) buffer TemperatureReadBuffer {
     float temperatures[];
 } temperatureReadBuffer;
 
@@ -31,55 +31,55 @@ layout(binding = 5) uniform TimeBuffer {
     float totalTime;
 } timeBuffer;
 
+bool areTetraConnected(TetraElement a, TetraElement b) {
+    int sharedVertices = 0;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            if (a.vertices[i] == b.vertices[j]) {
+                sharedVertices++;
+            }
+        }
+    }
+    return sharedVertices > 0; // Allow heat transfer through any shared vertex
+}
+
 void main() {
     uint tetraID = gl_GlobalInvocationID.x;
     if (tetraID >= tetraBuffer.elements.length()) return;
 
-    // Get the current tetrahedron
     TetraElement tetra = tetraBuffer.elements[tetraID];
     float temperature = temperatureReadBuffer.temperatures[tetraID];
-    float coolingRate = tetra.coolingRate;
-    float thermalConductivity = tetra.thermalConductivity;
-
-    // Linear cooling
-    temperature -= coolingRate * timeBuffer.deltaTime;
-
-    // Heat diffusion between neighbors
     vec3 center = centerBuffer.centers[tetraID].xyz;
-    float heatTransfer = 0.0;
-    int neighborCount = 0;
 
-    for (uint t = 0; t < centerBuffer.centers.length(); t++) {
-        if (t == tetraID) continue; // Skip self
+    const float MAX_RADIUS = 0.2;
+    const float HEAT_TRANSFER_RATE = 0.025;
+    float totalHeatTransfer = 0.0;
+    int transferCount = 0;
 
+    for (uint t = 0; t < tetraBuffer.elements.length(); t++) {
+        if (t == tetraID) continue;
+
+        TetraElement neighbor = tetraBuffer.elements[t];
         vec3 neighborCenter = centerBuffer.centers[t].xyz;
         float dist = distance(center, neighborCenter);
 
-        // Adjust interaction radius for a 0.2 x 0.2 x 0.2 model
-        if (dist < 0.05) { // Smaller radius for smaller model
-            float tempDiff = temperatureReadBuffer.temperatures[t] - temperature;
-            float absTempDiff = abs(tempDiff);
-            if (temperatureReadBuffer.temperatures[t] > temperature) {
-                heatTransfer += absTempDiff * thermalConductivity * timeBuffer.deltaTime;
-            } else {
-                heatTransfer -= absTempDiff * thermalConductivity * timeBuffer.deltaTime;
-            }
-            neighborCount++;
+        if (dist < MAX_RADIUS && areTetraConnected(tetra, neighbor)) {
+            float neighborTemp = temperatureReadBuffer.temperatures[t];
+            
+            float distanceFactor = 1.0 - (dist/MAX_RADIUS);
+            float k_avg = (tetra.thermalConductivity + neighbor.thermalConductivity) * 0.5;
+            float tempDiff = temperature - neighborTemp;
+            
+            float transfer = k_avg * tempDiff * HEAT_TRANSFER_RATE * distanceFactor * timeBuffer.deltaTime;
+            totalHeatTransfer -= transfer;
+            transferCount++;
         }
     }
 
-    // Normalize heat transfer by the number of neighbors
-    if (neighborCount > 0) {
-        heatTransfer /= neighborCount;
+    if (transferCount > 0) {
+        temperature += totalHeatTransfer;
     }
 
-    // Apply heat transfer
-    temperature += heatTransfer;
-
-    // Clamp temperature to avoid negative values
-    temperature = max(temperature, 0.0);
-
-    // Write back the updated temperature
-    temperatureWriteBuffer.temperatures[tetraID] = temperature;
-    //debugPrintfEXT("Tetra ID: %i, Updated Temp: %f\n", tetraID, temperature); 
+    temperature *= (1.0 - tetra.coolingRate * timeBuffer.deltaTime);
+    temperatureWriteBuffer.temperatures[tetraID] = max(temperature, 0.0);
 }

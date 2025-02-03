@@ -1,0 +1,85 @@
+#version 450
+#extension GL_EXT_debug_printf : enable
+
+layout(local_size_x = 256) in;
+
+struct TetraElement {
+    uint vertices[4];
+    float temperature;
+    float coolingRate;
+    float thermalConductivity;
+};
+
+layout(binding = 0) buffer TetraBuffer {
+    TetraElement elements[];
+} tetraBuffer;
+
+layout(binding = 1) buffer TemperatureWriteBuffer {
+    float temperatures[];
+} temperatureWriteBuffer;
+
+layout(binding = 2) buffer TemperatureReadBuffer {
+    float temperatures[];
+} temperatureReadBuffer;
+
+layout(binding = 4) buffer CenterBuffer {
+    vec4 centers[];
+} centerBuffer;
+
+layout(binding = 5) uniform TimeBuffer {
+    float deltaTime;
+    float totalTime;
+} timeBuffer;
+
+bool areTetraConnected(TetraElement a, TetraElement b) {
+    int sharedVertices = 0;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            if (a.vertices[i] == b.vertices[j]) {
+                sharedVertices++;
+            }
+        }
+    }
+    return sharedVertices > 0; // Allow heat transfer through any shared vertex
+}
+
+void main() {
+    uint tetraID = gl_GlobalInvocationID.x;
+    if (tetraID >= tetraBuffer.elements.length()) return;
+
+    TetraElement tetra = tetraBuffer.elements[tetraID];
+    float temperature = temperatureReadBuffer.temperatures[tetraID];
+    vec3 center = centerBuffer.centers[tetraID].xyz;
+
+    const float MAX_RADIUS = 0.2;
+    const float HEAT_TRANSFER_RATE = 0.025;
+    float totalHeatTransfer = 0.0;
+    int transferCount = 0;
+
+    for (uint t = 0; t < tetraBuffer.elements.length(); t++) {
+        if (t == tetraID) continue;
+
+        TetraElement neighbor = tetraBuffer.elements[t];
+        vec3 neighborCenter = centerBuffer.centers[t].xyz;
+        float dist = distance(center, neighborCenter);
+
+        if (dist < MAX_RADIUS && areTetraConnected(tetra, neighbor)) {
+            float neighborTemp = temperatureReadBuffer.temperatures[t];
+            
+            float distanceFactor = 1.0 - (dist/MAX_RADIUS);
+            float k_avg = (tetra.thermalConductivity + neighbor.thermalConductivity) * 0.5;
+            float tempDiff = temperature - neighborTemp;
+            
+            float transfer = k_avg * tempDiff * HEAT_TRANSFER_RATE * distanceFactor * timeBuffer.deltaTime;
+            totalHeatTransfer -= transfer;
+            transferCount++;
+        }
+    }
+
+    if (transferCount > 0) {
+        temperature += totalHeatTransfer;
+    }
+
+    temperature *= (1.0 - tetra.coolingRate * timeBuffer.deltaTime);
+    temperatureWriteBuffer.temperatures[tetraID] = max(temperature, 0.0);
+}

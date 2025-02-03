@@ -105,8 +105,8 @@ VkDescriptorSetAllocateInfo allocInfo{};
 }
 
 void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass renderPass) {
-    auto vertShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/grid_vert.spv"); //change
-    auto fragShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/grid_frag.spv"); //change
+    auto vertShaderCode = readFile("shaders/grid_vert.spv"); //change
+    auto fragShaderCode = readFile("shaders/grid_frag.spv"); //change
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);

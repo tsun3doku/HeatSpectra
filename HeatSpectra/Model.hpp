@@ -16,8 +16,8 @@
 
 class VulkanDevice;
 
-const std::string MODEL_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/models/teapot.obj"; //change
-const std::string TEXTURE_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/texture.jpg"; //change
+const std::string MODEL_PATH = "models/teapot.obj"; 
+const std::string TEXTURE_PATH = "textures/texture.jpg"; 
 
 struct Vertex {
     glm::vec3 pos;      // Vertex position

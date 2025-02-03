@@ -546,9 +546,9 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
 
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
-        feaMesh.elements[i].temperature = 10;
-        feaMesh.elements[i].coolingRate = 0.25f;
-        feaMesh.elements[i].thermalConductivity = 0.25f;
+        feaMesh.elements[i].temperature = (i < 2000) ? 10 : 0;
+        feaMesh.elements[i].coolingRate = 0.002f;
+        feaMesh.elements[i].thermalConductivity = 0.5f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
             << ", vertices = ["
@@ -732,7 +732,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
 }
 
 void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/heat_tetra_comp.spv");
+    auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv"); //change
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
@@ -873,7 +873,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, u
 }
 
 void HeatSystem::createSurfacePipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/heat_surface_comp.spv");
+    auto computeShaderCode = readFile("shaders/heat_surface_comp.spv"); //change
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo shaderStageInfo{};

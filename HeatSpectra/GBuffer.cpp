@@ -595,8 +595,8 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, con
 }
 
 void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2D extent) {
-    auto vertShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/gbuffer_vert.spv");
-    auto fragShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/gbuffer_frag.spv");
+    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv"); //change
+    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv"); //change
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
@@ -741,8 +741,8 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2
 }
 
 void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2D swapchainExtent) {   
-    auto vertShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/lighting_vert.spv");
-    auto fragShaderCode = readFile("C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/shaders/lighting_frag.spv");
+    auto vertShaderCode = readFile("shaders/lighting_vert.spv");
+    auto fragShaderCode = readFile("shaders/lighting_frag.spv");
    
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);

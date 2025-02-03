@@ -1,0 +1,64 @@
+#version 450
+layout(local_size_x = 256) in;
+
+struct SurfaceVertex {
+    vec3 position;
+    vec3 color;
+};
+
+struct TetraElement {
+    uint vertices[4];
+    float temperature;
+    float coolingRate;        
+    float thermalConductivity;
+};
+
+layout(binding = 0) buffer TemperatureReadBuffer {
+    float temperatures[];
+} temperatureReadBuffer;
+
+layout(binding = 1) buffer SurfaceBuffer {
+    SurfaceVertex vertices[];
+} surfaceBuffer;
+
+layout(binding = 2) buffer CenterBuffer {
+    vec4 centers[];
+} centerBuffer;
+
+vec3 temperatureToColor(float t) {
+    // t should be normalized between 0 and 1
+    if (t <= 0.0) return vec3(0, 0, 0);                                                          // Black for coldest
+    else if (t < 0.25) return mix(vec3(0, 0, 0), vec3(0.1, 0.0, 0.6), t * 4.0);                   // Black to soft blue
+    else if (t < 0.375) return mix(vec3(0.1, 0.0, 0.6), vec3(0.3, 0.0, 0.5), (t - 0.25) * 8.0);  // Blue to violet (soft)
+    else if (t < 0.55) return mix(vec3(0.3, 0.0, 0.5), vec3(0.9, 0.0, 0.0), (t - 0.375) * 5.71); // Violet to soft red (extended range)
+    else if (t < 0.75) return mix(vec3(0.9, 0.0, 0.0), vec3(0.9, 0.6, 0.0), (t - 0.55) * 5.0);   // Soft red to soft orange
+    else if (t < 0.9) return mix(vec3(0.9, 0.6, 0.0), vec3(1.0, 1.0, 0.3), (t - 0.75) * 6.67);   // Orange to soft yellow
+    else return mix(vec3(1.0, 1.0, 0.3), vec3(1.0, 1.0, 1.0), (t - 0.9) * 10.0);                 // Yellow to white
+}
+void main() {
+    uint vertexID = gl_GlobalInvocationID.x;
+    if (vertexID >= surfaceBuffer.vertices.length()) return;
+
+    vec3 vertPos = surfaceBuffer.vertices[vertexID].position;
+    const float maxRadius = 0.025; // Define maxRadius first
+    float minDist = maxRadius; // Now use maxRadius to initialize minDist
+    float nearestTemp = 0.0; // Default temperature if no tetra is found
+
+    // Find the nearest tetrahedron
+    for(uint t = 0; t < centerBuffer.centers.length(); t++) {
+        vec3 tetraCenter = centerBuffer.centers[t].xyz;
+        float dist = distance(vertPos, tetraCenter);
+        
+        if(dist < minDist) {
+            minDist = dist;
+            nearestTemp = temperatureReadBuffer.temperatures[t];
+        }
+    }
+
+    // Map temperature to color
+    float temperatureScale = 10.0; // Adjust based on your temperature range
+    float normalized = clamp(nearestTemp / temperatureScale, 0.0, 1.0);
+    surfaceBuffer.vertices[vertexID].color = temperatureToColor(normalized);
+
+}
+
