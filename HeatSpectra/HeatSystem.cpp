@@ -11,15 +11,16 @@
 #include "Model.hpp"
 #include "HeatSystem.hpp"
 
-void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Camera& camera, uint32_t maxFramesInFlight) {
+void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Camera& camera, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice;
-    this->model = &model;
+    this->simModel = &simModel;
+    this->visModel = &visModel;
     this->camera = &camera;
     this->uniformBufferManager = &uniformBufferManager;
 
-    generateTetrahedralMesh(model);
+    generateTetrahedralMesh(simModel);
     createProcessedBuffer(vulkanDevice);
-    createSurfaceBuffer(vulkanDevice);
+    createSurfaceBuffer(vulkanDevice, visModel);
     createTetraBuffer(vulkanDevice, maxFramesInFlight);
     createMeshBuffer(vulkanDevice);
     createCenterBuffer(vulkanDevice);
@@ -57,7 +58,7 @@ void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_
 //                                         understand the logic ]
 //
 
-void HeatSystem::update(VulkanDevice& vulkanDevice, Model& model, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -370,8 +371,8 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
     std::cout << "Elements: " << feaMesh.elements.size() << std::endl;
 }
 
-void HeatSystem::createSurfaceBuffer(VulkanDevice& vulkanDevice) {
-    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * model->getVertexCount();
+void HeatSystem::createSurfaceBuffer(VulkanDevice& vulkanDevice, Model& visModel) {
+    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * visModel.getVertexCount();
 
     // 1. Create STORAGE buffer (for compute shader)
     VkBufferCreateInfo storageBufferInfo{};
@@ -420,8 +421,8 @@ void HeatSystem::createSurfaceBuffer(VulkanDevice& vulkanDevice) {
     // 4. Initialize data in staging buffer
     SurfaceVertex* mappedData;
     vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, (void**)&mappedData);
-    for (uint32_t i = 0; i < model->getVertexCount(); ++i) {
-        mappedData[i].position = model->getVertices()[i].pos;
+    for (uint32_t i = 0; i < visModel.getVertexCount(); ++i) {
+        mappedData[i].position = visModel.getVertices()[i].pos;
         mappedData[i].color = glm::vec3(0.0f, 0.0f, 0.0f); // Blue for all initially
     }
     vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
@@ -836,7 +837,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, u
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorBufferInfo, 3> bufferInfos = {
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, 0, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{surfaceBuffer, 0, sizeof(SurfaceVertex) * model->getVertexCount()},
+            VkDescriptorBufferInfo{surfaceBuffer, 0, sizeof(SurfaceVertex) * visModel->getVertexCount()},
             VkDescriptorBufferInfo{centerBuffer, 0, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
         };
 
@@ -915,8 +916,8 @@ void HeatSystem::dispatchTetraCompute(const VulkanDevice& vulkanDevice, Model& m
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
 
-void HeatSystem::dispatchSurfaceCompute(const VulkanDevice& vulkanDevice, Model& model, VkCommandBuffer commandBuffer, uint32_t currentFrame) {
-    uint32_t vertexCount = model.getVertexCount();
+void HeatSystem::dispatchSurfaceCompute(const VulkanDevice& vulkanDevice, Model& visModel, VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+    uint32_t vertexCount = visModel.getVertexCount();
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
 
@@ -936,7 +937,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     VkBuffer currentWriteBuffer = tetraFrameBuffers.writeBuffer;
 
     // --- First pass: Process tetra elements ---
-    dispatchTetraCompute(*vulkanDevice, *model, commandBuffer, currentFrame);
+    dispatchTetraCompute(*vulkanDevice, *simModel, commandBuffer, currentFrame);
 
     // Barrier between tetra compute and surface compute
     VkBufferMemoryBarrier tetraToSurfaceBarrier{};
@@ -958,7 +959,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     );
 
     // --- Second pass: Process surface vertices ---
-    dispatchSurfaceCompute(*vulkanDevice, *model, commandBuffer, currentFrame);
+    dispatchSurfaceCompute(*vulkanDevice, *visModel, commandBuffer, currentFrame);
 
     // Pre-copy barrier: Ensure previous vertex reads complete before transfer
     VkBufferMemoryBarrier preCopyBarrier{};
@@ -1000,7 +1001,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
     // Copy surface data to vertex buffer
     VkBufferCopy copyRegion{};
-    copyRegion.size = sizeof(SurfaceVertex) * model->getVertexCount();
+    copyRegion.size = sizeof(SurfaceVertex) * visModel->getVertexCount();
     vkCmdCopyBuffer(commandBuffer, surfaceBuffer, surfaceVertexBuffer, 1, &copyRegion);
 
     // Final barrier: Transfer -> Vertex input

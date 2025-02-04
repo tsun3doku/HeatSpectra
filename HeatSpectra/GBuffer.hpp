@@ -15,7 +15,7 @@ class GBuffer {
 public:
     GBuffer() = default;
 
-    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
+    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
         VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
@@ -37,7 +37,7 @@ public:
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
-    void recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& model, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
+    void recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visModel, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -92,7 +92,7 @@ public:
 private:
     const VulkanDevice* vulkanDevice;
     const UniformBufferManager* uniformBufferManager;
-    Model* model;
+    Model* visModel;
     Grid* grid;
     HeatSystem* heatSystem;
 

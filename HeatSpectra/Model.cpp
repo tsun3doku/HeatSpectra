@@ -12,16 +12,15 @@ void Model::init(VulkanDevice& vulkanDevice) {
     this->vulkanDevice = &vulkanDevice; 
 
     loadModel();
+    subdivide();
     createVertexBuffer();
     createIndexBuffer();
 }
 
-void Model::cleanup() {
-    vkDestroyBuffer(vulkanDevice->getDevice(), indexBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), indexBufferMemory, nullptr);
-
-    vkDestroyBuffer(vulkanDevice->getDevice(), vertexBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), vertexBufferMemory, nullptr);
+void Model::recreateBuffers() {
+    cleanup();
+    createVertexBuffer();
+    createIndexBuffer();
 }
 
 glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
@@ -213,4 +212,78 @@ void Model::createIndexBuffer() {
     
     vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
+}
+
+void Model::setSubdivisionLevel(int level) { 
+    subdivisionLevel = level; 
+}
+
+void Model::subdivide() {
+    for (int i = 0; i < subdivisionLevel; i++) {
+        std::vector<Vertex> newVertices = vertices;
+        std::vector<uint32_t> newIndices;
+        std::map<std::pair<uint32_t, uint32_t>, uint32_t> edgeMap;
+        const float MERGE_EPSILON = 1e-6f; // Merge nearby vertices
+
+        auto safeGetMidpoint = [&](uint32_t a, uint32_t b) {
+            // Prevent zero-length edges
+            if (glm::distance(vertices[a].pos, vertices[b].pos) < MERGE_EPSILON) {
+                return a;
+            }
+
+            // Create new midpoint vertex
+            Vertex mid;
+            mid.pos = (vertices[a].pos + vertices[b].pos) * 0.5f;
+            mid.normal = glm::normalize(vertices[a].normal + vertices[b].normal);
+            mid.color = (vertices[a].color + vertices[b].color) * 0.5f;
+            mid.texCoord = (vertices[a].texCoord + vertices[b].texCoord) * 0.5f;
+
+            // Check if midpoint already exists
+            auto it = edgeMap.find({ a, b });
+            if (it != edgeMap.end()) {
+                return it->second;
+            }
+
+            // Store new vertex
+            uint32_t index = newVertices.size();
+            newVertices.push_back(mid);
+            edgeMap[{a, b}] = index;
+            edgeMap[{b, a}] = index; // Bidirectional
+            return index;
+            };
+
+        // Modified subdivision logic
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            uint32_t v0 = indices[i];
+            uint32_t v1 = indices[i + 1];
+            uint32_t v2 = indices[i + 2];
+
+            // Skip degenerate source triangles
+            if (v0 == v1 || v1 == v2 || v0 == v2) continue;
+
+            // Create new vertices with safety checks
+            uint32_t a = safeGetMidpoint(v0, v1);
+            uint32_t b = safeGetMidpoint(v1, v2);
+            uint32_t c = safeGetMidpoint(v2, v0);
+
+            // Only add valid new triangles
+            if (a != b && b != c && c != a) {
+                newIndices.insert(newIndices.end(), { v0, a, c });
+                newIndices.insert(newIndices.end(), { v1, b, a });
+                newIndices.insert(newIndices.end(), { v2, c, b });
+                newIndices.insert(newIndices.end(), { a, b, c });
+            }
+        }
+
+        vertices = newVertices;
+        indices = newIndices;
+    }
+}
+
+void Model::cleanup() {
+    vkDestroyBuffer(vulkanDevice->getDevice(), indexBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->getDevice(), indexBufferMemory, nullptr);
+
+    vkDestroyBuffer(vulkanDevice->getDevice(), vertexBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->getDevice(), vertexBufferMemory, nullptr);
 }

@@ -9,8 +9,8 @@ class Camera;
 
 class HeatSystem {
 public:
-    void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Camera& camera, uint32_t maxFramesInFLight);
-    void update(VulkanDevice& vulkanDevice, Model& model, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
+    void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Camera& camera, uint32_t maxFramesInFLight);
+    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     
     void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice);
@@ -27,7 +27,7 @@ public:
     void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
     void generateTetrahedralMesh(Model& model);
-    void createSurfaceBuffer(VulkanDevice& vulkanDevice);
+    void createSurfaceBuffer(VulkanDevice& vulkanDevice, Model& visModel);
     void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createProcessedBuffer(VulkanDevice& vulkanDevice);
     void createMeshBuffer(VulkanDevice& vulkanDevice);
@@ -68,7 +68,8 @@ public:
 private:
     VulkanDevice* vulkanDevice;
     const UniformBufferManager* uniformBufferManager;
-    Model* model;
+    Model* simModel;
+    Model* visModel;
     Camera* camera;
 
     FEAMesh feaMesh;

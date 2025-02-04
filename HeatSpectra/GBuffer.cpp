@@ -15,11 +15,11 @@
 #include <array>
 #include <vector>
 
-void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& model, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
+void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
     VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice;
     this->uniformBufferManager = &uniformBufferManager;
-    this->model = &model;
+    this->visModel = &visModel;
     this->grid = &grid;
     this->heatSystem = &heatSystem;
 
@@ -919,7 +919,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& model, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
+void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visModel, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -976,15 +976,15 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& model
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Geometry subpass 
-    VkBuffer vertexBuffers[] = { model.getVertexBuffer(), heatSystem->getSurfaceVertexBuffer() };
+    VkBuffer vertexBuffers[] = { visModel.getVertexBuffer(), heatSystem->getSurfaceVertexBuffer() };
     VkDeviceSize offsets[] = { 0,0 };
     std::cout << "GBuffer::recordCommandBuffer - Binding vertex buffer: " << vertexBuffers[0] << std::endl;
     std::cout << "GBuffer::recordCommandBuffer - Binding color buffer: " << vertexBuffers[1] << std::endl;
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, model.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(commandBuffer, visModel.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw geometry
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getIndices().size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(visModel.getIndices().size()), 1, 0, 0, 0);
 
     // Transition to lighting subpass
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);

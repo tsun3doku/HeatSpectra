@@ -19,6 +19,8 @@ class VulkanDevice;
 const std::string MODEL_PATH = "models/teapot.obj"; 
 const std::string TEXTURE_PATH = "textures/texture.jpg"; 
 
+static int iterations = 2;
+
 struct Vertex {
     glm::vec3 pos;      // Vertex position
     glm::vec3 color;    // Vertex color
@@ -115,14 +117,18 @@ public:
     void loadModel();
     void createVertexBuffer();
     void createIndexBuffer();
+    void setSubdivisionLevel(int level);
+    void subdivide();
 
+    void recreateBuffers();
     void cleanup();
 
     glm::vec3 getBoundingBoxCenter();
     glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
-
+   
     HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
 
+    // Getters
     std::vector<Vertex> getVertices() {
         return vertices;
     }
@@ -145,8 +151,12 @@ public:
         return indexBufferMemory;
     }
 
+    int getSubdivisionLevel() {
+        return subdivisionLevel;
+    }
+
 private:
-    VulkanDevice* vulkanDevice;
+    VulkanDevice* vulkanDevice = nullptr;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
@@ -156,4 +166,5 @@ private:
 	VkBuffer indexBuffer{};
 	VkDeviceMemory indexBufferMemory{};
 
+    int subdivisionLevel = 0;
 }; 
