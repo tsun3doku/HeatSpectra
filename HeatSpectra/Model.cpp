@@ -265,7 +265,8 @@ void Model::subdivide() {
             uint32_t a = safeGetMidpoint(v0, v1);
             uint32_t b = safeGetMidpoint(v1, v2);
             uint32_t c = safeGetMidpoint(v2, v0);
-
+            //std::cout << "Subdividing..." << std::endl;
+           
             // Only add valid new triangles
             if (a != b && b != c && c != a) {
                 newIndices.insert(newIndices.end(), { v0, a, c });

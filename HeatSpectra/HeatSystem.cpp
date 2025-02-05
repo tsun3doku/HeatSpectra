@@ -374,71 +374,51 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
 void HeatSystem::createSurfaceBuffer(VulkanDevice& vulkanDevice, Model& visModel) {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * visModel.getVertexCount();
 
-    // 1. Create STORAGE buffer (for compute shader)
-    VkBufferCreateInfo storageBufferInfo{};
-    storageBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    storageBufferInfo.size = bufferSize;
-    storageBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT; // For compute writes and transfer
-    storageBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
+    // GPU accessible buffer stores color data written by the surface compute shader
     surfaceBuffer = vulkanDevice.createBuffer(
-        storageBufferInfo.size,
-        storageBufferInfo.usage,
+        bufferSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         surfaceBufferMemory
     );
 
-    // 2. Create VERTEX buffer (for graphics pipeline)
-    VkBufferCreateInfo vertexBufferInfo{};
-    vertexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vertexBufferInfo.size = bufferSize;
-    vertexBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT; // For vertex input and transfer
-    vertexBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
+    // GPU accessible buffer stores a copy of the color data from the surfaceBuffer and handled by the vertex shader
     surfaceVertexBuffer = vulkanDevice.createBuffer(
-        vertexBufferInfo.size,
-        vertexBufferInfo.usage,
+        bufferSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        surfaceVertexBufferMemory 
+        surfaceVertexBufferMemory
     );
 
-    // 3. Create staging buffer
-    VkBufferCreateInfo stagingBufferInfo{};
-    stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    stagingBufferInfo.size = bufferSize;
-    stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    stagingBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VkBuffer stagingBuffer;
+    // Staging buffer copies CPU data to the GPU
     VkDeviceMemory stagingBufferMemory;
-    stagingBuffer = vulkanDevice.createBuffer(
-        stagingBufferInfo.size,
-        stagingBufferInfo.usage,
+    VkBuffer stagingBuffer = vulkanDevice.createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         stagingBufferMemory
     );
 
-    // 4. Initialize data in staging buffer
-    SurfaceVertex* mappedData;
-    vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, (void**)&mappedData);
-    for (uint32_t i = 0; i < visModel.getVertexCount(); ++i) {
-        mappedData[i].position = visModel.getVertices()[i].pos;
-        mappedData[i].color = glm::vec3(0.0f, 0.0f, 0.0f); // Blue for all initially
+    // CPU accessible data initialization 
+    std::vector<SurfaceVertex> surfaceVertices(visModel.getVertexCount());
+    const auto& modelVertices = visModel.getVertices();
+
+    for (int i = 0; i < visModel.getVertexCount(); i++) {
+        surfaceVertices[i].position = modelVertices[i].pos;
+        surfaceVertices[i].color = glm::vec3(0.0f);
     }
+
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, surfaceVertices.data(), bufferSize);
     vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
 
-    // 5. Copy from staging to BOTH buffers
     VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
-
-    VkBufferCopy copyRegion{};
-    copyRegion.size = bufferSize;
-
+    VkBufferCopy copyRegion{ 0, 0, bufferSize };
     vkCmdCopyBuffer(copyCmd, stagingBuffer, surfaceBuffer, 1, &copyRegion);
     vkCmdCopyBuffer(copyCmd, stagingBuffer, surfaceVertexBuffer, 1, &copyRegion);
-
     endSingleTimeCommands(vulkanDevice, copyCmd);
 
-    // 6. Destroy staging buffer
     vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
 }
@@ -465,14 +445,14 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
 
     tetraFrameBuffers.readBuffer = vulkanDevice.createBuffer(
         sizeof(float) * feaMesh.elements.size(),
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         tetraFrameBuffers.readBufferMemory
     );
 
     tetraFrameBuffers.writeBuffer = vulkanDevice.createBuffer(
         sizeof(float) * feaMesh.elements.size(),
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         tetraFrameBuffers.writeBufferMemory
     );
@@ -547,7 +527,7 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
 
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
-        feaMesh.elements[i].temperature = (i < 2000) ? 10 : 0;
+        feaMesh.elements[i].temperature = (i < 2000) ? 10 : 1;
         feaMesh.elements[i].coolingRate = 0.002f;
         feaMesh.elements[i].thermalConductivity = 0.5f;
 
@@ -645,7 +625,7 @@ void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice
     layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
-    layoutInfo.pNext = &bindingFlags;  // Add this line
+    layoutInfo.pNext = &bindingFlags; 
 
     if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &tetraDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat descriptor set layout");
