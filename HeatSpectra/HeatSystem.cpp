@@ -62,7 +62,9 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
-    float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+
+    const float timeScale = 1.0f;
+    float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
     // Update GPU time buffer
@@ -70,8 +72,6 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
         mappedTimeData->deltaTime = deltaTime;
         mappedTimeData->totalTime += deltaTime; 
     }
-    //std::cout << "Delta time: " << deltaTime << std::endl;
-  
 }
 
 void HeatSystem::swapBuffers() {

@@ -1,6 +1,6 @@
 # HeatSpectra
 
-Realtime heat transfer visualization using tetrahedral mesh elements and compute shaders
+Realtime thermal analysis visualization using tetrahedral mesh elements and compute shaders
 
 ![Heat Transfer Capture](x64/Release/capture.png)
 
