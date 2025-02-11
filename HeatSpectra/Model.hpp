@@ -112,11 +112,13 @@ namespace std {
 class Model {
 public:
     Model() = default;
-    void init(VulkanDevice& vulkanDevice);
+    void init(VulkanDevice& vulkanDevice, const std::string modelPath);
 
-    void loadModel();
+    void loadModel(const std::string& modelPath);
     void createVertexBuffer();
     void createIndexBuffer();
+    void createSurfaceBuffer();
+
     void setSubdivisionLevel(int level);
     void subdivide();
 
@@ -138,17 +140,27 @@ public:
     std::vector<uint32_t> getIndices() {
         return indices;
     }
+
     VkBuffer getVertexBuffer() {
         return vertexBuffer;
     }
     VkDeviceMemory getVertexBufferMemory() {
         return vertexBufferMemory;
     }
+
     VkBuffer getIndexBuffer() {
         return indexBuffer;
     }
     VkDeviceMemory getIndexBufferMemory() {
         return indexBufferMemory;
+    }
+
+    VkBuffer getSurfaceBuffer() {
+        return surfaceBuffer;
+    }
+
+    VkBuffer getSurfaceVertexBuffer() {
+        return surfaceVertexBuffer;
     }
 
     int getSubdivisionLevel() {
@@ -163,8 +175,16 @@ private:
 
 	VkBuffer vertexBuffer{};
 	VkDeviceMemory vertexBufferMemory{};
+
 	VkBuffer indexBuffer{};
 	VkDeviceMemory indexBufferMemory{};
+
+    SurfaceVertex* mappedSurfaceVertices = nullptr;
+    VkBuffer surfaceBuffer;
+    VkDeviceMemory surfaceBufferMemory;
+
+    VkBuffer surfaceVertexBuffer;
+    VkDeviceMemory surfaceVertexBufferMemory;
 
     int subdivisionLevel = 0;
 }; 

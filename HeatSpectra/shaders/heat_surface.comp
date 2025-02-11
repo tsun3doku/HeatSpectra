@@ -28,11 +28,11 @@ layout(binding = 2) buffer CenterBuffer {
 vec3 temperatureToColor(float t) {
     // t should be normalized between 0 and 1
     if (t <= 0.0) return vec3(0, 0, 0);                                                          // Black for coldest
-    else if (t < 0.25) return mix(vec3(0, 0, 0), vec3(0.1, 0.0, 0.6), t * 4.0);                   // Black to soft blue
-    else if (t < 0.375) return mix(vec3(0.1, 0.0, 0.6), vec3(0.3, 0.0, 0.5), (t - 0.25) * 8.0);  // Blue to violet (soft)
-    else if (t < 0.55) return mix(vec3(0.3, 0.0, 0.5), vec3(0.9, 0.0, 0.0), (t - 0.375) * 5.71); // Violet to soft red (extended range)
-    else if (t < 0.75) return mix(vec3(0.9, 0.0, 0.0), vec3(0.9, 0.6, 0.0), (t - 0.55) * 5.0);   // Soft red to soft orange
-    else if (t < 0.9) return mix(vec3(0.9, 0.6, 0.0), vec3(1.0, 1.0, 0.3), (t - 0.75) * 6.67);   // Orange to soft yellow
+    else if (t < 0.25) return mix(vec3(0, 0, 0), vec3(0.1, 0.0, 0.6), t * 4.0);                  // Black to blue
+    else if (t < 0.375) return mix(vec3(0.1, 0.0, 0.6), vec3(0.3, 0.0, 0.5), (t - 0.25) * 8.0);  // Blue to violet 
+    else if (t < 0.55) return mix(vec3(0.3, 0.0, 0.5), vec3(0.9, 0.0, 0.0), (t - 0.375) * 5.71); // Violet to red 
+    else if (t < 0.75) return mix(vec3(0.9, 0.0, 0.0), vec3(0.9, 0.6, 0.0), (t - 0.55) * 5.0);   // Red to orange
+    else if (t < 0.9) return mix(vec3(0.9, 0.6, 0.0), vec3(1.0, 1.0, 0.3), (t - 0.75) * 6.67);   // Orange to yellow
     else return mix(vec3(1.0, 1.0, 0.3), vec3(1.0, 1.0, 1.0), (t - 0.9) * 10.0);                 // Yellow to white
 }
 void main() {

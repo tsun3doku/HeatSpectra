@@ -20,21 +20,18 @@ struct UniformBufferObject {
     alignas(16) glm::vec3 color; // 16 byte aligned 
 }; // 208 bytes
 
-// Grid UBO
 struct GridUniformBufferObject {
     alignas(16) glm::mat4 view; // 16 byte aligned
     alignas(16) glm::mat4 proj; // 16 byte aligned
     alignas(16) glm::vec3 pos;  // 16 byte aligned
 }; // 144 bytes
 
-// Light UBO
 struct LightUniformBufferObject {
     alignas(16) glm::vec3 lightPos_Key; // 16 byte aligned
     alignas(16) glm::vec3 lightPos_Rim; // 16 byte aligned
     alignas(16) glm::vec3 lightAmbient; // 16 byte aligned
 }; // 48 bytes
 
-// SSAO Buffer
 struct SSAOKernelBufferObject {
     alignas(16) glm::vec4 SSAOKernel[16]; 
 };
@@ -77,5 +74,11 @@ struct TetraFrameBuffers {
     VkDeviceMemory writeBufferMemory;
     void* mappedReadData;
     void* mappedWriteData;
+};
+
+struct HeatSourceVertex {
+    alignas(16) glm::vec3 position;  // Matches your existing vertex format
+    alignas(16) glm::vec3 color;     // Will be set by compute shader
+    alignas(4) float temperature;    // Initial temperature value
 };
 

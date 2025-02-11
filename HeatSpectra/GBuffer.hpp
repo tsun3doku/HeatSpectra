@@ -7,6 +7,7 @@ class VulkanDevice;
 class UniformBufferManager;
 class Model;
 class Grid;
+class HeatSource;
 class HeatSystem;
 
 const std::vector<float> clearColorValues = { {0.012f, 0.014f, 0.015f, 1.0f} };
@@ -15,7 +16,7 @@ class GBuffer {
 public:
     GBuffer() = default;
 
-    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Grid& grid, HeatSystem& heatSystem, uint32_t width, uint32_t height,
+    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
         VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
@@ -93,8 +94,10 @@ private:
     const VulkanDevice* vulkanDevice;
     const UniformBufferManager* uniformBufferManager;
     Model* visModel;
-    Grid* grid;
+    Model* heatModel;
+    HeatSource* heatSource;
     HeatSystem* heatSystem;
+    Grid* grid;
 
     uint32_t width, height;
     uint32_t currentFrame = 0;

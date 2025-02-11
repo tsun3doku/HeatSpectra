@@ -5,16 +5,17 @@
 class VulkanDevice;
 class UniformBufferManager;
 class Model;
+class HeatSource;
 class Camera;
 
 class HeatSystem {
 public:
-    void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Camera& camera, uint32_t maxFramesInFLight);
+    void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     
     void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
     void createTetraPipeline(const VulkanDevice& vulkanDevice);
 
     void createSurfaceDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -22,12 +23,11 @@ public:
     void createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createSurfacePipeline(const VulkanDevice& vulkanDevice);
 
-    void dispatchTetraCompute(const VulkanDevice& vulkanDevice, Model& model, VkCommandBuffer commandBuffer, uint32_t currentFrame);
-    void dispatchSurfaceCompute(const VulkanDevice& vulkanDevice, Model& model, VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void dispatchSurfaceCompute(Model& visModel, VkCommandBuffer commandBuffer, uint32_t currentFrame);
     void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
     void generateTetrahedralMesh(Model& model);
-    void createSurfaceBuffer(VulkanDevice& vulkanDevice, Model& visModel);
     void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createProcessedBuffer(VulkanDevice& vulkanDevice);
     void createMeshBuffer(VulkanDevice& vulkanDevice);
@@ -35,6 +35,7 @@ public:
     void createTimeBuffer(VulkanDevice& vulkanDevice);
 
     void swapBuffers();
+    void initializeSurfaceBuffer(Model& visModel);
     void initializeTetra(VulkanDevice& vulkanDevice);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
@@ -53,14 +54,6 @@ public:
         return tetraDescriptorSets;
     }
 
-    VkBuffer getSurfaceBuffer() const {
-        return surfaceBuffer;
-    }
-
-    VkBuffer getSurfaceVertexBuffer() const {
-        return surfaceVertexBuffer;
-    }
-
     std::vector<VkCommandBuffer> getComputeCommandBuffers() {
         return computeCommandBuffers;
     }
@@ -70,6 +63,8 @@ private:
     const UniformBufferManager* uniformBufferManager;
     Model* simModel;
     Model* visModel;
+    Model* heatModel;
+    HeatSource* heatSource;
     Camera* camera;
 
     FEAMesh feaMesh;
@@ -82,15 +77,15 @@ private:
 
     std::vector<VkCommandBuffer> computeCommandBuffers;
 
-    SurfaceVertex* mappedSurfaceVertices = nullptr;
-    VkBuffer surfaceBuffer;
-    VkDeviceMemory surfaceBufferMemory;
+    //SurfaceVertex* mappedSurfaceVertices = nullptr;
+    //VkBuffer surfaceBuffer;
+    //VkDeviceMemory surfaceBufferMemory;
 
     VkBuffer tetraBuffer;
     VkDeviceMemory tetraBufferMemory;
 
-    VkBuffer surfaceVertexBuffer;
-    VkDeviceMemory surfaceVertexBufferMemory;
+    //VkBuffer surfaceVertexBuffer;
+    //VkDeviceMemory surfaceVertexBufferMemory;
 
     VkBuffer processedBuffer;
     VkDeviceMemory processedBufferMemory;

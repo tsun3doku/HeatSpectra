@@ -14,6 +14,7 @@
 //#include "HDR.hpp"
 #include "Grid.hpp"
 #include "GBuffer.hpp" 
+#include "HeatSource.hpp"
 #include "HeatSystem.hpp"
 
 #include <iostream>
@@ -91,9 +92,11 @@ private:
 
     Model simModel;
     Model visModel;
+    Model heatSourceModel;
     //HDR hdr; 
     GBuffer gbuffer; 
     Grid grid;
+    HeatSource heatSource;
     HeatSystem heatSystem;
 
     UniformBufferManager uniformBufferManager;
@@ -151,7 +154,8 @@ private:
     }
 
     void initScene() {
-        simModel.init(vulkanDevice);
+        // Initialize surface model
+        simModel.init(vulkanDevice, MODEL_PATH);
 
         // Create subdivided version for visualization
         visModel = simModel;
@@ -161,14 +165,21 @@ private:
         // Recreate buffers with subdivided size
         visModel.recreateBuffers();
 
+        // Initialize heat source model
+        heatSourceModel.init(vulkanDevice, HEATSOURCE_PATH);
+
         center = simModel.getBoundingBoxCenter();
         camera.setLookAt(center);
     }
 
     void initRenderResources() {
-        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);  
-        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, camera, MAXFRAMESINFLIGHT);
-        gbuffer.init(vulkanDevice, uniformBufferManager, visModel, grid, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    }
+        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+
+        heatSource.init(vulkanDevice, heatSourceModel, MAXFRAMESINFLIGHT);
+        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
+
+        gbuffer.init(vulkanDevice, uniformBufferManager, visModel, heatSourceModel, grid, heatSource, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    
+    }
 
     void initVulkan() {
         std::cout << "Initializing Vulkan..." << std::endl;
@@ -262,6 +273,7 @@ private:
         }
 
         cleanupSwapChain();
+        heatSource.cleanup(vulkanDevice);
         heatSystem.cleanup(vulkanDevice);
 
         createSwapChain();
@@ -270,7 +282,7 @@ private:
         gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
         gbuffer.createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 
-        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, camera, MAXFRAMESINFLIGHT);
+        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
         
@@ -289,6 +301,7 @@ private:
     void cleanupScene() {
         simModel.cleanup();
         visModel.cleanup();
+        heatSourceModel.cleanup();
     }
 
     void cleanupSyncObjects() {
@@ -348,23 +361,21 @@ private:
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
             populateDebugMessengerCreateInfo(debugCreateInfo);
-            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+            debugCreateInfo.pNext = nullptr;
+            createInfo.pNext = &debugCreateInfo;
 
             VkValidationFeaturesEXT validationFeatures = {};
             validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
             validationFeatures.enabledValidationFeatureCount = 1;
-
-            VkValidationFeatureEnableEXT enabledValidationFeatures[1] = {
+            VkValidationFeatureEnableEXT enabledValidationFeatures[] = {
                 VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
             };
             validationFeatures.pEnabledValidationFeatures = enabledValidationFeatures;
-
             validationFeatures.pNext = createInfo.pNext;
             createInfo.pNext = &validationFeatures;
         }
         else {
             createInfo.enabledLayerCount = 0;
-
             createInfo.pNext = nullptr;
         } 
 

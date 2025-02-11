@@ -175,6 +175,7 @@
     <ClCompile Include="GBuffer.cpp" />
     <ClCompile Include="Grid.cpp" />
     <ClCompile Include="HDR.cpp" />
+    <ClCompile Include="HeatSource.cpp" />
     <ClCompile Include="HeatSystem.cpp" />
     <ClCompile Include="libs\TetGen\predicates.cxx" />
     <ClCompile Include="libs\TetGen\tetgen.cxx" />
@@ -190,6 +191,7 @@
     <None Include="shaders\gbuffer.vert" />
     <None Include="shaders\grid.frag" />
     <None Include="shaders\grid.vert" />
+    <None Include="shaders\heat_source.comp" />
     <None Include="shaders\heat_surface.comp" />
     <None Include="shaders\heat_tetra.comp" />
     <None Include="shaders\lighting.frag" />
@@ -202,6 +204,7 @@
     <ClInclude Include="GBuffer.hpp" />
     <ClInclude Include="Grid.hpp" />
     <ClInclude Include="HDR.hpp" />
+    <ClInclude Include="HeatSource.hpp" />
     <ClInclude Include="HeatSystem.hpp" />
     <ClInclude Include="libs\TetGen\tetgen.h" />
     <ClInclude Include="Model.hpp" />

@@ -8,19 +8,24 @@
 #include "CommandBufferManager.hpp"
 #include "Model.hpp"
 
-void Model::init(VulkanDevice& vulkanDevice) {
+void Model::init(VulkanDevice& vulkanDevice, const std::string modelPath) {
     this->vulkanDevice = &vulkanDevice; 
 
-    loadModel();
+    loadModel(modelPath);
     subdivide();
+
     createVertexBuffer();
     createIndexBuffer();
+
+    createSurfaceBuffer();
 }
 
 void Model::recreateBuffers() {
     cleanup();
     createVertexBuffer();
     createIndexBuffer();
+
+    createSurfaceBuffer();
 }
 
 glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
@@ -93,13 +98,13 @@ HitResult Model::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDi
     return result;
 }
 
-void Model::loadModel() {
+void Model::loadModel(const std::string& modelPath) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
         throw std::runtime_error(warn + err);
     }
 
@@ -208,10 +213,27 @@ void Model::createIndexBuffer() {
     );
 
     copyBuffer(*vulkanDevice, stagingBuffer, indexBuffer, bufferSize);
-
     
     vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
+}
+
+void Model::createSurfaceBuffer() {
+    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * vertices.size();
+
+    surfaceBuffer = vulkanDevice->createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        surfaceBufferMemory
+    );
+
+    surfaceVertexBuffer = vulkanDevice->createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        surfaceVertexBufferMemory
+    );
 }
 
 void Model::setSubdivisionLevel(int level) { 

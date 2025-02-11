@@ -63,6 +63,9 @@
     <ClCompile Include="libs\TetGen\tetgen.cxx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="HeatSource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\shader.frag">
@@ -93,6 +96,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\heat_surface.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_source.comp">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -134,6 +140,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="libs\TetGen\tetgen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HeatSource.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
