@@ -65,7 +65,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
 
-    const float timeScale = 1.0f;
+    const float timeScale = 10.0f;
     float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
@@ -514,9 +514,9 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
 
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
-        feaMesh.elements[i].temperature = (i < 2000) ? 10 : 1;
-        feaMesh.elements[i].coolingRate = 0.002f;
-        feaMesh.elements[i].thermalConductivity = 0.5f;
+        feaMesh.elements[i].temperature = 1.0f;
+        feaMesh.elements[i].coolingRate = 0.01f;
+        feaMesh.elements[i].thermalConductivity = 0.75f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
             << ", vertices = ["
@@ -643,7 +643,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
             VkDescriptorBufferInfo{meshBuffer, 0, sizeof(glm::vec3) * feaMesh.nodes.size()},
             VkDescriptorBufferInfo{centerBuffer, 0, sizeof(glm::vec3) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, 0, sizeof(TimeUniform)},
-            VkDescriptorBufferInfo{heatSource.getSourceBuffer(), 0, sizeof(heatSource.getVertexCount())},
+            VkDescriptorBufferInfo{heatSource.getSourceBuffer(), 0, sizeof(HeatSourceVertex) * heatSource.getVertexCount()},
         };
 
         std::array<VkWriteDescriptorSet, 7> descriptorWrites{};

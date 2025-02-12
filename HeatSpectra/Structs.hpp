@@ -77,6 +77,7 @@ struct TetraFrameBuffers {
 };
 
 struct HeatSourceVertex {
+    alignas(16) glm::vec3 position;
     alignas(4) float temperature;   
 };
 

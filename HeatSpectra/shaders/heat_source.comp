@@ -1,28 +1,25 @@
 #version 450
 layout(local_size_x = 256) in;
 
-// Source data: positions+temps
 struct HeatSourceVertex {
+    vec3 position;
     float temperature;
 };
 
-// Destination data: positions+colors
 struct SurfaceVertex {
     vec3 position;
     vec3 color;
 };
 
-// layout(std430) or std140 is fine, but ensure matching alignment in your C++ structs
-layout(std430, binding = 0) buffer SourceBuffer {
+layout(binding = 0) buffer SourceBuffer {
     HeatSourceVertex srcVertices[];
 } sourceBuffer;
 
-layout(std430, binding = 1) buffer SurfaceBuffer {
+layout(binding = 1) buffer SurfaceBuffer {
     SurfaceVertex outVertices[];
 } surfaceBuffer;
 
 vec3 temperatureToColor(float t) {
-    // ~ Same gradient function as before
     if (t <= 0.0) return vec3(0, 0, 0);
     else if (t < 0.25)  return mix(vec3(0, 0, 0), vec3(0.1, 0.0, 0.6), t * 4.0);
     else if (t < 0.375) return mix(vec3(0.1, 0.0, 0.6), vec3(0.3, 0.0, 0.5), (t - 0.25) * 8.0);
