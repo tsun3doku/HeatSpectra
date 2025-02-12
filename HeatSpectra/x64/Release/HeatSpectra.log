@@ -12,12 +12,10 @@ C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(784,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(888,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(898,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-  Main.cpp
-  GLM_GTX_hash requires C++11 standard library support
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  8 of 4628 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    82 functions had inline decision re-evaluated but remain unchanged
+  45 of 4616 functions ( 1.0%) were compiled, the rest were copied from previous compilation.
+    11 functions were new in current compilation
+    110 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe

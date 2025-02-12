@@ -77,8 +77,6 @@ struct TetraFrameBuffers {
 };
 
 struct HeatSourceVertex {
-    alignas(16) glm::vec3 position;  // Matches your existing vertex format
-    alignas(16) glm::vec3 color;     // Will be set by compute shader
-    alignas(4) float temperature;    // Initial temperature value
+    alignas(4) float temperature;   
 };
 

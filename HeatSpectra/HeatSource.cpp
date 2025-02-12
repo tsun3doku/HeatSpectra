@@ -22,22 +22,7 @@ void HeatSource::init(VulkanDevice& vulkanDevice, Model& heatModel, uint32_t max
 }
 
 void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel) {
-    // Create CPU-side initialized data
-    std::vector<HeatSourceVertex> vertices;
-    const auto& modelVertices = heatModel.getVertices();
-
-    for (const auto& v : modelVertices) {
-        vertices.push_back({
-            v.pos,
-            glm::vec3(1.0f, 0.0f, 0.0f), // Initial color (red)
-            10.0f // Initial temperature
-            });
-    }
-
-    VkDeviceSize bufferSize = sizeof(HeatSourceVertex) * vertices.size();
-    std::cout << "Source buffer size: " << bufferSize << "\n";
-
-    // Create staging buffer
+    VkDeviceSize bufferSize = sizeof(HeatSourceVertex) * heatModel.getVertexCount();
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     stagingBuffer = vulkanDevice.createBuffer(
@@ -46,26 +31,79 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         stagingBufferMemory
     );
+    // Initialize surface vertices on the CPU
+    std::vector<HeatSourceVertex> surfaceVertices(heatModel.getVertexCount());
+    const auto& modelVertices = heatModel.getVertices();
+    for (size_t i = 0; i < heatModel.getVertexCount(); i++) {
+        surfaceVertices[i].temperature = 4.0f;
+    }
 
-    // Map and copy data
-    void* data;
-    vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
+    // Copy CPU data to staging buffer
+    void* mapped;
+    vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &mapped);
+    memcpy(mapped, surfaceVertices.data(), static_cast<size_t>(bufferSize));
     vkUnmapMemory(vulkanDevice.getDevice(), stagingBufferMemory);
+  
+    // Create GPU-only storage buffer for the compute shader
+    sourceBuffer = vulkanDevice.createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        sourceBufferMemory
+    );
 
-    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+    VkCommandBuffer cmd = beginSingleTimeCommands(vulkanDevice);
+    VkBufferCopy region{};
+    region.size = bufferSize;
+    vkCmdCopyBuffer(cmd, stagingBuffer, sourceBuffer, 1, &region);
+    endSingleTimeCommands(vulkanDevice, cmd);
 
-    VkBufferCopy region{ 0, 0, bufferSize };
-    
-    vkCmdCopyBuffer(copyCmd, stagingBuffer, heatModel.getSurfaceBuffer(), 1, &region);
-    
-    vkCmdCopyBuffer(copyCmd, stagingBuffer, heatModel.getSurfaceVertexBuffer(), 1, &region);
-
-    endSingleTimeCommands(vulkanDevice, copyCmd);
-
-    // 5) Cleanup staging
     vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);
+}
+
+void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
+    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * heatModel.getVertexCount();
+// 2) Allocate a CPU-visible staging buffer to hold our initial (position, color) data.
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
+    stagingBuffer = vulkanDevice->createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingMemory
+    );
+
+    // 3) Build an array of “SurfaceVertex” from the existing heatModel->getVertices().
+    std::vector<SurfaceVertex> surfaceVertices(heatModel.getVertexCount());
+    const auto& modelVerts = heatModel.getVertices();
+    for (size_t i = 0; i < modelVerts.size(); i++) {
+        surfaceVertices[i].position = modelVerts[i].pos;
+        // Initialize color to something, e.g. black:
+        surfaceVertices[i].color = glm::vec3(0.0f, 0.0f, 0.0f);
+    }
+
+    // 4) Copy that array into the staging buffer.
+    {
+        void* mapped = nullptr;
+        vkMapMemory(vulkanDevice->getDevice(), stagingMemory, 0, bufferSize, 0, &mapped);
+        memcpy(mapped, surfaceVertices.data(), static_cast<size_t>(bufferSize));
+        vkUnmapMemory(vulkanDevice->getDevice(), stagingMemory);
+    }
+
+    VkCommandBuffer cmd = beginSingleTimeCommands(*vulkanDevice);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.size = bufferSize;
+
+    vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceBuffer(), 1, &copyRegion);
+    vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceVertexBuffer(), 1, &copyRegion);
+
+    endSingleTimeCommands(*vulkanDevice, cmd);
+
+    // 6) Destroy the staging buffer once copies complete.
+    vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->getDevice(), stagingMemory, nullptr);
 }
 
 void HeatSource::createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight) {

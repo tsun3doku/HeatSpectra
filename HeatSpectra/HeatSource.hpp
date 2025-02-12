@@ -10,6 +10,7 @@ public:
     void init(VulkanDevice& device, Model& heatModel, uint32_t maxFramesInFlight);
 
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
+    void initializeSurfaceBuffer(Model& heatModel);
 
     void createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight);
     void createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t maxFramesInFlight);

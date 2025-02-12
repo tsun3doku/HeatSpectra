@@ -3,8 +3,6 @@ layout(local_size_x = 256) in;
 
 // Source data: positions+temps
 struct HeatSourceVertex {
-    vec3 position;
-    vec3 color;      // not used for final in-place color
     float temperature;
 };
 

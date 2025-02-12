@@ -375,8 +375,6 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
 
 void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * visModel.getVertexCount();
-    std::cout << "Surface buffer size: " << bufferSize << "\n";
-    // Create and fill staging buffer with initial data
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     stagingBuffer = vulkanDevice->createBuffer(
@@ -386,19 +384,21 @@ void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
         stagingBufferMemory
     );
 
+    // Initialize surface vertices on the CPU
     std::vector<SurfaceVertex> surfaceVertices(visModel.getVertexCount());
     const auto& modelVertices = visModel.getVertices();
-    for (int i = 0; i < visModel.getVertexCount(); i++) {
+    for (size_t i = 0; i < visModel.getVertexCount(); i++) {
         surfaceVertices[i].position = modelVertices[i].pos;
         surfaceVertices[i].color = glm::vec3(0.0f);
     }
 
+    // Copy CPU data to staging buffer
     void* data;
     vkMapMemory(vulkanDevice->getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
     memcpy(data, surfaceVertices.data(), bufferSize);
     vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
 
-    // Copy to device buffers
+    // Copy initial surface vertex data (position,color) to both surface and surface vertex buffers on the GPU
     VkCommandBuffer copyCmd = beginSingleTimeCommands(*vulkanDevice);
     VkBufferCopy copyRegion{ 0, 0, bufferSize };
     vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceBuffer(), 1, &copyRegion);
@@ -1035,7 +1035,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         0, nullptr
     );
 
-    // Copy surface data to vertex buffer
+    // Copy the compute shader written surface buffer to the surface vertex buffer readable by the vertex shader per frame
     VkBufferCopy copyRegion{};
     copyRegion.size = sizeof(SurfaceVertex) * visModel->getVertexCount();
     vkCmdCopyBuffer(commandBuffer, visModel->getSurfaceBuffer(), visModel->getSurfaceVertexBuffer(), 1, &copyRegion);
