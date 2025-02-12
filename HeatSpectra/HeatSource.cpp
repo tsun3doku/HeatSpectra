@@ -36,7 +36,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     const auto& modelVertices = heatModel.getVertices();
     for (size_t i = 0; i < heatModel.getVertexCount(); i++) {
         surfaceVertices[i].position = modelVertices[i].pos;
-        surfaceVertices[i].temperature = 5.5f;
+        surfaceVertices[i].temperature = 9.5f;
     }
 
     // Copy CPU data to staging buffer

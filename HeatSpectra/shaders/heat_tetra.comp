@@ -70,26 +70,29 @@ void main() {
     // 
     const float HEAT_RADIUS = 0.01;
     float heatAccumulation = 0.0;
+    float maxSourceTemp = 0.0;
 
     for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
         vec3 heatPos = heatSourceBuffer.heatSources[i].position;
         float heatTemp = heatSourceBuffer.heatSources[i].temperature;
+        maxSourceTemp = max(maxSourceTemp, heatTemp);
 
         float dist = distance(center, heatPos);
         if (dist < HEAT_RADIUS) {
             float intensity = (1.0 - dist / HEAT_RADIUS) * heatTemp;
-            heatAccumulation += intensity * timeBuffer.deltaTime * 0.25;
+             heatAccumulation += min(intensity * timeBuffer.deltaTime * 0.25, maxSourceTemp);
         }
     }
 
     // Add accumulated heat to this tetra’s temperature
     temperature += heatAccumulation;
+    temperature = min(temperature, maxSourceTemp);
 
     // 
     // Existing conduction logic
     // 
-    const float MAX_RADIUS = 0.2;
-    const float HEAT_TRANSFER_RATE = 0.05;
+    const float MAX_RADIUS = 0.22;
+    const float HEAT_TRANSFER_RATE = 0.09;
     float totalHeatTransfer = 0.0;
     int transferCount = 0;
 

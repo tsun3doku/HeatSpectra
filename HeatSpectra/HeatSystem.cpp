@@ -516,7 +516,7 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
         feaMesh.elements[i].temperature = 1.0f;
         feaMesh.elements[i].coolingRate = 0.01f;
-        feaMesh.elements[i].thermalConductivity = 0.75f;
+        feaMesh.elements[i].thermalConductivity = 0.25f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
             << ", vertices = ["

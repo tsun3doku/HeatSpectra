@@ -11,8 +11,8 @@ C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(898,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  3 of 4617 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+  1 of 4617 functions (<0.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    62 functions had inline decision re-evaluated but remain unchanged
+    61 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
