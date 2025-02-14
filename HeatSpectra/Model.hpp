@@ -6,13 +6,14 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include "File_utils.h" 
-#include "Structs.hpp"
-
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <array>
+
+#include "File_utils.h" 
+#include "Structs.hpp"
+
 
 class VulkanDevice;
 
@@ -126,7 +127,7 @@ public:
     void cleanup();
 
     glm::vec3 getBoundingBoxCenter();
-    glm::vec3 calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
+    std::array<glm::vec3, 8> calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
    
     HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
 
@@ -163,8 +164,24 @@ public:
         return surfaceVertexBuffer;
     }
 
+    glm::vec3 getModelPosition() {
+        return modelPosition;
+    }
+
+    glm::mat4 getModelMatrix() {
+        return modelMatrix;
+    }
+
     int getSubdivisionLevel() {
         return subdivisionLevel;
+    }
+
+    // Setters
+    void setModelPosition(const glm::vec3& position) { 
+        modelPosition = position; 
+    }
+    void setModelMatrix(const glm::mat4& matrix) {
+        modelMatrix = matrix;
     }
 
 private:
@@ -186,5 +203,7 @@ private:
     VkBuffer surfaceVertexBuffer;
     VkDeviceMemory surfaceVertexBufferMemory;
 
+    glm::vec3 modelPosition{};
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
     int subdivisionLevel = 0;
 }; 

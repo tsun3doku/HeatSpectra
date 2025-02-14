@@ -106,6 +106,22 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     vkFreeMemory(vulkanDevice->getDevice(), stagingMemory, nullptr);
 }
 
+void HeatSource::controller(GLFWwindow* window, float deltaTime) {
+    float moveSpeed = 0.1f * deltaTime; 
+    glm::vec3 currentPosition = heatModel->getModelPosition();
+
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        currentPosition += glm::vec3(0.0f, moveSpeed, 0.0f);
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        currentPosition -= glm::vec3(0.0f, moveSpeed, 0.0f);
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+        currentPosition += glm::vec3(moveSpeed, 0.0f, 0.0f);
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        currentPosition -= glm::vec3(moveSpeed, 0.0f, 0.0f);
+
+    heatModel->setModelPosition(currentPosition);
+}
+
 void HeatSource::createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 1> poolSizes{};
 
@@ -204,10 +220,17 @@ void HeatSource::createHeatSourcePipeline(VulkanDevice& device) {
     computeShaderStageInfo.module = computeShaderModule;
     computeShaderStageInfo.pName = "main";
 
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(HeatSourcePushConstant);
+
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts = &heatSourceDescriptorLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(device.getDevice(), &layoutInfo, nullptr, &heatSourcePipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat source pipeline layout!");
@@ -227,6 +250,15 @@ void HeatSource::createHeatSourcePipeline(VulkanDevice& device) {
 
 void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, heatSourcePipeline);
+
+    vkCmdPushConstants(
+        commandBuffer, 
+        heatSourcePipelineLayout, 
+        VK_SHADER_STAGE_COMPUTE_BIT, 
+        0, 
+        sizeof(HeatSourcePushConstant), 
+        &heatSourcePushConstant);
+
     vkCmdBindDescriptorSets(
         commandBuffer,
         VK_PIPELINE_BIND_POINT_COMPUTE,

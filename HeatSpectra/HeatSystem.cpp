@@ -65,7 +65,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
 
-    const float timeScale = 10.0f;
+    const float timeScale = 2.0f;
     float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
@@ -74,6 +74,18 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
         mappedTimeData->deltaTime = deltaTime;
         mappedTimeData->totalTime += deltaTime; 
     }
+
+    heatSource->controller(window, deltaTime);
+
+    glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), heatModel->getModelPosition());
+    heatModel->setModelMatrix(heatSourceModelMatrix);
+    heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
+
+    // Map the uniform buffer and copy the updated UBO
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
+    memcpy(data, &ubo, sizeof(UniformBufferObject));
+    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0]);
 }
 
 void HeatSystem::swapBuffers() {
@@ -515,8 +527,8 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
         feaMesh.elements[i].temperature = 1.0f;
-        feaMesh.elements[i].coolingRate = 0.01f;
-        feaMesh.elements[i].thermalConductivity = 0.25f;
+        feaMesh.elements[i].coolingRate = 0.02f;
+        feaMesh.elements[i].thermalConductivity = 0.5f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
             << ", vertices = ["
@@ -720,10 +732,17 @@ void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
     computeShaderStageInfo.module = computeShaderModule;
     computeShaderStageInfo.pName = "main";
 
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(HeatSourcePushConstant);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &tetraDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &tetraPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create compute pipeline layout!");
@@ -889,7 +908,16 @@ void HeatSystem::dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t cu
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (elementCount + workGroupSize - 1) / workGroupSize;
 
+    const auto& pushConstant = heatSource->getHeatSourcePushConstant();
+
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, tetraPipeline);
+    vkCmdPushConstants(
+        commandBuffer,
+        tetraPipelineLayout,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        0,
+        sizeof(HeatSourcePushConstant),
+        &pushConstant);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, tetraPipelineLayout, 0, 1, &tetraDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
@@ -911,6 +939,8 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin recording compute command buffer");
     }
+
+    //heatSource->updatePositions();
 
     // --- Heat Source Compute Pass ---
     heatSource->dispatchSourceCompute(commandBuffer, currentFrame);

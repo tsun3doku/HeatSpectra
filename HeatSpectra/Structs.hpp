@@ -18,23 +18,23 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 view;  // 16 byte aligned
     alignas(16) glm::mat4 proj;  // 16 byte aligned
     alignas(16) glm::vec3 color; // 16 byte aligned 
-}; // 208 bytes
+};  // 208 bytes
 
 struct GridUniformBufferObject {
     alignas(16) glm::mat4 view; // 16 byte aligned
     alignas(16) glm::mat4 proj; // 16 byte aligned
     alignas(16) glm::vec3 pos;  // 16 byte aligned
-}; // 144 bytes
+};  // 144 bytes
 
 struct LightUniformBufferObject {
     alignas(16) glm::vec3 lightPos_Key; // 16 byte aligned
     alignas(16) glm::vec3 lightPos_Rim; // 16 byte aligned
     alignas(16) glm::vec3 lightAmbient; // 16 byte aligned
-}; // 48 bytes
+};  // 48 bytes
 
 struct SSAOKernelBufferObject {
-    alignas(16) glm::vec4 SSAOKernel[16]; 
-};
+    alignas(16) glm::vec4 SSAOKernel[16]; // 16 byte aligned
+};  // 256 bytes
 
 struct HitResult {
     bool hit;
@@ -46,12 +46,12 @@ struct HitResult {
 struct TimeUniform {
     alignas(8) float deltaTime;    // 8-byte aligned
     alignas(8) float totalTime;    // 8-byte aligned
-};
+};  // 16 bytes
 
 struct SurfaceVertex {
     alignas(16) glm::vec3 position; // 16 byte aligned
     alignas(16) glm::vec3 color;    // 16 byte aligned
-};
+};  // 32 bytes
 
 struct TetrahedralElement {
     uint32_t vertices[4];  
@@ -76,8 +76,12 @@ struct TetraFrameBuffers {
     void* mappedWriteData;
 };
 
-struct HeatSourceVertex {
-    alignas(16) glm::vec3 position;
-    alignas(4) float temperature;   
+struct HeatSourcePushConstant {
+   alignas(16) glm::mat4 model; // 16 byte aligned
 };
+
+struct HeatSourceVertex {
+    alignas(16) glm::vec3 position; // 16 byte aligned
+    float temperature;   
+};  // 20 bytes
 

@@ -12,6 +12,8 @@ public:
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
     void initializeSurfaceBuffer(Model& heatModel);
 
+    void controller(GLFWwindow* window, float deltaTime);
+
     void createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight);
     void createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t maxFramesInFlight);
     void createHeatSourcePipeline(VulkanDevice& device);
@@ -38,10 +40,19 @@ public:
     VkBuffer getSourceBuffer() const {
         return sourceBuffer;
     }
+    const HeatSourcePushConstant getHeatSourcePushConstant() const {
+        return heatSourcePushConstant;
+    }
+    
+    // Setters
+    void setHeatSourcePushConstant(glm::mat4 modelMatrix) {
+        heatSourcePushConstant.model = modelMatrix;
+    }
    
 private:
     VulkanDevice* vulkanDevice;
     Model* heatModel;
+    HeatSourcePushConstant heatSourcePushConstant;
 
     VkDescriptorPool heatSourceDescriptorPool;
     std::vector<VkDescriptorSet> heatSourceDescriptorSets;

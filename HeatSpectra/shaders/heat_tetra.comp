@@ -44,6 +44,10 @@ layout(binding = 6) buffer HeatSourceBuffer {
     HeatSourceVertex heatSources[];
 } heatSourceBuffer;
 
+layout(push_constant) uniform PushConstantBlock {
+    mat4 heatSourceModelMatrix;
+} pushConstants;
+
 bool areTetraConnected(TetraElement a, TetraElement b) {
     int sharedVertices = 0;
     for (int i = 0; i < 4; i++) {
@@ -73,11 +77,14 @@ void main() {
     float maxSourceTemp = 0.0;
 
     for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
-        vec3 heatPos = heatSourceBuffer.heatSources[i].position;
+        vec4 transformedPos = pushConstants.heatSourceModelMatrix * vec4(heatSourceBuffer.heatSources[i].position, 1.0);
+        vec3 heatPos = transformedPos.xyz;
+
         float heatTemp = heatSourceBuffer.heatSources[i].temperature;
         maxSourceTemp = max(maxSourceTemp, heatTemp);
 
         float dist = distance(center, heatPos);
+
         if (dist < HEAT_RADIUS) {
             float intensity = (1.0 - dist / HEAT_RADIUS) * heatTemp;
              heatAccumulation += min(intensity * timeBuffer.deltaTime * 0.25, maxSourceTemp);

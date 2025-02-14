@@ -4,6 +4,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <array>
+
 #include "VulkanDevice.hpp"
 #include "CommandBufferManager.hpp"
 #include "Model.hpp"
@@ -28,9 +30,9 @@ void Model::recreateBuffers() {
     createSurfaceBuffer();
 }
 
-glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
+std::array<glm::vec3, 8> Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
     // Initialize min and max bounding box values
-    minBound = glm::vec3(FLT_MAX);  
+    minBound = glm::vec3(FLT_MAX);
     maxBound = glm::vec3(-FLT_MAX);
 
     // Iterate through all vertices to find the min and max coordinates
@@ -44,14 +46,25 @@ glm::vec3 Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::
         maxBound.z = std::max(maxBound.z, vertex.pos.z);
     }
 
-    // Return the center of the bounding box
-    return (minBound + maxBound);
-    
+    std::array<glm::vec3, 8> points;
+    points[0] = minBound; // min x, min y, min z
+    points[1] = glm::vec3(maxBound.x, minBound.y, minBound.z); 
+    points[2] = glm::vec3(maxBound.x, maxBound.y, minBound.z); 
+    points[3] = glm::vec3(minBound.x, maxBound.y, minBound.z); 
+    points[4] = glm::vec3(minBound.x, minBound.y, maxBound.z); 
+    points[5] = glm::vec3(maxBound.x, minBound.y, maxBound.z); 
+    points[6] = maxBound; // max x, max y, max z
+    points[7] = glm::vec3(minBound.x, maxBound.y, maxBound.z); 
+
+    return points;
 }
 
 glm::vec3 Model::getBoundingBoxCenter() {
     glm::vec3 minBound, maxBound;
-    return calculateBoundingBox(vertices, minBound, maxBound) * 0.5f;
+    std::array<glm::vec3, 8> points = calculateBoundingBox(vertices, minBound, maxBound);
+
+    return (points[0] + points[1] + points[2] + points[3] +
+        points[4] + points[5] + points[6] + points[7]) * 0.125f; // Calculate the average
 }
 
 HitResult Model::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir) {
@@ -151,8 +164,7 @@ void Model::loadModel(const std::string& modelPath) {
         }
     }
 
-    glm::vec3 minBound, maxBound;
-    glm::vec3 bboxCenter = calculateBoundingBox(vertices, minBound, maxBound);
+    modelPosition = getBoundingBoxCenter();
 }
 
 void Model::createVertexBuffer() {
