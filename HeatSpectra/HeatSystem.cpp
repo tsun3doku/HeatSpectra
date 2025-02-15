@@ -20,7 +20,7 @@ void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& un
     this->camera = &camera;
     this->uniformBufferManager = &uniformBufferManager;
 
-    generateTetrahedralMesh(simModel);
+    //generateTetrahedralMesh(simModel);
     createProcessedBuffer(vulkanDevice);
     createTetraBuffer(vulkanDevice, maxFramesInFlight);
     createMeshBuffer(vulkanDevice);
@@ -43,22 +43,71 @@ void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& un
     createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
 }
 
+
+//                                       [ the following code requires
+//                                         good commentary to fully
+//                                         understand the logic ]
+//
+
+
 void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    // Free existing command buffers
+    if (!computeCommandBuffers.empty()) {
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(),
+            static_cast<uint32_t>(computeCommandBuffers.size()), computeCommandBuffers.data());
+    }
+
     computeCommandBuffers.resize(maxFramesInFlight);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vulkanDevice.getCommandPool();
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = static_cast<uint32_t>(computeCommandBuffers.size());
+
     if (vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo,computeCommandBuffers.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate command buffers for compute shader");
     }
 }
 
-//                                       [ the following code requires
-//                                         good commentary to fully
-//                                         understand the logic ]
-//
+void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource) {
+    // *** RECREATE AND COPY tetraFrameBuffers ***
+    VkBuffer oldReadBuffer = tetraFrameBuffers.readBuffer;
+    VkDeviceMemory oldReadBufferMemory = tetraFrameBuffers.readBufferMemory;
+    VkBuffer oldWriteBuffer = tetraFrameBuffers.writeBuffer;
+    VkDeviceMemory oldWriteBufferMemory = tetraFrameBuffers.writeBufferMemory;
+
+   createTetraBuffer(vulkanDevice, maxFramesInFlight); // This recreates the buffers
+
+    // Copy data from old buffers to new buffers
+    VkDeviceSize bufferSize = sizeof(float) * feaMesh.elements.size();
+    if (oldReadBuffer != VK_NULL_HANDLE && oldWriteBuffer != VK_NULL_HANDLE) {
+        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+
+        VkBufferCopy copyRegion{};
+        copyRegion.size = bufferSize;
+
+        vkCmdCopyBuffer(copyCmd, oldReadBuffer,tetraFrameBuffers.readBuffer, 1, &copyRegion);
+        vkCmdCopyBuffer(copyCmd, oldWriteBuffer, tetraFrameBuffers.writeBuffer, 1, &copyRegion);
+
+        endSingleTimeCommands(vulkanDevice, copyCmd);
+
+        // Destroy old buffers
+        vkDestroyBuffer(vulkanDevice.getDevice(), oldReadBuffer, nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), oldReadBufferMemory, nullptr);
+        vkDestroyBuffer(vulkanDevice.getDevice(), oldWriteBuffer, nullptr);
+        vkFreeMemory(vulkanDevice.getDevice(), oldWriteBufferMemory, nullptr);
+    }
+    createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createSurfaceDescriptorSetLayout(vulkanDevice);
+    createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createTetraDescriptorSetLayout(vulkanDevice);
+    createTetraPipeline(vulkanDevice);
+    createSurfacePipeline(vulkanDevice);
+
+    createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
+    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight, heatSource);
+    createSurfaceDescriptorSets(vulkanDevice, maxFramesInFlight);
+}
 
 void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
@@ -571,15 +620,15 @@ glm::vec3 HeatSystem::calculateTetraCenter(const TetrahedralElement& tetra) {
 }
 
 void HeatSystem::createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    std::array<VkDescriptorPoolSize, 1> poolSizes{};
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
     // Storage buffers
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[0].descriptorCount = maxFramesInFlight * 6;  // Storage buffer count
 
     // Uniform buffer
-    //poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    //poolSizes[1].descriptorCount = maxFramesInFlight;  // Uniform buffer count
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[1].descriptorCount = maxFramesInFlight;  // Uniform buffer count
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -643,6 +692,15 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
     allocInfo.pSetLayouts = layouts.data();
 
     tetraDescriptorSets.resize(maxFramesInFlight);
+    if (tetraDescriptorPool == VK_NULL_HANDLE) {
+        std::cerr << "ERROR: tetraDescriptorPool is VK_NULL_HANDLE!" << std::endl;
+        throw std::runtime_error("Invalid descriptor pool");
+    }
+    if (tetraDescriptorSetLayout == VK_NULL_HANDLE) {
+        std::cerr << "ERROR: tetraDescriptorSetLayout is VK_NULL_HANDLE!" << std::endl;
+        throw std::runtime_error("Invalid descriptor set layout");
+    }
+
     if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, tetraDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate heat descriptor sets");
     }
@@ -940,8 +998,6 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         throw std::runtime_error("Failed to begin recording compute command buffer");
     }
 
-    //heatSource->updatePositions();
-
     // --- Heat Source Compute Pass ---
     heatSource->dispatchSourceCompute(commandBuffer, currentFrame);
 
@@ -1094,18 +1150,58 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     }
 }
 
+void HeatSystem::cleanupResources(const VulkanDevice& vulkanDevice) {
+    vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
+
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), surfacePipelineLayout, nullptr);
+
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr); 
+}
+
 void HeatSystem::cleanup(const VulkanDevice& vulkanDevice) {
-    
+    vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
+
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), surfacePipelineLayout, nullptr);
+
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
+
+    if (mappedTetraData) {
+        vkUnmapMemory(vulkanDevice.getDevice(), tetraBufferMemory);
+        mappedTetraData = nullptr; 
+    }
+
+    if (mappedTimeData) {
+        vkUnmapMemory(vulkanDevice.getDevice(), timeBufferMemory);
+        mappedTimeData = nullptr;
+    }
+
+    if (mappedProcessedData) {
+        vkUnmapMemory(vulkanDevice.getDevice(), processedBufferMemory);
+        mappedProcessedData = nullptr;
+    }
+
     vkDestroyBuffer(vulkanDevice.getDevice(), tetraFrameBuffers.readBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), tetraFrameBuffers.readBufferMemory, nullptr);
     vkDestroyBuffer(vulkanDevice.getDevice(), tetraFrameBuffers.writeBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), tetraFrameBuffers.writeBufferMemory, nullptr);
-    
-
-    vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
     vkDestroyBuffer(vulkanDevice.getDevice(), tetraBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), tetraBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), timeBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), timeBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), centerBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), centerBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), meshBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), meshBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), processedBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), processedBufferMemory, nullptr);
 }

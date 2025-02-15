@@ -278,5 +278,10 @@ void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t c
 void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
     vkDestroyBuffer(vulkanDevice.getDevice(), sourceBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), sourceBufferMemory, nullptr);
+
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), heatSourceDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), heatSourceDescriptorLayout, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), heatSourcePipeline, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), heatSourcePipelineLayout, nullptr);
 }
 

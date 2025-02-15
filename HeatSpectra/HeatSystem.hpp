@@ -11,6 +11,7 @@ class Camera;
 class HeatSystem {
 public:
     void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
+    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     
     void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -42,6 +43,7 @@ public:
 
     void createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
+    void cleanupResources(const VulkanDevice& vulkanDevice);
     void cleanup(const VulkanDevice& vulkanDevice);
 
     VkPipeline getHeatPipeline() const { 

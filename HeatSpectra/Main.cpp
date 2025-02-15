@@ -168,6 +168,8 @@ private:
         // Initialize heat source model
         heatSourceModel.init(vulkanDevice, HEATSOURCE_PATH);
 
+        heatSystem.generateTetrahedralMesh(simModel);
+
         center = simModel.getBoundingBoxCenter();
         camera.setLookAt(center);
     }
@@ -263,7 +265,7 @@ private:
             vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[i]);
         }
 
-        vkResetCommandPool(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+        //vkResetCommandPool(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
         for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
@@ -273,16 +275,19 @@ private:
         }
 
         cleanupSwapChain();
+        heatSystem.cleanupResources(vulkanDevice);
         heatSource.cleanup(vulkanDevice);
-        heatSystem.cleanup(vulkanDevice);
 
         createSwapChain();
         createImageViews();
+
+        heatSource.init(vulkanDevice, heatSourceModel, MAXFRAMESINFLIGHT);
+        //heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
+        heatSystem.recreateResources(vulkanDevice, MAXFRAMESINFLIGHT, heatSource);
+
         gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
         gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
         gbuffer.createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
-
-        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
         
@@ -334,7 +339,6 @@ private:
     }
 
     void createInstance() {
-
         if (enableValidationLayers && !checkValidationLayerSupport()) {
             throw std::runtime_error("Validation layers requested, but not available");
         }
@@ -356,33 +360,42 @@ private:
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+
         if (enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
             populateDebugMessengerCreateInfo(debugCreateInfo);
             debugCreateInfo.pNext = nullptr;
-            createInfo.pNext = &debugCreateInfo;
 
             VkValidationFeaturesEXT validationFeatures = {};
             validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-            validationFeatures.enabledValidationFeatureCount = 1;
+
+            // Enable both BEST_PRACTICES and DEBUG_PRINTF
             VkValidationFeatureEnableEXT enabledValidationFeatures[] = {
+                VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
                 VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
             };
+            validationFeatures.enabledValidationFeatureCount = sizeof(enabledValidationFeatures) / sizeof(VkValidationFeatureEnableEXT);
             validationFeatures.pEnabledValidationFeatures = enabledValidationFeatures;
+
+            // Chain the validation features struct
             validationFeatures.pNext = createInfo.pNext;
             createInfo.pNext = &validationFeatures;
+
+            debugCreateInfo.pNext = createInfo.pNext;
+            createInfo.pNext = &debugCreateInfo;
         }
         else {
             createInfo.enabledLayerCount = 0;
             createInfo.pNext = nullptr;
-        } 
+        }
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create instance");
         }
     }
+
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};

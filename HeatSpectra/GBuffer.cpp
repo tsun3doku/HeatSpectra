@@ -949,13 +949,12 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visMo
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = extent;
 
-    std::array<VkClearValue, 6> clearValues{};
+    std::array<VkClearValue, 5> clearValues{};
     clearValues[0].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Clear Albedo 
     clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Clear Normal 
     clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Clear Position
     clearValues[3].depthStencil = { 1.0, 0 };               // Clear Depth
     clearValues[4].color = { {clearColorValues[0],clearColorValues[1], clearColorValues[2], 1.0f } };  // Clear Swapchain
-    clearValues[5].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Clear Grid
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();

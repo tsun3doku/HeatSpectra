@@ -321,4 +321,10 @@ void Model::cleanup() {
 
     vkDestroyBuffer(vulkanDevice->getDevice(), vertexBuffer, nullptr);
     vkFreeMemory(vulkanDevice->getDevice(), vertexBufferMemory, nullptr);
+
+    vkDestroyBuffer(vulkanDevice->getDevice(), surfaceBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->getDevice(), surfaceBufferMemory, nullptr);
+
+    vkDestroyBuffer(vulkanDevice->getDevice(), surfaceVertexBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->getDevice(), surfaceVertexBufferMemory, nullptr);
 }
