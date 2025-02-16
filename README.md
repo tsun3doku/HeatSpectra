@@ -16,3 +16,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 2. Build shaders using `compile.bat`
 3. Open solution in Visual Studio 2022
 4. Build and run in Release mode
+
+## Controls
+- W A S D Q E Camera controls
+- Arrow keys for heat source control
