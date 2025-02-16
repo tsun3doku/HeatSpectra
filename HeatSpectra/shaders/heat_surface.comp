@@ -40,8 +40,8 @@ void main() {
     if (vertexID >= surfaceBuffer.vertices.length()) return;
 
     vec3 vertPos = surfaceBuffer.vertices[vertexID].position;
-    const float maxRadius = 0.025; // Define maxRadius first
-    float minDist = maxRadius; // Now use maxRadius to initialize minDist
+    const float maxRadius = 0.02; 
+    float minDist = maxRadius; 
     float nearestTemp = 0.0; // Default temperature if no tetra is found
 
     // Find the nearest tetrahedron

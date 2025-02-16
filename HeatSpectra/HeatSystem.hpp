@@ -30,7 +30,7 @@ public:
 
     void generateTetrahedralMesh(Model& model);
     void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createProcessedBuffer(VulkanDevice& vulkanDevice);
+    void createNeighborBuffer(VulkanDevice& vulkanDevice);
     void createMeshBuffer(VulkanDevice& vulkanDevice);
     void createCenterBuffer(VulkanDevice& vulkanDevice);
     void createTimeBuffer(VulkanDevice& vulkanDevice);
@@ -89,9 +89,9 @@ private:
     //VkBuffer surfaceVertexBuffer;
     //VkDeviceMemory surfaceVertexBufferMemory;
 
-    VkBuffer processedBuffer;
-    VkDeviceMemory processedBufferMemory;
-    uint32_t* mappedProcessedData;
+    VkBuffer neighborBuffer;
+    VkDeviceMemory neighborBufferMemory;
+    const uint32_t MAX_NEIGHBORS = 4;
 
     VkBuffer meshBuffer;
     VkDeviceMemory meshBufferMemory;

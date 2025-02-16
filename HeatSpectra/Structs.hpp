@@ -64,7 +64,8 @@ struct FEAMesh {
     std::vector<TetrahedralElement> elements;
     std::vector<glm::vec4> nodes; 
     std::vector<glm::vec4> tetraCenters;
-    std::vector<float> nodeTemps;     
+    std::vector<float> nodeTemps; 
+    std::vector<std::vector<uint32_t>> neighbors;
 };
 
 struct TetraFrameBuffers {

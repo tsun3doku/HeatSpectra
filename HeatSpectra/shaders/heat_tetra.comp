@@ -29,11 +29,13 @@ layout(binding = 2) buffer TemperatureReadBuffer {
     float temperatures[];
 } temperatureReadBuffer;
 
+layout(binding = 3) buffer NeighborBuffer {
+    int neighbors[];
+} neighborBuffer;
 
 layout(binding = 4) buffer CenterBuffer {
     vec4 centers[];
 } centerBuffer;
-
 
 layout(binding = 5) uniform TimeBuffer {
     float deltaTime;
@@ -48,87 +50,58 @@ layout(push_constant) uniform PushConstantBlock {
     mat4 heatSourceModelMatrix;
 } pushConstants;
 
-bool areTetraConnected(TetraElement a, TetraElement b) {
-    int sharedVertices = 0;
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            if (a.vertices[i] == b.vertices[j]) {
-                sharedVertices++;
-            }
-        }
-    }
-    return sharedVertices > 0;
-}
 
 void main() {
     uint tetraID = gl_GlobalInvocationID.x;
     if (tetraID >= tetraBuffer.elements.length()) return;
 
-    // Read the tetra data and old temperature
+    // Read tetrahedron data and previous temperature
     TetraElement tetra = tetraBuffer.elements[tetraID];
     float temperature = temperatureReadBuffer.temperatures[tetraID];
     vec3 center = centerBuffer.centers[tetraID].xyz;
 
-    // 
-    // Heat source influence calculation
-    // 
-    const float HEAT_RADIUS = 0.01;
+    const float HEAT_RADIUS = 0.015;
     float heatAccumulation = 0.0;
     float maxSourceTemp = 0.0;
 
     for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
         vec4 transformedPos = pushConstants.heatSourceModelMatrix * vec4(heatSourceBuffer.heatSources[i].position, 1.0);
         vec3 heatPos = transformedPos.xyz;
-
         float heatTemp = heatSourceBuffer.heatSources[i].temperature;
         maxSourceTemp = max(maxSourceTemp, heatTemp);
-
         float dist = distance(center, heatPos);
 
         if (dist < HEAT_RADIUS) {
             float intensity = (1.0 - dist / HEAT_RADIUS) * heatTemp;
-             heatAccumulation += min(intensity * timeBuffer.deltaTime * 0.25, maxSourceTemp);
+            // The multiplication by 0.25 and deltaTime scales the influence
+            heatAccumulation += min(intensity * timeBuffer.deltaTime * 0.25, maxSourceTemp);
         }
     }
-
-    // Add accumulated heat to this tetra’s temperature
     temperature += heatAccumulation;
     temperature = min(temperature, maxSourceTemp);
 
-    // 
-    // Existing conduction logic
-    // 
-    const float MAX_RADIUS = 0.22;
-    const float HEAT_TRANSFER_RATE = 0.09;
     float totalHeatTransfer = 0.0;
-    int transferCount = 0;
+    int baseIndex = int(tetraID) * 5;
+    int neighborCount = neighborBuffer.neighbors[baseIndex];
 
-    for (uint t = 0; t < tetraBuffer.elements.length(); t++) {
-        if (t == tetraID) continue;
-
-        TetraElement neighbor = tetraBuffer.elements[t];
-        vec3 neighborCenter = centerBuffer.centers[t].xyz;
-        float dist = distance(center, neighborCenter);
-
-        if (dist < MAX_RADIUS && areTetraConnected(tetra, neighbor)) {
-            float neighborTemp = temperatureReadBuffer.temperatures[t];
-            float distanceFactor = 1.0 - (dist / MAX_RADIUS);
-            float k_avg = (tetra.thermalConductivity + neighbor.thermalConductivity) * 0.5;
-            float tempDiff = temperature - neighborTemp;
-
-            float transfer = k_avg * tempDiff * HEAT_TRANSFER_RATE * distanceFactor * timeBuffer.deltaTime;
-            totalHeatTransfer -= transfer;
-            transferCount++;
-        }
+    for (int i = 0; i < neighborCount; ++i) {
+        int t = neighborBuffer.neighbors[baseIndex + 1 + i];
+        if (t < 0 || t >= tetraBuffer.elements.length()) continue;
+        
+        // Read neighbor temperature
+        float neighborTemp = temperatureReadBuffer.temperatures[t];
+        // Average conductivity of the two tetrahedra
+        float k_avg = (tetra.thermalConductivity + tetraBuffer.elements[t].thermalConductivity) * 0.5;
+        
+        float transfer = k_avg * (neighborTemp - temperature) * timeBuffer.deltaTime;
+        totalHeatTransfer += transfer;
     }
+    // Update temperature with the net conduction transfer
+    temperature += totalHeatTransfer;
 
-    if (transferCount > 0) {
-        temperature += totalHeatTransfer;
-    }
-
-    // Cooling
+    // Cooling  
     temperature *= (1.0 - tetra.coolingRate * timeBuffer.deltaTime);
 
-    // Write updated temperature to the output buffer
+    // Write updated temperature to the output buffer   
     temperatureWriteBuffer.temperatures[tetraID] = max(temperature, 0.0);
 }

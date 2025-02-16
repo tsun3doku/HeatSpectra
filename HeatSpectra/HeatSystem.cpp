@@ -21,8 +21,8 @@ void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& un
     this->uniformBufferManager = &uniformBufferManager;
 
     //generateTetrahedralMesh(simModel);
-    createProcessedBuffer(vulkanDevice);
     createTetraBuffer(vulkanDevice, maxFramesInFlight);
+    createNeighborBuffer(vulkanDevice);
     createMeshBuffer(vulkanDevice);
     createCenterBuffer(vulkanDevice);
     createTimeBuffer(vulkanDevice);
@@ -70,13 +70,12 @@ void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_
 }
 
 void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource) {
-    // *** RECREATE AND COPY tetraFrameBuffers ***
     VkBuffer oldReadBuffer = tetraFrameBuffers.readBuffer;
     VkDeviceMemory oldReadBufferMemory = tetraFrameBuffers.readBufferMemory;
     VkBuffer oldWriteBuffer = tetraFrameBuffers.writeBuffer;
     VkDeviceMemory oldWriteBufferMemory = tetraFrameBuffers.writeBufferMemory;
 
-   createTetraBuffer(vulkanDevice, maxFramesInFlight); // This recreates the buffers
+    createTetraBuffer(vulkanDevice, maxFramesInFlight); 
 
     // Copy data from old buffers to new buffers
     VkDeviceSize bufferSize = sizeof(float) * feaMesh.elements.size();
@@ -91,7 +90,6 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
 
         endSingleTimeCommands(vulkanDevice, copyCmd);
 
-        // Destroy old buffers
         vkDestroyBuffer(vulkanDevice.getDevice(), oldReadBuffer, nullptr);
         vkFreeMemory(vulkanDevice.getDevice(), oldReadBufferMemory, nullptr);
         vkDestroyBuffer(vulkanDevice.getDevice(), oldWriteBuffer, nullptr);
@@ -298,18 +296,17 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
         tetgenbehavior b;
         b.plc = 1;           // Preserve the input surface mesh
         b.quality = 1;       // Generate quality tetrahedral mesh
-        b.nobisect = 1;      // Allow splitting
-        b.steinerleft = 1000;
+        b.nobisect = 0;      // Allow splitting
+        b.steinerleft = 100;
         b.quiet = 0;         // Enable output for debugging
         b.minratio = 1.5;    // Add quality mesh ratio
-        b.mindihedral = 10; // Lower minimum dihedral angle
+        b.mindihedral = 10;  // Lower minimum dihedral angle
         b.coarsen = 0;       // Enable mesh coarsening
-        b.verbose = 2;       // Enable verbose output
+        b.verbose = 1;       // Enable verbose output
         b.docheck = 1;       // Check mesh consistency
         b.refine = 0;        // Disable refining tetrahedra mesh
         b.weighted = 0;      // No weighted Delaunay
         b.metric = 1;        // Use metric for size control
-        //b.epsilon = 1.0e-6;  // Set numerical tolerance
     
         // Generate tetrahedral mesh
         try {
@@ -363,7 +360,51 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
         tetra.vertices[3] = out.tetrahedronlist[i * 4 + 3];
         feaMesh.elements[i] = tetra;
     }
-    std::cout << "feaMesh: nodes = " << feaMesh.nodes.size() << ", elements = " << feaMesh.elements.size() << std::endl;
+    //std::cout << "feaMesh: nodes = " << feaMesh.nodes.size() << ", elements = " << feaMesh.elements.size() << std::endl;
+    std::unordered_map<std::string, std::vector<uint32_t>> faceMap;
+
+    auto createFaceKey = [](uint32_t a, uint32_t b, uint32_t c) {
+        if (a > b) std::swap(a, b);
+        if (b > c) std::swap(b, c);
+        if (a > b) std::swap(a, b);
+        return std::to_string(a) + "_" + std::to_string(b) + "_" + std::to_string(c);
+        };
+
+    // Build face map
+    for (uint32_t tid = 0; tid < feaMesh.elements.size(); ++tid) {
+        const auto& t = feaMesh.elements[tid];
+        uint32_t v[4] = { t.vertices[0], t.vertices[1], t.vertices[2], t.vertices[3] };
+
+        // Create all 4 faces
+        const std::array<std::array<int, 3>, 4> faces = { {
+            {0, 1, 2}, {0, 1, 3}, {0, 2, 3}, {1, 2, 3}
+        } };
+
+        for (const auto& face : faces) {
+            // Sort vertices to ensure consistent face key
+            uint32_t sorted[3] = { v[face[0]], v[face[1]], v[face[2]] };
+            std::sort(sorted, sorted + 3);
+            auto key = createFaceKey(sorted[0], sorted[1], sorted[2]);
+            faceMap[key].push_back(tid);
+        }
+    }
+
+    // Build neighbor list
+    feaMesh.neighbors.resize(feaMesh.elements.size());
+    for (auto& [key, tets] : faceMap) {
+        // Only faces shared by exactly 2 tetras are valid neighbors
+        if (tets.size() == 2) {
+            feaMesh.neighbors[tets[0]].push_back(tets[1]);
+            feaMesh.neighbors[tets[1]].push_back(tets[0]);
+        }
+    }
+
+    // Remove duplicates (if any)
+    for (auto& neighbors : feaMesh.neighbors) {
+        std::sort(neighbors.begin(), neighbors.end());
+        auto last = std::unique(neighbors.begin(), neighbors.end());
+        neighbors.erase(last, neighbors.end());
+    }
 
     feaMesh.tetraCenters.resize(feaMesh.elements.size());
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
@@ -509,18 +550,34 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
     memcpy(mappedTetraData, feaMesh.elements.data(), bufferSize);
 }
 
-void HeatSystem::createProcessedBuffer(VulkanDevice& vulkanDevice) {
-    VkDeviceSize bufferSize = sizeof(uint32_t) * vertexMap.size() + sizeof(uint32_t);
+void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
+    std::vector<int32_t> neighborData;
 
-    processedBuffer = vulkanDevice.createBuffer(
+    for (const auto& neighbors : feaMesh.neighbors) {
+        uint32_t count = std::min(static_cast<uint32_t>(neighbors.size()), MAX_NEIGHBORS);
+        neighborData.push_back(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            neighborData.push_back(neighbors[i]);
+        }
+        
+        for (uint32_t i = count; i < MAX_NEIGHBORS; ++i) {
+            neighborData.push_back(-1);
+        }
+    }
+
+    VkDeviceSize bufferSize = neighborData.size() * sizeof(int32_t);
+
+    neighborBuffer = vulkanDevice.createBuffer(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        processedBufferMemory
+        neighborBufferMemory
     );
 
-    vkMapMemory(vulkanDevice.getDevice(), processedBufferMemory, 0, bufferSize, 0, (void**)&mappedProcessedData);
-    memset(mappedProcessedData, 0, bufferSize);
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), neighborBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, neighborData.data(), bufferSize);
+    vkUnmapMemory(vulkanDevice.getDevice(), neighborBufferMemory);
 }
 
 void HeatSystem::createMeshBuffer(VulkanDevice& vulkanDevice) {
@@ -650,7 +707,7 @@ void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         // Temperature read binbing
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        // Mesh binding
+        // Neighbor binding
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         // Center binding
         {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -710,7 +767,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
             VkDescriptorBufferInfo{tetraBuffer, 0, sizeof(TetrahedralElement) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffer, 0, sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, 0, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{meshBuffer, 0, sizeof(glm::vec3) * feaMesh.nodes.size()},
+            VkDescriptorBufferInfo{neighborBuffer, 0, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{centerBuffer, 0, sizeof(glm::vec3) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, 0, sizeof(TimeUniform)},
             VkDescriptorBufferInfo{heatSource.getSourceBuffer(), 0, sizeof(HeatSourceVertex) * heatSource.getVertexCount()},
@@ -742,13 +799,13 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
         readWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         readWrite.pBufferInfo = &bufferInfos[2];
 
-        VkWriteDescriptorSet& meshWrite = descriptorWrites[3];
-        meshWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        meshWrite.dstSet = tetraDescriptorSets[i];
-        meshWrite.dstBinding = 3;
-        meshWrite.descriptorCount = 1;
-        meshWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        meshWrite.pBufferInfo = &bufferInfos[3];
+        VkWriteDescriptorSet& neighborWrite = descriptorWrites[3];
+        neighborWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        neighborWrite.dstSet = tetraDescriptorSets[i];
+        neighborWrite.dstBinding = 3;
+        neighborWrite.descriptorCount = 1;
+        neighborWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        neighborWrite.pBufferInfo = &bufferInfos[3];
 
         VkWriteDescriptorSet& centerWrite = descriptorWrites[4];
         centerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1185,11 +1242,6 @@ void HeatSystem::cleanup(const VulkanDevice& vulkanDevice) {
         mappedTimeData = nullptr;
     }
 
-    if (mappedProcessedData) {
-        vkUnmapMemory(vulkanDevice.getDevice(), processedBufferMemory);
-        mappedProcessedData = nullptr;
-    }
-
     vkDestroyBuffer(vulkanDevice.getDevice(), tetraFrameBuffers.readBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), tetraFrameBuffers.readBufferMemory, nullptr);
     vkDestroyBuffer(vulkanDevice.getDevice(), tetraFrameBuffers.writeBuffer, nullptr);
@@ -1202,6 +1254,6 @@ void HeatSystem::cleanup(const VulkanDevice& vulkanDevice) {
     vkFreeMemory(vulkanDevice.getDevice(), centerBufferMemory, nullptr);
     vkDestroyBuffer(vulkanDevice.getDevice(), meshBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), meshBufferMemory, nullptr);
-    vkDestroyBuffer(vulkanDevice.getDevice(), processedBuffer, nullptr);
-    vkFreeMemory(vulkanDevice.getDevice(), processedBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), neighborBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(),neighborBufferMemory, nullptr);
 }
