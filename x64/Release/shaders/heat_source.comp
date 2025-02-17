@@ -1,6 +1,10 @@
 #version 450
 layout(local_size_x = 256) in;
 
+layout(push_constant) uniform PushConstantBlock {
+    mat4 modelMatrix;
+} pushConstants;
+
 struct HeatSourceVertex {
     vec3 position;
     float temperature;
@@ -31,14 +35,16 @@ vec3 temperatureToColor(float t) {
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
-    if (idx >= sourceBuffer.srcVertices.length() ||
-        idx >= surfaceBuffer.outVertices.length()) return;
+    if (idx >= sourceBuffer.srcVertices.length() || idx >= surfaceBuffer.outVertices.length()) 
+        return;
+
+    vec4 transformedPosition = pushConstants.modelMatrix * vec4(sourceBuffer.srcVertices[idx].position, 1.0);
 
     float temperatureScale = 10.0;
     float temp = sourceBuffer.srcVertices[idx].temperature;
     float normalized = clamp(temp / temperatureScale, 0.0, 1.0);
 
     // Write result to surfaceBuffer
-    //surfaceBuffer.outVertices[idx].position = sourceBuffer.srcVertices[idx].position;
+    surfaceBuffer.outVertices[idx].position = transformedPosition.xyz;
     surfaceBuffer.outVertices[idx].color = temperatureToColor(normalized);
 }

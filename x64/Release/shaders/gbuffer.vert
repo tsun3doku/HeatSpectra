@@ -22,12 +22,12 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 fragTexCoord;      
                  
 void main() {
-    vec3 worldPos = vec3(ubo.model * vec4(inPos, 1.0));
+    vec3 worldPos = vec3(ubo.model * vec4(inSurfacePos, 1.0));
     fragColor = inSurfaceColor;          
     fragNormal = inNormal;        
     fragTexCoord = inTexCoord;    
     fragPos = worldPos;          
 
     // Final clip-space position
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inSurfacePos, 1.0);
 }

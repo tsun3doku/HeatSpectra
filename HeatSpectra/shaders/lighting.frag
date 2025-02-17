@@ -61,7 +61,7 @@ void main() {
     vec3 totalLighting = ambientLight + diffuseLighting_Key + diffuseLighting_Rim;
 
     vec3 hsl = rgb2hsl(albedo);
-    hsl.z *= (1.0 + dot(totalLighting, vec3(0.333)));
+    hsl.z *= (1.0 + log(1.0 + dot(totalLighting, vec3(0.333))) * 0.5);
 
     vec3 finalColor = hsl2rgb(hsl);
 

@@ -4,6 +4,7 @@ layout(location = 1) in vec3 nearPoint;
 layout(location = 2) in vec3 farPoint;
 layout(location = 3) in mat4 fragView;
 layout(location = 7) in mat4 fragProj;
+layout(location = 11) in vec3 cameraPos;
 layout(location = 0) out vec4 outColor;
 
 vec4 grid(vec3 fragPos3D, float scale, bool drawAxis) {
@@ -56,9 +57,18 @@ float computeDepth(vec3 pos) {
 }
 void main() {
     float t = -nearPoint.y / (farPoint.y - nearPoint.y);
+
     vec3 fragPos3D = nearPoint + t * (farPoint - nearPoint);
+    vec3 viewDirection = normalize(fragPos3D - cameraPos);
+
+   vec3 camForward = normalize(-cameraPos);
+    float angle = acos(clamp(dot(camForward, vec3(0.0, -1.0, 0.0)), -1.0, 1.0));
+    float fadeFactor = 1 - smoothstep(1.2, 1.57, abs(angle));
+
     gl_FragDepth = computeDepth(fragPos3D);
-    outColor = grid(fragPos3D, 10, true) * float(t > 0);
+    vec4 gridColor = grid(fragPos3D, 10, true);
+    gridColor.a *= fadeFactor;
+    outColor = gridColor * float(t > 0);
 }
 
 
