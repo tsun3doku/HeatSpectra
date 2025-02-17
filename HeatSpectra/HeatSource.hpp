@@ -50,8 +50,9 @@ public:
     }
    
 private:
-    VulkanDevice* vulkanDevice;
-    Model* heatModel;
+    VulkanDevice* vulkanDevice = nullptr;
+    Model* heatModel = nullptr;
+
     HeatSourcePushConstant heatSourcePushConstant;
 
     VkDescriptorPool heatSourceDescriptorPool;

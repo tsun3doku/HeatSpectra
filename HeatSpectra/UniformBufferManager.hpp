@@ -84,8 +84,8 @@ public:
 	}
 	
 private:	
-	VulkanDevice* vulkanDevice;
-	Camera* camera;
+	VulkanDevice* vulkanDevice = nullptr;
+	Camera* camera = nullptr;
 
 	VkExtent2D swapChainExtent;
 

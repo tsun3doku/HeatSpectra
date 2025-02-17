@@ -60,7 +60,7 @@ void main() {
     float temperature = temperatureReadBuffer.temperatures[tetraID];
     vec3 center = centerBuffer.centers[tetraID].xyz;
 
-    const float HEAT_RADIUS = 0.015;
+    const float HEAT_RADIUS = 0.012;
     float heatAccumulation = 0.0;
     float maxSourceTemp = 0.0;
 

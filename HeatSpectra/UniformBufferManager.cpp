@@ -143,7 +143,7 @@ void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage,Camera&
     // Grid ubo shares same matrices as main ubo   
     gridUbo.view = ubo.view;
     gridUbo.proj = ubo.proj;
-    gridUbo.pos = glm::vec3(0.0f, 0.0f, 0.0f);
+    gridUbo.pos = camera.getPosition();
 
     memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
 }

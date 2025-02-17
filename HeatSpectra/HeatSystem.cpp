@@ -49,24 +49,32 @@ void HeatSystem::init(VulkanDevice& vulkanDevice, const UniformBufferManager& un
 //                                         understand the logic ]
 //
 
+void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+    // Time calculation
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
 
-void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    // Free existing command buffers
-    if (!computeCommandBuffers.empty()) {
-        vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(),
-            static_cast<uint32_t>(computeCommandBuffers.size()), computeCommandBuffers.data());
+    const float timeScale = 2.0f;
+    float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
+    lastTime = currentTime;
+
+    // Update GPU time buffer
+    if (mappedTimeData) {
+        mappedTimeData->deltaTime = deltaTime;
+        mappedTimeData->totalTime += deltaTime;
     }
 
-    computeCommandBuffers.resize(maxFramesInFlight);
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = vulkanDevice.getCommandPool();
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = static_cast<uint32_t>(computeCommandBuffers.size());
+    heatSource->controller(window, deltaTime);
 
-    if (vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo,computeCommandBuffers.data()) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate command buffers for compute shader");
-    }
+    glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), heatModel->getModelPosition());
+    heatModel->setModelMatrix(heatSourceModelMatrix);
+    heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
+
+    // Map the uniform buffer and copy the updated UBO
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
+    memcpy(data, &ubo, sizeof(UniformBufferObject));
+    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0]);
 }
 
 void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource) {
@@ -105,34 +113,6 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
     createTetraDescriptorSets(vulkanDevice, maxFramesInFlight, heatSource);
     createSurfaceDescriptorSets(vulkanDevice, maxFramesInFlight);
-}
-
-void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
-    // Time calculation
-    static auto lastTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-
-    const float timeScale = 2.0f;
-    float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
-    lastTime = currentTime;
-
-    // Update GPU time buffer
-    if (mappedTimeData) {
-        mappedTimeData->deltaTime = deltaTime;
-        mappedTimeData->totalTime += deltaTime; 
-    }
-
-    heatSource->controller(window, deltaTime);
-
-    glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), heatModel->getModelPosition());
-    heatModel->setModelMatrix(heatSourceModelMatrix);
-    heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
-
-    // Map the uniform buffer and copy the updated UBO
-    void* data;
-    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
-    memcpy(data, &ubo, sizeof(UniformBufferObject));
-    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0]);
 }
 
 void HeatSystem::swapBuffers() {
@@ -634,7 +614,7 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
         feaMesh.elements[i].temperature = 1.0f;
         feaMesh.elements[i].coolingRate = 0.02f;
-        feaMesh.elements[i].thermalConductivity = 0.5f;
+        feaMesh.elements[i].thermalConductivity = 1.8f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
             << ", vertices = ["
@@ -1204,6 +1184,25 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
         throw std::runtime_error("Failed to record compute command buffer");
+    }
+}
+
+void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    // Free existing command buffers
+    if (!computeCommandBuffers.empty()) {
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(),
+            static_cast<uint32_t>(computeCommandBuffers.size()), computeCommandBuffers.data());
+    }
+
+    computeCommandBuffers.resize(maxFramesInFlight);
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = vulkanDevice.getCommandPool();
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = static_cast<uint32_t>(computeCommandBuffers.size());
+
+    if (vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate command buffers for compute shader");
     }
 }
 

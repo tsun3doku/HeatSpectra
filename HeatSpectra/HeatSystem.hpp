@@ -11,9 +11,20 @@ class Camera;
 class HeatSystem {
 public:
     void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
-    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
-    
+    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
+    void swapBuffers();
+
+    void generateTetrahedralMesh(Model& model);
+    void initializeSurfaceBuffer(Model& visModel);
+    void initializeTetra(VulkanDevice& vulkanDevice);
+
+    void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createNeighborBuffer(VulkanDevice& vulkanDevice);
+    void createMeshBuffer(VulkanDevice& vulkanDevice);
+    void createCenterBuffer(VulkanDevice& vulkanDevice);
+    void createTimeBuffer(VulkanDevice& vulkanDevice);
+
     void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice);
     void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
@@ -27,17 +38,6 @@ public:
     void dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
     void dispatchSurfaceCompute(Model& visModel, VkCommandBuffer commandBuffer, uint32_t currentFrame);
     void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
-
-    void generateTetrahedralMesh(Model& model);
-    void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createNeighborBuffer(VulkanDevice& vulkanDevice);
-    void createMeshBuffer(VulkanDevice& vulkanDevice);
-    void createCenterBuffer(VulkanDevice& vulkanDevice);
-    void createTimeBuffer(VulkanDevice& vulkanDevice);
-
-    void swapBuffers();
-    void initializeSurfaceBuffer(Model& visModel);
-    void initializeTetra(VulkanDevice& vulkanDevice);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
 
@@ -61,33 +61,24 @@ public:
     }
 
 private:
-    VulkanDevice* vulkanDevice;
-    const UniformBufferManager* uniformBufferManager;
-    Model* simModel;
-    Model* visModel;
-    Model* heatModel;
-    HeatSource* heatSource;
-    Camera* camera;
+    VulkanDevice* vulkanDevice = nullptr;
+    const UniformBufferManager* uniformBufferManager = nullptr;
+    Model* simModel = nullptr;
+    Model* visModel = nullptr;
+    Model* heatModel = nullptr;
+    HeatSource* heatSource = nullptr;
+    Camera* camera = nullptr;
 
     FEAMesh feaMesh;
     std::vector<int> remappedIndices;
     std::unordered_map<glm::vec3, int> vertexMap;
     std::vector<glm::vec3> tetraCenters;
 
-    TetrahedralElement* mappedTetraData = nullptr;
-    glm::vec3* mappedVertexColors = nullptr;
-
     std::vector<VkCommandBuffer> computeCommandBuffers;
-
-    //SurfaceVertex* mappedSurfaceVertices = nullptr;
-    //VkBuffer surfaceBuffer;
-    //VkDeviceMemory surfaceBufferMemory;
 
     VkBuffer tetraBuffer;
     VkDeviceMemory tetraBufferMemory;
-
-    //VkBuffer surfaceVertexBuffer;
-    //VkDeviceMemory surfaceVertexBufferMemory;
+    TetrahedralElement* mappedTetraData = nullptr;
 
     VkBuffer neighborBuffer;
     VkDeviceMemory neighborBufferMemory;
@@ -101,15 +92,15 @@ private:
 
     VkBuffer timeBuffer;
     VkDeviceMemory timeBufferMemory;
-    TimeUniform* mappedTimeData;
+    TimeUniform* mappedTimeData = nullptr;
 
     VkBuffer tetraWriteBuffer;
     VkDeviceMemory tetraWriteBufferMemory;
-    uint32_t* mappedTetraWriteData;
+    uint32_t* mappedTetraWriteData = nullptr;
 
     VkBuffer tetraReadBuffer;
     VkDeviceMemory tetraReadBufferMemory;
-    uint32_t* mappedTetraReadData;
+    uint32_t* mappedTetraReadData = nullptr;
 
     TetraFrameBuffers tetraFrameBuffers;
 

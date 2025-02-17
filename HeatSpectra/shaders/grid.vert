@@ -1,4 +1,5 @@
 #version 450
+#extension GL_KHR_vulkan_glsl : enable
 
 layout(set = 0, binding = 0) uniform ViewUniforms {
     mat4 view;  // View matrix
@@ -10,6 +11,7 @@ layout(location = 1) out vec3 nearPoint;     // Near point output
 layout(location = 2) out vec3 farPoint;      // Far point output
 layout(location = 3) out mat4 fragView;      // View matrix output
 layout(location = 7) out mat4 fragProj;      // Projection matrix output
+layout(location = 11) out vec3 cameraPos; // Camera position output
 
 // Grid positions in clipped space
 vec3 gridPlane[6] = vec3[] (
@@ -34,6 +36,8 @@ void main() {
     // Pass the view and projection matrices to the fragment shader
     fragView = viewUniforms.view;
     fragProj = viewUniforms.proj;
+
+    cameraPos = viewUniforms.pos;
 
     // Set gl_Position for the vertex
     gl_Position = vec4(p, 1.0);

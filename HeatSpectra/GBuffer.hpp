@@ -91,13 +91,13 @@ public:
     }
 
 private:
-    const VulkanDevice* vulkanDevice;
-    const UniformBufferManager* uniformBufferManager;
-    Model* visModel;
-    Model* heatModel;
-    HeatSource* heatSource;
-    HeatSystem* heatSystem;
-    Grid* grid;
+    const VulkanDevice* vulkanDevice = nullptr;
+    const UniformBufferManager* uniformBufferManager = nullptr;
+    Model* visModel = nullptr;
+    Model* heatModel = nullptr;
+    HeatSource* heatSource = nullptr;
+    HeatSystem* heatSystem = nullptr;
+    Grid* grid = nullptr;
 
     uint32_t width, height;
     uint32_t currentFrame = 0;
