@@ -36,6 +36,18 @@ struct SSAOKernelBufferObject {
     alignas(16) glm::vec4 SSAOKernel[16]; // 16 byte aligned
 };  // 256 bytes
 
+struct Suballocation {
+    VkDeviceSize offset;
+    VkDeviceSize size;
+    bool isFree;
+};
+
+struct AllocatorStats {
+    VkDeviceSize totalAllocated = 0;
+    VkDeviceSize usedBytes = 0;
+    uint32_t allocationCount = 0;
+};
+
 struct HitResult {
     bool hit;
     float distance;

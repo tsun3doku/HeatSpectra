@@ -8,6 +8,7 @@
 #include "Model.hpp"
 #include "Structs.hpp"
 #include "VulkanImage.hpp"
+#include "MemoryAllocator.hpp"
 #include "UniformBufferManager.hpp" 
 #include "Camera.hpp"
 #include "File_utils.h" 
@@ -68,6 +69,7 @@ void static DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 
 class App {
 public:
+    App() {}
     void run() {
         initWindow();
         initVulkan();
@@ -83,6 +85,7 @@ private:
     VkSurfaceKHR surface{};
 
     VulkanDevice vulkanDevice;
+    std::unique_ptr<MemoryAllocator> memoryAllocator;
 
     VkSwapchainKHR swapChain{};
     std::vector<VkImage> swapChainImages;
@@ -92,7 +95,7 @@ private:
 
     Model simModel;
     Model visModel;
-    Model heatSourceModel;
+    Model heatModel;
     //HDR hdr; 
     GBuffer gbuffer; 
     Grid grid;
@@ -146,6 +149,7 @@ private:
         setupDebugMessenger();
         createSurface();
         vulkanDevice.init(instance, surface, deviceExtensions, validationLayers, enableValidationLayers);
+        memoryAllocator = std::make_unique<MemoryAllocator>(vulkanDevice);
     }
 
     void initSwapChain() {
@@ -155,7 +159,7 @@ private:
 
     void initScene() {
         // Initialize surface model
-        simModel.init(vulkanDevice, MODEL_PATH);
+        simModel.init(vulkanDevice, *memoryAllocator, MODEL_PATH);
 
         // Create subdivided version for visualization
         visModel = simModel;
@@ -166,7 +170,7 @@ private:
         visModel.recreateBuffers();
 
         // Initialize heat source model
-        heatSourceModel.init(vulkanDevice, HEATSOURCE_PATH);
+        heatModel.init(vulkanDevice, *memoryAllocator, HEATSOURCE_PATH);
 
         heatSystem.generateTetrahedralMesh(simModel);
 
@@ -177,10 +181,10 @@ private:
     void initRenderResources() {
         uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
 
-        heatSource.init(vulkanDevice, heatSourceModel, MAXFRAMESINFLIGHT);
-        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
+        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT);
+        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
 
-        gbuffer.init(vulkanDevice, uniformBufferManager, visModel, heatSourceModel, grid, heatSource, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    
+        gbuffer.init(vulkanDevice, *memoryAllocator, uniformBufferManager, visModel, heatModel, grid, heatSource, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    
     }
 
     void initVulkan() {
@@ -208,6 +212,7 @@ private:
     void renderLoop() {
         const double targetFrameTime = 1.0 / frameRate;
         auto lastFrameTime = std::chrono::high_resolution_clock::now();
+        int frameCount = 0;
 
         while (!glfwWindowShouldClose(window)) {
             if (isCameraUpdated.load(std::memory_order_acquire)) {
@@ -222,6 +227,12 @@ private:
             }
 
             lastFrameTime = std::chrono::high_resolution_clock::now();
+
+            // Call defragment() every 1000 frames
+            frameCount++;
+            if (frameCount % 1000 == 0) {
+                memoryAllocator->defragment(); // Call defragment on the memory allocator
+            }
         }
 
         vkDeviceWaitIdle(vulkanDevice.getDevice());
@@ -281,8 +292,8 @@ private:
         createSwapChain();
         createImageViews();
 
-        heatSource.init(vulkanDevice, heatSourceModel, MAXFRAMESINFLIGHT);
-        //heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatSourceModel, heatSource, camera, MAXFRAMESINFLIGHT);
+        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT);
+        //heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
         heatSystem.recreateResources(vulkanDevice, MAXFRAMESINFLIGHT, heatSource);
 
         gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
@@ -306,7 +317,7 @@ private:
     void cleanupScene() {
         simModel.cleanup();
         visModel.cleanup();
-        heatSourceModel.cleanup();
+        heatModel.cleanup();
     }
 
     void cleanupSyncObjects() {

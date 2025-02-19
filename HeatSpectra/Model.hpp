@@ -16,6 +16,7 @@
 
 
 class VulkanDevice;
+class MemoryAllocator;
 
 const std::string MODEL_PATH = "models/teapot.obj"; 
 const std::string TEXTURE_PATH = "textures/texture.jpg"; 
@@ -113,7 +114,7 @@ namespace std {
 class Model {
 public:
     Model() = default;
-    void init(VulkanDevice& vulkanDevice, const std::string modelPath);
+    void init(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, const std::string modelPath);
 
     void loadModel(const std::string& modelPath);
     void createVertexBuffer();
@@ -141,9 +142,12 @@ public:
     std::vector<uint32_t> getIndices() {
         return indices;
     }
-
+    
     VkBuffer getVertexBuffer() {
         return vertexBuffer;
+    }
+    VkDeviceSize getVertexBufferOffset() {
+        return vertexBufferOffset_;
     }
     VkDeviceMemory getVertexBufferMemory() {
         return vertexBufferMemory;
@@ -152,6 +156,9 @@ public:
     VkBuffer getIndexBuffer() {
         return indexBuffer;
     }
+    VkDeviceSize getIndexBufferOffset() {
+        return indexBufferOffset_;
+    }
     VkDeviceMemory getIndexBufferMemory() {
         return indexBufferMemory;
     }
@@ -159,9 +166,18 @@ public:
     VkBuffer getSurfaceBuffer() {
         return surfaceBuffer;
     }
+    VkDeviceSize getSurfaceBufferOffset() {
+        return surfaceBufferOffset_;
+    }
+    VkDeviceMemory getSurfaceBufferMemory() {
+        return surfaceBufferMemory;
+    }
 
     VkBuffer getSurfaceVertexBuffer() {
         return surfaceVertexBuffer;
+    }
+    VkDeviceSize getSurfaceVertexBufferOffset() {
+        return surfaceVertexBufferOffset_;
     }
 
     glm::vec3 getModelPosition() {
@@ -186,21 +202,26 @@ public:
 
 private:
     VulkanDevice* vulkanDevice = nullptr;
+    MemoryAllocator* memoryAllocator;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
-	VkBuffer vertexBuffer{};
-	VkDeviceMemory vertexBufferMemory{};
+	VkBuffer vertexBuffer;
+    VkDeviceSize vertexBufferOffset_;
+	VkDeviceMemory vertexBufferMemory;
 
-	VkBuffer indexBuffer{};
-	VkDeviceMemory indexBufferMemory{};
+	VkBuffer indexBuffer;
+    VkDeviceSize indexBufferOffset_;
+	VkDeviceMemory indexBufferMemory;
 
-    SurfaceVertex* mappedSurfaceVertices = nullptr;
     VkBuffer surfaceBuffer;
     VkDeviceMemory surfaceBufferMemory;
+    VkDeviceSize surfaceBufferOffset_;
+    SurfaceVertex* mappedSurfaceVertices = nullptr;
 
     VkBuffer surfaceVertexBuffer;
+    VkDeviceSize surfaceVertexBufferOffset_;
     VkDeviceMemory surfaceVertexBufferMemory;
 
     glm::vec3 modelPosition{};

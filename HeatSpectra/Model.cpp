@@ -7,11 +7,13 @@
 #include <array>
 
 #include "VulkanDevice.hpp"
+#include "MemoryAllocator.hpp"
 #include "CommandBufferManager.hpp"
 #include "Model.hpp"
 
-void Model::init(VulkanDevice& vulkanDevice, const std::string modelPath) {
+void Model::init(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, const std::string modelPath) {
     this->vulkanDevice = &vulkanDevice; 
+    this->memoryAllocator = &allocator;
 
     loadModel(modelPath);
     subdivide();
@@ -168,88 +170,92 @@ void Model::loadModel(const std::string& modelPath) {
 }
 
 void Model::createVertexBuffer() {
-   
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    VkBuffer stagingBuffer{};
-    VkDeviceMemory stagingBufferMemory;
-    stagingBuffer = vulkanDevice->createBuffer(
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBufferMemory
+    auto [stagingBuffer, stagingOffset] = memoryAllocator->allocate(
+        bufferSize, 
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
-    void* data;
-    vkMapMemory(vulkanDevice->getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
+    void* stagingData = memoryAllocator->getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, vertices.data(), static_cast<size_t>(bufferSize));
 
-    // Create the vertex buffer
-    vertexBuffer = vulkanDevice->createBuffer(
+    // Allocate the local device vertex buffer
+    auto [vertexBufferHandle, vertexBufferOffset] = memoryAllocator->allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        vertexBufferMemory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+        vulkanDevice->getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
     );
 
-    copyBuffer(*vulkanDevice, stagingBuffer, vertexBuffer, bufferSize);
+    // Copy from the staging buffer to the vertex buffer
+    copyBuffer(*vulkanDevice, stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
 
-    vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
+    // Free the staging buffer 
+    memoryAllocator->free(stagingBuffer, stagingOffset);
+
+    // Assign handles and offsets
+    vertexBuffer = vertexBufferHandle;
+    vertexBufferOffset_ = vertexBufferOffset; 
 }
 
 void Model::createIndexBuffer() {
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    stagingBuffer = vulkanDevice->createBuffer(
+    // Allocate staging buffer using MemoryAllocator
+    auto [stagingBuffer, stagingOffset] = memoryAllocator->allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBufferMemory
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
-    void* data;
-    vkMapMemory(vulkanDevice->getDevice(), stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize);
-    vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
+    void* stagingData = memoryAllocator->getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, indices.data(), static_cast<size_t>(bufferSize));
 
-    // Create the index buffer
-    indexBuffer = vulkanDevice->createBuffer(
+    // Allocate device-local index buffer using MemoryAllocator
+    auto [indexBufferHandle, indexBufferOffset] = memoryAllocator->allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        indexBufferMemory
+        vulkanDevice->getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
     );
 
-    copyBuffer(*vulkanDevice, stagingBuffer, indexBuffer, bufferSize);
-    
-    vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), stagingBufferMemory, nullptr);
+    // Copy data with offsets
+    copyBuffer(*vulkanDevice, stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
+
+    // Free staging buffer
+    memoryAllocator->free(stagingBuffer, stagingOffset);
+
+    // Assign handles and offsets
+    indexBuffer = indexBufferHandle;
+    indexBufferOffset_ = indexBufferOffset;
 }
 
 void Model::createSurfaceBuffer() {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * vertices.size();
 
-    surfaceBuffer = vulkanDevice->createBuffer(
+    // Allocate surfaceBuffer
+    auto [surfaceBufferHandle, surfaceBufferOffset] = memoryAllocator->allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        surfaceBufferMemory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
+    surfaceBuffer = surfaceBufferHandle;
+    surfaceBufferOffset_ = surfaceBufferOffset;
 
-    surfaceVertexBuffer = vulkanDevice->createBuffer(
+    // Allocate surfaceVertexBuffer 
+    auto [surfaceVertexBufferHandle, surfaceVertexBufferOffset] = memoryAllocator->allocate(
         bufferSize,
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        surfaceVertexBufferMemory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
+    surfaceVertexBuffer = surfaceVertexBufferHandle;
+    surfaceVertexBufferOffset_ = surfaceVertexBufferOffset;
 }
 
-void Model::setSubdivisionLevel(int level) { 
-    subdivisionLevel = level; 
+void Model::setSubdivisionLevel(int level) {
+    subdivisionLevel = level;
 }
 
 void Model::subdivide() {
@@ -316,15 +322,20 @@ void Model::subdivide() {
 }
 
 void Model::cleanup() {
-    vkDestroyBuffer(vulkanDevice->getDevice(), indexBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), indexBufferMemory, nullptr);
-
-    vkDestroyBuffer(vulkanDevice->getDevice(), vertexBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), vertexBufferMemory, nullptr);
-
-    vkDestroyBuffer(vulkanDevice->getDevice(), surfaceBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), surfaceBufferMemory, nullptr);
-
-    vkDestroyBuffer(vulkanDevice->getDevice(), surfaceVertexBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), surfaceVertexBufferMemory, nullptr);
+    if (vertexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator->free(vertexBuffer, vertexBufferOffset_);
+        vertexBuffer = VK_NULL_HANDLE;
+    }
+    if (indexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator->free(indexBuffer, indexBufferOffset_);
+        indexBuffer = VK_NULL_HANDLE;
+    }
+    if (surfaceBuffer != VK_NULL_HANDLE) {
+        memoryAllocator->free(surfaceBuffer, surfaceBufferOffset_);
+        surfaceBuffer = VK_NULL_HANDLE;
+    }
+    if (surfaceVertexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator->free(surfaceVertexBuffer, surfaceVertexBufferOffset_);
+        surfaceVertexBuffer = VK_NULL_HANDLE;
+    }
 }

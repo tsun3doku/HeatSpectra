@@ -480,11 +480,24 @@ void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
     memcpy(data, surfaceVertices.data(), bufferSize);
     vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
 
-    // Copy initial surface vertex data (position,color) to both surface and surface vertex buffers on the GPU
     VkCommandBuffer copyCmd = beginSingleTimeCommands(*vulkanDevice);
-    VkBufferCopy copyRegion{ 0, 0, bufferSize };
-    vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceBuffer(), 1, &copyRegion);
-    vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceVertexBuffer(), 1, &copyRegion);
+
+    // Copy to surface buffer with offset
+    VkBufferCopy copyRegionSurface{
+        0,                                        // Source offset   
+        visModel.getSurfaceBufferOffset(),        // Destination offset
+        bufferSize                                // Size
+    };
+    vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceBuffer(), 1, &copyRegionSurface);
+
+    // Copy to surface vertex buffer with offset
+    VkBufferCopy copyRegionVertex{
+        0,                                        // Source offset
+        visModel.getSurfaceVertexBufferOffset(),  // Destination offset
+        bufferSize                                // Size
+    };
+    vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceVertexBuffer(), 1, &copyRegionVertex);
+
     endSingleTimeCommands(*vulkanDevice, copyCmd);
 
     vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
@@ -929,7 +942,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, u
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorBufferInfo, 3> bufferInfos = {
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, 0, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{visModel->getSurfaceBuffer(), 0, sizeof(SurfaceVertex) * visModel->getVertexCount()},
+            VkDescriptorBufferInfo{visModel->getSurfaceBuffer(), visModel->getSurfaceBufferOffset(), sizeof(SurfaceVertex) * visModel->getVertexCount()},
             VkDescriptorBufferInfo{centerBuffer, 0, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
         };
 
@@ -966,7 +979,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, u
 }
 
 void HeatSystem::createSurfacePipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("shaders/heat_surface_comp.spv"); //change
+    auto computeShaderCode = readFile("shaders/heat_surface_comp.spv"); 
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo shaderStageInfo{};
@@ -1039,63 +1052,53 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     heatSource->dispatchSourceCompute(commandBuffer, currentFrame);
 
     // Compute write -> transfer read
-    {
-        VkBufferMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;     
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;    
-        barrier.buffer = heatModel->getSurfaceBuffer();         
-        barrier.offset = 0;
-        barrier.size = VK_WHOLE_SIZE;
+    VkBufferMemoryBarrier heatSourceTransferBarrier{};
+    heatSourceTransferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    heatSourceTransferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    heatSourceTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    heatSourceTransferBarrier.buffer = heatModel->getSurfaceBuffer();
+    heatSourceTransferBarrier.offset = heatModel->getSurfaceBufferOffset();
+    heatSourceTransferBarrier.size = VK_WHOLE_SIZE;
 
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0, nullptr,
-            1, &barrier,
-            0, nullptr
-        );
-    }
-
-    // Copy surfaceBuffer -> surfaceVertexBuffer
-    {
-        VkBufferCopy copyRegion{};
-        copyRegion.size = sizeof(SurfaceVertex) * heatModel->getVertexCount();
-        vkCmdCopyBuffer(
-            commandBuffer,
-            heatModel->getSurfaceBuffer(),
-            heatModel->getSurfaceVertexBuffer(),
-            1,
-            &copyRegion
-        );
-    }
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0, nullptr,
+        1, &heatSourceTransferBarrier,
+        0, nullptr
+    );
+  
+    // Copy surfaceBuffer -> surfaceVertexBuffer 
+    VkBufferCopy heatSourceCopyRegion{};
+    heatSourceCopyRegion.srcOffset = heatModel->getSurfaceBufferOffset();
+    heatSourceCopyRegion.dstOffset = heatModel->getSurfaceVertexBufferOffset();
+    heatSourceCopyRegion.size = sizeof(SurfaceVertex) * heatModel->getVertexCount();
+    vkCmdCopyBuffer(commandBuffer, heatModel->getSurfaceBuffer(), heatModel->getSurfaceVertexBuffer(), 1, &heatSourceCopyRegion);
   
     // Transfer write -> vertex input read
-    {
-        VkBufferMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-        barrier.buffer = heatModel->getSurfaceVertexBuffer();
-        barrier.offset = 0;
-        barrier.size = VK_WHOLE_SIZE;
+    VkBufferMemoryBarrier heatSourceVertexBarrier{};
+    heatSourceVertexBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    heatSourceVertexBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    heatSourceVertexBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    heatSourceVertexBarrier.buffer = heatModel->getSurfaceVertexBuffer();
+    heatSourceVertexBarrier.offset = heatModel->getSurfaceVertexBufferOffset();
+    heatSourceVertexBarrier.size = VK_WHOLE_SIZE;
 
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-            0,
-            0, nullptr,
-            1, &barrier,
-            0, nullptr
-        );
-    }
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+        0,
+        0, nullptr,
+        1, &heatSourceVertexBarrier,
+        0, nullptr
+    );
 
     VkBuffer currentWriteBuffer = tetraFrameBuffers.writeBuffer;
 
-    // --- First pass: Process tetra elements ---
+    // --- Tetra Compute Pass ---
     dispatchTetraCompute(commandBuffer, currentFrame);
 
     // Barrier between tetra compute and surface compute
@@ -1117,7 +1120,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         0, nullptr
     );
 
-    // --- Second pass: Process surface vertices ---
+    // --- Surface Compute Pass ---
     dispatchSurfaceCompute(*visModel, commandBuffer, currentFrame);
 
     // Pre-copy barrier: Ensure previous vertex reads complete before transfer
@@ -1126,7 +1129,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     preCopyBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT; // From previous frame
     preCopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;        // To current transfer
     preCopyBarrier.buffer = visModel->getSurfaceVertexBuffer();
-    preCopyBarrier.offset = 0;
+    preCopyBarrier.offset = visModel->getSurfaceVertexBufferOffset();
     preCopyBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1145,7 +1148,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     surfaceTransferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     surfaceTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     surfaceTransferBarrier.buffer = visModel->getSurfaceBuffer();
-    surfaceTransferBarrier.offset = 0;
+    surfaceTransferBarrier.offset = visModel->getSurfaceBufferOffset();
     surfaceTransferBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1159,18 +1162,20 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     );
 
     // Copy the compute shader written surface buffer to the surface vertex buffer readable by the vertex shader per frame
-    VkBufferCopy copyRegion{};
-    copyRegion.size = sizeof(SurfaceVertex) * visModel->getVertexCount();
-    vkCmdCopyBuffer(commandBuffer, visModel->getSurfaceBuffer(), visModel->getSurfaceVertexBuffer(), 1, &copyRegion);
+    VkBufferCopy surfaceCopyRegion{};
+    surfaceCopyRegion.srcOffset = visModel->getSurfaceBufferOffset();
+    surfaceCopyRegion.dstOffset = visModel->getSurfaceVertexBufferOffset();
+    surfaceCopyRegion.size = sizeof(SurfaceVertex) * visModel->getVertexCount();
+    vkCmdCopyBuffer(commandBuffer, visModel->getSurfaceBuffer(), visModel->getSurfaceVertexBuffer(), 1, &surfaceCopyRegion);
 
     // Final barrier: Transfer -> Vertex input
-    VkBufferMemoryBarrier vertexBufferBarrier{};
-    vertexBufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    vertexBufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    vertexBufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    vertexBufferBarrier.buffer = visModel->getSurfaceVertexBuffer();
-    vertexBufferBarrier.offset = 0;
-    vertexBufferBarrier.size = VK_WHOLE_SIZE;
+    VkBufferMemoryBarrier surfaceVertexBufferBarrier{};
+    surfaceVertexBufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    surfaceVertexBufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    surfaceVertexBufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    surfaceVertexBufferBarrier.buffer = visModel->getSurfaceVertexBuffer();
+    surfaceVertexBufferBarrier.offset = visModel->getSurfaceVertexBufferOffset();
+    surfaceVertexBufferBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
         commandBuffer,
@@ -1178,7 +1183,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
         0,
         0, nullptr,
-        1, &vertexBufferBarrier,
+        1, &surfaceVertexBufferBarrier,
         0, nullptr
     );
 

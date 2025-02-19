@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include "VulkanDevice.hpp"
+#include "MemoryAllocator.hpp"
 #include "VulkanImage.hpp"
 #include "UniformBufferManager.hpp"
 #include "Model.hpp"
@@ -16,9 +17,10 @@
 #include <array>
 #include <vector>
 
-void GBuffer::init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
+void GBuffer::init(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
     VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice;
+    this->memoryAllocator = &memoryAllocator;
     this->uniformBufferManager = &uniformBufferManager;
     this->visModel = &visModel;
     this->heatModel = &heatModel;
@@ -979,24 +981,30 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visMo
 
     // Geometry subpass 
     VkBuffer vertexBuffers[] = { visModel.getVertexBuffer(), visModel.getSurfaceVertexBuffer() };
-    VkDeviceSize offsets[] = { 0,0 };
+    VkDeviceSize vertexOffsets[] = { 
+        visModel.getVertexBufferOffset(),      
+        visModel.getSurfaceVertexBufferOffset() 
+    };
     //std::cout << "GBuffer::recordCommandBuffer - Binding vertex buffer: " << vertexBuffers[0] << std::endl;
     //std::cout << "GBuffer::recordCommandBuffer - Binding color buffer: " << vertexBuffers[1] << std::endl;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, visModel.getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
+    vkCmdBindIndexBuffer(commandBuffer, visModel.getIndexBuffer(), visModel.getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw geometry
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(visModel.getIndices().size()), 1, 0, 0, 0);
     std::cout << "VisModel indices: " << visModel.getIndices().size() << std::endl;
 
-    VkBuffer heatSourceVertexBuffers[] = { heatSource->getVertexBuffer(), heatModel->getSurfaceVertexBuffer() };
-    VkDeviceSize heatSourceOffsets[] = { 0,0 };
+    VkBuffer heatSourceVertexBuffers[] = { heatModel->getVertexBuffer(), heatModel->getSurfaceVertexBuffer() };
+    VkDeviceSize heatSourceOffsets[] = {
+    heatModel->getVertexBufferOffset(),
+    heatModel->getSurfaceVertexBufferOffset()
+    };
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatSourceVertexBuffers, heatSourceOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, heatSource->getIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(commandBuffer, heatModel->getIndexBuffer(), heatModel->getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw heat source model
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(heatSource->getIndexCount()), 1, 0, 0, 0);
-    std::cout << "HeatSource indices: " << heatSource->getIndexCount() << std::endl;
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(heatModel->getIndices().size()), 1, 0, 0, 0);
+    std::cout << "HeatSource indices: " << heatModel->getIndices().size() << std::endl;
 
     // Transition to lighting subpass
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);

@@ -37,6 +37,7 @@ public:
 
     void cleanup();
 
+    // Getters
     VkPhysicalDevice getPhysicalDevice() const {
         return physicalDevice;
     }
@@ -57,6 +58,11 @@ public:
     }
     VkCommandPool getCommandPool() const {
         return commandPool;
+    }
+    VkPhysicalDeviceProperties getPhysicalDeviceProperties() const {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+        return properties;
     }
   
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);

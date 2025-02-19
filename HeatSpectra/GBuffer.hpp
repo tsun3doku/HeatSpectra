@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 
 class VulkanDevice;
+class MemoryAllocator;
 class UniformBufferManager;
 class Model;
 class Grid;
@@ -16,7 +17,7 @@ class GBuffer {
 public:
     GBuffer() = default;
 
-    void init(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
+    void init(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
         VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
 
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
@@ -92,6 +93,7 @@ public:
 
 private:
     const VulkanDevice* vulkanDevice = nullptr;
+    MemoryAllocator* memoryAllocator = nullptr;
     const UniformBufferManager* uniformBufferManager = nullptr;
     Model* visModel = nullptr;
     Model* heatModel = nullptr;

@@ -44,17 +44,17 @@ void endSingleTimeCommands(VulkanDevice& vulkanDevice, VkCommandBuffer commandBu
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-void copyBuffer(VulkanDevice& vulkanDevice, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
-
+void copyBuffer(VulkanDevice& vulkanDevice, VkBuffer srcBuffer, VkDeviceSize srcOffset, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size) {
+    VkCommandBuffer cmdBuffer = beginSingleTimeCommands(vulkanDevice);
     VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = srcOffset;
+    copyRegion.dstOffset = dstOffset;
     copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    endSingleTimeCommands(vulkanDevice, commandBuffer);
+    vkCmdCopyBuffer(cmdBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    endSingleTimeCommands(vulkanDevice, cmdBuffer);
 }
 
-void copyBufferToImage(VulkanDevice& vulkanDevice, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) { //[new
+void copyBufferToImage(VulkanDevice& vulkanDevice, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) { 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
 
     VkBufferImageCopy region{};

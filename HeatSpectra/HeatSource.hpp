@@ -1,13 +1,14 @@
 #pragma once
 
-class Model;
 class VulkanDevice;
+class MemoryAllocator;
+class Model;
 
 const std::string HEATSOURCE_PATH = "models/torus.obj";
 
 class HeatSource {
 public:
-    void init(VulkanDevice& device, Model& heatModel, uint32_t maxFramesInFlight);
+    void init(VulkanDevice& device, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
 
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
     void initializeSurfaceBuffer(Model& heatModel);
@@ -51,6 +52,7 @@ public:
    
 private:
     VulkanDevice* vulkanDevice = nullptr;
+    MemoryAllocator* memoryAllocator = nullptr;
     Model* heatModel = nullptr;
 
     HeatSourcePushConstant heatSourcePushConstant;
@@ -64,6 +66,7 @@ private:
 
     VkBuffer sourceBuffer;
     VkDeviceMemory sourceBufferMemory;
+    VkDeviceSize sourceBufferOffset_;
 
     VkBuffer heatSourceStagingBuffer;
     VkDeviceMemory heatSourceStagingMemory;
