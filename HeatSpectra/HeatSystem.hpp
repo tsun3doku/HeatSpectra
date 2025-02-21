@@ -1,8 +1,8 @@
 #pragma once
 #include "TetGen/tetgen.h"
-#include <unordered_map>
 
 class VulkanDevice;
+class MemoryAllocator;
 class UniformBufferManager;
 class Model;
 class HeatSource;
@@ -10,7 +10,7 @@ class Camera;
 
 class HeatSystem {
 public:
-    void init(VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
+    void init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
     void swapBuffers();
@@ -62,6 +62,7 @@ public:
 
 private:
     VulkanDevice* vulkanDevice = nullptr;
+    MemoryAllocator* memoryAllocator = nullptr;
     const UniformBufferManager* uniformBufferManager = nullptr;
     Model* simModel = nullptr;
     Model* visModel = nullptr;
@@ -76,33 +77,28 @@ private:
 
     std::vector<VkCommandBuffer> computeCommandBuffers;
 
+    TetraFrameBuffers tetraFrameBuffers;
     VkBuffer tetraBuffer;
     VkDeviceMemory tetraBufferMemory;
+    VkDeviceSize tetraBufferOffset_;
     TetrahedralElement* mappedTetraData = nullptr;
 
     VkBuffer neighborBuffer;
     VkDeviceMemory neighborBufferMemory;
+    VkDeviceSize neighborBufferOffset_;
     const uint32_t MAX_NEIGHBORS = 4;
 
     VkBuffer meshBuffer;
     VkDeviceMemory meshBufferMemory;
 
     VkBuffer centerBuffer;
+    VkDeviceSize centerBufferOffset_;
     VkDeviceMemory centerBufferMemory;
 
     VkBuffer timeBuffer;
     VkDeviceMemory timeBufferMemory;
+    VkDeviceSize timeBufferOffset_;
     TimeUniform* mappedTimeData = nullptr;
-
-    VkBuffer tetraWriteBuffer;
-    VkDeviceMemory tetraWriteBufferMemory;
-    uint32_t* mappedTetraWriteData = nullptr;
-
-    VkBuffer tetraReadBuffer;
-    VkDeviceMemory tetraReadBufferMemory;
-    uint32_t* mappedTetraReadData = nullptr;
-
-    TetraFrameBuffers tetraFrameBuffers;
 
     VkDescriptorPool tetraDescriptorPool;
     VkDescriptorSetLayout tetraDescriptorSetLayout;

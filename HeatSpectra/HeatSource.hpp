@@ -41,6 +41,9 @@ public:
     VkBuffer getSourceBuffer() const {
         return sourceBuffer;
     }
+    VkDeviceSize getSourceBufferOffset() const {
+        return sourceBufferOffset_;
+    }
     const HeatSourcePushConstant getHeatSourcePushConstant() const {
         return heatSourcePushConstant;
     }

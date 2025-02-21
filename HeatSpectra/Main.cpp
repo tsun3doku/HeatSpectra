@@ -172,8 +172,6 @@ private:
         // Initialize heat source model
         heatModel.init(vulkanDevice, *memoryAllocator, HEATSOURCE_PATH);
 
-        heatSystem.generateTetrahedralMesh(simModel);
-
         center = simModel.getBoundingBoxCenter();
         camera.setLookAt(center);
     }
@@ -182,7 +180,7 @@ private:
         uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
 
         heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT);
-        heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
+        heatSystem.init(vulkanDevice, *memoryAllocator, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
 
         gbuffer.init(vulkanDevice, *memoryAllocator, uniformBufferManager, visModel, heatModel, grid, heatSource, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    
     }
@@ -276,8 +274,6 @@ private:
             vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[i]);
         }
 
-        //vkResetCommandPool(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
-
         for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
@@ -292,8 +288,7 @@ private:
         createSwapChain();
         createImageViews();
 
-        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT);
-        //heatSystem.init(vulkanDevice, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
+        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT); // This may at one point be replaced by a recreateresources function
         heatSystem.recreateResources(vulkanDevice, MAXFRAMESINFLIGHT, heatSource);
 
         gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);

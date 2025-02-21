@@ -83,8 +83,10 @@ struct FEAMesh {
 struct TetraFrameBuffers {
     VkBuffer readBuffer;
     VkDeviceMemory readBufferMemory;
+    VkDeviceSize readBufferOffset_;
     VkBuffer writeBuffer;
     VkDeviceMemory writeBufferMemory;
+    VkDeviceSize writeBufferOffset_;
     void* mappedReadData;
     void* mappedWriteData;
 };

@@ -2,12 +2,12 @@
 #include "VulkanDevice.hpp"
 #include "MemoryAllocator.hpp"
 
-MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps) 
+MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps)
     : vulkanDevice(vulkanDevice),
-      memProperties(memProps),
-      buffer(VK_NULL_HANDLE),
-      memory(VK_NULL_HANDLE)
-    {
+    memProperties(memProps),
+    buffer(VK_NULL_HANDLE),
+    memory(VK_NULL_HANDLE)
+{
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -18,7 +18,7 @@ MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBuff
     VkResult result = vkCreateBuffer(vulkanDevice.getDevice(), &bufferInfo, nullptr, &buffer);
     if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to create buffer");
-    }  
+    }
 
     VkMemoryRequirements memReqs;
     vkGetBufferMemoryRequirements(vulkanDevice.getDevice(), buffer, &memReqs);
@@ -27,7 +27,7 @@ MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBuff
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memReqs.size;
     allocInfo.memoryTypeIndex = vulkanDevice.findMemoryType(memReqs.memoryTypeBits, memProps);
-    
+
     result = vkAllocateMemory(vulkanDevice.getDevice(), &allocInfo, nullptr, &memory);
     if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate memory");
@@ -55,7 +55,7 @@ MemoryAllocator::~MemoryAllocator() {
 }
 
 std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps, VkDeviceSize alignment) {
-    std::lock_guard<std::mutex> lock(allocationMutex); 
+    std::lock_guard<std::mutex> lock(allocationMutex);
 
     // Apply alignment
     if (alignment > 0) {
@@ -68,8 +68,8 @@ std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, V
         auto& poolVector = pools[key];
 
         // Iterate through unique_ptrs
-        for (auto& poolPtr : poolVector) { 
-            MemoryPool& pool = *poolPtr; 
+        for (auto& poolPtr : poolVector) {
+            MemoryPool& pool = *poolPtr;
             for (auto it = pool.blocks.begin(); it != pool.blocks.end(); ++it) {
                 if (it->isFree && it->size >= size) {
                     // Save the allocation offset
