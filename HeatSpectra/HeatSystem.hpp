@@ -1,22 +1,22 @@
 #pragma once
 #include "TetGen/tetgen.h"
 
-class VulkanDevice;
-class MemoryAllocator;
-class UniformBufferManager;
-class Model;
-class HeatSource;
 class Camera;
+class HeatSource;
+class ResourceManager;
+class MemoryAllocator;
+class VulkanDevice;
 
 class HeatSystem {
 public:
-    void init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFLight);
-    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
-    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
-    void swapBuffers();
+    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
+    ~HeatSystem();
+    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
+    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void swapBuffers(ResourceManager& resourceManager);
 
-    void generateTetrahedralMesh(Model& model);
-    void initializeSurfaceBuffer(Model& visModel);
+    void generateTetrahedralMesh(ResourceManager& resourceManager);
+    void initializeSurfaceBuffer(ResourceManager& resourceManager);
     void initializeTetra(VulkanDevice& vulkanDevice);
 
     void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -27,25 +27,26 @@ public:
 
     void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource);
+    void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createTetraPipeline(const VulkanDevice& vulkanDevice);
 
     void createSurfaceDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createSurfaceDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
     void createSurfacePipeline(const VulkanDevice& vulkanDevice);
 
     void dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
-    void dispatchSurfaceCompute(Model& visModel, VkCommandBuffer commandBuffer, uint32_t currentFrame);
-    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame);
+    void recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
 
     void createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
-    void cleanupResources(const VulkanDevice& vulkanDevice);
-    void cleanup(const VulkanDevice& vulkanDevice);
+    void cleanupResources(VulkanDevice& vulkanDevice);
+    void cleanup(VulkanDevice& vulkanDevice);
 
+    // Getters
     VkPipeline getHeatPipeline() const { 
         return tetraPipeline; 
     }
@@ -55,6 +56,9 @@ public:
     std::vector<VkDescriptorSet>& getHeatDescriptorSets() {
         return tetraDescriptorSets;
     }
+    HeatSource& getHeatSource() { 
+        return *heatSource; 
+    }
 
     std::vector<VkCommandBuffer> getComputeCommandBuffers() {
         return computeCommandBuffers;
@@ -63,11 +67,8 @@ public:
 private:
     VulkanDevice* vulkanDevice = nullptr;
     MemoryAllocator* memoryAllocator = nullptr;
-    const UniformBufferManager* uniformBufferManager = nullptr;
-    Model* simModel = nullptr;
-    Model* visModel = nullptr;
-    Model* heatModel = nullptr;
-    HeatSource* heatSource = nullptr;
+    ResourceManager& resourceManager;
+    std::unique_ptr<HeatSource> heatSource;
     Camera* camera = nullptr;
 
     FEAMesh feaMesh;

@@ -8,7 +8,8 @@ const std::string HEATSOURCE_PATH = "models/torus.obj";
 
 class HeatSource {
 public:
-    void init(VulkanDevice& device, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
+    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
+    ~HeatSource();
 
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
     void initializeSurfaceBuffer(Model& heatModel);
@@ -22,6 +23,7 @@ public:
 
     void dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
+    void cleanupResources(VulkanDevice& vulkanDevice);
     void cleanup(VulkanDevice& vulkanDevice);
 
     // Getters

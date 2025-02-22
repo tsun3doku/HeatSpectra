@@ -24,6 +24,14 @@ void Model::init(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, const s
     createSurfaceBuffer();
 }
 
+Model::Model(VulkanDevice& device, MemoryAllocator& allocator)
+    : vulkanDevice(&device), memoryAllocator(&allocator) {
+}
+
+Model::~Model() {
+    cleanup();
+}
+
 void Model::recreateBuffers() {
     cleanup();
     createVertexBuffer();

@@ -113,7 +113,8 @@ namespace std {
 
 class Model {
 public:
-    Model() = default;
+    Model(VulkanDevice& device, MemoryAllocator& allocator);
+    ~Model();
     void init(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, const std::string modelPath);
 
     void loadModel(const std::string& modelPath);

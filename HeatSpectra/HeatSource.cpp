@@ -10,17 +10,18 @@
 #include "Model.hpp"
 #include "HeatSource.hpp"
 
-void HeatSource::init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice;
-    this->memoryAllocator = &memoryAllocator;
-    this->heatModel = &heatModel;
+HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight) 
+    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator),heatModel(&heatModel) {
     
     createSourceBuffer(vulkanDevice, heatModel);
-
+    initializeSurfaceBuffer(heatModel);
     createHeatSourceDescriptorPool(vulkanDevice, maxFramesInFlight);
     createHeatSourceDescriptorSetLayout(vulkanDevice);
     createHeatSourceDescriptorSets(vulkanDevice, maxFramesInFlight);
     createHeatSourcePipeline(vulkanDevice);
+}
+
+HeatSource::~HeatSource() {
 }
 
 void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel) {
@@ -287,11 +288,14 @@ void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t c
     vkCmdDispatch(commandBuffer, workgroupCount, 1, 1);
 }
 
-void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
-    memoryAllocator->free(sourceBuffer, sourceBufferOffset_);
+void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), heatSourceDescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), heatSourceDescriptorLayout, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), heatSourcePipeline, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), heatSourcePipelineLayout, nullptr);
+}
+
+void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
+    memoryAllocator->free(sourceBuffer, sourceBufferOffset_);
 }
 

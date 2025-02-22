@@ -181,6 +181,7 @@
     <ClCompile Include="libs\TetGen\tetgen.cxx" />
     <ClCompile Include="MemoryAllocator.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="ResourceManager.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="file_utils.cpp" />
     <ClCompile Include="Main.cpp" />
@@ -210,6 +211,7 @@
     <ClInclude Include="libs\TetGen\tetgen.h" />
     <ClInclude Include="MemoryAllocator.hpp" />
     <ClInclude Include="Model.hpp" />
+    <ClInclude Include="ResourceManager.hpp" />
     <ClInclude Include="VulkanDevice.hpp" />
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="file_utils.h" />

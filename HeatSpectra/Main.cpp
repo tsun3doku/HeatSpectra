@@ -8,6 +8,7 @@
 #include "Model.hpp"
 #include "Structs.hpp"
 #include "VulkanImage.hpp"
+#include "ResourceManager.hpp"
 #include "MemoryAllocator.hpp"
 #include "UniformBufferManager.hpp" 
 #include "Camera.hpp"
@@ -86,6 +87,7 @@ private:
 
     VulkanDevice vulkanDevice;
     std::unique_ptr<MemoryAllocator> memoryAllocator;
+    std::unique_ptr<ResourceManager> resourceManager;
 
     VkSwapchainKHR swapChain{};
     std::vector<VkImage> swapChainImages;
@@ -93,16 +95,9 @@ private:
     VkExtent2D swapChainExtent{};
     std::vector<VkImageView> swapChainImageViews;
 
-    Model simModel;
-    Model visModel;
-    Model heatModel;
     //HDR hdr; 
     GBuffer gbuffer; 
     Grid grid;
-    HeatSource heatSource;
-    HeatSystem heatSystem;
-
-    UniformBufferManager uniformBufferManager;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -112,6 +107,7 @@ private:
     uint32_t frameRate = 240;
 
     Camera camera;
+    std::unique_ptr<HeatSystem> heatSystem;
     
     bool framebufferResized = false;
     std::atomic<bool> isCameraUpdated{ false };
@@ -158,31 +154,32 @@ private:
     }
 
     void initScene() {
-        // Initialize surface model
-        simModel.init(vulkanDevice, *memoryAllocator, MODEL_PATH);
+        resourceManager = std::make_unique<ResourceManager>(vulkanDevice, *memoryAllocator, MAXFRAMESINFLIGHT);
+        resourceManager->initialize();
 
-        // Create subdivided version for visualization
-        visModel = simModel;
-        visModel.setSubdivisionLevel(2);
-        visModel.subdivide();
-
-        // Recreate buffers with subdivided size
-        visModel.recreateBuffers();
-
-        // Initialize heat source model
-        heatModel.init(vulkanDevice, *memoryAllocator, HEATSOURCE_PATH);
-
-        center = simModel.getBoundingBoxCenter();
+        center = resourceManager->getSimModel().getBoundingBoxCenter();
         camera.setLookAt(center);
+
+        heatSystem = std::make_unique<HeatSystem>(
+            vulkanDevice,
+            *memoryAllocator,
+            *resourceManager,
+            MAXFRAMESINFLIGHT
+        );
     }
 
     void initRenderResources() {
-        uniformBufferManager.init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
-
-        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT);
-        heatSystem.init(vulkanDevice, *memoryAllocator, uniformBufferManager, simModel, visModel, heatModel, heatSource, camera, MAXFRAMESINFLIGHT);
-
-        gbuffer.init(vulkanDevice, *memoryAllocator, uniformBufferManager, visModel, heatModel, grid, heatSource, heatSystem, WIDTH, HEIGHT, swapChainExtent, swapChainImageViews, swapChainImageFormat, MAXFRAMESINFLIGHT);    
+        resourceManager->getUniformBufferManager().init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+     
+        gbuffer.init(vulkanDevice, *memoryAllocator, resourceManager->getUniformBufferManager(),
+            resourceManager->getVisModel(),
+            resourceManager->getHeatModel(),
+            grid,
+            heatSystem->getHeatSource(),
+            *heatSystem,
+            WIDTH, HEIGHT, swapChainExtent,
+            swapChainImageViews, swapChainImageFormat,
+            MAXFRAMESINFLIGHT);
     }
 
     void initVulkan() {
@@ -282,14 +279,12 @@ private:
         }
 
         cleanupSwapChain();
-        heatSystem.cleanupResources(vulkanDevice);
-        heatSource.cleanup(vulkanDevice);
+        heatSystem->cleanupResources(vulkanDevice);
 
         createSwapChain();
         createImageViews();
 
-        heatSource.init(vulkanDevice, *memoryAllocator, heatModel, MAXFRAMESINFLIGHT); // This may at one point be replaced by a recreateresources function
-        heatSystem.recreateResources(vulkanDevice, MAXFRAMESINFLIGHT, heatSource);
+        heatSystem->recreateResources(vulkanDevice, MAXFRAMESINFLIGHT);
 
         gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
         gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
@@ -301,7 +296,9 @@ private:
     }
 
     void cleanupRenderResources() {
-        uniformBufferManager.cleanup(MAXFRAMESINFLIGHT);
+        resourceManager->getUniformBufferManager().cleanup(MAXFRAMESINFLIGHT);
+        heatSystem->cleanupResources(vulkanDevice);
+        heatSystem->cleanup(vulkanDevice);
         gbuffer.cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
     }
 
@@ -310,9 +307,9 @@ private:
     }
 
     void cleanupScene() {
-        simModel.cleanup();
-        visModel.cleanup();
-        heatModel.cleanup();
+        resourceManager->getSimModel().cleanup();
+        resourceManager->getVisModel().cleanup();
+        resourceManager->getHeatModel().cleanup();
     }
 
     void cleanupSyncObjects() {
@@ -536,21 +533,21 @@ private:
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
         
         UniformBufferObject ubo{};
-        uniformBufferManager.updateUniformBuffer(currentFrame, camera, ubo);
+        resourceManager->getUniformBufferManager().updateUniformBuffer(currentFrame, camera, ubo);
         GridUniformBufferObject gridUbo{};
-        uniformBufferManager.updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
+        resourceManager->getUniformBufferManager().updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
         LightUniformBufferObject lightUbo{};
-        uniformBufferManager.updateLightUniformBuffer(currentFrame, camera, lightUbo);
+        resourceManager->getUniformBufferManager().updateLightUniformBuffer(currentFrame, camera, lightUbo);
 
-        VkCommandBuffer computeCommandBuffer = heatSystem.getComputeCommandBuffers()[currentFrame];
+        VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
         vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         
         VkCommandBufferBeginInfo computeBeginInfo{};
         computeBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         computeBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        heatSystem.update(vulkanDevice, window, ubo, WIDTH, HEIGHT);
-        heatSystem.recordComputeCommands(computeCommandBuffer, currentFrame);
+        heatSystem->update(vulkanDevice, window, *resourceManager, ubo, WIDTH, HEIGHT);
+        heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
 
         VkSubmitInfo computeSubmitInfo{};
         computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -560,10 +557,10 @@ private:
         computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
         vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
-        heatSystem.swapBuffers();
+        heatSystem->swapBuffers(*resourceManager);
 
         // Graphics pass
-        gbuffer.recordCommandBuffer(vulkanDevice, visModel, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
+        gbuffer.recordCommandBuffer(vulkanDevice, resourceManager->getVisModel(), swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
 
         std::array<VkPipelineStageFlags, 2> waitStages = {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore

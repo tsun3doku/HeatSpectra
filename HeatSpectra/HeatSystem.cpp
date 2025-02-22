@@ -3,9 +3,11 @@
 
 #include <omp.h>
 #include <unordered_map>
+#include <memory>
 
 #include "VulkanDevice.hpp"
 #include "MemoryAllocator.hpp"
+#include "ResourceManager.hpp"
 #include "VulkanImage.hpp"
 #include "CommandBufferManager.hpp"
 #include "UniformBufferManager.hpp"
@@ -14,46 +16,44 @@
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
 
-void HeatSystem::init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& simModel, Model& visModel, Model& heatModel, HeatSource& heatSource, Camera& camera, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice;
-    this->memoryAllocator = &memoryAllocator;
-    this->simModel = &simModel;
-    this->visModel = &visModel;
-    this->heatModel = &heatModel;
-    this->heatSource = &heatSource;
-    this->camera = &camera;
-    this->uniformBufferManager = &uniformBufferManager;
-
-    generateTetrahedralMesh(simModel);
-    createTetraBuffer(vulkanDevice, maxFramesInFlight);
-    createNeighborBuffer(vulkanDevice);
-    createMeshBuffer(vulkanDevice);
-    createCenterBuffer(vulkanDevice);
-    createTimeBuffer(vulkanDevice);
-
-    initializeSurfaceBuffer(visModel);
-    initializeTetra(vulkanDevice);
-
-    createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createTetraDescriptorSetLayout(vulkanDevice);
-    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight, heatSource);
-    createTetraPipeline(vulkanDevice);
-
-    createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createSurfaceDescriptorSetLayout(vulkanDevice);
-    createSurfaceDescriptorSets(vulkanDevice, maxFramesInFlight);
-    createSurfacePipeline(vulkanDevice);
-
-    createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
-}
-
 
 //                                       [ the following code requires
 //                                         good commentary to fully
 //                                         understand the logic ]
 //
 
-void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, uint32_t maxFramesInFlight)
+    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), resourceManager(resourceManager) {
+    
+    heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
+
+    generateTetrahedralMesh(resourceManager);
+    createTetraBuffer(vulkanDevice, maxFramesInFlight);
+    createNeighborBuffer(vulkanDevice);
+    createMeshBuffer(vulkanDevice);
+    createCenterBuffer(vulkanDevice);
+    createTimeBuffer(vulkanDevice);
+
+    initializeSurfaceBuffer(resourceManager);
+    initializeTetra(vulkanDevice);
+
+    createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createTetraDescriptorSetLayout(vulkanDevice);
+    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
+    createTetraPipeline(vulkanDevice);
+
+    createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createSurfaceDescriptorSetLayout(vulkanDevice);
+    createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+    createSurfacePipeline(vulkanDevice);
+
+    createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
+}
+
+HeatSystem::~HeatSystem() {
+}
+
+void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -70,18 +70,18 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, UniformB
 
     heatSource->controller(window, deltaTime);
 
-    glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), heatModel->getModelPosition());
-    heatModel->setModelMatrix(heatSourceModelMatrix);
+    glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), resourceManager.getHeatModel().getModelPosition());
+    resourceManager.getHeatModel().setModelMatrix(heatSourceModelMatrix);
     heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
 
     // Map the uniform buffer and copy the updated UBO
     void* data;
-    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
+    vkMapMemory(vulkanDevice.getDevice(), resourceManager.getUniformBufferManager().getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
     memcpy(data, &ubo, sizeof(UniformBufferObject));
-    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager->getUniformBuffersMemory()[0]);
+    vkUnmapMemory(vulkanDevice.getDevice(), resourceManager.getUniformBufferManager().getUniformBuffersMemory()[0]);
 }
 
-void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource) {
+void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     VkBuffer oldReadBuffer = tetraFrameBuffers.readBuffer;
     VkDeviceMemory oldReadBufferMemory = tetraFrameBuffers.readBufferMemory;
     VkDeviceSize oldReadOffset = tetraFrameBuffers.readBufferOffset_;
@@ -120,11 +120,11 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     createSurfacePipeline(vulkanDevice);
 
     createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
-    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight, heatSource);
-    createSurfaceDescriptorSets(vulkanDevice, maxFramesInFlight);
+    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
+    createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
 }
 
-void HeatSystem::swapBuffers() {
+void HeatSystem::swapBuffers(ResourceManager& resourceManager) {
     // Swap buffer handles
     std::swap(tetraFrameBuffers.readBuffer, tetraFrameBuffers.writeBuffer);
     std::swap(tetraFrameBuffers.readBufferMemory, tetraFrameBuffers.writeBufferMemory);
@@ -167,7 +167,7 @@ void HeatSystem::swapBuffers() {
     for (size_t i = 0; i < surfaceDescriptorSets.size(); ++i) {
         std::array<VkDescriptorBufferInfo, 3> surfaceBufferInfos = {
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{visModel->getSurfaceBuffer(), visModel->getSurfaceBufferOffset(), sizeof(SurfaceVertex) * visModel->getVertexCount()},
+            VkDescriptorBufferInfo{resourceManager.getVisModel().getSurfaceBuffer(), resourceManager.getVisModel().getSurfaceBufferOffset(), sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount()},
             VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()}
         };
 
@@ -191,9 +191,9 @@ void HeatSystem::swapBuffers() {
     }
 }
 
-void HeatSystem::generateTetrahedralMesh(Model& model) {
-    const auto& vertices = model.getVertices();
-    const auto& indices = model.getIndices();
+void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
+    const auto& vertices = resourceManager.getSimModel().getVertices();
+    const auto& indices = resourceManager.getSimModel().getIndices();
 
     if (vertices.empty()) {
         throw std::runtime_error("Vertices vector is empty!");
@@ -454,8 +454,8 @@ void HeatSystem::generateTetrahedralMesh(Model& model) {
     std::cout << "Elements: " << feaMesh.elements.size() << std::endl;
 }
 
-void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
-    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * visModel.getVertexCount();
+void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
+    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount();
 
     // Create staging buffer
     auto [stagingBuffer, stagingOffset] = memoryAllocator->allocate(
@@ -465,9 +465,9 @@ void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
     );
 
     // Initialize surface vertices on the CPU
-    std::vector<SurfaceVertex> surfaceVertices(visModel.getVertexCount());
-    const auto& modelVertices = visModel.getVertices();
-    for (size_t i = 0; i < visModel.getVertexCount(); i++) {
+    std::vector<SurfaceVertex> surfaceVertices(resourceManager.getVisModel().getVertexCount());
+    const auto& modelVertices = resourceManager.getVisModel().getVertices();
+    for (size_t i = 0; i < resourceManager.getVisModel().getVertexCount(); i++) {
         surfaceVertices[i].position = modelVertices[i].pos;
         surfaceVertices[i].color = glm::vec3(0.0f);
     }
@@ -478,8 +478,8 @@ void HeatSystem::initializeSurfaceBuffer(Model& visModel) {
 
     // Copy to destination buffers
     VkCommandBuffer copyCmd = beginSingleTimeCommands(*vulkanDevice);
-    VkBufferCopy copyRegion = { stagingOffset, visModel.getSurfaceBufferOffset(), bufferSize };
-    vkCmdCopyBuffer(copyCmd, stagingBuffer, visModel.getSurfaceBuffer(), 1, &copyRegion);
+    VkBufferCopy copyRegion = { stagingOffset, resourceManager.getVisModel().getSurfaceBufferOffset(), bufferSize };
+    vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceBuffer(), 1, &copyRegion);
     endSingleTimeCommands(*vulkanDevice, copyCmd);
 
     memoryAllocator->free(stagingBuffer, stagingOffset);
@@ -726,7 +726,7 @@ void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice
     }
 }
 
-void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight, HeatSource& heatSource) {
+void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, tetraDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -757,7 +757,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
             VkDescriptorBufferInfo{neighborBuffer, neighborBufferOffset_, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec3) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, timeBufferOffset_, sizeof(TimeUniform)},
-            VkDescriptorBufferInfo{heatSource.getSourceBuffer(), heatSource.getSourceBufferOffset(), sizeof(HeatSourceVertex) * heatSource.getVertexCount()},
+            VkDescriptorBufferInfo{heatSource->getSourceBuffer(), heatSource->getSourceBufferOffset(), sizeof(HeatSourceVertex) * heatSource->getVertexCount()},
         };
 
         std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
@@ -918,7 +918,7 @@ void HeatSystem::createSurfaceDescriptorSetLayout(const VulkanDevice& vulkanDevi
     }
 }
 
-void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, surfaceDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -936,7 +936,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, u
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorBufferInfo, 3> bufferInfos = {
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{visModel->getSurfaceBuffer(), visModel->getSurfaceBufferOffset(), sizeof(SurfaceVertex) * visModel->getVertexCount()},
+            VkDescriptorBufferInfo{resourceManager.getVisModel().getSurfaceBuffer(), resourceManager.getVisModel().getSurfaceBufferOffset(), sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount()},
             VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
         };
 
@@ -1024,8 +1024,8 @@ void HeatSystem::dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t cu
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
 
-void HeatSystem::dispatchSurfaceCompute(Model& visModel, VkCommandBuffer commandBuffer, uint32_t currentFrame) {
-    uint32_t vertexCount = visModel.getVertexCount();
+void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame) {
+    uint32_t vertexCount = resourceManager.getVisModel().getVertexCount();
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
 
@@ -1034,7 +1034,7 @@ void HeatSystem::dispatchSurfaceCompute(Model& visModel, VkCommandBuffer command
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
 
-void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -1050,8 +1050,8 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     heatSourceTransferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     heatSourceTransferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     heatSourceTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    heatSourceTransferBarrier.buffer = heatModel->getSurfaceBuffer();
-    heatSourceTransferBarrier.offset = heatModel->getSurfaceBufferOffset();
+    heatSourceTransferBarrier.buffer = resourceManager.getHeatModel().getSurfaceBuffer();
+    heatSourceTransferBarrier.offset = resourceManager.getHeatModel().getSurfaceBufferOffset();
     heatSourceTransferBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1066,18 +1066,18 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
   
     // Copy surfaceBuffer -> surfaceVertexBuffer 
     VkBufferCopy heatSourceCopyRegion{};
-    heatSourceCopyRegion.srcOffset = heatModel->getSurfaceBufferOffset();
-    heatSourceCopyRegion.dstOffset = heatModel->getSurfaceVertexBufferOffset();
-    heatSourceCopyRegion.size = sizeof(SurfaceVertex) * heatModel->getVertexCount();
-    vkCmdCopyBuffer(commandBuffer, heatModel->getSurfaceBuffer(), heatModel->getSurfaceVertexBuffer(), 1, &heatSourceCopyRegion);
+    heatSourceCopyRegion.srcOffset = resourceManager.getHeatModel().getSurfaceBufferOffset();
+    heatSourceCopyRegion.dstOffset = resourceManager.getHeatModel().getSurfaceVertexBufferOffset();
+    heatSourceCopyRegion.size = sizeof(SurfaceVertex) * resourceManager.getHeatModel().getVertexCount();
+    vkCmdCopyBuffer(commandBuffer, resourceManager.getHeatModel().getSurfaceBuffer(), resourceManager.getHeatModel().getSurfaceVertexBuffer(), 1, &heatSourceCopyRegion);
   
     // Transfer write -> vertex input read
     VkBufferMemoryBarrier heatSourceVertexBarrier{};
     heatSourceVertexBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     heatSourceVertexBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     heatSourceVertexBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    heatSourceVertexBarrier.buffer = heatModel->getSurfaceVertexBuffer();
-    heatSourceVertexBarrier.offset = heatModel->getSurfaceVertexBufferOffset();
+    heatSourceVertexBarrier.buffer = resourceManager.getHeatModel().getSurfaceVertexBuffer();
+    heatSourceVertexBarrier.offset = resourceManager.getHeatModel().getSurfaceVertexBufferOffset();
     heatSourceVertexBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1115,15 +1115,15 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     );
 
     // --- Surface Compute Pass ---
-    dispatchSurfaceCompute(*visModel, commandBuffer, currentFrame);
+    dispatchSurfaceCompute(commandBuffer, resourceManager, currentFrame);
 
     // Pre-copy barrier: Ensure previous vertex reads complete before transfer
     VkBufferMemoryBarrier preCopyBarrier{};
     preCopyBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     preCopyBarrier.srcAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT; // From previous frame
     preCopyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;        // To current transfer
-    preCopyBarrier.buffer = visModel->getSurfaceVertexBuffer();
-    preCopyBarrier.offset = visModel->getSurfaceVertexBufferOffset();
+    preCopyBarrier.buffer = resourceManager.getVisModel().getSurfaceVertexBuffer();
+    preCopyBarrier.offset = resourceManager.getVisModel().getSurfaceVertexBufferOffset();
     preCopyBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1141,8 +1141,8 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     surfaceTransferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     surfaceTransferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     surfaceTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    surfaceTransferBarrier.buffer = visModel->getSurfaceBuffer();
-    surfaceTransferBarrier.offset = visModel->getSurfaceBufferOffset();
+    surfaceTransferBarrier.buffer = resourceManager.getVisModel().getSurfaceBuffer();
+    surfaceTransferBarrier.offset = resourceManager.getVisModel().getSurfaceBufferOffset();
     surfaceTransferBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1157,18 +1157,18 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
     // Copy the compute shader written surface buffer to the surface vertex buffer readable by the vertex shader per frame
     VkBufferCopy surfaceCopyRegion{};
-    surfaceCopyRegion.srcOffset = visModel->getSurfaceBufferOffset();
-    surfaceCopyRegion.dstOffset = visModel->getSurfaceVertexBufferOffset();
-    surfaceCopyRegion.size = sizeof(SurfaceVertex) * visModel->getVertexCount();
-    vkCmdCopyBuffer(commandBuffer, visModel->getSurfaceBuffer(), visModel->getSurfaceVertexBuffer(), 1, &surfaceCopyRegion);
+    surfaceCopyRegion.srcOffset = resourceManager.getVisModel().getSurfaceBufferOffset();
+    surfaceCopyRegion.dstOffset = resourceManager.getVisModel().getSurfaceVertexBufferOffset();
+    surfaceCopyRegion.size = sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount();
+    vkCmdCopyBuffer(commandBuffer, resourceManager.getVisModel().getSurfaceBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer(), 1, &surfaceCopyRegion);
 
     // Final barrier: Transfer -> Vertex input
     VkBufferMemoryBarrier surfaceVertexBufferBarrier{};
     surfaceVertexBufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     surfaceVertexBufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     surfaceVertexBufferBarrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    surfaceVertexBufferBarrier.buffer = visModel->getSurfaceVertexBuffer();
-    surfaceVertexBufferBarrier.offset = visModel->getSurfaceVertexBufferOffset();
+    surfaceVertexBufferBarrier.buffer = resourceManager.getVisModel().getSurfaceVertexBuffer();
+    surfaceVertexBufferBarrier.offset = resourceManager.getVisModel().getSurfaceVertexBufferOffset();
     surfaceVertexBufferBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1205,7 +1205,7 @@ void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_
     }
 }
 
-void HeatSystem::cleanupResources(const VulkanDevice& vulkanDevice) {
+void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
     vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
 
@@ -1216,20 +1216,11 @@ void HeatSystem::cleanupResources(const VulkanDevice& vulkanDevice) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr); 
+
+    heatSource->cleanup(vulkanDevice);
 }
 
-void HeatSystem::cleanup(const VulkanDevice& vulkanDevice) {
-    vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
-    vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
-
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), surfacePipelineLayout, nullptr);
-
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
-
+void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
     if (mappedTetraData) {
         vkUnmapMemory(vulkanDevice.getDevice(), tetraBufferMemory);
         mappedTetraData = nullptr; 
@@ -1246,4 +1237,5 @@ void HeatSystem::cleanup(const VulkanDevice& vulkanDevice) {
     memoryAllocator->free(timeBuffer, timeBufferOffset_);
     memoryAllocator->free(centerBuffer, centerBufferOffset_);
     memoryAllocator->free(neighborBuffer, neighborBufferOffset_);
+
 }

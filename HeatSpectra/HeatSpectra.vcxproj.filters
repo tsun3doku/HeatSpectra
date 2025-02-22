@@ -69,6 +69,9 @@
     <ClCompile Include="MemoryAllocator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ResourceManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\shader.frag">
@@ -149,6 +152,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MemoryAllocator.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
