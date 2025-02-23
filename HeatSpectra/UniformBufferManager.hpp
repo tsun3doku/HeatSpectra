@@ -18,11 +18,12 @@ class Camera;
 
 class UniformBufferManager {
 public: 
-	UniformBufferManager() = default;
+	UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+	~UniformBufferManager();
 
-	void init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight);
+	void init(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
-	void updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
+	void updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
 	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
 
 	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
@@ -86,8 +87,6 @@ public:
 private:	
 	VulkanDevice* vulkanDevice = nullptr;
 	Camera* camera = nullptr;
-
-	VkExtent2D swapChainExtent;
 
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;

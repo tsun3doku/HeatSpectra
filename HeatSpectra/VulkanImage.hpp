@@ -1,5 +1,7 @@
 #pragma once
 
+#include "VulkanDevice.hpp"
+
 void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 void transitionImageLayout(VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 VkImageView createImageView(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);

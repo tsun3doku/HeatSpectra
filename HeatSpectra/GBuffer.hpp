@@ -3,43 +3,44 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-class VulkanDevice;
-class MemoryAllocator;
-class UniformBufferManager;
 class Model;
 class Grid;
 class HeatSource;
 class HeatSystem;
+class UniformBufferManager;
+class ResourceManager;
+class MemoryAllocator;
+class VulkanDevice;
 
 const std::vector<float> clearColorValues = { {0.012f, 0.014f, 0.015f, 1.0f} };
 
 class GBuffer {
 public:
-    GBuffer() = default;
-
-    void init(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
-        VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
-
+    GBuffer(VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
+    ~GBuffer();
+    void init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, HeatSystem& heatSystem,
+        uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
     void createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat);
-    void createFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
+    void createFramebuffers(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
     void updateDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
     void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight);
 
     void createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
 
     void createLightingDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createLightingDescriptorSets(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
+    void createLightingDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
 
     void createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2D extent);
     void createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2D swapchainExtent);
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
-    void recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visModel, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
+    void recordCommandBuffer(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews, 
+        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -94,14 +95,10 @@ public:
 private:
     const VulkanDevice* vulkanDevice = nullptr;
     MemoryAllocator* memoryAllocator = nullptr;
-    const UniformBufferManager* uniformBufferManager = nullptr;
-    Model* visModel = nullptr;
-    Model* heatModel = nullptr;
-    HeatSource* heatSource = nullptr;
+    ResourceManager* resourceManager;
+    
     HeatSystem* heatSystem = nullptr;
-    Grid* grid = nullptr;
-
-    uint32_t width, height;
+   
     uint32_t currentFrame = 0;
 
     VkFormat findDepthFormat(VkPhysicalDevice physicalDevice);

@@ -1,6 +1,7 @@
 #pragma once
 
 class Model;
+class Grid;
 class HeatSource;
 class HeatSystem;
 class UniformBufferManager;
@@ -20,7 +21,13 @@ public:
 	ResourceManager(ResourceManager&&) noexcept;
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
+		void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
+
 	// Getters
+	Grid& getGrid() {
+		return *grid;
+	}
+
 	Model& getSimModel() { 
 		return *simModel; 
 	}
@@ -42,12 +49,11 @@ public:
 		return *uniformBufferManager; 
 	}
 
-	void initialize();
-
 private:
 	VulkanDevice& vulkanDevice;
 	MemoryAllocator& memoryAllocator;
 
+	std::unique_ptr<Grid> grid;
 	std::unique_ptr<Model> simModel;
 	std::unique_ptr<Model> visModel;
 	std::unique_ptr<Model> heatModel;

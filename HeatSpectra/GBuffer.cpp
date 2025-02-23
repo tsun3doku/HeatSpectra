@@ -1,56 +1,52 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "VulkanDevice.hpp"
-#include "MemoryAllocator.hpp"
-#include "VulkanImage.hpp"
-#include "UniformBufferManager.hpp"
-#include "Model.hpp"
-#include "Grid.hpp"
-#include "HeatSource.hpp"
-#include "HeatSystem.hpp"
-#include "Structs.hpp"
-#include "File_utils.h"
-#include "GBuffer.hpp"
-
 #include <stdexcept>
 #include <array>
 #include <vector>
 
-void GBuffer::init(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, const UniformBufferManager& uniformBufferManager, Model& visModel, Model& heatModel, Grid& grid, HeatSource& heatSource, HeatSystem& heatSystem, uint32_t width, uint32_t height,
-    VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
+#include "Structs.hpp"
+#include "File_utils.h"
+#include "Model.hpp"
+#include "Grid.hpp"
+#include "HeatSource.hpp"
+#include "HeatSystem.hpp"
+#include "VulkanImage.hpp"
+#include "UniformBufferManager.hpp"
+#include "ResourceManager.hpp"
+#include "MemoryAllocator.hpp"
+#include "VulkanDevice.hpp"
+#include "GBuffer.hpp"
+
+GBuffer::GBuffer(VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat)
+    : vulkanDevice(&vulkanDevice) {
+    createRenderPass(vulkanDevice, swapchainImageFormat);
+}
+
+GBuffer::~GBuffer() {
+}
+
+void GBuffer::init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, HeatSystem& heatSystem,
+    uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
     this->vulkanDevice = &vulkanDevice;
     this->memoryAllocator = &memoryAllocator;
-    this->uniformBufferManager = &uniformBufferManager;
-    this->visModel = &visModel;
-    this->heatModel = &heatModel;
-    this->grid = &grid;
-    this->heatSource = &heatSource;
+    this->resourceManager = &resourceManager;
     this->heatSystem = &heatSystem;
 
-    if (width != swapchainExtent.width || height != swapchainExtent.height) {
-        throw std::runtime_error("Width and height do not match swapchain extent");
-    }
     createImageViews(vulkanDevice, swapchainExtent, maxFramesInFlight);
-    
+
     createGeometryDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGeometryDescriptorSetLayout(vulkanDevice);
-    createGeometryDescriptorSets(vulkanDevice, maxFramesInFlight);
+    createGeometryDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
 
     createLightingDescriptorPool(vulkanDevice, maxFramesInFlight);
     createLightingDescriptorSetLayout(vulkanDevice);
-    createLightingDescriptorSets(vulkanDevice, uniformBufferManager, maxFramesInFlight);
+    createLightingDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
 
-    grid.createGridDescriptorPool(vulkanDevice, maxFramesInFlight);
-    grid.createGridDescriptorSetLayout(vulkanDevice);
-    grid.createGridDescriptorSets(vulkanDevice, uniformBufferManager, maxFramesInFlight);
-
-    createRenderPass(vulkanDevice, swapchainImageFormat);
-    createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapchainExtent, maxFramesInFlight);
+    createFramebuffers(vulkanDevice, swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
     createGeometryPipeline(vulkanDevice, swapchainExtent);
     createLightingPipeline(vulkanDevice, swapchainExtent);
-    grid.createGridPipeline(vulkanDevice, renderPass);
 
     createCommandBuffers(vulkanDevice, maxFramesInFlight);
 }
@@ -132,7 +128,7 @@ void GBuffer::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D exte
     }
 }
 
-void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, const Grid& grid, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
+void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
     size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
     framebuffers.resize(totalFramebuffers);
 
@@ -420,7 +416,7 @@ void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created geometry descriptor set layout: " << geometryDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, geometryDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -436,7 +432,7 @@ void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, uin
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
-        uboBufferInfo.buffer = uniformBufferManager->getUniformBuffers()[i]; 
+        uboBufferInfo.buffer = resourceManager.getUniformBufferManager().getUniformBuffers()[i];
         uboBufferInfo.offset = 0;
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
@@ -501,7 +497,7 @@ void GBuffer::createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created lighting descriptor set layout: " << lightingDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, lightingDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -535,13 +531,13 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, con
 
         // Main UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
-        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.buffer = resourceManager.getUniformBufferManager().getUniformBuffers()[i];
         uboBufferInfo.offset = 0;
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
         // Light UBO descriptor
         VkDescriptorBufferInfo lightBufferInfo{};
-        lightBufferInfo.buffer = uniformBufferManager.getLightBuffers()[i];
+        lightBufferInfo.buffer = resourceManager.getUniformBufferManager().getLightBuffers()[i];
         lightBufferInfo.offset = 0;
         lightBufferInfo.range = sizeof(LightUniformBufferObject);
 
@@ -924,7 +920,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visModel, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
+void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -980,31 +976,31 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visMo
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Geometry subpass 
-    VkBuffer vertexBuffers[] = { visModel.getVertexBuffer(), visModel.getSurfaceVertexBuffer() };
+    VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer()};
     VkDeviceSize vertexOffsets[] = { 
-        visModel.getVertexBufferOffset(),      
-        visModel.getSurfaceVertexBufferOffset() 
+        resourceManager.getVisModel().getVertexBufferOffset(),      
+        resourceManager.getVisModel().getSurfaceVertexBufferOffset() 
     };
     //std::cout << "GBuffer::recordCommandBuffer - Binding vertex buffer: " << vertexBuffers[0] << std::endl;
     //std::cout << "GBuffer::recordCommandBuffer - Binding color buffer: " << vertexBuffers[1] << std::endl;
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, visModel.getIndexBuffer(), visModel.getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw geometry
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(visModel.getIndices().size()), 1, 0, 0, 0);
-    std::cout << "VisModel indices: " << visModel.getIndices().size() << std::endl;
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
+    std::cout << "VisModel indices: " << resourceManager.getVisModel().getIndices().size() << std::endl;
 
-    VkBuffer heatSourceVertexBuffers[] = { heatModel->getVertexBuffer(), heatModel->getSurfaceVertexBuffer() };
+    VkBuffer heatSourceVertexBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(),resourceManager.getHeatModel().getSurfaceVertexBuffer()};
     VkDeviceSize heatSourceOffsets[] = {
-    heatModel->getVertexBufferOffset(),
-    heatModel->getSurfaceVertexBufferOffset()
+    resourceManager.getHeatModel().getVertexBufferOffset(),
+    resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
     };
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatSourceVertexBuffers, heatSourceOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, heatModel->getIndexBuffer(), heatModel->getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     // Draw heat source model
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(heatModel->getIndices().size()), 1, 0, 0, 0);
-    std::cout << "HeatSource indices: " << heatModel->getIndices().size() << std::endl;
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getHeatModel().getIndices().size()), 1, 0, 0, 0);
+    std::cout << "HeatSource indices: " << resourceManager.getHeatModel().getIndices().size() << std::endl;
 
     // Transition to lighting subpass
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
@@ -1015,10 +1011,10 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, Model& visMo
 
     // Transition to grid subpass
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grid->getGridPipeline());
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, grid->getGridPipelineLayout(), 0, 1, &grid->getGridDescriptorSets()[currentFrame], 0, nullptr);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipeline());
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipelineLayout(), 0, 1, &resourceManager.getGrid().getGridDescriptorSets()[currentFrame], 0, nullptr);
     // Draw grid
-    vkCmdDraw(commandBuffer, grid->vertexCount, 1, 0, 0);
+    vkCmdDraw(commandBuffer, resourceManager.getGrid().vertexCount, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1080,7 +1076,7 @@ void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
 
-    grid->cleanup(vulkanDevice, maxFramesInFlight);
+    resourceManager->getGrid().cleanup(vulkanDevice, maxFramesInFlight);
   
 
     for (VkFramebuffer framebuffer : framebuffers) {

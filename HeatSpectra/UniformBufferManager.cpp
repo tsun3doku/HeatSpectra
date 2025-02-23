@@ -5,10 +5,20 @@
 #include "Camera.hpp"
 #include "UniformBufferManager.hpp"
 
-void UniformBufferManager::init(VulkanDevice& vulkanDevice, VkExtent2D swapChainExtent, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice; 
-    this->swapChainExtent = swapChainExtent;
+UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight)
+: vulkanDevice(&vulkanDevice) {
+    createUniformBuffers(maxFramesInFlight);
+    createGridUniformBuffers(maxFramesInFlight);
+    createLightUniformBuffers(maxFramesInFlight);
+    createSSAOKernelBuffers(maxFramesInFlight);
+}
 
+UniformBufferManager::~UniformBufferManager() {
+}
+
+void UniformBufferManager::init(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    this->vulkanDevice = &vulkanDevice; 
+    
     std::cout << "Logical device in UniformBufferManager: " << vulkanDevice.getDevice() << std::endl;
     
     createUniformBuffers(maxFramesInFlight);
@@ -109,7 +119,7 @@ void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
     }
 }
 
-void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {   
+void UniformBufferManager::updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, Camera& camera, UniformBufferObject& ubo) {
     // Get current time
     static auto startTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();

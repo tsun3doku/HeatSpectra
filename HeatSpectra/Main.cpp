@@ -4,20 +4,22 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include "CommandBufferManager.hpp"
-#include "Model.hpp"
+#include "File_utils.h"
 #include "Structs.hpp"
-#include "VulkanImage.hpp"
-#include "ResourceManager.hpp"
-#include "MemoryAllocator.hpp"
-#include "UniformBufferManager.hpp" 
+
 #include "Camera.hpp"
-#include "File_utils.h" 
-//#include "HDR.hpp"
+#include "Model.hpp"
 #include "Grid.hpp"
-#include "GBuffer.hpp" 
+#include "UniformBufferManager.hpp"
+
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
+#include "ResourceManager.hpp"
+#include "GBuffer.hpp"
+
+#include "VulkanImage.hpp"
+#include "CommandBufferManager.hpp"
+#include "MemoryAllocator.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -96,8 +98,8 @@ private:
     std::vector<VkImageView> swapChainImageViews;
 
     //HDR hdr; 
-    GBuffer gbuffer; 
-    Grid grid;
+    std::unique_ptr<GBuffer> gbuffer; 
+    //Grid grid;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -155,8 +157,8 @@ private:
 
     void initScene() {
         resourceManager = std::make_unique<ResourceManager>(vulkanDevice, *memoryAllocator, MAXFRAMESINFLIGHT);
-        resourceManager->initialize();
-
+        resourceManager->initialize(gbuffer->getRenderPass(), MAXFRAMESINFLIGHT);
+        
         center = resourceManager->getSimModel().getBoundingBoxCenter();
         camera.setLookAt(center);
 
@@ -166,28 +168,25 @@ private:
             *resourceManager,
             MAXFRAMESINFLIGHT
         );
+
+        gbuffer->init(vulkanDevice, *memoryAllocator, *resourceManager, *heatSystem,
+            WIDTH, HEIGHT, swapChainExtent, swapChainImageViews,
+            swapChainImageFormat, MAXFRAMESINFLIGHT);
     }
 
-    void initRenderResources() {
-        resourceManager->getUniformBufferManager().init(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
-     
-        gbuffer.init(vulkanDevice, *memoryAllocator, resourceManager->getUniformBufferManager(),
-            resourceManager->getVisModel(),
-            resourceManager->getHeatModel(),
-            grid,
-            heatSystem->getHeatSource(),
-            *heatSystem,
-            WIDTH, HEIGHT, swapChainExtent,
-            swapChainImageViews, swapChainImageFormat,
-            MAXFRAMESINFLIGHT);
+    void initRenderResources() {  
+        gbuffer = std::make_unique<GBuffer>(
+            vulkanDevice,
+            swapChainImageFormat
+        );
     }
 
     void initVulkan() {
         std::cout << "Initializing Vulkan..." << std::endl;
         initCore();
         initSwapChain();
-        initScene();
         initRenderResources();
+        initScene();
         createSyncObjects();
     }
 
@@ -236,17 +235,17 @@ private:
     void cleanupSwapChain() {    
         vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-        gbuffer.cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
-        gbuffer.cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
+        gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
+        gbuffer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
         
         for (auto imageView : swapChainImageViews) {
             std::cout << "Destroyed swapchain: " << imageView << std::endl;
             vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
         }
 
-        if (gbuffer.getCommandBuffers().size() != MAXFRAMESINFLIGHT) {
-            gbuffer.freeCommandBuffers(vulkanDevice);
-            gbuffer.createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+        if (gbuffer->getCommandBuffers().size() != MAXFRAMESINFLIGHT) {
+            gbuffer->freeCommandBuffers(vulkanDevice);
+            gbuffer->createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
         }
         swapChainImageViews.clear();
         swapChainImages.clear();
@@ -286,9 +285,9 @@ private:
 
         heatSystem->recreateResources(vulkanDevice, MAXFRAMESINFLIGHT);
 
-        gbuffer.createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
-        gbuffer.updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
-        gbuffer.createFramebuffers(vulkanDevice, grid, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer->createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer->updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
+        gbuffer->createFramebuffers(vulkanDevice, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
         
@@ -299,7 +298,7 @@ private:
         resourceManager->getUniformBufferManager().cleanup(MAXFRAMESINFLIGHT);
         heatSystem->cleanupResources(vulkanDevice);
         heatSystem->cleanup(vulkanDevice);
-        gbuffer.cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
+        gbuffer->cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
     }
 
     void cleanupTextures() {
@@ -528,12 +527,12 @@ private:
             throw std::runtime_error("Failed to acquire swap chain image");
         }
 
-        VkCommandBuffer commandBuffer = gbuffer.getCommandBuffers()[currentFrame];
+        VkCommandBuffer commandBuffer = gbuffer->getCommandBuffers()[currentFrame];
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
         
         UniformBufferObject ubo{};
-        resourceManager->getUniformBufferManager().updateUniformBuffer(currentFrame, camera, ubo);
+        resourceManager->getUniformBufferManager().updateUniformBuffer(swapChainExtent, currentFrame, camera, ubo);
         GridUniformBufferObject gridUbo{};
         resourceManager->getUniformBufferManager().updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
         LightUniformBufferObject lightUbo{};
@@ -560,7 +559,7 @@ private:
         heatSystem->swapBuffers(*resourceManager);
 
         // Graphics pass
-        gbuffer.recordCommandBuffer(vulkanDevice, resourceManager->getVisModel(), swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
+        gbuffer->recordCommandBuffer(vulkanDevice, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
 
         std::array<VkPipelineStageFlags, 2> waitStages = {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore

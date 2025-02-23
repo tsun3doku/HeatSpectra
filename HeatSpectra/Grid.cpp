@@ -1,12 +1,29 @@
-#include "VulkanDevice.hpp"  
-#include "UniformBufferManager.hpp" 
-#include "VulkanImage.hpp"
-#include "Structs.hpp"
-#include "File_utils.h"
-#include "Grid.hpp"
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
 #include <array>
 #include <vector>
+
+#include "Structs.hpp"
+#include "File_utils.h"
+#include "VulkanImage.hpp"
+#include "UniformBufferManager.hpp"
+#include "ResourceManager.hpp"
+#include "VulkanDevice.hpp"
+#include "Grid.hpp"
+
+
+Grid::Grid(VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight, VkRenderPass renderPass)
+    : vulkanDevice(&vulkanDevice), resourceManager(resourceManager) {
+    createGridDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createGridDescriptorSetLayout(vulkanDevice);
+    createGridDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+
+    createGridPipeline(vulkanDevice, renderPass);
+}
+
+Grid::~Grid() {
+}
 
 void Grid::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight) {
     // Resize the vectors for multiple frames
@@ -71,7 +88,7 @@ void Grid::createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
     }
 }
 
-void Grid::createGridDescriptorSets(const VulkanDevice& vulkanDevice, const UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+void Grid::createGridDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, gridDescriptorSetLayout);
     
 VkDescriptorSetAllocateInfo allocInfo{};
@@ -87,7 +104,7 @@ VkDescriptorSetAllocateInfo allocInfo{};
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = uniformBufferManager.getGridUniformBuffers()[i];
+        bufferInfo.buffer = resourceManager.getUniformBufferManager().getGridUniformBuffers()[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(GridUniformBufferObject);
 

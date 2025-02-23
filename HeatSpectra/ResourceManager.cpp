@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Model.hpp"
+#include "Grid.hpp"
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
 #include "UniformBufferManager.hpp"
@@ -18,13 +19,13 @@ ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& me
     simModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
     visModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
     heatModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
-    uniformBufferManager = std::make_unique<UniformBufferManager>();
+    uniformBufferManager = std::make_unique<UniformBufferManager>(vulkanDevice, maxFramesInFlight);
 }
 
 ResourceManager::~ResourceManager() {
 }
 
-void ResourceManager::initialize() {
+void ResourceManager::initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
     simModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
 
     visModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
@@ -33,5 +34,7 @@ void ResourceManager::initialize() {
     visModel->recreateBuffers();
 
     heatModel->init(vulkanDevice, memoryAllocator, HEATSOURCE_PATH);
+
+    grid = std::make_unique<Grid>(vulkanDevice, *this, maxFramesInFlight, renderPass);
 
 }
