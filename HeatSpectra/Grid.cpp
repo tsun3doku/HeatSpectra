@@ -87,7 +87,7 @@ VkDescriptorSetAllocateInfo allocInfo{};
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBufferManager.getGridUniformBuffers()[i];
-        bufferInfo.offset = 0;
+        bufferInfo.offset = uniformBufferManager.getGridUniformBufferOffset();
         bufferInfo.range = sizeof(GridUniformBufferObject);
 
         std::array<VkWriteDescriptorSet, 1> descriptorWrites{};

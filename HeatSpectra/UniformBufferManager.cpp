@@ -1,109 +1,122 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "VulkanDevice.hpp"
 #include "Camera.hpp"
+#include "MemoryAllocator.hpp"
+#include "VulkanDevice.hpp"
 #include "UniformBufferManager.hpp"
 
-UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight)
-: vulkanDevice(vulkanDevice) {
-    createUniformBuffers(maxFramesInFlight);
-    createGridUniformBuffers(maxFramesInFlight);
-    createLightUniformBuffers(maxFramesInFlight);
-    createSSAOKernelBuffers(maxFramesInFlight);
+UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight)
+: vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator) {
+    createUniformBuffers(memoryAllocator, maxFramesInFlight);
+    createGridUniformBuffers(memoryAllocator, maxFramesInFlight);
+    createLightUniformBuffers(memoryAllocator, maxFramesInFlight);
+    createSSAOKernelBuffers(memoryAllocator, maxFramesInFlight);
 }
 
 UniformBufferManager::~UniformBufferManager() {
 }
 
-void UniformBufferManager::createUniformBuffers(uint32_t maxFramesInFlight) {
-   
+void UniformBufferManager::createUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
+    
     uniformBuffers.resize(maxFramesInFlight);
-    uniformBuffersMemory.resize(maxFramesInFlight);
     uniformBuffersMapped.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        uniformBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        auto [buffer, offset] = memoryAllocator.allocate(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            uniformBuffersMemory[i]);
-        std::cout << "Created Uniform Buffer: " << uniformBuffers[i] << std::endl;
-        std::cout << "Memory for Uniform Buffer: " << uniformBuffersMemory[i] << std::endl;
+            vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+        );
 
-        vkMapMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+        uniformBuffers[i] = buffer;
+        uniformBufferOffset_ = offset;
+        uniformBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
 
-void UniformBufferManager::createGridUniformBuffers(uint32_t maxFramesInFlight) {
+void UniformBufferManager::createGridUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(GridUniformBufferObject);
 
     gridUniformBuffers.resize(maxFramesInFlight);
-    gridUniformBuffersMemory.resize(maxFramesInFlight);
     gridUniformBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        gridUniformBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-            gridUniformBuffersMemory[i]);
-        std::cout << "Created Grid Uniform Buffer: " << gridUniformBuffers[i] << std::endl;
-        std::cout << "Memory for Grid Uniform Buffer: " << gridUniformBuffersMemory[i] << std::endl;
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        auto [buffer, offset] = memoryAllocator.allocate(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+        );
 
-        vkMapMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], 0, bufferSize, 0, &gridUniformBuffersMapped[i]);
+        gridUniformBuffers[i] = buffer;
+        gridUniformBufferOffset_ = offset;
+        gridUniformBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
 
-void UniformBufferManager::createLightUniformBuffers(uint32_t maxFramesInFlight) {
+void UniformBufferManager::createLightUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(LightUniformBufferObject); 
     
     lightBuffers.resize(maxFramesInFlight);
-    lightBuffersMemory.resize(maxFramesInFlight);
     lightBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        lightBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        auto [buffer, offset] = memoryAllocator.allocate(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            lightBuffersMemory[i]);
+            vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+        );
 
-        vkMapMemory(vulkanDevice.getDevice(), lightBuffersMemory[i], 0, bufferSize, 0, &lightBuffersMapped[i]);
+        lightBuffers[i] = buffer;
+        lightBufferOffset_ = offset;
+        lightBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
 
-void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
+void UniformBufferManager::createSSAOKernelBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(SSAOKernelBufferObject);
 
     SSAOKernelBuffers.resize(maxFramesInFlight);
-    SSAOKernelBuffersMemory.resize(maxFramesInFlight);
     SSAOKernelBuffersMapped.resize(maxFramesInFlight);
 
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        SSAOKernelBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    // Generate SSAO kernel samples once
+    SSAOKernelBufferObject ssaoKernel;
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
+
+    for (int j = 0; j < 16; ++j) {
+        glm::vec3 sample(
+            randomFloats(generator) * 2.0f - 1.0f,
+            randomFloats(generator) * 2.0f - 1.0f,
+            randomFloats(generator)
+        );
+        sample = glm::normalize(sample);
+        sample *= randomFloats(generator);
+
+        float scale = float(j) / 16.0f;
+        scale = glm::mix(0.1f, 1.0f, scale * scale);
+        sample *= scale;
+
+        ssaoKernel.SSAOKernel[j] = glm::vec4(sample, 0.0f);
+    }
+
+    // Create buffers and copy kernel data
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        auto [buffer, offset] = memoryAllocator.allocate(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            SSAOKernelBuffersMemory[i]);
+            vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+        );
 
-        vkMapMemory(vulkanDevice.getDevice(), SSAOKernelBuffersMemory[i], 0, bufferSize, 0, &SSAOKernelBuffersMapped[i]);
+        SSAOKernelBuffers[i] = buffer;
+        SSAOKernelBufferOffset_ = offset;
+        SSAOKernelBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
 
-        // Generate SSAO kernel samples (randomly distributed in the hemisphere)
-        SSAOKernelBufferObject ssaoKernel;
-        std::default_random_engine generator;
-        std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
-
-        for (int j = 0; j < 16; ++j) {
-            glm::vec3 sample(
-                randomFloats(generator) * 2.0f - 1.0f,  // X in [-1, 1]
-                randomFloats(generator) * 2.0f - 1.0f,  // Y in [-1, 1]
-                randomFloats(generator)                   // Z in [0, 1]
-            );
-            sample = glm::normalize(sample);  // Normalize to unit length
-            sample *= randomFloats(generator); // Scale with a random factor
-
-            float scale = float(j) / 16.0f;
-            scale = glm::mix(0.1f, 1.0f, scale * scale);
-            sample *= scale;
-
-            ssaoKernel.SSAOKernel[j] = glm::vec4(sample, 0.0f);
-        }
-        // Copy the generated kernel to the mapped memory
         memcpy(SSAOKernelBuffersMapped[i], &ssaoKernel, sizeof(ssaoKernel));
     }
 }
@@ -163,45 +176,24 @@ void UniformBufferManager::updateSSAOKernelBuffer(uint32_t currentImage, Camera&
 void UniformBufferManager::cleanup(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         if (uniformBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice.getDevice(), uniformBuffers[i], nullptr);
-
-            std::cout << "Destroyed uniform buffer " << uniformBuffers[i] << std::endl;
+            memoryAllocator.free(uniformBuffers[i], 0);
+            std::cout << "Freed main uniform buffers " << uniformBuffers[i] << std::endl;
         }
 
-        if (uniformBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], nullptr);
-
-            std::cout << "Freed uniform buffer memory " << uniformBuffersMemory[i] << std::endl;
-        }
         if (gridUniformBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice.getDevice(), gridUniformBuffers[i], nullptr);
-
-            std::cout << "Destroyed grid uniform buffer " << gridUniformBuffers[i] << std::endl;
-        }
-
-        if (gridUniformBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], nullptr);
-
-            std::cout << "Freed grid uniform buffer memory " << gridUniformBuffersMemory[i] << std::endl;
+            memoryAllocator.free(gridUniformBuffers[i], 0);
+            std::cout << "Freed grid uniform buffers " << gridUniformBuffers[i] << std::endl;
         }
 
         if (lightBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice.getDevice(), lightBuffers[i], nullptr);
-
-            std::cout << "Destroyed light buffer " << lightBuffers[i] << std::endl;
-        }
-
-        if (lightBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice.getDevice(), lightBuffersMemory[i], nullptr);
-
-            std::cout << "Freed light buffer memory " << lightBuffersMemory[i] << std::endl;
+            memoryAllocator.free(lightBuffers[i], 0);
+            std::cout << "Freed light uniform buffers " << lightBuffers[i] << std::endl;
         }
 
         if (SSAOKernelBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice.getDevice(), SSAOKernelBuffers[i], nullptr);
-        }
-        if (SSAOKernelBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice.getDevice(), SSAOKernelBuffersMemory[i], nullptr);
+            memoryAllocator.free(SSAOKernelBuffers[i], 0);
+            std::cout << "Freed SSAO kernel uniform buffers " << SSAOKernelBuffers[i] << std::endl;
         }
     }
 }
+

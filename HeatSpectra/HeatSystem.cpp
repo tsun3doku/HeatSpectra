@@ -74,11 +74,9 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
     resourceManager.getHeatModel().setModelMatrix(heatSourceModelMatrix);
     heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
 
-    // Map the uniform buffer and copy the updated UBO
-    void* data;
-    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager.getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
-    memcpy(data, &ubo, sizeof(UniformBufferObject));
-    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager.getUniformBuffersMemory()[0]);
+    // Use the already mapped memory from UniformBufferManager
+    void* mappedMemory = uniformBufferManager.getUniformBuffersMapped()[0];
+    memcpy(mappedMemory, &ubo, sizeof(UniformBufferObject));
 }
 
 void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {

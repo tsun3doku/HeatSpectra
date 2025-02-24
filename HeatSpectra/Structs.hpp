@@ -68,7 +68,7 @@ struct SurfaceVertex {
 struct TetrahedralElement {
     uint32_t vertices[4];  
     float temperature;  
-    float coolingRate;        
+    float coolingRate;
     float thermalConductivity;
 };  
     

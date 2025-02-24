@@ -170,6 +170,7 @@ private:
         // Create UniformBufferManager
         uniformBufferManager = std::make_unique<UniformBufferManager>(
             vulkanDevice,
+            *memoryAllocator,
             MAXFRAMESINFLIGHT
         );
 

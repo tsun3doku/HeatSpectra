@@ -150,9 +150,6 @@ public:
     VkDeviceSize getVertexBufferOffset() {
         return vertexBufferOffset_;
     }
-    VkDeviceMemory getVertexBufferMemory() {
-        return vertexBufferMemory;
-    }
 
     VkBuffer getIndexBuffer() {
         return indexBuffer;
@@ -160,18 +157,12 @@ public:
     VkDeviceSize getIndexBufferOffset() {
         return indexBufferOffset_;
     }
-    VkDeviceMemory getIndexBufferMemory() {
-        return indexBufferMemory;
-    }
 
     VkBuffer getSurfaceBuffer() {
         return surfaceBuffer;
     }
     VkDeviceSize getSurfaceBufferOffset() {
         return surfaceBufferOffset_;
-    }
-    VkDeviceMemory getSurfaceBufferMemory() {
-        return surfaceBufferMemory;
     }
 
     VkBuffer getSurfaceVertexBuffer() {
@@ -210,20 +201,16 @@ private:
 
 	VkBuffer vertexBuffer;
     VkDeviceSize vertexBufferOffset_;
-	VkDeviceMemory vertexBufferMemory;
 
 	VkBuffer indexBuffer;
     VkDeviceSize indexBufferOffset_;
-	VkDeviceMemory indexBufferMemory;
 
     VkBuffer surfaceBuffer;
-    VkDeviceMemory surfaceBufferMemory;
     VkDeviceSize surfaceBufferOffset_;
     SurfaceVertex* mappedSurfaceVertices = nullptr;
 
     VkBuffer surfaceVertexBuffer;
     VkDeviceSize surfaceVertexBufferOffset_;
-    VkDeviceMemory surfaceVertexBufferMemory;
 
     glm::vec3 modelPosition{};
     glm::mat4 modelMatrix = glm::mat4(1.0f);
