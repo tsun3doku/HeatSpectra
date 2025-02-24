@@ -46,8 +46,8 @@ public:
 	glm::vec3 getCurrentColor(UniformBufferObject& ubo) {
 		return ubo.color;
 	}
-	const VkDeviceSize& getUniformBufferOffset() const {
-		return uniformBufferOffset_;
+	const std::vector<VkDeviceSize>& getUniformBufferOffsets() const {
+		return uniformBufferOffsets_;
 	}
 
 	// Getter functions for Grid Uniform Buffers
@@ -57,8 +57,8 @@ public:
 	const std::vector<void*>& getGridUniformBuffersMapped() const {
 		return gridUniformBuffersMapped;
 	}
-	const VkDeviceSize& getGridUniformBufferOffset() const {
-		return gridUniformBufferOffset_;
+	const std::vector<VkDeviceSize>& getGridUniformBufferOffsets() const {
+		return gridUniformBufferOffsets_;
 	}
 
 	// Getter functions for Light Buffers
@@ -68,8 +68,8 @@ public:
 	const std::vector<void*>& getLightBuffersMapped() const {
 		return lightBuffersMapped;
 	}	
-	const VkDeviceSize& getLightBufferOffset() const {
-		return lightBufferOffset_;
+	const std::vector<VkDeviceSize>& getLightBufferOffsets() const {
+		return lightBufferOffsets_;
 	}
 
 	// Getter functions for SSAO Kernel Buffers
@@ -79,6 +79,9 @@ public:
 	const std::vector<void*>& getSSAOKernelBuffersMapped() const {
 		return SSAOKernelBuffersMapped;
 	}
+	const std::vector<VkDeviceSize>& getSSAOKernelBufferOffsets() const {
+		return SSAOKernelBufferOffsets_;
+	}
 
 private:	
 	VulkanDevice& vulkanDevice;
@@ -87,17 +90,17 @@ private:
 
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<void*> uniformBuffersMapped;
-	VkDeviceSize uniformBufferOffset_;
+	std::vector<VkDeviceSize> uniformBufferOffsets_;
 
 	std::vector<VkBuffer> gridUniformBuffers;
 	std::vector<void*> gridUniformBuffersMapped;
-	VkDeviceSize gridUniformBufferOffset_;
+	std::vector<VkDeviceSize> gridUniformBufferOffsets_;
 
 	std::vector<VkBuffer> lightBuffers;
 	std::vector<void*> lightBuffersMapped;
-	VkDeviceSize lightBufferOffset_;
+	std::vector<VkDeviceSize> lightBufferOffsets_;
 
 	std::vector<VkBuffer> SSAOKernelBuffers;
-	std::vector<void*> SSAOKernelBuffersMapped;	
-	VkDeviceSize SSAOKernelBufferOffset_;
+	std::vector<void*> SSAOKernelBuffersMapped;
+	std::vector<VkDeviceSize> SSAOKernelBufferOffsets_;
 };

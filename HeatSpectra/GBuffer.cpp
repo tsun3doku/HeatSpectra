@@ -211,7 +211,7 @@ void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, Res
         // UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
-        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffset();
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
 
@@ -310,13 +310,13 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Def
         // Main UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
-        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffset();
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
         // Light UBO descriptor
         VkDescriptorBufferInfo lightBufferInfo{};
         lightBufferInfo.buffer = uniformBufferManager.getLightBuffers()[i];
-        lightBufferInfo.offset = uniformBufferManager.getLightBufferOffset();
+        lightBufferInfo.offset = uniformBufferManager.getLightBufferOffsets()[i];
         lightBufferInfo.range = sizeof(LightUniformBufferObject);
 
         std::array<VkWriteDescriptorSet, 5> descriptorWrites{};

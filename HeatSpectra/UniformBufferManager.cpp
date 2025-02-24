@@ -22,6 +22,7 @@ void UniformBufferManager::createUniformBuffers(MemoryAllocator& memoryAllocator
     
     uniformBuffers.resize(maxFramesInFlight);
     uniformBuffersMapped.resize(maxFramesInFlight);
+    uniformBufferOffsets_.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         auto [buffer, offset] = memoryAllocator.allocate(
@@ -32,7 +33,7 @@ void UniformBufferManager::createUniformBuffers(MemoryAllocator& memoryAllocator
         );
 
         uniformBuffers[i] = buffer;
-        uniformBufferOffset_ = offset;
+        uniformBufferOffsets_[i] = offset;
         uniformBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
@@ -42,6 +43,7 @@ void UniformBufferManager::createGridUniformBuffers(MemoryAllocator& memoryAlloc
 
     gridUniformBuffers.resize(maxFramesInFlight);
     gridUniformBuffersMapped.resize(maxFramesInFlight);
+    gridUniformBufferOffsets_.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         auto [buffer, offset] = memoryAllocator.allocate(
@@ -52,7 +54,7 @@ void UniformBufferManager::createGridUniformBuffers(MemoryAllocator& memoryAlloc
         );
 
         gridUniformBuffers[i] = buffer;
-        gridUniformBufferOffset_ = offset;
+        gridUniformBufferOffsets_[i] = offset;
         gridUniformBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
@@ -62,6 +64,7 @@ void UniformBufferManager::createLightUniformBuffers(MemoryAllocator& memoryAllo
     
     lightBuffers.resize(maxFramesInFlight);
     lightBuffersMapped.resize(maxFramesInFlight);
+    lightBufferOffsets_.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         auto [buffer, offset] = memoryAllocator.allocate(
@@ -72,7 +75,7 @@ void UniformBufferManager::createLightUniformBuffers(MemoryAllocator& memoryAllo
         );
 
         lightBuffers[i] = buffer;
-        lightBufferOffset_ = offset;
+        lightBufferOffsets_[i] = offset;
         lightBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
     }
 }
@@ -82,6 +85,7 @@ void UniformBufferManager::createSSAOKernelBuffers(MemoryAllocator& memoryAlloca
 
     SSAOKernelBuffers.resize(maxFramesInFlight);
     SSAOKernelBuffersMapped.resize(maxFramesInFlight);
+    SSAOKernelBufferOffsets_.resize(maxFramesInFlight);
 
     // Generate SSAO kernel samples once
     SSAOKernelBufferObject ssaoKernel;
@@ -114,7 +118,7 @@ void UniformBufferManager::createSSAOKernelBuffers(MemoryAllocator& memoryAlloca
         );
 
         SSAOKernelBuffers[i] = buffer;
-        SSAOKernelBufferOffset_ = offset;
+        SSAOKernelBufferOffsets_[i] = offset;
         SSAOKernelBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
 
         memcpy(SSAOKernelBuffersMapped[i], &ssaoKernel, sizeof(ssaoKernel));
