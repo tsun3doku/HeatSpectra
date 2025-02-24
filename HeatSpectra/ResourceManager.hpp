@@ -10,7 +10,7 @@ class VulkanDevice;
 
 class ResourceManager {
 public:
-	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
+	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, VkRenderPass renderPass, uint32_t maxFramesInFlight);
 	~ResourceManager();
 
 	// Delete copy operations
@@ -21,7 +21,7 @@ public:
 	ResourceManager(ResourceManager&&) noexcept;
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
-		void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
+		void initialize();
 
 	// Getters
 	Grid& getGrid() {
@@ -45,13 +45,10 @@ public:
 		return *heatSystem; 
 	}
 
-	UniformBufferManager& getUniformBufferManager() { 
-		return *uniformBufferManager; 
-	}
-
 private:
 	VulkanDevice& vulkanDevice;
 	MemoryAllocator& memoryAllocator;
+	UniformBufferManager& uniformBufferManager;
 
 	std::unique_ptr<Grid> grid;
 	std::unique_ptr<Model> simModel;
@@ -59,5 +56,4 @@ private:
 	std::unique_ptr<Model> heatModel;
 	std::unique_ptr<HeatSource> heatSource;
 	std::unique_ptr<HeatSystem> heatSystem;
-	std::unique_ptr<UniformBufferManager> uniformBufferManager;
 };

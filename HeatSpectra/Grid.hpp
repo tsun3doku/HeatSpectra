@@ -1,23 +1,19 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 class UniformBufferManager;
 class ResourceManager;
 class VulkanDevice;
 
 class Grid {
 public:
-    Grid(VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight, VkRenderPass renderPass);
+    Grid(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass);
     ~Grid();
 
     void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) const;
-    void createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight); // Optional
 
     void createGridDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createGridDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
+    void createGridDescriptorSets(const VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
 
     void createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass renderPass);
 
@@ -30,7 +26,7 @@ public:
     VkDescriptorSetLayout getGridDescriptorSetLayout() const {
         return gridDescriptorSetLayout;
     }
-    std::vector<VkDescriptorSet> getGridDescriptorSets() const {
+    const std::vector<VkDescriptorSet>& getGridDescriptorSets() const {
         return gridDescriptorSets;
     }
 
@@ -41,27 +37,10 @@ public:
         return gridPipelineLayout;
     }
 
-    std::vector<VkImage> getGridImages() const {
-        return gridImages;
-    }
-
-    std::vector<VkDeviceMemory> getGridImageMemories() const {
-        return gridImageMemories;
-    }
-
-    std::vector<VkImageView> getGridImageViews() const {
-        return gridImageViews;
-    }
-
 private:
     VulkanDevice* vulkanDevice;
-    //UniformBufferManager* uniformBufferManager;
     ResourceManager& resourceManager;
-   
-    std::vector<VkImage> gridImages; // Optional
-    std::vector<VkDeviceMemory> gridImageMemories; // Optional 
-    std::vector<VkImageView> gridImageViews; // Optional
-    VkImageCreateInfo gridImageInfo; // Optional
+    UniformBufferManager& uniformBufferManager;
  
     VkDescriptorPool gridDescriptorPool;
     VkDescriptorSetLayout gridDescriptorSetLayout;

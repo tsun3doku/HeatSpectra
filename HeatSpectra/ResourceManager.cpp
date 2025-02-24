@@ -14,18 +14,19 @@
 #include "ResourceManager.hpp"
 
 
-ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight)
-	: vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator) {
+ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, VkRenderPass renderPass,  uint32_t maxFramesInFlight)
+	: vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager) {
+
     simModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
     visModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
     heatModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
-    uniformBufferManager = std::make_unique<UniformBufferManager>(vulkanDevice, maxFramesInFlight);
+    grid = std::make_unique<Grid>(vulkanDevice, uniformBufferManager, maxFramesInFlight, renderPass);
 }
 
 ResourceManager::~ResourceManager() {
 }
 
-void ResourceManager::initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
+void ResourceManager::initialize() {
     simModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
 
     visModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
@@ -34,7 +35,4 @@ void ResourceManager::initialize(VkRenderPass renderPass, uint32_t maxFramesInFl
     visModel->recreateBuffers();
 
     heatModel->init(vulkanDevice, memoryAllocator, HEATSOURCE_PATH);
-
-    grid = std::make_unique<Grid>(vulkanDevice, *this, maxFramesInFlight, renderPass);
-
 }

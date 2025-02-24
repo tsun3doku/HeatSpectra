@@ -9,9 +9,9 @@ class VulkanDevice;
 
 class HeatSystem {
 public:
-    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
+    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
     ~HeatSystem();
-    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
+    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void swapBuffers(ResourceManager& resourceManager);
 
@@ -68,6 +68,7 @@ private:
     VulkanDevice* vulkanDevice = nullptr;
     MemoryAllocator* memoryAllocator = nullptr;
     ResourceManager& resourceManager;
+    UniformBufferManager& uniformBufferManager;
     std::unique_ptr<HeatSource> heatSource;
     Camera* camera = nullptr;
 

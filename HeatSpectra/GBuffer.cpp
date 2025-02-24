@@ -14,41 +14,32 @@
 #include "VulkanImage.hpp"
 #include "UniformBufferManager.hpp"
 #include "ResourceManager.hpp"
+#include "DeferredRenderer.hpp"
 #include "MemoryAllocator.hpp"
 #include "VulkanDevice.hpp"
 #include "GBuffer.hpp"
 
-GBuffer::GBuffer(VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat)
-    : vulkanDevice(&vulkanDevice) {
-    createRenderPass(vulkanDevice, swapchainImageFormat);
-}
-
-GBuffer::~GBuffer() {
-}
-
-void GBuffer::init(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, HeatSystem& heatSystem,
-    uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice;
-    this->memoryAllocator = &memoryAllocator;
-    this->resourceManager = &resourceManager;
-    this->heatSystem = &heatSystem;
-
-    createImageViews(vulkanDevice, swapchainExtent, maxFramesInFlight);
+GBuffer::GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
+    uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight)
+    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), deferredRenderer(deferredRenderer), resourceManager(resourceManager), heatSystem(&heatSystem), uniformBufferManager(uniformBufferManager) {
+    
+    createFramebuffers(vulkanDevice, deferredRenderer, swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
     createGeometryDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGeometryDescriptorSetLayout(vulkanDevice);
-    createGeometryDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+    createGeometryDescriptorSets(vulkanDevice, resourceManager, uniformBufferManager, maxFramesInFlight);
 
     createLightingDescriptorPool(vulkanDevice, maxFramesInFlight);
     createLightingDescriptorSetLayout(vulkanDevice);
-    createLightingDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+    createLightingDescriptorSets(vulkanDevice, deferredRenderer, uniformBufferManager, maxFramesInFlight);
 
-    createFramebuffers(vulkanDevice, swapChainImageViews, swapchainExtent, maxFramesInFlight);
-
-    createGeometryPipeline(vulkanDevice, swapchainExtent);
-    createLightingPipeline(vulkanDevice, swapchainExtent);
+    createGeometryPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
+    createLightingPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
 
     createCommandBuffers(vulkanDevice, maxFramesInFlight);
+}
+
+GBuffer::~GBuffer() {
 }
 
 void GBuffer::createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
@@ -69,66 +60,8 @@ void GBuffer::freeCommandBuffers(VulkanDevice& vulkanDevice) {
     vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
     gbufferCommandBuffers.clear();
 }
-        
-void GBuffer::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight) {
-    // Resize the vectors for multiple frames
-    gAlbedoImageViews.resize(maxFramesInFlight);
-    gNormalImageViews.resize(maxFramesInFlight);
-    gPositionImageViews.resize(maxFramesInFlight);
-    gDepthImageViews.resize(maxFramesInFlight);
-
-    gAlbedoImages.resize(maxFramesInFlight);
-    gAlbedoImageMemories.resize(maxFramesInFlight);
-
-    gNormalImages.resize(maxFramesInFlight);
-    gNormalImageMemories.resize(maxFramesInFlight);
-
-    gPositionImages.resize(maxFramesInFlight);
-    gPositionImageMemories.resize(maxFramesInFlight);
-
-    gDepthImages.resize(maxFramesInFlight);
-    gDepthImageMemories.resize(maxFramesInFlight);
-
-    for (size_t i = 0; i < maxFramesInFlight; i++) {
-        // Albedo image creation for each frame
-        VkFormat albedoFormat = VK_FORMAT_R8G8B8A8_UNORM;
-        gAlbedoImageInfo = createImageCreateInfo(extent.width, extent.height, albedoFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        createImage(vulkanDevice, extent.width, extent.height, albedoFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gAlbedoImages[i], gAlbedoImageMemories[i]);
-        gAlbedoImageViews[i] = createImageView(vulkanDevice, gAlbedoImages[i], albedoFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-        // Normal image creation for each frame
-        VkFormat normalFormat = VK_FORMAT_R16G16B16A16_SFLOAT; //A16 remains unused
-        gNormalImageInfo = createImageCreateInfo(extent.width, extent.height, normalFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        createImage(vulkanDevice, extent.width, extent.height, normalFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gNormalImages[i], gNormalImageMemories[i]);
-        gNormalImageViews[i] = createImageView(vulkanDevice, gNormalImages[i], normalFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-        // Position image creation for each frame
-        VkFormat positionFormat = VK_FORMAT_R16G16B16A16_SFLOAT; //A16 remains unused
-        gPositionImageInfo = createImageCreateInfo(extent.width, extent.height, positionFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        createImage(vulkanDevice, extent.width, extent.height, positionFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gPositionImages[i], gPositionImageMemories[i]);
-        gPositionImageViews[i] = createImageView(vulkanDevice, gPositionImages[i], positionFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-
-        // Depth image creation for each frame
-        VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
-        gDepthImageInfo = createImageCreateInfo(extent.width, extent.height, depthFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-        createImage(vulkanDevice, extent.width, extent.height, depthFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gDepthImages[i], gDepthImageMemories[i]);
-        gDepthImageViews[i] = createImageView(vulkanDevice, gDepthImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-    }
-}
-
-void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
+       
+void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
     size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
     framebuffers.resize(totalFramebuffers);
 
@@ -140,17 +73,17 @@ void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, std::vector<V
         for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
 
             std::array<VkImageView, 5> attachments = {
-                gAlbedoImageViews[frameIndex],
-                gNormalImageViews[frameIndex],
-                gPositionImageViews[frameIndex],
-                gDepthImageViews[frameIndex],
+                deferredRenderer.getAlbedoViews()[frameIndex],
+                deferredRenderer.getNormalViews()[frameIndex],
+                deferredRenderer.getPositionViews()[frameIndex],
+                deferredRenderer.getDepthViews()[frameIndex],
                 swapChainImageViews[swapchainIndex],
                 
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.renderPass = deferredRenderer.getRenderPass();
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = extent.width;
@@ -165,178 +98,23 @@ void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, std::vector<V
     }
 }
 
-void GBuffer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat) {
-    VkAttachmentDescription attachments[6] = {};
-
-    // Albedo attachment
-    attachments[0] = {};
-    attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
-    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Normal attachment
-    attachments[1] = {};
-    attachments[1].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Position attachment
-    attachments[2] = {};
-    attachments[2].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-    attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Depth attachment
-    attachments[3] = {};
-    attachments[3].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
-    attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Store the result
-    attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[3].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    // Lighting presenting attachment 
-    attachments[4] = {};
-    attachments[4].format = swapchainImageFormat;
-    attachments[4].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[4].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[4].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[4].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[4].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[4].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[4].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    // First subpass: Geometry pass (writes to gbuffer)
-    VkAttachmentReference geometryReferences[3] = {};
-    geometryReferences[0].attachment = 0; // Albedo attachment index attachments array
-    geometryReferences[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    geometryReferences[1].attachment = 1; // Normal attachment index attachments array
-    geometryReferences[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    geometryReferences[2].attachment = 2; // Position attachment index attachments array
-    geometryReferences[2].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depthReference = {};
-    depthReference.attachment = 3; // Depth attachment index in attachments array
-    depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription geometrySubpass = {};
-    geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    geometrySubpass.colorAttachmentCount = 3;
-    geometrySubpass.pColorAttachments = geometryReferences;
-    geometrySubpass.pDepthStencilAttachment = &depthReference;
-
-    // Second subpass: Lighting pass (reads gbuffer, writes to swapchain)
-    VkAttachmentReference inputReferences[4] = {};
-    inputReferences[0].attachment = 0; // Albedo
-    inputReferences[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputReferences[1].attachment = 1; // Normal
-    inputReferences[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputReferences[2].attachment = 2; // Position
-    inputReferences[2].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    inputReferences[3].attachment = 3; // Depth
-    inputReferences[3].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-    VkAttachmentReference lightingColorReference = {};
-    lightingColorReference.attachment = 4; // Lighting attachment index in attachments array;
-    lightingColorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription lightingSubpass = {};
-    lightingSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    lightingSubpass.inputAttachmentCount = 4; // Albedo, Normal, Position, Depth/Stencil
-    lightingSubpass.pInputAttachments = inputReferences;
-    lightingSubpass.colorAttachmentCount = 1;
-    lightingSubpass.pColorAttachments = &lightingColorReference;
-    lightingSubpass.pDepthStencilAttachment = &depthReference;
-    
-    // Third subpass: Grid subpass 
-    VkAttachmentReference gridColorReference = {};
-    gridColorReference.attachment = 4; // Using same attachment as lighting
-    gridColorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription gridSubpass = {};
-    gridSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    gridSubpass.colorAttachmentCount = 1; // Writing to the grid attachment
-    gridSubpass.pColorAttachments = &gridColorReference;
-    gridSubpass.pDepthStencilAttachment = &depthReference;
-
-    // Subpass dependencies
-    std::array<VkSubpassDependency, 3> dependencies = {};
-
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].srcAccessMask = 0;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    dependencies[1].srcSubpass = 0; // Geometry Pass
-    dependencies[1].dstSubpass = 1; // Lighting Pass
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    dependencies[2].srcSubpass = 1; // Lighting Pass
-    dependencies[2].dstSubpass = 2; // Grid Pass
-    dependencies[2].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[2].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[2].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    VkSubpassDescription subpasses[3] = { geometrySubpass, lightingSubpass, gridSubpass};
-
-    // Render pass creation
-    VkRenderPassCreateInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 5;
-    renderPassInfo.pAttachments = attachments;
-    renderPassInfo.subpassCount = 3;
-    renderPassInfo.pSubpasses = subpasses;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(vulkanDevice.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create render pass!");
-    }
-}
-
-void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // Update G-buffer descriptors (for input attachments)
         VkDescriptorImageInfo albedoImageInfo{};
-        albedoImageInfo.imageView = gAlbedoImageViews[i]; // Updated albedo image view
+        albedoImageInfo.imageView = deferredRenderer.getAlbedoViews()[i]; // Updated albedo image view
         albedoImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo normalImageInfo{};
-        normalImageInfo.imageView = gNormalImageViews[i]; // Updated normal image view
+        normalImageInfo.imageView = deferredRenderer.getNormalViews()[i]; // Updated normal image view
         normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo positionImageInfo{};
-        positionImageInfo.imageView = gPositionImageViews[i]; // Updated position image view
+        positionImageInfo.imageView = deferredRenderer.getPositionViews()[i]; // Updated position image view
         positionImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo depthImageInfo{};
-        depthImageInfo.imageView = gDepthImageViews[i]; // Updated depth image view
+        depthImageInfo.imageView = deferredRenderer.getDepthViews()[i]; // Updated depth image view
         depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
@@ -416,7 +194,7 @@ void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created geometry descriptor set layout: " << geometryDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
+void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, geometryDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -432,7 +210,7 @@ void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, Res
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
-        uboBufferInfo.buffer = resourceManager.getUniformBufferManager().getUniformBuffers()[i];
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
         uboBufferInfo.offset = 0;
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
@@ -497,7 +275,7 @@ void GBuffer::createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created lighting descriptor set layout: " << lightingDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
+void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, lightingDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -514,15 +292,15 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Res
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // G-buffer descriptors (for input attachments)
         VkDescriptorImageInfo albedoImageInfo{};
-        albedoImageInfo.imageView = gAlbedoImageViews[i]; // Gbuffer albedo image view
+        albedoImageInfo.imageView = deferredRenderer.getAlbedoViews()[i]; // Gbuffer albedo image view
         albedoImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo normalImageInfo{};
-        normalImageInfo.imageView = gNormalImageViews[i]; // Gbuffer normal image view
+        normalImageInfo.imageView = deferredRenderer.getNormalViews()[i]; // Gbuffer normal image view
         normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo positionImageInfo{};
-        positionImageInfo.imageView = gPositionImageViews[i]; // Gbuffer position image view
+        positionImageInfo.imageView = deferredRenderer.getPositionViews()[i]; // Gbuffer position image view
         positionImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         //VkDescriptorImageInfo depthImageInfo{};
@@ -531,13 +309,13 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Res
 
         // Main UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
-        uboBufferInfo.buffer = resourceManager.getUniformBufferManager().getUniformBuffers()[i];
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
         uboBufferInfo.offset = 0;
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
         // Light UBO descriptor
         VkDescriptorBufferInfo lightBufferInfo{};
-        lightBufferInfo.buffer = resourceManager.getUniformBufferManager().getLightBuffers()[i];
+        lightBufferInfo.buffer = uniformBufferManager.getLightBuffers()[i];
         lightBufferInfo.offset = 0;
         lightBufferInfo.range = sizeof(LightUniformBufferObject);
 
@@ -595,7 +373,7 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Res
     }
 }
 
-void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2D extent) {
+void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/gbuffer_vert.spv"); //change
     auto fragShaderCode = readFile("shaders/gbuffer_frag.spv"); //change
 
@@ -730,7 +508,7 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = geometryPipelineLayout;
-    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
     pipelineInfo.subpass = 0; // Geometry pass
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &geometryPipeline) != VK_SUCCESS) {
@@ -741,7 +519,7 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
 }
 
-void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2D swapchainExtent) {   
+void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent) {
     auto vertShaderCode = readFile("shaders/lighting_vert.spv");
     auto fragShaderCode = readFile("shaders/lighting_frag.spv");
    
@@ -858,7 +636,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, VkExtent2
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = lightingPipelineLayout;
-    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
     pipelineInfo.subpass = 1; // Lighting subpass
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &lightingPipeline) != VK_SUCCESS) {
@@ -920,7 +698,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
+void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -942,7 +720,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, ResourceMana
     */
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass;
+    renderPassInfo.renderPass = deferredRenderer.getRenderPass();
     renderPassInfo.framebuffer = framebuffers[imageIndex];
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = extent;
@@ -1034,37 +812,6 @@ void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t max
     framebuffers.clear();
 }
 
-void GBuffer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    vkDeviceWaitIdle(vulkanDevice.getDevice());
-
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        if (gAlbedoImageViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(vulkanDevice.getDevice(), gAlbedoImageViews[i], nullptr);
-            vkDestroyImageView(vulkanDevice.getDevice(), gNormalImageViews[i], nullptr);
-            vkDestroyImageView(vulkanDevice.getDevice(), gPositionImageViews[i], nullptr);
-            vkDestroyImageView(vulkanDevice.getDevice(), gDepthImageViews[i], nullptr);
-        }
-    }
-
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        if (gAlbedoImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(vulkanDevice.getDevice(), gAlbedoImages[i], nullptr);
-            vkDestroyImage(vulkanDevice.getDevice(), gNormalImages[i], nullptr);
-            vkDestroyImage(vulkanDevice.getDevice(), gPositionImages[i], nullptr);
-            vkDestroyImage(vulkanDevice.getDevice(), gDepthImages[i], nullptr);
-        }
-    }
-
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        if (gAlbedoImageMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice.getDevice(), gAlbedoImageMemories[i], nullptr);
-            vkFreeMemory(vulkanDevice.getDevice(), gNormalImageMemories[i], nullptr);
-            vkFreeMemory(vulkanDevice.getDevice(), gPositionImageMemories[i], nullptr);
-            vkFreeMemory(vulkanDevice.getDevice(), gDepthImageMemories[i], nullptr);
-        }
-    }
-}
-
 void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
@@ -1076,12 +823,11 @@ void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
 
-    resourceManager->getGrid().cleanup(vulkanDevice, maxFramesInFlight);
+    resourceManager.getGrid().cleanup(vulkanDevice, maxFramesInFlight);
   
 
     for (VkFramebuffer framebuffer : framebuffers) {
         vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
     }
-
-    vkDestroyRenderPass(vulkanDevice.getDevice(), renderPass, nullptr);
+   
 }

@@ -172,6 +172,7 @@
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
+    <ClCompile Include="DeferredRenderer.cpp" />
     <ClCompile Include="GBuffer.cpp" />
     <ClCompile Include="Grid.cpp" />
     <ClCompile Include="HDR.cpp" />
@@ -203,6 +204,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CommandBufferManager.hpp" />
+    <ClInclude Include="DeferredRenderer.hpp" />
     <ClInclude Include="GBuffer.hpp" />
     <ClInclude Include="Grid.hpp" />
     <ClInclude Include="HDR.hpp" />

@@ -13,34 +13,16 @@
 #include "Grid.hpp"
 
 
-Grid::Grid(VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight, VkRenderPass renderPass)
-    : vulkanDevice(&vulkanDevice), resourceManager(resourceManager) {
+Grid::Grid(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass)
+    : vulkanDevice(&vulkanDevice), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
     createGridDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGridDescriptorSetLayout(vulkanDevice);
-    createGridDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+    createGridDescriptorSets(vulkanDevice, uniformBufferManager, maxFramesInFlight);
 
     createGridPipeline(vulkanDevice, renderPass);
 }
 
 Grid::~Grid() {
-}
-
-void Grid::createImageViews(const VulkanDevice& vulkanDevice, VkExtent2D extent, uint32_t maxFramesInFlight) {
-    // Resize the vectors for multiple frames
-    gridImageViews.resize(maxFramesInFlight);
-    gridImages.resize(maxFramesInFlight);
-    gridImageMemories.resize(maxFramesInFlight);
-
-    for (size_t i = 0; i < maxFramesInFlight; i++) {        
-        VkFormat gridFormat = VK_FORMAT_R8G8B8A8_UNORM;  
-        gridImageInfo = createImageCreateInfo(extent.width, extent.height, gridFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);        
-        createImage(vulkanDevice, extent.width, extent.height, gridFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridImages[i], gridImageMemories[i]);
-    
-        gridImageViews[i] = createImageView(vulkanDevice, gridImages[i], gridFormat, VK_IMAGE_ASPECT_COLOR_BIT);
-    }
 }
 
 void Grid::createGridDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
@@ -88,7 +70,7 @@ void Grid::createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
     }
 }
 
-void Grid::createGridDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
+void Grid::createGridDescriptorSets(const VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, gridDescriptorSetLayout);
     
 VkDescriptorSetAllocateInfo allocInfo{};
@@ -104,7 +86,7 @@ VkDescriptorSetAllocateInfo allocInfo{};
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = resourceManager.getUniformBufferManager().getGridUniformBuffers()[i];
+        bufferInfo.buffer = uniformBufferManager.getGridUniformBuffers()[i];
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(GridUniformBufferObject);
 
@@ -122,8 +104,8 @@ VkDescriptorSetAllocateInfo allocInfo{};
 }
 
 void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass renderPass) {
-    auto vertShaderCode = readFile("shaders/grid_vert.spv"); //change
-    auto fragShaderCode = readFile("shaders/grid_frag.spv"); //change
+    auto vertShaderCode = readFile("shaders/grid_vert.spv"); 
+    auto fragShaderCode = readFile("shaders/grid_frag.spv"); 
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);

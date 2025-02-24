@@ -16,17 +16,6 @@ UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t 
 UniformBufferManager::~UniformBufferManager() {
 }
 
-void UniformBufferManager::init(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    this->vulkanDevice = &vulkanDevice; 
-    
-    std::cout << "Logical device in UniformBufferManager: " << vulkanDevice.getDevice() << std::endl;
-    
-    createUniformBuffers(maxFramesInFlight);
-    createGridUniformBuffers(maxFramesInFlight);
-    createLightUniformBuffers(maxFramesInFlight);
-    createSSAOKernelBuffers(maxFramesInFlight);
-}
-
 void UniformBufferManager::createUniformBuffers(uint32_t maxFramesInFlight) {
    
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);

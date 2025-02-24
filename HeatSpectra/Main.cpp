@@ -9,12 +9,11 @@
 
 #include "Camera.hpp"
 #include "Model.hpp"
-#include "Grid.hpp"
 #include "UniformBufferManager.hpp"
 
-#include "HeatSource.hpp"
 #include "HeatSystem.hpp"
 #include "ResourceManager.hpp"
+#include "DeferredRenderer.hpp"
 #include "GBuffer.hpp"
 
 #include "VulkanImage.hpp"
@@ -90,6 +89,7 @@ private:
     VulkanDevice vulkanDevice;
     std::unique_ptr<MemoryAllocator> memoryAllocator;
     std::unique_ptr<ResourceManager> resourceManager;
+    std::unique_ptr<UniformBufferManager> uniformBufferManager;
 
     VkSwapchainKHR swapChain{};
     std::vector<VkImage> swapChainImages;
@@ -97,9 +97,9 @@ private:
     VkExtent2D swapChainExtent{};
     std::vector<VkImageView> swapChainImageViews;
 
-    //HDR hdr; 
+    //HDR hdr;
+    std::unique_ptr<DeferredRenderer> deferredRenderer;
     std::unique_ptr<GBuffer> gbuffer; 
-    //Grid grid;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -108,13 +108,14 @@ private:
     uint32_t currentFrame = 0;
     uint32_t frameRate = 240;
 
-    Camera camera;
     std::unique_ptr<HeatSystem> heatSystem;
-    
+    Camera camera;
+    glm::vec3 center;
+
     bool framebufferResized = false;
     std::atomic<bool> isCameraUpdated{ false };
 
-    glm::vec3 center;
+  
 
     void initWindow() {
         glfwInit();
@@ -155,30 +156,59 @@ private:
         createImageViews();
     }
 
-    void initScene() {
-        resourceManager = std::make_unique<ResourceManager>(vulkanDevice, *memoryAllocator, MAXFRAMESINFLIGHT);
-        resourceManager->initialize(gbuffer->getRenderPass(), MAXFRAMESINFLIGHT);
-        
-        center = resourceManager->getSimModel().getBoundingBoxCenter();
-        camera.setLookAt(center);
+    void initRenderResources() {
+        // Create DeferredRenderer first since it owns render pass and image views
+        deferredRenderer = std::make_unique<DeferredRenderer>(
+            vulkanDevice,
+            swapChainImageFormat,
+            swapChainExtent,
+            MAXFRAMESINFLIGHT
+        );
 
+        auto renderPass = deferredRenderer->getRenderPass();
+
+        // Create UniformBufferManager
+        uniformBufferManager = std::make_unique<UniformBufferManager>(
+            vulkanDevice,
+            MAXFRAMESINFLIGHT
+        );
+
+        // Create ResourceManager 
+        resourceManager = std::make_unique<ResourceManager>(
+            vulkanDevice, 
+            *memoryAllocator,
+            *uniformBufferManager,
+            renderPass, 
+            MAXFRAMESINFLIGHT);
+        
+        resourceManager->initialize();
+
+        // Create HeatSystem
         heatSystem = std::make_unique<HeatSystem>(
             vulkanDevice,
             *memoryAllocator,
             *resourceManager,
+            *uniformBufferManager,
             MAXFRAMESINFLIGHT
         );
 
-        gbuffer->init(vulkanDevice, *memoryAllocator, *resourceManager, *heatSystem,
-            WIDTH, HEIGHT, swapChainExtent, swapChainImageViews,
-            swapChainImageFormat, MAXFRAMESINFLIGHT);
-    }
-
-    void initRenderResources() {  
+        // Create GBuffer last since it depends on all other components
         gbuffer = std::make_unique<GBuffer>(
             vulkanDevice,
-            swapChainImageFormat
+            *memoryAllocator,
+            *deferredRenderer,
+            *resourceManager,
+            *uniformBufferManager,
+            *heatSystem,
+            WIDTH, HEIGHT,
+            swapChainExtent,
+            swapChainImageViews,
+            swapChainImageFormat,
+            MAXFRAMESINFLIGHT
         );
+
+        center = resourceManager->getSimModel().getBoundingBoxCenter();
+        camera.setLookAt(center);
     }
 
     void initVulkan() {
@@ -186,7 +216,6 @@ private:
         initCore();
         initSwapChain();
         initRenderResources();
-        initScene();
         createSyncObjects();
     }
 
@@ -236,7 +265,7 @@ private:
         vkDeviceWaitIdle(vulkanDevice.getDevice());
 
         gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
-        gbuffer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
+        deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
         
         for (auto imageView : swapChainImageViews) {
             std::cout << "Destroyed swapchain: " << imageView << std::endl;
@@ -285,9 +314,9 @@ private:
 
         heatSystem->recreateResources(vulkanDevice, MAXFRAMESINFLIGHT);
 
-        gbuffer->createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
-        gbuffer->updateDescriptorSets(vulkanDevice, MAXFRAMESINFLIGHT);
-        gbuffer->createFramebuffers(vulkanDevice, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+        deferredRenderer->createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer->updateDescriptorSets(vulkanDevice, *deferredRenderer, MAXFRAMESINFLIGHT);
+        gbuffer->createFramebuffers(vulkanDevice, *deferredRenderer, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
         
@@ -295,7 +324,7 @@ private:
     }
 
     void cleanupRenderResources() {
-        resourceManager->getUniformBufferManager().cleanup(MAXFRAMESINFLIGHT);
+        uniformBufferManager->cleanup(MAXFRAMESINFLIGHT);
         heatSystem->cleanupResources(vulkanDevice);
         heatSystem->cleanup(vulkanDevice);
         gbuffer->cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
@@ -532,11 +561,11 @@ private:
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
         
         UniformBufferObject ubo{};
-        resourceManager->getUniformBufferManager().updateUniformBuffer(swapChainExtent, currentFrame, camera, ubo);
+        uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, camera, ubo);
         GridUniformBufferObject gridUbo{};
-        resourceManager->getUniformBufferManager().updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
+        uniformBufferManager->updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
         LightUniformBufferObject lightUbo{};
-        resourceManager->getUniformBufferManager().updateLightUniformBuffer(currentFrame, camera, lightUbo);
+        uniformBufferManager->updateLightUniformBuffer(currentFrame, camera, lightUbo);
 
         VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
         vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
@@ -545,7 +574,7 @@ private:
         computeBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         computeBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        heatSystem->update(vulkanDevice, window, *resourceManager, ubo, WIDTH, HEIGHT);
+        heatSystem->update(vulkanDevice, window, *resourceManager, *uniformBufferManager, ubo, WIDTH, HEIGHT);
         heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
 
         VkSubmitInfo computeSubmitInfo{};
@@ -559,7 +588,7 @@ private:
         heatSystem->swapBuffers(*resourceManager);
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(vulkanDevice, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
+        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
 
         std::array<VkPipelineStageFlags, 2> waitStages = {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore

@@ -22,8 +22,8 @@
 //                                         understand the logic ]
 //
 
-HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, uint32_t maxFramesInFlight)
-    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), resourceManager(resourceManager) {
+HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
+    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
     
     heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
 
@@ -53,7 +53,7 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
 HeatSystem::~HeatSystem() {
 }
 
-void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -76,9 +76,9 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
 
     // Map the uniform buffer and copy the updated UBO
     void* data;
-    vkMapMemory(vulkanDevice.getDevice(), resourceManager.getUniformBufferManager().getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
+    vkMapMemory(vulkanDevice.getDevice(), uniformBufferManager.getUniformBuffersMemory()[0], 0, sizeof(UniformBufferObject), 0, &data);
     memcpy(data, &ubo, sizeof(UniformBufferObject));
-    vkUnmapMemory(vulkanDevice.getDevice(), resourceManager.getUniformBufferManager().getUniformBuffersMemory()[0]);
+    vkUnmapMemory(vulkanDevice.getDevice(), uniformBufferManager.getUniformBuffersMemory()[0]);
 }
 
 void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {

@@ -21,8 +21,6 @@ public:
 	UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 	~UniformBufferManager();
 
-	void init(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-
 	void updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
 	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
 
