@@ -56,8 +56,8 @@ public:
     }
    
 private:
-    VulkanDevice* vulkanDevice = nullptr;
-    MemoryAllocator* memoryAllocator = nullptr;
+    VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
     Model* heatModel = nullptr;
 
     HeatSourcePushConstant heatSourcePushConstant;

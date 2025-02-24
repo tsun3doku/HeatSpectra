@@ -10,7 +10,7 @@
 #include "DeferredRenderer.hpp"
 
 DeferredRenderer::DeferredRenderer(VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat, VkExtent2D swapchainExtent, uint32_t maxFramesInFlight)
-	: vulkanDevice(&vulkanDevice) {
+	: vulkanDevice(vulkanDevice) {
 	createRenderPass(vulkanDevice, swapchainImageFormat);
 	createImageViews(vulkanDevice, swapchainExtent, maxFramesInFlight);
 }

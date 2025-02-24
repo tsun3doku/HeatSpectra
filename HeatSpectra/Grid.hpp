@@ -38,7 +38,7 @@ public:
     }
 
 private:
-    VulkanDevice* vulkanDevice;
+    VulkanDevice& vulkanDevice;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
  

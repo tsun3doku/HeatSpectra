@@ -14,7 +14,7 @@
 
 
 Grid::Grid(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass)
-    : vulkanDevice(&vulkanDevice), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
+    : vulkanDevice(vulkanDevice), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
     createGridDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGridDescriptorSetLayout(vulkanDevice);
     createGridDescriptorSets(vulkanDevice, uniformBufferManager, maxFramesInFlight);

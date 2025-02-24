@@ -65,8 +65,8 @@ public:
     }
 
 private:
-    VulkanDevice* vulkanDevice = nullptr;
-    MemoryAllocator* memoryAllocator = nullptr;
+    VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
     std::unique_ptr<HeatSource> heatSource;

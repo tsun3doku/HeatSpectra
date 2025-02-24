@@ -83,7 +83,7 @@ public:
 	}
 	
 private:	
-	VulkanDevice* vulkanDevice = nullptr;
+	VulkanDevice& vulkanDevice;
 	Camera* camera = nullptr;
 
 	std::vector<VkBuffer> uniformBuffers;

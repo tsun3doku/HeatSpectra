@@ -6,10 +6,7 @@
 #include "MemoryAllocator.hpp"
 
 MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps)
-    : vulkanDevice(vulkanDevice),
-    memProperties(memProps),
-    buffer(VK_NULL_HANDLE),
-    memory(VK_NULL_HANDLE)
+    : vulkanDevice(vulkanDevice), memProperties(memProps), buffer(VK_NULL_HANDLE), memory(VK_NULL_HANDLE)
 {
 
     VkBufferCreateInfo bufferInfo{};

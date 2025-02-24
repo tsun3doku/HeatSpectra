@@ -44,7 +44,7 @@ public:
     }
 
 private:
-    VulkanDevice* vulkanDevice;
+    VulkanDevice& vulkanDevice;
     VkRenderPass renderPass;
 
     std::vector<VkImage> albedoImages, normalImages, positionImages, depthImages;

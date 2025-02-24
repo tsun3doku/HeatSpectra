@@ -6,7 +6,7 @@
 #include "UniformBufferManager.hpp"
 
 UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight)
-: vulkanDevice(&vulkanDevice) {
+: vulkanDevice(vulkanDevice) {
     createUniformBuffers(maxFramesInFlight);
     createGridUniformBuffers(maxFramesInFlight);
     createLightUniformBuffers(maxFramesInFlight);
@@ -25,13 +25,13 @@ void UniformBufferManager::createUniformBuffers(uint32_t maxFramesInFlight) {
     uniformBuffersMapped.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        uniformBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        uniformBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             uniformBuffersMemory[i]);
         std::cout << "Created Uniform Buffer: " << uniformBuffers[i] << std::endl;
         std::cout << "Memory for Uniform Buffer: " << uniformBuffersMemory[i] << std::endl;
 
-        vkMapMemory(vulkanDevice->getDevice(), uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+        vkMapMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
     }
 }
 
@@ -43,13 +43,13 @@ void UniformBufferManager::createGridUniformBuffers(uint32_t maxFramesInFlight) 
     gridUniformBuffersMapped.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        gridUniformBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        gridUniformBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
             gridUniformBuffersMemory[i]);
         std::cout << "Created Grid Uniform Buffer: " << gridUniformBuffers[i] << std::endl;
         std::cout << "Memory for Grid Uniform Buffer: " << gridUniformBuffersMemory[i] << std::endl;
 
-        vkMapMemory(vulkanDevice->getDevice(), gridUniformBuffersMemory[i], 0, bufferSize, 0, &gridUniformBuffersMapped[i]);
+        vkMapMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], 0, bufferSize, 0, &gridUniformBuffersMapped[i]);
     }
 }
 
@@ -61,11 +61,11 @@ void UniformBufferManager::createLightUniformBuffers(uint32_t maxFramesInFlight)
     lightBuffersMapped.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        lightBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        lightBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             lightBuffersMemory[i]);
 
-        vkMapMemory(vulkanDevice->getDevice(), lightBuffersMemory[i], 0, bufferSize, 0, &lightBuffersMapped[i]);
+        vkMapMemory(vulkanDevice.getDevice(), lightBuffersMemory[i], 0, bufferSize, 0, &lightBuffersMapped[i]);
     }
 }
 
@@ -77,11 +77,11 @@ void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
     SSAOKernelBuffersMapped.resize(maxFramesInFlight);
 
     for (size_t i = 0; i < maxFramesInFlight; ++i) {
-        SSAOKernelBuffers[i] = vulkanDevice->createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        SSAOKernelBuffers[i] = vulkanDevice.createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             SSAOKernelBuffersMemory[i]);
 
-        vkMapMemory(vulkanDevice->getDevice(), SSAOKernelBuffersMemory[i], 0, bufferSize, 0, &SSAOKernelBuffersMapped[i]);
+        vkMapMemory(vulkanDevice.getDevice(), SSAOKernelBuffersMemory[i], 0, bufferSize, 0, &SSAOKernelBuffersMapped[i]);
 
         // Generate SSAO kernel samples (randomly distributed in the hemisphere)
         SSAOKernelBufferObject ssaoKernel;
@@ -163,45 +163,45 @@ void UniformBufferManager::updateSSAOKernelBuffer(uint32_t currentImage, Camera&
 void UniformBufferManager::cleanup(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         if (uniformBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice->getDevice(), uniformBuffers[i], nullptr);
+            vkDestroyBuffer(vulkanDevice.getDevice(), uniformBuffers[i], nullptr);
 
             std::cout << "Destroyed uniform buffer " << uniformBuffers[i] << std::endl;
         }
 
         if (uniformBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice->getDevice(), uniformBuffersMemory[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), uniformBuffersMemory[i], nullptr);
 
             std::cout << "Freed uniform buffer memory " << uniformBuffersMemory[i] << std::endl;
         }
         if (gridUniformBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice->getDevice(), gridUniformBuffers[i], nullptr);
+            vkDestroyBuffer(vulkanDevice.getDevice(), gridUniformBuffers[i], nullptr);
 
             std::cout << "Destroyed grid uniform buffer " << gridUniformBuffers[i] << std::endl;
         }
 
         if (gridUniformBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice->getDevice(), gridUniformBuffersMemory[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), gridUniformBuffersMemory[i], nullptr);
 
             std::cout << "Freed grid uniform buffer memory " << gridUniformBuffersMemory[i] << std::endl;
         }
 
         if (lightBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice->getDevice(), lightBuffers[i], nullptr);
+            vkDestroyBuffer(vulkanDevice.getDevice(), lightBuffers[i], nullptr);
 
             std::cout << "Destroyed light buffer " << lightBuffers[i] << std::endl;
         }
 
         if (lightBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice->getDevice(), lightBuffersMemory[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), lightBuffersMemory[i], nullptr);
 
             std::cout << "Freed light buffer memory " << lightBuffersMemory[i] << std::endl;
         }
 
         if (SSAOKernelBuffers[i] != VK_NULL_HANDLE) {
-            vkDestroyBuffer(vulkanDevice->getDevice(), SSAOKernelBuffers[i], nullptr);
+            vkDestroyBuffer(vulkanDevice.getDevice(), SSAOKernelBuffers[i], nullptr);
         }
         if (SSAOKernelBuffersMemory[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(vulkanDevice->getDevice(), SSAOKernelBuffersMemory[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), SSAOKernelBuffersMemory[i], nullptr);
         }
     }
 }

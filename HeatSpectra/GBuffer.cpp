@@ -21,7 +21,7 @@
 
 GBuffer::GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
     uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight)
-    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), deferredRenderer(deferredRenderer), resourceManager(resourceManager), heatSystem(&heatSystem), uniformBufferManager(uniformBufferManager) {
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), deferredRenderer(deferredRenderer), resourceManager(resourceManager), heatSystem(heatSystem), uniformBufferManager(uniformBufferManager) {
     
     createFramebuffers(vulkanDevice, deferredRenderer, swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
@@ -656,7 +656,7 @@ VkFormat GBuffer::findDepthFormat(VkPhysicalDevice physicalDevice) {
 
     for (VkFormat format : candidates) {
         VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(vulkanDevice->getPhysicalDevice(), format, &props);
+        vkGetPhysicalDeviceFormatProperties(vulkanDevice.getPhysicalDevice(), format, &props);
 
         if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ==
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {

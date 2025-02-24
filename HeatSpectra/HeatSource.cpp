@@ -11,7 +11,7 @@
 #include "HeatSource.hpp"
 
 HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight) 
-    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator),heatModel(&heatModel) {
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator),heatModel(&heatModel) {
     
     createSourceBuffer(vulkanDevice, heatModel);
     initializeSurfaceBuffer(heatModel);
@@ -28,7 +28,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     VkDeviceSize bufferSize = sizeof(HeatSourceVertex) * heatModel.getVertexCount();
 
     // Allocate staging buffer
-    auto [stagingBufferHandle, stagingBufferOffset] = memoryAllocator->allocate(
+    auto [stagingBufferHandle, stagingBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -43,11 +43,11 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     }
 
     // Copy data to staging buffer
-    void* mapped = memoryAllocator->getMappedPointer(stagingBufferHandle, stagingBufferOffset);
+    void* mapped = memoryAllocator.getMappedPointer(stagingBufferHandle, stagingBufferOffset);
     memcpy(mapped, surfaceVertices.data(), static_cast<size_t>(bufferSize));
 
     // Allocate source buffer
-    auto [sourceBufferHandle, sourceBufferOffset] = memoryAllocator->allocate(
+    auto [sourceBufferHandle, sourceBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -65,7 +65,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     endSingleTimeCommands(vulkanDevice, cmd);
 
     // Free staging buffer
-    memoryAllocator->free(stagingBufferHandle, stagingBufferOffset);
+    memoryAllocator.free(stagingBufferHandle, stagingBufferOffset);
 }
 
 void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
@@ -74,7 +74,7 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     // Create staging buffer
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingMemory;
-    stagingBuffer = vulkanDevice->createBuffer(
+    stagingBuffer = vulkanDevice.createBuffer(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -91,11 +91,11 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
 
     // Copy data to staging buffer
     void* mapped = nullptr;
-    vkMapMemory(vulkanDevice->getDevice(), stagingMemory, 0, bufferSize, 0, &mapped);
+    vkMapMemory(vulkanDevice.getDevice(), stagingMemory, 0, bufferSize, 0, &mapped);
     memcpy(mapped, surfaceVertices.data(), static_cast<size_t>(bufferSize));
-    vkUnmapMemory(vulkanDevice->getDevice(), stagingMemory);
+    vkUnmapMemory(vulkanDevice.getDevice(), stagingMemory);
 
-    VkCommandBuffer cmd = beginSingleTimeCommands(*vulkanDevice);
+    VkCommandBuffer cmd = beginSingleTimeCommands(vulkanDevice);
 
     // Copy to surface buffer with offset
     VkBufferCopy copyRegionSurface{
@@ -113,10 +113,10 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     };
     vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceVertexBuffer(), 1, &copyRegionVertex);
 
-    endSingleTimeCommands(*vulkanDevice, cmd);
+    endSingleTimeCommands(vulkanDevice, cmd);
 
-    vkDestroyBuffer(vulkanDevice->getDevice(), stagingBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->getDevice(), stagingMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), stagingMemory, nullptr);
 }
 
 void HeatSource::controller(GLFWwindow* window, float deltaTime) {
@@ -296,6 +296,6 @@ void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
 }
 
 void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
-    memoryAllocator->free(sourceBuffer, sourceBufferOffset_);
+    memoryAllocator.free(sourceBuffer, sourceBufferOffset_);
 }
 

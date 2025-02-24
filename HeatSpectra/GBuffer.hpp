@@ -58,13 +58,13 @@ public:
     }
 
 private:
-    const VulkanDevice* vulkanDevice = nullptr;
-    MemoryAllocator* memoryAllocator = nullptr;
+    VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
     DeferredRenderer& deferredRenderer;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
     
-    HeatSystem* heatSystem = nullptr;
+    HeatSystem& heatSystem;
    
     uint32_t currentFrame = 0;
 

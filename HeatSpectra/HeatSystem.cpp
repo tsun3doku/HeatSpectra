@@ -23,7 +23,7 @@
 //
 
 HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
-    : vulkanDevice(&vulkanDevice), memoryAllocator(&memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
     
     heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
 
@@ -109,8 +109,8 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
 
         endSingleTimeCommands(vulkanDevice, copyCmd);
 
-        memoryAllocator->free(oldReadBuffer, oldReadOffset);
-        memoryAllocator->free(oldWriteBuffer, oldWriteOffset);
+        memoryAllocator.free(oldReadBuffer, oldReadOffset);
+        memoryAllocator.free(oldWriteBuffer, oldWriteOffset);
     }
     createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
     createSurfaceDescriptorSetLayout(vulkanDevice);
@@ -160,7 +160,7 @@ void HeatSystem::swapBuffers(ResourceManager& resourceManager) {
         // Time buffer uses uniform buffer type
         descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-        vkUpdateDescriptorSets(vulkanDevice->getDevice(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
     }
 
     // Update surface compute descriptor sets
@@ -187,7 +187,7 @@ void HeatSystem::swapBuffers(ResourceManager& resourceManager) {
             };
         }
 
-        vkUpdateDescriptorSets(vulkanDevice->getDevice(), surfaceWrites.size(), surfaceWrites.data(), 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), surfaceWrites.size(), surfaceWrites.data(), 0, nullptr);
     }
 }
 
@@ -458,7 +458,7 @@ void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount();
 
     // Create staging buffer
-    auto [stagingBuffer, stagingOffset] = memoryAllocator->allocate(
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -473,16 +473,16 @@ void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
     }
 
     // Copy to staging buffer
-    void* stagingData = memoryAllocator->getMappedPointer(stagingBuffer, stagingOffset);
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
     memcpy(stagingData, surfaceVertices.data(), bufferSize);
 
     // Copy to destination buffers
-    VkCommandBuffer copyCmd = beginSingleTimeCommands(*vulkanDevice);
+    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
     VkBufferCopy copyRegion = { stagingOffset, resourceManager.getVisModel().getSurfaceBufferOffset(), bufferSize };
     vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceBuffer(), 1, &copyRegion);
-    endSingleTimeCommands(*vulkanDevice, copyCmd);
+    endSingleTimeCommands(vulkanDevice, copyCmd);
 
-    memoryAllocator->free(stagingBuffer, stagingOffset);
+    memoryAllocator.free(stagingBuffer, stagingOffset);
 }
 
 void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
@@ -494,7 +494,7 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
     VkDeviceSize tempBufferSize = sizeof(float) * feaMesh.elements.size();
 
     // Create tetra buffer
-    auto [tetraBufferHandle, tetraBufferOffset] = memoryAllocator->allocate(
+    auto [tetraBufferHandle, tetraBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -505,11 +505,11 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
 
     // Map the tetra buffer
     mappedTetraData = static_cast<TetrahedralElement*>(
-        memoryAllocator->getMappedPointer(tetraBuffer, tetraBufferOffset_)
+        memoryAllocator.getMappedPointer(tetraBuffer, tetraBufferOffset_)
         );
 
     // Create read buffer
-    auto [readBufferHandle, readOffset] = memoryAllocator->allocate(
+    auto [readBufferHandle, readOffset] = memoryAllocator.allocate(
         tempBufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -519,7 +519,7 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
     tetraFrameBuffers.readBufferOffset_ = readOffset;
 
     // Create write buffer
-    auto [writeBufferHandle, writeOffset] = memoryAllocator->allocate(
+    auto [writeBufferHandle, writeOffset] = memoryAllocator.allocate(
         tempBufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -547,7 +547,7 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
     VkDeviceSize bufferSize = neighborData.size() * sizeof(int32_t);
 
     // Create neighbor buffer
-    auto [neighborBufferHandle, neighborBufferOffset] = memoryAllocator->allocate(
+    auto [neighborBufferHandle, neighborBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -557,7 +557,7 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
     neighborBufferOffset_ = neighborBufferOffset;
 
     // Map and copy data
-    void* data = memoryAllocator->getMappedPointer(neighborBuffer, neighborBufferOffset_);
+    void* data = memoryAllocator.getMappedPointer(neighborBuffer, neighborBufferOffset_);
     memcpy(data, neighborData.data(), bufferSize);
 }
 
@@ -580,7 +580,7 @@ void HeatSystem::createMeshBuffer(VulkanDevice& vulkanDevice) {
 void HeatSystem::createCenterBuffer(VulkanDevice& vulkanDevice) {
     VkDeviceSize bufferSize = sizeof(glm::vec4) * feaMesh.tetraCenters.size();
 
-    auto [centerBufferHandle, centerBufferOffset] = memoryAllocator->allocate(
+    auto [centerBufferHandle, centerBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -590,7 +590,7 @@ void HeatSystem::createCenterBuffer(VulkanDevice& vulkanDevice) {
     centerBufferOffset_ = centerBufferOffset;
 
     // Map and copy tetra center data
-    void* data = memoryAllocator->getMappedPointer(centerBuffer, centerBufferOffset_);
+    void* data = memoryAllocator.getMappedPointer(centerBuffer, centerBufferOffset_);
     memcpy(data, feaMesh.tetraCenters.data(), bufferSize);
 }
 
@@ -598,7 +598,7 @@ void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
     VkDeviceSize bufferSize = sizeof(TimeUniform);
 
     // Create time buffer
-    auto [timeBufferHandle, timeBufferOffset] = memoryAllocator->allocate(
+    auto [timeBufferHandle, timeBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -609,7 +609,7 @@ void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
 
     // Get mapped pointer via allocator
     mappedTimeData = static_cast<TimeUniform*>(
-        memoryAllocator->getMappedPointer(timeBuffer, timeBufferOffset_)
+        memoryAllocator.getMappedPointer(timeBuffer, timeBufferOffset_)
     );
 }
 
@@ -635,7 +635,7 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
 
     // Copy to temperature buffers using memory allocator
     float* tempData = static_cast<float*>(
-        memoryAllocator->getMappedPointer(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_)
+        memoryAllocator.getMappedPointer(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_)
         );
 
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
@@ -1231,11 +1231,11 @@ void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
         mappedTimeData = nullptr;
     }
 
-    memoryAllocator->free(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_);
-    memoryAllocator->free(tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_);
-    memoryAllocator->free(tetraBuffer, tetraBufferOffset_);
-    memoryAllocator->free(timeBuffer, timeBufferOffset_);
-    memoryAllocator->free(centerBuffer, centerBufferOffset_);
-    memoryAllocator->free(neighborBuffer, neighborBufferOffset_);
+    memoryAllocator.free(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_);
+    memoryAllocator.free(tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_);
+    memoryAllocator.free(tetraBuffer, tetraBufferOffset_);
+    memoryAllocator.free(timeBuffer, timeBufferOffset_);
+    memoryAllocator.free(centerBuffer, centerBufferOffset_);
+    memoryAllocator.free(neighborBuffer, neighborBufferOffset_);
 
 }
