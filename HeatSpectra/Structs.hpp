@@ -56,9 +56,9 @@ struct HitResult {
 };
 
 struct TimeUniform {
-    alignas(8) float deltaTime;    // 8-byte aligned
-    alignas(8) float totalTime;    // 8-byte aligned
-};  // 16 bytes
+    float deltaTime;    
+    float totalTime;    
+};  // 8 bytes
 
 struct SurfaceVertex {
     alignas(16) glm::vec3 position; // 16 byte aligned
@@ -66,17 +66,20 @@ struct SurfaceVertex {
 };  // 32 bytes
 
 struct TetrahedralElement {
-    uint32_t vertices[4];  
-    float temperature;  
+    uint32_t vertices[4];
+    float temperature;
+    float volume;
+    float density;
+    float specificHeat;
+    float conductivity;
     float coolingRate;
-    float thermalConductivity;
-};  
-    
+};
+
 struct FEAMesh {
     std::vector<TetrahedralElement> elements;
-    std::vector<glm::vec4> nodes; 
+    std::vector<glm::vec4> nodes;
     std::vector<glm::vec4> tetraCenters;
-    std::vector<float> nodeTemps; 
+    std::vector<float> nodeTemps;
     std::vector<std::vector<uint32_t>> neighbors;
 };
 
@@ -92,11 +95,10 @@ struct TetraFrameBuffers {
 };
 
 struct HeatSourcePushConstant {
-   alignas(16) glm::mat4 model; // 16 byte aligned
+    alignas(16) glm::mat4 model; // 16 byte aligned
 };
 
 struct HeatSourceVertex {
     alignas(16) glm::vec3 position; // 16 byte aligned
-    float temperature;   
+    float temperature;
 };  // 20 bytes
-

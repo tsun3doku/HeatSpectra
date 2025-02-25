@@ -24,13 +24,12 @@
 
 HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
-    
+
     heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
 
     generateTetrahedralMesh(resourceManager);
     createTetraBuffer(vulkanDevice, maxFramesInFlight);
     createNeighborBuffer(vulkanDevice);
-    createMeshBuffer(vulkanDevice);
     createCenterBuffer(vulkanDevice);
     createTimeBuffer(vulkanDevice);
 
@@ -58,7 +57,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
 
-    const float timeScale = 2.0f;
+    const float timeScale = 5.0f;
     float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
@@ -91,7 +90,7 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     VkDeviceSize bufferSize = sizeof(float) * feaMesh.elements.size();
     if (oldReadBuffer != VK_NULL_HANDLE &&
         oldWriteBuffer != VK_NULL_HANDLE &&
-        oldReadBuffer != tetraFrameBuffers.readBuffer && 
+        oldReadBuffer != tetraFrameBuffers.readBuffer &&
         oldWriteBuffer != tetraFrameBuffers.writeBuffer) {
         VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
 
@@ -135,7 +134,7 @@ void HeatSystem::swapBuffers(ResourceManager& resourceManager) {
             VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_, sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{neighborBuffer, neighborBufferOffset_, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec3) * feaMesh.tetraCenters.size()},
+            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, timeBufferOffset_, sizeof(TimeUniform)},
             VkDescriptorBufferInfo{heatSource->getSourceBuffer(), heatSource->getSourceBufferOffset(), sizeof(HeatSourceVertex) * heatSource->getVertexCount()}
         };
@@ -251,7 +250,7 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
     for (int i = 0; i < in.numberofpoints; i++) {
         in.pointmarkerlist[i] = 1;
     }
-    
+
     for (int i = 0; i < in.numberoffacets; ++i) {
         int numVertices = 3;
         in.facetmarkerlist[i] = 1;
@@ -284,7 +283,7 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
         b.refine = 0;        // Disable refining tetrahedra mesh
         b.weighted = 0;      // No weighted Delaunay
         b.metric = 1;        // Use metric for size control
-    
+
         // Generate tetrahedral mesh
         try {
             tetrahedralize(&b, &in, &out);
@@ -528,7 +527,7 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
 }
 
 void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
-    std::vector<int32_t> neighborData; 
+    std::vector<int32_t> neighborData;
 
     for (const auto& neighbors : feaMesh.neighbors) {
         uint32_t count = std::min(static_cast<uint32_t>(neighbors.size()), MAX_NEIGHBORS);
@@ -536,7 +535,7 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
         for (uint32_t i = 0; i < count; ++i) {
             neighborData.push_back(neighbors[i]);
         }
-        
+
         for (uint32_t i = count; i < MAX_NEIGHBORS; ++i) {
             neighborData.push_back(-1);
         }
@@ -557,22 +556,6 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
     // Map and copy data
     void* data = memoryAllocator.getMappedPointer(neighborBuffer, neighborBufferOffset_);
     memcpy(data, neighborData.data(), bufferSize);
-}
-
-void HeatSystem::createMeshBuffer(VulkanDevice& vulkanDevice) {
-    VkDeviceSize bufferSize = sizeof(glm::vec3) * feaMesh.nodes.size();
-    meshBuffer = vulkanDevice.createBuffer(
-        bufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        meshBufferMemory
-    );
-    
-    // Map and copy the node data
-    glm::vec3* mappedNodes;
-    vkMapMemory(vulkanDevice.getDevice(), meshBufferMemory, 0, bufferSize, 0, (void**)&mappedNodes);
-    memcpy(mappedNodes, feaMesh.nodes.data(), bufferSize);
-    vkUnmapMemory(vulkanDevice.getDevice(), meshBufferMemory);
 }
 
 void HeatSystem::createCenterBuffer(VulkanDevice& vulkanDevice) {
@@ -608,7 +591,7 @@ void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
     // Get mapped pointer via allocator
     mappedTimeData = static_cast<TimeUniform*>(
         memoryAllocator.getMappedPointer(timeBuffer, timeBufferOffset_)
-    );
+        );
 }
 
 void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
@@ -617,10 +600,14 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
         feaMesh.elements[i].temperature = 1.0f;
-        feaMesh.elements[i].coolingRate = 0.02f;
-        feaMesh.elements[i].thermalConductivity = 1.8f;
+        feaMesh.elements[i].volume = calculateTetraVolume(feaMesh.elements[i]);
+        feaMesh.elements[i].density = 2710.0f;
+        feaMesh.elements[i].specificHeat = 903.0f;
+        feaMesh.elements[i].conductivity = 237.0f;
+        feaMesh.elements[i].coolingRate = 0.1f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
+            << ", volume = " << feaMesh.elements[i].volume  
             << ", vertices = ["
             << feaMesh.elements[i].vertices[0] << ", "
             << feaMesh.elements[i].vertices[1] << ", "
@@ -656,9 +643,25 @@ glm::vec3 HeatSystem::calculateTetraCenter(const TetrahedralElement& tetra) {
     glm::vec3 v1 = feaMesh.nodes[tetra.vertices[1]];
     glm::vec3 v2 = feaMesh.nodes[tetra.vertices[2]];
     glm::vec3 v3 = feaMesh.nodes[tetra.vertices[3]];
-    
+
     // Return center of tetrahedron
     return (v0 + v1 + v2 + v3) * 0.25f;
+}
+
+float HeatSystem::calculateTetraVolume(const TetrahedralElement& tetra) {
+    // Get vertex positions
+    glm::vec3 v0 = feaMesh.nodes[tetra.vertices[0]];
+    glm::vec3 v1 = feaMesh.nodes[tetra.vertices[1]];
+    glm::vec3 v2 = feaMesh.nodes[tetra.vertices[2]];
+    glm::vec3 v3 = feaMesh.nodes[tetra.vertices[3]];
+
+    // Calculate scaled edges
+    glm::vec3 edge1 = (v1 - v0);
+    glm::vec3 edge2 = (v2 - v0);
+    glm::vec3 edge3 = (v3 - v0);
+
+    // Return volume using scalar triple product
+    return glm::abs(glm::dot(edge1, glm::cross(edge2, edge3))) / 6.0f;
 }
 
 void HeatSystem::createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
@@ -717,7 +720,7 @@ void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice
     layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
-    layoutInfo.pNext = &bindingFlags; 
+    layoutInfo.pNext = &bindingFlags;
 
     if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &tetraDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat descriptor set layout");
@@ -753,7 +756,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
             VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_, sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{neighborBuffer, neighborBufferOffset_, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec3) * feaMesh.tetraCenters.size()},
+            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, timeBufferOffset_, sizeof(TimeUniform)},
             VkDescriptorBufferInfo{heatSource->getSourceBuffer(), heatSource->getSourceBufferOffset(), sizeof(HeatSourceVertex) * heatSource->getVertexCount()},
         };
@@ -971,7 +974,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
 }
 
 void HeatSystem::createSurfacePipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("shaders/heat_surface_comp.spv"); 
+    auto computeShaderCode = readFile("shaders/heat_surface_comp.spv");
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo shaderStageInfo{};
@@ -1061,14 +1064,14 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceMa
         1, &heatSourceTransferBarrier,
         0, nullptr
     );
-  
+
     // Copy surfaceBuffer -> surfaceVertexBuffer 
     VkBufferCopy heatSourceCopyRegion{};
     heatSourceCopyRegion.srcOffset = resourceManager.getHeatModel().getSurfaceBufferOffset();
     heatSourceCopyRegion.dstOffset = resourceManager.getHeatModel().getSurfaceVertexBufferOffset();
     heatSourceCopyRegion.size = sizeof(SurfaceVertex) * resourceManager.getHeatModel().getVertexCount();
     vkCmdCopyBuffer(commandBuffer, resourceManager.getHeatModel().getSurfaceBuffer(), resourceManager.getHeatModel().getSurfaceVertexBuffer(), 1, &heatSourceCopyRegion);
-  
+
     // Transfer write -> vertex input read
     VkBufferMemoryBarrier heatSourceVertexBarrier{};
     heatSourceVertexBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -1213,7 +1216,7 @@ void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr); 
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
 
     heatSource->cleanup(vulkanDevice);
 }
@@ -1221,7 +1224,7 @@ void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
 void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
     if (mappedTetraData) {
         vkUnmapMemory(vulkanDevice.getDevice(), tetraBufferMemory);
-        mappedTetraData = nullptr; 
+        mappedTetraData = nullptr;
     }
 
     if (mappedTimeData) {

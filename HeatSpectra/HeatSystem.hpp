@@ -21,7 +21,6 @@ public:
 
     void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createNeighborBuffer(VulkanDevice& vulkanDevice);
-    void createMeshBuffer(VulkanDevice& vulkanDevice);
     void createCenterBuffer(VulkanDevice& vulkanDevice);
     void createTimeBuffer(VulkanDevice& vulkanDevice);
 
@@ -40,6 +39,7 @@ public:
     void recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
+    float calculateTetraVolume(const TetrahedralElement& tetra);
 
     void createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
@@ -89,9 +89,6 @@ private:
     VkDeviceMemory neighborBufferMemory;
     VkDeviceSize neighborBufferOffset_;
     const uint32_t MAX_NEIGHBORS = 4;
-
-    VkBuffer meshBuffer;
-    VkDeviceMemory meshBufferMemory;
 
     VkBuffer centerBuffer;
     VkDeviceSize centerBufferOffset_;

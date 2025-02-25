@@ -11,8 +11,8 @@ struct HeatSourceVertex {
 };
 
 struct SurfaceVertex {
-    vec3 position;
-    vec3 color;
+    vec4 position;
+    vec4 color;
 };
 
 layout(binding = 0) buffer SourceBuffer {
@@ -45,6 +45,6 @@ void main() {
     float normalized = clamp(temp / temperatureScale, 0.0, 1.0);
 
     // Write result to surfaceBuffer
-    surfaceBuffer.outVertices[idx].position = transformedPosition.xyz;
-    surfaceBuffer.outVertices[idx].color = temperatureToColor(normalized);
+    surfaceBuffer.outVertices[idx].position = transformedPosition;
+    surfaceBuffer.outVertices[idx].color = vec4(temperatureToColor(normalized),1.0);
 }
