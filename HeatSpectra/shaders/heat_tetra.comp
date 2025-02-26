@@ -14,7 +14,7 @@ struct TetraElement {
 };
 
 struct HeatSourceVertex {
-    vec3 position;
+    vec4 position;
     float temperature;
 };
 
@@ -67,7 +67,7 @@ void main() {
     float maxSourceTemp = 0.0;
     
     for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
-        vec4 transformedPos = pushConstants.heatSourceModelMatrix * vec4(heatSourceBuffer.heatSources[i].position, 1.0);
+        vec4 transformedPos = pushConstants.heatSourceModelMatrix * heatSourceBuffer.heatSources[i].position;
         vec3 heatPos = transformedPos.xyz;
         float heatTemp = heatSourceBuffer.heatSources[i].temperature;
         maxSourceTemp = max(maxSourceTemp, heatTemp);

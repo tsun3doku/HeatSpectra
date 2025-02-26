@@ -6,17 +6,18 @@ layout(local_size_x = 256) in;
 struct TetraElement {
     uint vertices[4];
     float temperature;
+    float volume;
+    float density;
+    float specificHeat;
+    float conductivity;
     float coolingRate;
-    float thermalConductivity;
 };
 
 struct HeatSourceVertex {
-    // Position + temperature (stored by your heat source model)
-    vec3 position;
+    vec4 position;
     float temperature;
 };
 
-// Existing buffers
 layout(binding = 0) buffer TetraBuffer {
     TetraElement elements[];
 } tetraBuffer;
@@ -55,53 +56,85 @@ void main() {
     uint tetraID = gl_GlobalInvocationID.x;
     if (tetraID >= tetraBuffer.elements.length()) return;
 
-    // Read tetrahedron data and previous temperature
+    // Read tetrahedron data
     TetraElement tetra = tetraBuffer.elements[tetraID];
     float temperature = temperatureReadBuffer.temperatures[tetraID];
     vec3 center = centerBuffer.centers[tetraID].xyz;
-
+    
+    // ---------- Heat Source Contribution ----------
     const float HEAT_RADIUS = 0.012;
-    float heatAccumulation = 0.0;
+    float heatGeneration = 0.0; // q'' term
     float maxSourceTemp = 0.0;
-
+    
     for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
-        vec4 transformedPos = pushConstants.heatSourceModelMatrix * vec4(heatSourceBuffer.heatSources[i].position, 1.0);
+        vec4 transformedPos = pushConstants.heatSourceModelMatrix * heatSourceBuffer.heatSources[i].position;
         vec3 heatPos = transformedPos.xyz;
         float heatTemp = heatSourceBuffer.heatSources[i].temperature;
         maxSourceTemp = max(maxSourceTemp, heatTemp);
+        
         float dist = distance(center, heatPos);
-
         if (dist < HEAT_RADIUS) {
             float intensity = (1.0 - dist / HEAT_RADIUS) * heatTemp;
-            // The multiplication by 0.25 and deltaTime scales the influence
-            heatAccumulation += min(intensity * timeBuffer.deltaTime * 0.25, maxSourceTemp);
+            heatGeneration += intensity * timeBuffer.deltaTime * 0.25;
         }
     }
-    temperature += heatAccumulation;
-    temperature = min(temperature, maxSourceTemp);
-
-    float totalHeatTransfer = 0.0;
+    
+    // ---------- Conduction Term ----------
+    float conductionTerm = 0.0;
     int baseIndex = int(tetraID) * 5;
     int neighborCount = neighborBuffer.neighbors[baseIndex];
-
+    
     for (int i = 0; i < neighborCount; ++i) {
-        int t = neighborBuffer.neighbors[baseIndex + 1 + i];
-        if (t < 0 || t >= tetraBuffer.elements.length()) continue;
+        int neighborIdx = neighborBuffer.neighbors[baseIndex + 1 + i];
+        if (neighborIdx < 0 || neighborIdx >= tetraBuffer.elements.length()) 
+        continue;
         
-        // Read neighbor temperature
-        float neighborTemp = temperatureReadBuffer.temperatures[t];
-        // Average conductivity of the two tetrahedra
-        float k_avg = (tetra.thermalConductivity + tetraBuffer.elements[t].thermalConductivity) * 0.5;
+        // Read neighbor temperature and properties
+        float neighborTemp = temperatureReadBuffer.temperatures[neighborIdx];
+        TetraElement neighborTetra = tetraBuffer.elements[neighborIdx];
         
-        float transfer = k_avg * (neighborTemp - temperature) * timeBuffer.deltaTime;
-        totalHeatTransfer += transfer;
+        float avgVolume = (tetra.volume + neighborTetra.volume) * 0.5;
+        float sharedArea = pow(avgVolume, 2.0/3.0) * 0.5;
+        
+        // Distance between centers
+        float centerDistance = distance(center, centerBuffer.centers[neighborIdx].xyz);
+        if (centerDistance < 0.001) 
+        centerDistance = 0.001;
+        
+        // Average conductivity 
+        float k_avg = (tetra.conductivity + neighborTetra.conductivity) * 0.5;
+        
+        // Heat flux through shared face: -k * (dT/dx) * A
+        // Where dT/dx is approximated as (neighborTemp - temperature) / centerDistance
+        float heatFlux = k_avg * (neighborTemp - temperature) / centerDistance * sharedArea;
+        
+        // Add to conduction term
+        conductionTerm += heatFlux;
     }
-    // Update temperature with the net conduction transfer
-    temperature += totalHeatTransfer;
+    
+    // ---------- Complete Heat Equation Implementation ----------
+    
+    float thermalMass = tetra.density * tetra.specificHeat * tetra.volume;
 
-    // Cooling  
-    temperature *= (1.0 - tetra.coolingRate * timeBuffer.deltaTime);
+    // Ensure minimum thermal mass to avoid instability
+    thermalMass = max(thermalMass, 0.001); 
+    
+    // Temperature change rate: (conductionTerm + heatGeneration) / thermalMass
+    float temperatureChangeRate = (conductionTerm + heatGeneration) / thermalMass;
+    
+    // Limit the maximum temperature change per step for stability
+    float maxTempChange = 10.0;
+    temperatureChangeRate = clamp(temperatureChangeRate, -maxTempChange, maxTempChange);
 
-    // Write updated temperature to the output buffer   
-    temperatureWriteBuffer.temperatures[tetraID] = max(temperature, 0.0);
+    // Update temperature using explicit time integration
+    temperature += temperatureChangeRate * timeBuffer.deltaTime;
+
+    // Ambient cooling (reduce the cooling rate)
+    temperature *= (1.0 - tetra.coolingRate * 0.1 * timeBuffer.deltaTime);
+
+    // Ensure temperature stays positive
+    temperature = max(temperature, 0.0);
+    
+    // Write updated temperature
+    temperatureWriteBuffer.temperatures[tetraID] = temperature;
 }

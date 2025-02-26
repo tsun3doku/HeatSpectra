@@ -12,8 +12,8 @@ layout(location = 0) in vec3 inPos;           // From Vertex buffer
 layout(location = 1) in vec3 inColor;         // From Vertex buffer
 layout(location = 2) in vec3 inNormal;        // From Vertex buffer
 layout(location = 3) in vec2 inTexCoord;      // From Vertex buffer
-layout(location = 4) in vec3 inSurfacePos;    // From Surface buffer 
-layout(location = 5) in vec3 inSurfaceColor;  // From Surface buffer 
+layout(location = 4) in vec4 inSurfacePos;    // From Surface buffer 
+layout(location = 5) in vec4 inSurfaceColor;  // From Surface buffer 
 
 // Output to the fragment shader
 layout(location = 0) out vec3 fragColor;         
@@ -22,12 +22,12 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 fragTexCoord;      
                  
 void main() {
-    vec3 worldPos = vec3(ubo.model * vec4(inSurfacePos, 1.0));
-    fragColor = inSurfaceColor;          
+    vec3 worldPos = vec3(ubo.model * inSurfacePos.xyz);
+    fragColor = inSurfaceColor.xyz;          
     fragNormal = inNormal;        
     fragTexCoord = inTexCoord;    
     fragPos = worldPos;          
 
     // Final clip-space position
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inSurfacePos, 1.0);
+    gl_Position = ubo.proj * ubo.view * ubo.model * inSurfacePos;
 }

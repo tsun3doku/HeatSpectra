@@ -38,7 +38,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     std::vector<HeatSourceVertex> surfaceVertices(heatModel.getVertexCount());
     const auto& modelVertices = heatModel.getVertices();
     for (size_t i = 0; i < heatModel.getVertexCount(); i++) {
-        surfaceVertices[i].position = modelVertices[i].pos;
+        surfaceVertices[i].position = glm::vec4(modelVertices[i].pos, 1.0f);
         surfaceVertices[i].temperature = 9.5f;
     }
 
@@ -85,8 +85,8 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     std::vector<SurfaceVertex> surfaceVertices(heatModel.getVertexCount());
     const auto& modelVerts = heatModel.getVertices();
     for (size_t i = 0; i < modelVerts.size(); i++) {
-        surfaceVertices[i].position = modelVerts[i].pos;
-        surfaceVertices[i].color = glm::vec3(0.0f, 0.0f, 0.0f);
+        surfaceVertices[i].position = glm::vec4(modelVerts[i].pos, 1.0);
+        surfaceVertices[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     // Copy data to staging buffer

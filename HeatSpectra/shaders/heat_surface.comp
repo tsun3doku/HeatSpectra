@@ -2,8 +2,8 @@
 layout(local_size_x = 256) in;
 
 struct SurfaceVertex {
-    vec3 position;
-    vec3 color;
+    vec4 position;
+    vec4 color;
 };
 
 struct TetraElement {
@@ -39,7 +39,7 @@ void main() {
     uint vertexID = gl_GlobalInvocationID.x;
     if (vertexID >= surfaceBuffer.vertices.length()) return;
 
-    vec3 vertPos = surfaceBuffer.vertices[vertexID].position;
+    vec3 vertPos = surfaceBuffer.vertices[vertexID].position.xyz;
     const float maxRadius = 0.012; 
     float minDist = maxRadius; 
     float nearestTemp = 0.0; // Default temperature if no tetra is found
@@ -58,7 +58,7 @@ void main() {
     // Map temperature to color
     float temperatureScale = 10.0; // Adjust based on your temperature range
     float normalized = clamp(nearestTemp / temperatureScale, 0.0, 1.0);
-    surfaceBuffer.vertices[vertexID].color = temperatureToColor(normalized);
+    surfaceBuffer.vertices[vertexID].color = vec4(temperatureToColor(normalized), 1.0);
 
 }
 

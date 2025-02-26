@@ -6,13 +6,13 @@ layout(push_constant) uniform PushConstantBlock {
 } pushConstants;
 
 struct HeatSourceVertex {
-    vec3 position;
+    vec4 position;
     float temperature;
 };
 
 struct SurfaceVertex {
-    vec3 position;
-    vec3 color;
+    vec4 position;
+    vec4 color;
 };
 
 layout(binding = 0) buffer SourceBuffer {
@@ -38,13 +38,13 @@ void main() {
     if (idx >= sourceBuffer.srcVertices.length() || idx >= surfaceBuffer.outVertices.length()) 
         return;
 
-    vec4 transformedPosition = pushConstants.modelMatrix * vec4(sourceBuffer.srcVertices[idx].position, 1.0);
+    vec4 transformedPosition = pushConstants.modelMatrix * sourceBuffer.srcVertices[idx].position;
 
     float temperatureScale = 10.0;
     float temp = sourceBuffer.srcVertices[idx].temperature;
     float normalized = clamp(temp / temperatureScale, 0.0, 1.0);
 
     // Write result to surfaceBuffer
-    surfaceBuffer.outVertices[idx].position = transformedPosition.xyz;
-    surfaceBuffer.outVertices[idx].color = temperatureToColor(normalized);
+    surfaceBuffer.outVertices[idx].position = transformedPosition;
+    surfaceBuffer.outVertices[idx].color = vec4(temperatureToColor(normalized),1.0);
 }

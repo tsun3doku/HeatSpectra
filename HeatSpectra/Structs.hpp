@@ -61,8 +61,8 @@ struct TimeUniform {
 };  // 8 bytes
 
 struct SurfaceVertex {
-    alignas(16) glm::vec3 position; // 16 byte aligned
-    alignas(16) glm::vec3 color;    // 16 byte aligned
+    glm::vec4 position; // 16 byte aligned
+    glm::vec4 color;    // 16 byte aligned
 };  // 32 bytes
 
 struct TetrahedralElement {
@@ -99,6 +99,7 @@ struct HeatSourcePushConstant {
 };
 
 struct HeatSourceVertex {
-    alignas(16) glm::vec3 position; // 16 byte aligned
+    glm::vec4 position; // 16 byte aligned
     float temperature;
-};  // 20 bytes
+    float padding[3];
+};  // 32 bytes

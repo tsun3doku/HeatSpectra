@@ -81,12 +81,12 @@ struct Vertex {
 
         surfaceVertexAttributes[0].binding = 1;
         surfaceVertexAttributes[0].location = 4;
-        surfaceVertexAttributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        surfaceVertexAttributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         surfaceVertexAttributes[0].offset = offsetof(SurfaceVertex, position); 
 
         surfaceVertexAttributes[1].binding = 1;
         surfaceVertexAttributes[1].location = 5;
-        surfaceVertexAttributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        surfaceVertexAttributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         surfaceVertexAttributes[1].offset = offsetof(SurfaceVertex, color);
 
         return surfaceVertexAttributes;
