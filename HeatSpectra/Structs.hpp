@@ -84,14 +84,14 @@ struct FEAMesh {
 };
 
 struct TetraFrameBuffers {
-    VkBuffer readBuffer;
-    VkDeviceMemory readBufferMemory;
-    VkDeviceSize readBufferOffset_;
-    VkBuffer writeBuffer;
-    VkDeviceMemory writeBufferMemory;
-    VkDeviceSize writeBufferOffset_;
-    void* mappedReadData;
-    void* mappedWriteData;
+    std::vector<VkBuffer> readBuffers;
+    std::vector<VkDeviceMemory> readBufferMemories;
+    std::vector<VkDeviceSize> readBufferOffsets_;
+    std::vector<VkBuffer> writeBuffers;
+    std::vector<VkDeviceMemory> writeBufferMemories;
+    std::vector<VkDeviceSize> writeBufferOffsets_;
+    std::vector<void*> mappedReadData;
+    std::vector<void*> mappedWriteData;
 };
 
 struct HeatSourcePushConstant {

@@ -39,7 +39,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     const auto& modelVertices = heatModel.getVertices();
     for (size_t i = 0; i < heatModel.getVertexCount(); i++) {
         surfaceVertices[i].position = glm::vec4(modelVertices[i].pos, 1.0f);
-        surfaceVertices[i].temperature = 9.5f;
+        surfaceVertices[i].temperature = 100.0f;
     }
 
     // Copy data to staging buffer

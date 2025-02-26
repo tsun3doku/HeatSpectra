@@ -57,7 +57,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
 
-    const float timeScale = 5.0f;
+    const float timeScale = 1.0f;
     float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
@@ -79,36 +79,36 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
 }
 
 void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    VkBuffer oldReadBuffer = tetraFrameBuffers.readBuffer;
-    VkDeviceMemory oldReadBufferMemory = tetraFrameBuffers.readBufferMemory;
-    VkDeviceSize oldReadOffset = tetraFrameBuffers.readBufferOffset_;
-    VkBuffer oldWriteBuffer = tetraFrameBuffers.writeBuffer;
-    VkDeviceMemory oldWriteBufferMemory = tetraFrameBuffers.writeBufferMemory;
-    VkDeviceSize oldWriteOffset = tetraFrameBuffers.writeBufferOffset_;
+    std::vector<VkBuffer> oldReadBuffers = tetraFrameBuffers.readBuffers;
+    std::vector<VkDeviceSize> oldReadOffsets = tetraFrameBuffers.readBufferOffsets_;
+    std::vector<VkBuffer> oldWriteBuffers = tetraFrameBuffers.writeBuffers;
+    std::vector<VkDeviceSize> oldWriteOffsets = tetraFrameBuffers.writeBufferOffsets_;
 
-    // Copy data from old buffers to new buffers
-    VkDeviceSize bufferSize = sizeof(float) * feaMesh.elements.size();
-    if (oldReadBuffer != VK_NULL_HANDLE &&
-        oldWriteBuffer != VK_NULL_HANDLE &&
-        oldReadBuffer != tetraFrameBuffers.readBuffer &&
-        oldWriteBuffer != tetraFrameBuffers.writeBuffer) {
-        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
-
+    // Copy data from old buffers to new for each frame
+    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+    for (uint32_t i = 0; i < maxFramesInFlight; ++i) {
         VkBufferCopy copyRegion{};
-        copyRegion.size = bufferSize;
-        copyRegion.srcOffset = oldReadOffset;
-        copyRegion.dstOffset = tetraFrameBuffers.readBufferOffset_;
-        vkCmdCopyBuffer(copyCmd, oldReadBuffer, tetraFrameBuffers.readBuffer, 1, &copyRegion);
+        copyRegion.size = sizeof(float) * feaMesh.elements.size();
+        
+        // Read buffer copy
+        copyRegion.srcOffset = oldReadOffsets[i];
+        copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
+        vkCmdCopyBuffer(copyCmd, oldReadBuffers[i], 
+                        tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
 
-        copyRegion.srcOffset = oldWriteOffset;
-        copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffset_;
-        vkCmdCopyBuffer(copyCmd, oldWriteBuffer, tetraFrameBuffers.writeBuffer, 1, &copyRegion);
-
-        endSingleTimeCommands(vulkanDevice, copyCmd);
-
-        memoryAllocator.free(oldReadBuffer, oldReadOffset);
-        memoryAllocator.free(oldWriteBuffer, oldWriteOffset);
+        // Write buffer copy
+        copyRegion.srcOffset = oldWriteOffsets[i];
+        copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
+        vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i], 
+                        tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
     }
+    endSingleTimeCommands(vulkanDevice, copyCmd);
+
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
+        memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
+    }
+
     createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
     createSurfaceDescriptorSetLayout(vulkanDevice);
     createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
@@ -119,73 +119,6 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
     createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
     createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
-}
-
-void HeatSystem::swapBuffers(ResourceManager& resourceManager) {
-    // Swap buffer handles
-    std::swap(tetraFrameBuffers.readBuffer, tetraFrameBuffers.writeBuffer);
-    std::swap(tetraFrameBuffers.readBufferMemory, tetraFrameBuffers.writeBufferMemory);
-    std::swap(tetraFrameBuffers.readBufferOffset_, tetraFrameBuffers.writeBufferOffset_);
-
-    // Update ALL descriptors for each frame
-    for (size_t i = 0; i < tetraDescriptorSets.size(); ++i) {
-        std::array<VkDescriptorBufferInfo, 7> bufferInfos = {
-            VkDescriptorBufferInfo{tetraBuffer, tetraBufferOffset_, sizeof(TetrahedralElement) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{neighborBuffer, neighborBufferOffset_, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
-            VkDescriptorBufferInfo{timeBuffer, timeBufferOffset_, sizeof(TimeUniform)},
-            VkDescriptorBufferInfo{heatSource->getSourceBuffer(), heatSource->getSourceBufferOffset(), sizeof(HeatSourceVertex) * heatSource->getVertexCount()}
-        };
-
-        std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
-        for (size_t j = 0; j < descriptorWrites.size(); j++) {
-            descriptorWrites[j] = {
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                nullptr,
-                tetraDescriptorSets[i],
-                static_cast<uint32_t>(j),  // binding
-                0,
-                1,
-                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                nullptr,
-                &bufferInfos[j],
-                nullptr
-            };
-        }
-        // Time buffer uses uniform buffer type
-        descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-    }
-
-    // Update surface compute descriptor sets
-    for (size_t i = 0; i < surfaceDescriptorSets.size(); ++i) {
-        std::array<VkDescriptorBufferInfo, 3> surfaceBufferInfos = {
-            VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{resourceManager.getVisModel().getSurfaceBuffer(), resourceManager.getVisModel().getSurfaceBufferOffset(), sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount()},
-            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()}
-        };
-
-        std::array<VkWriteDescriptorSet, 3> surfaceWrites{};
-        for (size_t j = 0; j < surfaceWrites.size(); j++) {
-            surfaceWrites[j] = {
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                nullptr,
-                surfaceDescriptorSets[i],
-                static_cast<uint32_t>(j),
-                0,
-                1,
-                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                nullptr,
-                &surfaceBufferInfos[j],
-                nullptr
-            };
-        }
-
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), surfaceWrites.size(), surfaceWrites.data(), 0, nullptr);
-    }
 }
 
 void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
@@ -505,25 +438,40 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
         memoryAllocator.getMappedPointer(tetraBuffer, tetraBufferOffset_)
         );
 
-    // Create read buffer
-    auto [readBufferHandle, readOffset] = memoryAllocator.allocate(
-        tempBufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
-    );
-    tetraFrameBuffers.readBuffer = readBufferHandle;
-    tetraFrameBuffers.readBufferOffset_ = readOffset;
+    // Resize vectors to hold per-frame buffers
+    tetraFrameBuffers.readBuffers.resize(maxFramesInFlight);
+    tetraFrameBuffers.readBufferMemories.resize(maxFramesInFlight);
+    tetraFrameBuffers.readBufferOffsets_.resize(maxFramesInFlight);
+    tetraFrameBuffers.writeBuffers.resize(maxFramesInFlight);
+    tetraFrameBuffers.writeBufferMemories.resize(maxFramesInFlight);
+    tetraFrameBuffers.writeBufferOffsets_.resize(maxFramesInFlight);
+    tetraFrameBuffers.mappedReadData.resize(maxFramesInFlight);
+    tetraFrameBuffers.mappedWriteData.resize(maxFramesInFlight);
 
-    // Create write buffer
-    auto [writeBufferHandle, writeOffset] = memoryAllocator.allocate(
-        tempBufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
-    );
-    tetraFrameBuffers.writeBuffer = writeBufferHandle;
-    tetraFrameBuffers.writeBufferOffset_ = writeOffset;
+    // Create per-frame buffers
+    for (uint32_t i = 0; i < maxFramesInFlight; i++) {
+        // Create read buffer for this frame
+        auto [readBufferHandle, readOffset] = memoryAllocator.allocate(
+            tempBufferSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
+        );
+        tetraFrameBuffers.readBuffers[i] = readBufferHandle;
+        tetraFrameBuffers.readBufferOffsets_[i] = readOffset;
+        tetraFrameBuffers.mappedReadData[i] = memoryAllocator.getMappedPointer(readBufferHandle, readOffset);
+
+        // Create write buffer for this frame
+        auto [writeBufferHandle, writeOffset] = memoryAllocator.allocate(
+            tempBufferSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
+        );
+        tetraFrameBuffers.writeBuffers[i] = writeBufferHandle;
+        tetraFrameBuffers.writeBufferOffsets_[i] = writeOffset;
+        tetraFrameBuffers.mappedWriteData[i] = memoryAllocator.getMappedPointer(writeBufferHandle, writeOffset);
+    }
 }
 
 void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
@@ -607,7 +555,7 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
         feaMesh.elements[i].coolingRate = 0.1f;
 
         std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
-            << ", volume = " << feaMesh.elements[i].volume  
+            << ", volume = " << feaMesh.elements[i].volume
             << ", vertices = ["
             << feaMesh.elements[i].vertices[0] << ", "
             << feaMesh.elements[i].vertices[1] << ", "
@@ -618,23 +566,22 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
     // Map and copy the updated elements to GPU buffer
     memcpy(mappedTetraData, feaMesh.elements.data(), sizeof(TetrahedralElement) * feaMesh.elements.size());
 
-    // Copy to temperature buffers using memory allocator
-    float* tempData = static_cast<float*>(
-        memoryAllocator.getMappedPointer(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_)
-        );
+    for (size_t i = 0; i < tetraFrameBuffers.readBuffers.size(); i++) {
+        // Write to read buffer
+        float* readData = static_cast<float*>(tetraFrameBuffers.mappedReadData[i]);
+        for (size_t j = 0; j < feaMesh.elements.size(); j++) {
+            readData[j] = feaMesh.elements[j].temperature;
+        }
 
-    for (size_t i = 0; i < feaMesh.elements.size(); i++) {
-        tempData[i] = feaMesh.elements[i].temperature;
+        // Copy read -> write buffer for this frame
+        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+        VkBufferCopy copyRegion{};
+        copyRegion.size = sizeof(float) * feaMesh.elements.size();
+        copyRegion.srcOffset = tetraFrameBuffers.readBufferOffsets_[i];
+        copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
+        vkCmdCopyBuffer(copyCmd, tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+        endSingleTimeCommands(vulkanDevice, copyCmd);
     }
-
-    // Copy readBuffer -> writeBuffer
-    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
-    VkBufferCopy copyRegion{};
-    copyRegion.size = sizeof(float) * feaMesh.elements.size();
-    copyRegion.srcOffset = tetraFrameBuffers.readBufferOffset_;
-    copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffset_;
-    vkCmdCopyBuffer(copyCmd, tetraFrameBuffers.readBuffer, tetraFrameBuffers.writeBuffer, 1, &copyRegion);
-    endSingleTimeCommands(vulkanDevice, copyCmd);
 }
 
 glm::vec3 HeatSystem::calculateTetraCenter(const TetrahedralElement& tetra) {
@@ -737,24 +684,24 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
     allocInfo.pSetLayouts = layouts.data();
 
     tetraDescriptorSets.resize(maxFramesInFlight);
-    if (tetraDescriptorPool == VK_NULL_HANDLE) {
-        std::cerr << "ERROR: tetraDescriptorPool is VK_NULL_HANDLE!" << std::endl;
+    if (tetraDescriptorPool == VK_NULL_HANDLE) {    
         throw std::runtime_error("Invalid descriptor pool");
     }
-    if (tetraDescriptorSetLayout == VK_NULL_HANDLE) {
-        std::cerr << "ERROR: tetraDescriptorSetLayout is VK_NULL_HANDLE!" << std::endl;
+    if (tetraDescriptorSetLayout == VK_NULL_HANDLE) {    
         throw std::runtime_error("Invalid descriptor set layout");
     }
-
     if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, tetraDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate heat descriptor sets");
     }
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
+        // For reading, use the previous frame's write buffer (with wrap-around)
+        uint32_t prevFrame = (i > 0) ? (i - 1) : (maxFramesInFlight - 1);
+
         std::array<VkDescriptorBufferInfo, 7> bufferInfos = {
             VkDescriptorBufferInfo{tetraBuffer, tetraBufferOffset_, sizeof(TetrahedralElement) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_, sizeof(float) * feaMesh.elements.size()},
-            VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
+            VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffers[i], tetraFrameBuffers.writeBufferOffsets_[i], sizeof(float) * feaMesh.elements.size()},
+            VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffers[prevFrame], tetraFrameBuffers.writeBufferOffsets_[prevFrame], sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{neighborBuffer, neighborBufferOffset_, sizeof(int32_t) * (1 + MAX_NEIGHBORS) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
             VkDescriptorBufferInfo{timeBuffer, timeBufferOffset_, sizeof(TimeUniform)},
@@ -826,7 +773,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
 }
 
 void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv"); //change
+    auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv"); 
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
@@ -935,11 +882,13 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
     }
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        std::array<VkDescriptorBufferInfo, 3> bufferInfos = {
-            VkDescriptorBufferInfo{tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_, sizeof(float) * feaMesh.elements.size()},
+        // Use this frame's write buffer for the surface shader
+        std::array<VkDescriptorBufferInfo, 3> surfaceBufferInfos = {
+            VkDescriptorBufferInfo{tetraFrameBuffers.writeBuffers[i], tetraFrameBuffers.writeBufferOffsets_[i], sizeof(float) * feaMesh.elements.size()},
             VkDescriptorBufferInfo{resourceManager.getVisModel().getSurfaceBuffer(), resourceManager.getVisModel().getSurfaceBufferOffset(), sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount()},
-            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()},
+            VkDescriptorBufferInfo{centerBuffer, centerBufferOffset_, sizeof(glm::vec4) * feaMesh.tetraCenters.size()}
         };
+
 
         std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
@@ -949,7 +898,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
         tetraWrite.dstBinding = 0;
         tetraWrite.descriptorCount = 1;
         tetraWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        tetraWrite.pBufferInfo = &bufferInfos[0];
+        tetraWrite.pBufferInfo = &surfaceBufferInfos[0];
 
         VkWriteDescriptorSet& surfaceWrite = descriptorWrites[1];
         surfaceWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -957,7 +906,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
         surfaceWrite.dstBinding = 1;
         surfaceWrite.descriptorCount = 1;
         surfaceWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        surfaceWrite.pBufferInfo = &bufferInfos[1];
+        surfaceWrite.pBufferInfo = &surfaceBufferInfos[1];
 
         VkWriteDescriptorSet& centerWrite = descriptorWrites[2];
         centerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -965,7 +914,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
         centerWrite.dstBinding = 2;
         centerWrite.descriptorCount = 1;
         centerWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        centerWrite.pBufferInfo = &bufferInfos[2];
+        centerWrite.pBufferInfo = &surfaceBufferInfos[2];
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(),
             static_cast<uint32_t>(descriptorWrites.size()),
@@ -1091,8 +1040,6 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceMa
         0, nullptr
     );
 
-    VkBuffer currentWriteBuffer = tetraFrameBuffers.writeBuffer;
-
     // --- Tetra Compute Pass ---
     dispatchTetraCompute(commandBuffer, currentFrame);
 
@@ -1101,8 +1048,8 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceMa
     tetraToSurfaceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     tetraToSurfaceBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     tetraToSurfaceBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    tetraToSurfaceBarrier.buffer = tetraFrameBuffers.writeBuffer;
-    tetraToSurfaceBarrier.offset = tetraFrameBuffers.writeBufferOffset_;
+    tetraToSurfaceBarrier.buffer = tetraFrameBuffers.writeBuffers[currentFrame];
+    tetraToSurfaceBarrier.offset = tetraFrameBuffers.writeBufferOffsets_[currentFrame];
     tetraToSurfaceBarrier.size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(
@@ -1232,8 +1179,14 @@ void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
         mappedTimeData = nullptr;
     }
 
-    memoryAllocator.free(tetraFrameBuffers.readBuffer, tetraFrameBuffers.readBufferOffset_);
-    memoryAllocator.free(tetraFrameBuffers.writeBuffer, tetraFrameBuffers.writeBufferOffset_);
+    for (size_t i = 0; i < tetraFrameBuffers.readBuffers.size(); i++) {
+        if (tetraFrameBuffers.readBuffers[i] != VK_NULL_HANDLE) {
+            memoryAllocator.free(tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.readBufferOffsets_[i]);
+        }
+        if (tetraFrameBuffers.writeBuffers[i] != VK_NULL_HANDLE) {
+            memoryAllocator.free(tetraFrameBuffers.writeBuffers[i], tetraFrameBuffers.writeBufferOffsets_[i]);
+        }
+    }
     memoryAllocator.free(tetraBuffer, tetraBufferOffset_);
     memoryAllocator.free(timeBuffer, timeBufferOffset_);
     memoryAllocator.free(centerBuffer, centerBufferOffset_);

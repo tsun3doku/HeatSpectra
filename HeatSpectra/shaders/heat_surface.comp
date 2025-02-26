@@ -56,7 +56,7 @@ void main() {
     }
 
     // Map temperature to color
-    float temperatureScale = 10.0; // Adjust based on your temperature range
+    float temperatureScale = 50.0; // Adjust based on your temperature range
     float normalized = clamp(nearestTemp / temperatureScale, 0.0, 1.0);
     surfaceBuffer.vertices[vertexID].color = vec4(temperatureToColor(normalized), 1.0);
 

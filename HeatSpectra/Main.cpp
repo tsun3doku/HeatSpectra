@@ -586,7 +586,6 @@ private:
         computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
         vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
-        heatSystem->swapBuffers(*resourceManager);
 
         // Graphics pass
         gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
