@@ -8,7 +8,7 @@
 class Camera {
 public:
     void update(float deltaTime);   // Update position based on velocity
-    void processKeyInput(GLFWwindow* window);   // Process key input
+    void processKeyInput(GLFWwindow* window, float deltaTime);   // Process key input
     void processMouseMovement(GLFWwindow* window);  // Process mouse movement
     void processMouseScroll(double xOffset, double yOffset);    //Process mouse scroll
     void setLookAt(const glm::vec3& target);
@@ -46,6 +46,7 @@ private:
     float pitch = 0.0f;
     float yaw = -90.0f;
     float roll = 0.0f;
+    float movementSpeed = 60.0f;
 
     float nearPlane = 0.1f, farPlane = 100.0f;
 

@@ -38,7 +38,6 @@
 
 uint32_t WIDTH = 960;
 uint32_t HEIGHT = 540;
-
 const int MAXFRAMESINFLIGHT = 2;
 
 const std::vector<const char*> validationLayers = {
@@ -222,14 +221,17 @@ private:
 
     void mainLoop() {
         std::thread renderThread(&App::renderLoop, this);
-        UniformBufferObject ubo{};
+        auto lastTime = std::chrono::high_resolution_clock::now();
         while (!glfwWindowShouldClose(window)) {
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+            lastTime = currentTime;
+
             glfwPollEvents();
-            camera.processKeyInput(window);
+            camera.processKeyInput(window, deltaTime); 
             camera.processMouseMovement(window);
             isCameraUpdated.store(true, std::memory_order_release);
         }
-
         renderThread.join();
     }
 

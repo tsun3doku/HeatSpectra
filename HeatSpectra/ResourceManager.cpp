@@ -30,9 +30,12 @@ void ResourceManager::initialize() {
     simModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
 
     visModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
-    visModel->setSubdivisionLevel(2);
+    visModel->setSubdivisionLevel(3);
     visModel->subdivide();
     visModel->recreateBuffers();
 
     heatModel->init(vulkanDevice, memoryAllocator, HEATSOURCE_PATH);
+    heatModel->setSubdivisionLevel(2);
+    heatModel->subdivide();
+    heatModel->recreateBuffers();
 }

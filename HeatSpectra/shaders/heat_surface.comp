@@ -40,7 +40,7 @@ void main() {
     if (vertexID >= surfaceBuffer.vertices.length()) return;
 
     vec3 vertPos = surfaceBuffer.vertices[vertexID].position.xyz;
-    const float maxRadius = 0.012; 
+    const float maxRadius = 0.008; 
     float minDist = maxRadius; 
     float nearestTemp = 0.0; // Default temperature if no tetra is found
 

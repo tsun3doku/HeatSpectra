@@ -28,24 +28,25 @@ void Camera::setLookAt(const glm::vec3& center) {
     lookAt = center;
 }
 
-void Camera::processKeyInput(GLFWwindow* window) {
+void Camera::processKeyInput(GLFWwindow* window, float deltaTime) {
+    float speed = movementSpeed * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        pitch += 1.0f;  // Pitch up
+        pitch += speed;  // Pitch up
     }
     else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        pitch -= 1.0f;   // Pitch down
+        pitch -= speed;   // Pitch down
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        yaw += 1.0f; // Rotate right around the model (clockwise around y-axis)
+        yaw += speed; // Rotate right around the model (clockwise around y-axis)
     }
     else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        yaw -= 1.0f; // Rotate left around the model (counter-clockwise around y-axis)
+        yaw -= speed; // Rotate left around the model (counter-clockwise around y-axis)
     }
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
-        roll += 1.0f;  // Roll left (counter-clockwise around forward axis)
+        roll += speed;  // Roll left (counter-clockwise around forward axis)
     }
     else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-        roll -= 1.0f;  // Roll right (clockwise around forward axis)
+        roll -= speed;  // Roll right (clockwise around forward axis)
     }
     // Reset up vector when Shift+Q or Shift+E is pressed
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {

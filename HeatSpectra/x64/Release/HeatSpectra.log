@@ -1,19 +1,9 @@
-﻿  HeatSystem.cpp
+﻿  ResourceManager.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(160,79): warning C4267: 'argument': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(187,76): warning C4267: 'argument': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(217,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(233,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(245,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(292,20): warning C4101: 'error_code': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(715,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(906,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1010,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1029,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  5 of 5409 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+  3 of 5438 functions (<0.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    61 functions had inline decision re-evaluated but remain unchanged
+    62 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
