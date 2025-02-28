@@ -199,8 +199,8 @@
     <None Include="shaders\heat_tetra.comp" />
     <None Include="shaders\lighting.frag" />
     <None Include="shaders\lighting.vert" />
-    <None Include="shaders\shader.frag" />
-    <None Include="shaders\shader.vert" />
+    <None Include="shaders\wireframe.frag" />
+    <None Include="shaders\wireframe.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CommandBufferManager.hpp" />

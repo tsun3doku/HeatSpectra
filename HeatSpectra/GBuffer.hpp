@@ -15,7 +15,7 @@ const std::vector<float> clearColorValues = { {0.012f, 0.014f, 0.015f, 1.0f} };
 class GBuffer {
 public:
     GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
-        uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight);
+        uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe);
     ~GBuffer();
 
     void createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
@@ -31,11 +31,12 @@ public:
 
     void createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
     void createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent);
+    void createWireframePipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
     void recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews,
-        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent);
+        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -88,5 +89,8 @@ private:
 
     VkPipelineLayout lightingPipelineLayout;
     VkPipeline lightingPipeline;
+
+    VkPipeline wireframePipeline;
+    VkPipelineLayout wireframePipelineLayout;
 
 };

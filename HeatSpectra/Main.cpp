@@ -112,6 +112,7 @@ private:
     glm::vec3 center;
 
     bool framebufferResized = false;
+    bool wireframeEnabled = false;
     std::atomic<bool> isCameraUpdated{ false };
 
   
@@ -125,7 +126,8 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
         glfwSetScrollCallback(window, scroll_callback);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);   
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);  
+        glfwSetKeyCallback(window, key_callback);
 
     }
 
@@ -140,6 +142,13 @@ private:
     static void scroll_callback(GLFWwindow* window, double xOffset, double yOffset) {
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
         app->camera.processMouseScroll(xOffset, yOffset);
+    }
+
+    static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+        auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+        if (key == GLFW_KEY_H && action == GLFW_PRESS) {
+            app->wireframeEnabled = !app->wireframeEnabled;
+        }
     }
 
     void initCore() {
@@ -204,7 +213,8 @@ private:
             swapChainExtent,
             swapChainImageViews,
             swapChainImageFormat,
-            MAXFRAMESINFLIGHT
+            MAXFRAMESINFLIGHT,
+            wireframeEnabled
         );
 
         center = resourceManager->getSimModel().getBoundingBoxCenter();
@@ -590,7 +600,7 @@ private:
         vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent);
+        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled);
 
         std::array<VkPipelineStageFlags, 2> waitStages = {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore

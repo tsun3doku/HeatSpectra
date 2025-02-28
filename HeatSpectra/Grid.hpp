@@ -20,20 +20,20 @@ public:
     uint32_t vertexCount = 6;
 
     //Getters
-    VkDescriptorPool getGridDescriptorPool() const {
+    const VkDescriptorPool& getGridDescriptorPool() const {
         return gridDescriptorPool;
     }
-    VkDescriptorSetLayout getGridDescriptorSetLayout() const {
+    const VkDescriptorSetLayout& getGridDescriptorSetLayout() const {
         return gridDescriptorSetLayout;
     }
     const std::vector<VkDescriptorSet>& getGridDescriptorSets() const {
         return gridDescriptorSets;
     }
 
-    VkPipeline getGridPipeline() const {
+    const VkPipeline& getGridPipeline() const {
         return gridPipeline;
     }
-    VkPipelineLayout getGridPipelineLayout() const {
+    const VkPipelineLayout& getGridPipelineLayout() const {
         return gridPipelineLayout;
     }
 

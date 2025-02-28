@@ -53,14 +53,14 @@ public:
     VkPipelineLayout getHeatPipelineLayout() const { 
         return tetraPipelineLayout; 
     }
-    std::vector<VkDescriptorSet>& getHeatDescriptorSets() {
+    const std::vector<VkDescriptorSet>& getHeatDescriptorSets() const {
         return tetraDescriptorSets;
     }
     HeatSource& getHeatSource() { 
         return *heatSource; 
     }
 
-    std::vector<VkCommandBuffer> getComputeCommandBuffers() {
+    const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const {
         return computeCommandBuffers;
     }
 

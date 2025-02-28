@@ -134,13 +134,13 @@ public:
     HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
 
     // Getters
-    std::vector<Vertex> getVertices() {
+    const std::vector<Vertex>& getVertices() const {
         return vertices;
     }
-    size_t getVertexCount() {
+    const size_t& getVertexCount() const {
         return vertices.size();
     }
-    std::vector<uint32_t> getIndices() {
+    const std::vector<uint32_t>& getIndices() const {
         return indices;
     }
     
