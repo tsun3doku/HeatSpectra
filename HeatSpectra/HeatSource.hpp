@@ -4,7 +4,7 @@ class VulkanDevice;
 class MemoryAllocator;
 class Model;
 
-const std::string HEATSOURCE_PATH = "models/heatsource_square.obj";
+const std::string HEATSOURCE_PATH = "models/heatsource_torus.obj";
 
 class HeatSource {
 public:

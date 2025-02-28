@@ -18,7 +18,7 @@
 class VulkanDevice;
 class MemoryAllocator;
 
-const std::string MODEL_PATH = "models/heatsink.obj"; 
+const std::string MODEL_PATH = "models/teapot.obj"; 
 const std::string TEXTURE_PATH = "textures/texture.jpg"; 
 
 static int iterations = 2;
