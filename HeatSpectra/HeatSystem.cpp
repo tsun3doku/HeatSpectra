@@ -206,11 +206,11 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
         b.plc = 1;           // Preserve the input surface mesh
         b.quality = 1;       // Generate quality tetrahedral mesh
         b.nobisect = 0;      // Allow splitting
-        b.steinerleft = 100;
+        b.steinerleft = 50;
         b.quiet = 0;         // Enable output for debugging
         b.minratio = 1.5;    // Add quality mesh ratio
         b.mindihedral = 10;  // Lower minimum dihedral angle
-        b.coarsen = 0;       // Enable mesh coarsening
+        b.coarsen = 0;       // Disable mesh coarsening
         b.verbose = 1;       // Enable verbose output
         b.docheck = 1;       // Check mesh consistency
         b.refine = 0;        // Disable refining tetrahedra mesh

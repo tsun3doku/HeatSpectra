@@ -27,13 +27,13 @@ public:
     void cleanup(VulkanDevice& vulkanDevice);
 
     // Getters
-    size_t getVertexCount() {
+    size_t getVertexCount() const {
         return heatModel->getVertexCount();
     }
-    VkBuffer getVertexBuffer() { 
+    VkBuffer getVertexBuffer() const { 
         return heatModel->getVertexBuffer(); 
     }
-    VkBuffer getIndexBuffer() { 
+    VkBuffer getIndexBuffer() const { 
         return heatModel->getIndexBuffer(); 
     }
     size_t getIndexCount() const {

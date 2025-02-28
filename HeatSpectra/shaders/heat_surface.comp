@@ -40,25 +40,52 @@ void main() {
     if (vertexID >= surfaceBuffer.vertices.length()) return;
 
     vec3 vertPos = surfaceBuffer.vertices[vertexID].position.xyz;
-    const float maxRadius = 0.008; 
-    float minDist = maxRadius; 
-    float nearestTemp = 0.0; // Default temperature if no tetra is found
+    
+    // Track N closest centers
+    const int N = 4;
+    float closestDists[N];
+    float closestTemps[N];
+    
+    // Initialize arrays
+    for(int i = 0; i < N; i++) {
+        closestDists[i] = 1000.0;
+        closestTemps[i] = 0.0;
+    }
 
-    // Find the nearest tetrahedron
+    // Find N closest centers
     for(uint t = 0; t < centerBuffer.centers.length(); t++) {
         vec3 tetraCenter = centerBuffer.centers[t].xyz;
         float dist = distance(vertPos, tetraCenter);
         
-        if(dist < minDist) {
-            minDist = dist;
-            nearestTemp = temperatureReadBuffer.temperatures[t];
+        // Insert into sorted arrays
+        for(int i = 0; i < N; i++) {
+            if(dist < closestDists[i]) {
+                // Shift existing entries
+                for(int j = N-1; j > i; j--) {
+                    closestDists[j] = closestDists[j-1];
+                    closestTemps[j] = closestTemps[j-1];
+                }
+                closestDists[i] = dist;
+                closestTemps[i] = temperatureReadBuffer.temperatures[t];
+                break;
+            }
         }
     }
 
-    // Map temperature to color
-    float temperatureScale = 50.0; // Adjust based on your temperature range
-    float normalized = clamp(nearestTemp / temperatureScale, 0.0, 1.0);
-    surfaceBuffer.vertices[vertexID].color = vec4(temperatureToColor(normalized), 1.0);
+    // Calculate weighted temperature using inverse distance weighting
+    float weightedTemp = 0.0;
+    float totalWeight = 0.0;
+    
+    for(int i = 0; i < N; i++) {
+        float weight = 1.0 / (closestDists[i] * closestDists[i]);
+        weightedTemp += closestTemps[i] * weight;
+        totalWeight += weight;
+    }
+    
+    float finalTemp = weightedTemp / totalWeight;
+    float temperatureScale = 50.0f;
 
+    float normalized = clamp(finalTemp / temperatureScale, 0.0, 1.0);
+    surfaceBuffer.vertices[vertexID].color = vec4(temperatureToColor(normalized), 1.0);
 }
 

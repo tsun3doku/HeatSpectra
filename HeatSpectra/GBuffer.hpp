@@ -42,7 +42,7 @@ public:
     void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
 
     // Getters 
-    std::vector<VkFramebuffer>& getFramebuffers() {
+    const std::vector<VkFramebuffer>& getFramebuffers() const {
         return framebuffers;
     }
 
@@ -54,7 +54,7 @@ public:
         return geometryPipelineLayout;
     }
 
-    std::vector<VkCommandBuffer>& getCommandBuffers() {
+    const std::vector<VkCommandBuffer>& getCommandBuffers() const {
         return gbufferCommandBuffers;
     }
 
