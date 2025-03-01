@@ -62,7 +62,7 @@ void main() {
     vec3 center = centerBuffer.centers[tetraID].xyz;
     
     // ---------- Heat Source Contribution ----------
-    const float HEAT_RADIUS = 0.012;
+    const float HEAT_RADIUS = 0.006;
     float heatGeneration = 0.0; // q'' term
     float maxSourceTemp = 0.0;
     

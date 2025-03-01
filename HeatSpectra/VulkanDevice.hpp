@@ -64,6 +64,10 @@ public:
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
         return properties;
     }
+
+    VkResolveModeFlagBits getDepthResolveMode() const { 
+        return depthResolveMode; 
+    }
   
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
@@ -82,6 +86,8 @@ private:
 
     std::vector<const char*> deviceExtensions;
     std::vector<const char*> validationLayers;
+
+    VkResolveModeFlagBits depthResolveMode;
     
     bool enableValidationLayers = true;
   

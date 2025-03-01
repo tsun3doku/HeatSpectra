@@ -47,8 +47,10 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
         std::cerr << "Failed to pick a suitable physical device" << std::endl;
     }
 
-    this->deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    this->deviceExtensions.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+    std::cout << "Enabled device extensions:\n";
+    for (const auto& ext : deviceExtensions) {
+        std::cout << "- " << ext << std::endl;
+    }
 
     createLogicalDevice(surface);
     createCommandPool();
@@ -155,26 +157,53 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-    indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexingFeatures.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-    indexingFeatures.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
-    indexingFeatures.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;  
+    // Query supported depth resolve modes
+    VkPhysicalDeviceDepthStencilResolveProperties depthResolveProps = {};
+    depthResolveProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES;
+
+    VkPhysicalDeviceProperties2 props2{};
+    props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    props2.pNext = &depthResolveProps;
+
+    vkGetPhysicalDeviceProperties2(physicalDevice, &props2);
+
+    // Choose a supported depth resolve mode
+    VkResolveModeFlagBits chosenResolveMode = VK_RESOLVE_MODE_NONE;
+
+    if (depthResolveProps.supportedDepthResolveModes & VK_RESOLVE_MODE_SAMPLE_ZERO_BIT) {
+        chosenResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+    }
+    else if (depthResolveProps.supportedDepthResolveModes & VK_RESOLVE_MODE_MAX_BIT) {
+        chosenResolveMode = VK_RESOLVE_MODE_MAX_BIT;
+    }
+    else if (depthResolveProps.supportedDepthResolveModes & VK_RESOLVE_MODE_MIN_BIT) {
+        chosenResolveMode = VK_RESOLVE_MODE_MIN_BIT;
+    }
+    else {
+        std::cerr << "No suitable depth resolve mode found. Falling back to MSAA depth without resolve." << std::endl;
+    }
+
+    this->depthResolveMode = chosenResolveMode;
+ 
+    VkPhysicalDeviceVulkan12Features vulkan12Features{};
+    vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vulkan12Features.descriptorIndexing = VK_TRUE;
+    vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
+    vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+    vulkan12Features.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
+    deviceFeatures.sampleRateShading = VK_TRUE;
     deviceFeatures.samplerAnisotropy = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
     deviceFeatures.independentBlend = VK_TRUE;
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pNext = &indexingFeatures;
-
+    createInfo.pNext = &vulkan12Features;
+    createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-    createInfo.pEnabledFeatures = &deviceFeatures;
-
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 

@@ -113,9 +113,9 @@ private:
 
     bool framebufferResized = false;
     bool wireframeEnabled = false;
-    std::atomic<bool> isCameraUpdated{ false };
-
-  
+    std::atomic<bool> isCameraUpdated { 
+        false 
+    };
 
     void initWindow() {
         glfwInit();

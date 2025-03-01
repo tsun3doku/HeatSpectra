@@ -43,6 +43,19 @@ public:
         return depthViews; 
     }
 
+    const std::vector<VkImageView>& getAlbedoResolveViews() const {
+        return albedoResolveViews;
+    }
+    const std::vector<VkImageView>& getNormalResolveViews() const {
+        return normalResolveViews;
+    }
+    const std::vector<VkImageView>& getPositionResolveViews() const {
+        return positionResolveViews;
+    }
+    const std::vector<VkImageView>& getDepthResolveViews() const {
+        return depthResolveViews;
+    }
+
 private:
     VulkanDevice& vulkanDevice;
     VkRenderPass renderPass;
@@ -51,4 +64,8 @@ private:
     std::vector<VkDeviceMemory> albedoMemories, normalMemories, positionMemories, depthMemories;
     std::vector<VkImageView> albedoViews, normalViews, positionViews, depthViews;
     VkImageCreateInfo albedoImageInfo, normalImageInfo, positionImageInfo, depthImageInfo;
+
+    std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews;
+    std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages;
+    std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories;
 };  

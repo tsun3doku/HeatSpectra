@@ -73,12 +73,16 @@ void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRende
     for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
         for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
 
-            std::array<VkImageView, 5> attachments = {
-                deferredRenderer.getAlbedoViews()[frameIndex],
-                deferredRenderer.getNormalViews()[frameIndex],
-                deferredRenderer.getPositionViews()[frameIndex],
-                deferredRenderer.getDepthViews()[frameIndex],
-                swapChainImageViews[swapchainIndex],
+            std::array<VkImageView, 9> attachments = {
+            deferredRenderer.getAlbedoViews()[frameIndex],    // Multisampled
+            deferredRenderer.getNormalViews()[frameIndex],    // Multisampled
+            deferredRenderer.getPositionViews()[frameIndex],  // Multisampled
+            deferredRenderer.getDepthViews()[frameIndex],     // Multisampled
+            deferredRenderer.getAlbedoResolveViews()[frameIndex],   // Resolve
+            deferredRenderer.getNormalResolveViews()[frameIndex],   // Resolve
+            deferredRenderer.getPositionResolveViews()[frameIndex], // Resolve
+            deferredRenderer.getDepthResolveViews()[frameIndex],    // Resolve
+            swapChainImageViews[swapchainIndex]                     // Swapchain
                 
             };
 
@@ -103,20 +107,16 @@ void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRen
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // Update G-buffer descriptors (for input attachments)
         VkDescriptorImageInfo albedoImageInfo{};
-        albedoImageInfo.imageView = deferredRenderer.getAlbedoViews()[i]; // Updated albedo image view
+        albedoImageInfo.imageView = deferredRenderer.getAlbedoResolveViews()[i];
         albedoImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo normalImageInfo{};
-        normalImageInfo.imageView = deferredRenderer.getNormalViews()[i]; // Updated normal image view
+        normalImageInfo.imageView = deferredRenderer.getNormalResolveViews()[i];
         normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo positionImageInfo{};
-        positionImageInfo.imageView = deferredRenderer.getPositionViews()[i]; // Updated position image view
+        positionImageInfo.imageView = deferredRenderer.getPositionResolveViews()[i];
         positionImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkDescriptorImageInfo depthImageInfo{};
-        depthImageInfo.imageView = deferredRenderer.getDepthViews()[i]; // Updated depth image view
-        depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
@@ -293,15 +293,15 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Def
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // G-buffer descriptors (for input attachments)
         VkDescriptorImageInfo albedoImageInfo{};
-        albedoImageInfo.imageView = deferredRenderer.getAlbedoViews()[i]; // Gbuffer albedo image view
+        albedoImageInfo.imageView = deferredRenderer.getAlbedoResolveViews()[i];     // Albedo resolve view
         albedoImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo normalImageInfo{};
-        normalImageInfo.imageView = deferredRenderer.getNormalViews()[i]; // Gbuffer normal image view
+        normalImageInfo.imageView = deferredRenderer.getNormalResolveViews()[i];     // Normal resolve view
         normalImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkDescriptorImageInfo positionImageInfo{};
-        positionImageInfo.imageView = deferredRenderer.getPositionViews()[i]; // Gbuffer position image view
+        positionImageInfo.imageView = deferredRenderer.getPositionResolveViews()[i]; // Position resolve view
         positionImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         //VkDescriptorImageInfo depthImageInfo{};
@@ -375,8 +375,8 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Def
 }
 
 void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
-    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv"); //change
-    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv"); //change
+    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv"); 
+    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv"); 
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
@@ -437,8 +437,9 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.sampleShadingEnable = VK_TRUE;
+    multisampling.minSampleShading = 1.0f;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT; // Match renderpass
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -574,15 +575,15 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; 
    
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthTestEnable = VK_FALSE;
     depthStencil.depthWriteEnable = VK_FALSE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_TRUE;
+    depthStencil.stencilTestEnable = VK_FALSE;
 
     VkStencilOpState stencilOp{};
     stencilOp.passOp = VK_STENCIL_OP_KEEP;      // Keep stencil value on pass
@@ -711,7 +712,7 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT; // Match renderpass
     multisampling.minSampleShading = 1.0f;
     multisampling.pSampleMask = nullptr;
     multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -877,17 +878,30 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = extent;
 
-    std::array<VkClearValue, 5> clearValues{};
-    clearValues[0].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Clear Albedo 
-    clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Clear Normal 
-    clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Clear Position
-    clearValues[3].depthStencil = { 1.0, 0 };               // Clear Depth
-    clearValues[4].color = { {clearColorValues[0],clearColorValues[1], clearColorValues[2], 1.0f } };  // Clear Swapchain
+    VkSubpassBeginInfo subpassBeginInfo{};
+    subpassBeginInfo.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
+    subpassBeginInfo.contents = VK_SUBPASS_CONTENTS_INLINE;
+
+    VkSubpassBeginInfo nextSubpassBeginInfo{};
+    nextSubpassBeginInfo.sType = VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO;
+    VkSubpassEndInfo nextSubpassEndInfo{};
+    nextSubpassEndInfo.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO;
+
+    std::array<VkClearValue, 9> clearValues{};
+    clearValues[0].color = { {clearColorValues[0], clearColorValues[1], clearColorValues[2], 1.0f } };  // Albedo 
+    clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Normal 
+    clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position 
+    clearValues[3].depthStencil = { 1.0f, 0 };              // Depth 
+    clearValues[4].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Albedo Resolve
+    clearValues[5].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Normal Resolve
+    clearValues[6].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position Resolve
+    clearValues[7].color = { 1.0f, 0 };                     // Depth Resolve
+    clearValues[8].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };  // Swapchain
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass2(commandBuffer, &renderPassInfo, &subpassBeginInfo);
 
     // Geometry subpass
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
@@ -937,14 +951,14 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
     }
     // Transition to lighting subpass
-    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightingPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightingPipelineLayout, 0, 1, &lightingDescriptorSets[currentFrame], 0, nullptr);
     // Draw fullscreen triangle
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     // Draw grid
-    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipeline());
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipelineLayout(), 0, 1, &resourceManager.getGrid().getGridDescriptorSets()[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, resourceManager.getGrid().vertexCount, 1, 0, 0);

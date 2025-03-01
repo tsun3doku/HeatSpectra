@@ -11,7 +11,7 @@ vec4 grid(vec3 fragPos3D, float scale, bool drawAxis) {
     vec2 coord = fragPos3D.xz * scale;
     vec2 derivative = fwidth(coord);
     vec2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
-    float line = min(grid.x, grid.y) * 1.5; //line scale
+    float line = min(grid.x, grid.y) * 2.0; //line scale
     
     float minimumZ = min(derivative.y, 1.0);
     float minimumX = min(derivative.x, 1.0);
@@ -31,7 +31,7 @@ vec4 grid(vec3 fragPos3D, float scale, bool drawAxis) {
 
     float gradientOpacity = smoothstep(maxRadius, maxRadius - fallOff, distanceFromCenter);
 
-    vec4 color = vec4(0.025, 0.025, 0.025, (1.0 - min(line, 1.0)) * gradientOpacity);
+    vec4 color = vec4(0.025, 0.025, 0.025, smoothstep(0.0, 1.5, (1.0 - min(line, 1.0))) * gradientOpacity);
 
     if (greaterLineX < greaterLineMargin) {
         color = vec4(0.2, 0.2, 0.2, (1.0 - min(line,0.6)) * gradientOpacity); 
@@ -61,7 +61,7 @@ void main() {
     vec3 fragPos3D = nearPoint + t * (farPoint - nearPoint);
     vec3 viewDirection = normalize(fragPos3D - cameraPos);
 
-   vec3 camForward = normalize(-cameraPos);
+    vec3 camForward = normalize(-cameraPos);
     float angle = acos(clamp(dot(camForward, vec3(0.0, -1.0, 0.0)), -1.0, 1.0));
     float fadeFactor = 1 - smoothstep(1.2, 1.57, abs(angle));
 

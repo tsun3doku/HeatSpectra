@@ -22,7 +22,7 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 fragTexCoord;      
                  
 void main() {
-    vec3 worldPos = vec3(ubo.model * inSurfacePos.xyz);
+    vec3 worldPos = vec3(ubo.model * vec4(inSurfacePos.xyz, 1.0));
     fragColor = inSurfaceColor.xyz;          
     fragNormal = inNormal;        
     fragTexCoord = inTexCoord;    

@@ -1,9 +1,37 @@
-﻿  ResourceManager.cpp
+﻿  CommandBufferManager.cpp
+  DeferredRenderer.cpp
+  GBuffer.cpp
   GLM_GTX_hash requires C++11 standard library support
+  Grid.cpp
+  HDR.cpp
+  HeatSource.cpp
+  GLM_GTX_hash requires C++11 standard library support
+  HeatSystem.cpp
+  GLM_GTX_hash requires C++11 standard library support
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(150,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(166,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(178,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(225,20): warning C4101: 'error_code': unreferenced local variable
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(662,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(699,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(853,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(959,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(978,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+  Main.cpp
+  GLM_GTX_hash requires C++11 standard library support
+  MemoryAllocator.cpp
+  Model.cpp
+  GLM_GTX_hash requires C++11 standard library support
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.cpp(296,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+  ResourceManager.cpp
+  GLM_GTX_hash requires C++11 standard library support
+  UniformBufferManager.cpp
+  VulkanDevice.cpp
+  VulkanImage.cpp
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  3 of 5438 functions (<0.1%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    62 functions had inline decision re-evaluated but remain unchanged
+  54 of 5454 functions ( 1.0%) were compiled, the rest were copied from previous compilation.
+    12 functions were new in current compilation
+    132 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
