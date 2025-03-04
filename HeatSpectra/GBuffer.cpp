@@ -33,9 +33,14 @@ GBuffer::GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, D
     createLightingDescriptorSetLayout(vulkanDevice);
     createLightingDescriptorSets(vulkanDevice, deferredRenderer, uniformBufferManager, maxFramesInFlight);
 
+    createBlendDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createBlendDescriptorSetLayout(vulkanDevice);
+    createBlendDescriptorSets(vulkanDevice, deferredRenderer, maxFramesInFlight);
+
     createGeometryPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
     createLightingPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
     createWireframePipeline(vulkanDevice, deferredRenderer, swapchainExtent);
+    createBlendPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
 
     createCommandBuffers(vulkanDevice, maxFramesInFlight);
 }
@@ -73,17 +78,18 @@ void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRende
     for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
         for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
 
-            std::array<VkImageView, 9> attachments = {
-            deferredRenderer.getAlbedoViews()[frameIndex],    // Multisampled
-            deferredRenderer.getNormalViews()[frameIndex],    // Multisampled
-            deferredRenderer.getPositionViews()[frameIndex],  // Multisampled
-            deferredRenderer.getDepthViews()[frameIndex],     // Multisampled
-            deferredRenderer.getAlbedoResolveViews()[frameIndex],   // Resolve
-            deferredRenderer.getNormalResolveViews()[frameIndex],   // Resolve
-            deferredRenderer.getPositionResolveViews()[frameIndex], // Resolve
-            deferredRenderer.getDepthResolveViews()[frameIndex],    // Resolve
-            swapChainImageViews[swapchainIndex]                     // Swapchain
-                
+            std::array<VkImageView, 11> attachments = {
+            deferredRenderer.getAlbedoViews()[frameIndex],         // Albedo 
+            deferredRenderer.getNormalViews()[frameIndex],         // Normal 
+            deferredRenderer.getPositionViews()[frameIndex],       // Position 
+            deferredRenderer.getDepthViews()[frameIndex],          // Depth 
+            deferredRenderer.getAlbedoResolveViews()[frameIndex],  // Albedo Resolve
+            deferredRenderer.getNormalResolveViews()[frameIndex],  // Normal Resolve
+            deferredRenderer.getPositionResolveViews()[frameIndex],// Position Resolve
+            deferredRenderer.getDepthResolveViews()[frameIndex],   // Depth Resolve
+            swapChainImageViews[swapchainIndex],                   // Swapchain
+            deferredRenderer.getGridViews()[frameIndex],           // Grid 
+            deferredRenderer.getGridResolveViews()[frameIndex]     // Grid Resolve
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -153,6 +159,22 @@ void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRen
         //descriptorWrites[3].pImageInfo = &depthImageInfo;
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        VkDescriptorImageInfo gridResolveImageInfo{};
+        gridResolveImageInfo.imageView = deferredRenderer.getGridResolveViews()[i];
+        gridResolveImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet blendWrite{};
+        blendWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        blendWrite.dstSet = blendDescriptorSets[i];
+        blendWrite.dstBinding = 0;
+        blendWrite.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        blendWrite.descriptorCount = 1;
+        blendWrite.pImageInfo = &gridResolveImageInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 1, &blendWrite, 0, nullptr);
     }
 }
 
@@ -371,6 +393,71 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Def
         descriptorWrites[4].pBufferInfo = &lightBufferInfo;
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void GBuffer::createBlendDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    poolSize.descriptorCount = maxFramesInFlight * 1;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = maxFramesInFlight;
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &blendDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create blend descriptor pool");
+    }
+}
+
+void GBuffer::createBlendDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &binding;
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &blendDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create blend descriptor set layout");
+    }
+}
+
+void GBuffer::createBlendDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight) {
+    std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, blendDescriptorSetLayout);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = blendDescriptorPool;
+    allocInfo.descriptorSetCount = maxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+
+    blendDescriptorSets.resize(maxFramesInFlight);
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, blendDescriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate blend descriptor sets");
+    }
+
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = deferredRenderer.getGridResolveViews()[i];
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = blendDescriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 1, &descriptorWrite, 0, nullptr);
     }
 }
 
@@ -750,11 +837,11 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     colorBlendAttachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     colorBlendAttachments[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 
-    // Attachment 1 (Normal): Don't write color
+    // Dont write color to normal attachment
     colorBlendAttachments[1].colorWriteMask = 0;
     colorBlendAttachments[1].blendEnable = VK_FALSE;
 
-    // Attachment 2 (Position): Don't write color
+    // Dont write color to position attachment
     colorBlendAttachments[2].colorWriteMask = 0;
     colorBlendAttachments[2].blendEnable = VK_FALSE;
 
@@ -775,11 +862,10 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Pipeline layout should use geometry's descriptor layout
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout; // Use geometry's descriptors
+    pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout; 
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &wireframePipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create wireframe pipeline layout");
@@ -803,6 +889,123 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframePipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create wireframe pipeline");
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), vertModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
+}
+
+void GBuffer::createBlendPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
+    auto vertCode = readFile("shaders/blend_vert.spv");
+    auto fragCode = readFile("shaders/blend_frag.spv");
+
+    VkShaderModule vertModule = createShaderModule(vulkanDevice, vertCode);
+    VkShaderModule fragModule = createShaderModule(vulkanDevice, fragCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &blendDescriptorSetLayout;
+
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &blendPipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create blend pipeline layout");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = blendPipelineLayout;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
+    pipelineInfo.subpass = 3;
+
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &blendPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create blend pipeline");
     }
 
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertModule, nullptr);
@@ -887,7 +1090,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     VkSubpassEndInfo nextSubpassEndInfo{};
     nextSubpassEndInfo.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO;
 
-    std::array<VkClearValue, 9> clearValues{};
+    std::array<VkClearValue, 11> clearValues{};
     clearValues[0].color = { {clearColorValues[0], clearColorValues[1], clearColorValues[2], 1.0f } };  // Albedo 
     clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Normal 
     clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position 
@@ -897,6 +1100,8 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     clearValues[6].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position Resolve
     clearValues[7].color = { 1.0f, 0 };                     // Depth Resolve
     clearValues[8].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };  // Swapchain
+    clearValues[9].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Grid
+    clearValues[10].color = { { 0.0f, 0.0f, 0.0f, 0.0f } }; // Grid Resolve
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
@@ -957,11 +1162,19 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     // Draw fullscreen triangle
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-    // Draw grid
+    // Transition to grid subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipeline());
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipelineLayout(), 0, 1, &resourceManager.getGrid().getGridDescriptorSets()[currentFrame], 0, nullptr);
+    // Draw grid
     vkCmdDraw(commandBuffer, resourceManager.getGrid().vertexCount, 1, 0, 0);
+
+    // Transition to blend subpass
+    vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blendPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blendPipelineLayout, 0, 1, &blendDescriptorSets[currentFrame], 0, nullptr);
+    // Draw swapchain blend
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 

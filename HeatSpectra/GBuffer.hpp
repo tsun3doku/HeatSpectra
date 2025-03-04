@@ -29,9 +29,14 @@ public:
     void createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice);
     void createLightingDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
 
+    void createBlendDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createBlendDescriptorSetLayout(const VulkanDevice& vulkanDevice);
+    void createBlendDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight);
+
     void createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
     void createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent);
     void createWireframePipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
+    void createBlendPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
@@ -84,6 +89,10 @@ private:
     VkDescriptorSetLayout lightingDescriptorSetLayout;
     std::vector<VkDescriptorSet> lightingDescriptorSets;
 
+    VkDescriptorPool blendDescriptorPool;
+    VkDescriptorSetLayout blendDescriptorSetLayout;
+    std::vector<VkDescriptorSet> blendDescriptorSets;
+
     VkPipelineLayout geometryPipelineLayout;
     VkPipeline geometryPipeline;
 
@@ -92,5 +101,8 @@ private:
 
     VkPipeline wireframePipeline;
     VkPipelineLayout wireframePipelineLayout;
+
+    VkPipeline blendPipeline;
+    VkPipelineLayout blendPipelineLayout;
 
 };

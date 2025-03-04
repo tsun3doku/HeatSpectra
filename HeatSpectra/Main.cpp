@@ -327,7 +327,7 @@ private:
 
         heatSystem->recreateResources(vulkanDevice, MAXFRAMESINFLIGHT);
 
-        deferredRenderer->createImageViews(vulkanDevice, swapChainExtent, MAXFRAMESINFLIGHT);
+        deferredRenderer->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
         gbuffer->updateDescriptorSets(vulkanDevice, *deferredRenderer, MAXFRAMESINFLIGHT);
         gbuffer->createFramebuffers(vulkanDevice, *deferredRenderer, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 

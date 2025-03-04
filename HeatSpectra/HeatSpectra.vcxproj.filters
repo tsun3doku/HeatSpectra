@@ -110,6 +110,12 @@
     <None Include="shaders\wireframe.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\blend.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\blend.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_utils.h">
