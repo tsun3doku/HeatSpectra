@@ -267,7 +267,7 @@ private:
             // Call defragment() every 1000 frames
             frameCount++;
             if (frameCount % 1000 == 0) {
-                memoryAllocator->defragment(); // Call defragment on the memory allocator
+                memoryAllocator->defragment();
             }
         }
 
@@ -280,14 +280,10 @@ private:
         gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
         deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
         
-        for (auto imageView : swapChainImageViews) {
-            std::cout << "Destroyed swapchain: " << imageView << std::endl;
-            vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
-        }
+        gbuffer->freeCommandBuffers(vulkanDevice);
 
-        if (gbuffer->getCommandBuffers().size() != MAXFRAMESINFLIGHT) {
-            gbuffer->freeCommandBuffers(vulkanDevice);
-            gbuffer->createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
         }
         swapChainImageViews.clear();
         swapChainImages.clear();
@@ -321,6 +317,7 @@ private:
 
         cleanupSwapChain();
         heatSystem->cleanupResources(vulkanDevice);
+        gbuffer->createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
 
         createSwapChain();
         createImageViews();
@@ -337,10 +334,11 @@ private:
     }
 
     void cleanupRenderResources() {
+        deferredRenderer->cleanup(vulkanDevice);
+        gbuffer->cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
         uniformBufferManager->cleanup(MAXFRAMESINFLIGHT);
         heatSystem->cleanupResources(vulkanDevice);
         heatSystem->cleanup(vulkanDevice);
-        gbuffer->cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
     }
 
     void cleanupTextures() {
@@ -348,15 +346,14 @@ private:
     }
 
     void cleanupScene() {
-        resourceManager->getSimModel().cleanup();
-        resourceManager->getVisModel().cleanup();
-        resourceManager->getHeatModel().cleanup();
+        resourceManager->cleanup();     
     }
 
     void cleanupSyncObjects() {
         for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
+            vkDestroySemaphore(vulkanDevice.getDevice(), computeFinishedSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
         }
     }
@@ -376,6 +373,7 @@ private:
         cleanupTextures();
         cleanupScene();
         cleanupSyncObjects();
+        memoryAllocator.reset();
         cleanupCore();
 
         glfwDestroyWindow(window);
@@ -732,8 +730,7 @@ private:
             }
         }
 
-        return true;
-        
+        return true;      
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
@@ -743,7 +740,6 @@ private:
 
         return VK_FALSE;
     }
-
 };
 
 int main() {

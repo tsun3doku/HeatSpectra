@@ -231,7 +231,7 @@ void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass ren
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-void Grid::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) const {
+void Grid::cleanup(VulkanDevice& vulkanDevice) const {
     vkDestroyPipeline(vulkanDevice.getDevice(), gridPipeline, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), gridPipelineLayout, nullptr);
 

@@ -1162,23 +1162,14 @@ void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
 
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
+
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
 
-    heatSource->cleanup(vulkanDevice);
+    heatSource->cleanupResources(vulkanDevice);
 }
 
 void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
-    if (mappedTetraData) {
-        vkUnmapMemory(vulkanDevice.getDevice(), tetraBufferMemory);
-        mappedTetraData = nullptr;
-    }
-
-    if (mappedTimeData) {
-        vkUnmapMemory(vulkanDevice.getDevice(), timeBufferMemory);
-        mappedTimeData = nullptr;
-    }
-
     for (size_t i = 0; i < tetraFrameBuffers.readBuffers.size(); i++) {
         if (tetraFrameBuffers.readBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.readBufferOffsets_[i]);
@@ -1191,5 +1182,5 @@ void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
     memoryAllocator.free(timeBuffer, timeBufferOffset_);
     memoryAllocator.free(centerBuffer, centerBufferOffset_);
     memoryAllocator.free(neighborBuffer, neighborBufferOffset_);
-
+    heatSource->cleanup(vulkanDevice);
 }

@@ -43,15 +43,22 @@ MemoryPool::MemoryPool(VulkanDevice& vulkanDevice, VkDeviceSize poolSize, VkBuff
 }
 
 MemoryPool::~MemoryPool() {
-    if (mappedPtr) {
-        vkUnmapMemory(vulkanDevice.getDevice(), memory);
+    if (buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(vulkanDevice.getDevice(), buffer, nullptr);
+        buffer = VK_NULL_HANDLE;
     }
-    if (buffer) vkDestroyBuffer(vulkanDevice.getDevice(), buffer, nullptr);
-    if (memory) vkFreeMemory(vulkanDevice.getDevice(), memory, nullptr);
+
+    if (memory != VK_NULL_HANDLE) {
+        vkFreeMemory(vulkanDevice.getDevice(), memory, nullptr);
+        memory = VK_NULL_HANDLE;
+    }
 }
 
 MemoryAllocator::~MemoryAllocator() {
-    // Pools will self-destroy through their destructors
+    for (auto& pair : pools) {
+        pair.second.clear();
+    }
+    pools.clear();
 }
 
 std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps, VkDeviceSize alignment) {

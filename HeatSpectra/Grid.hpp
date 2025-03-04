@@ -9,7 +9,7 @@ public:
     Grid(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass);
     ~Grid();
 
-    void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) const;
+    void cleanup(VulkanDevice& vulkanDevice) const;
 
     void createGridDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice);

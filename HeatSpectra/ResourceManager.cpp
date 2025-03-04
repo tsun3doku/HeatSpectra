@@ -39,3 +39,9 @@ void ResourceManager::initialize() {
     heatModel->subdivide();
     heatModel->recreateBuffers();
 }
+
+void ResourceManager::cleanup() {
+    simModel->cleanup();
+    visModel->cleanup();
+    heatModel->cleanup();
+}

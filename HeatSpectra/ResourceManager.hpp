@@ -21,7 +21,8 @@ public:
 	ResourceManager(ResourceManager&&) noexcept;
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
-		void initialize();
+	void initialize();
+	void cleanup();
 
 	// Getters
 	Grid& getGrid() {

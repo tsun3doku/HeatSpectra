@@ -1186,30 +1186,32 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
 void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     for (uint32_t i = 0; i < framebuffers.size(); ++i) {
-        if (framebuffers[i] != VK_NULL_HANDLE) { // Check if the framebuffer handle is valid
+        if (framebuffers[i] != VK_NULL_HANDLE) { 
             vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffers[i], nullptr);
-            framebuffers[i] = VK_NULL_HANDLE; // Set the handle to VK_NULL_HANDLE to prevent double destroy
+            framebuffers[i] = VK_NULL_HANDLE; 
         }
     }
     framebuffers.clear();
 }
 
 void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    resourceManager.getGrid().cleanup(vulkanDevice);
+
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), wireframePipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), blendPipeline, nullptr);
+
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), lightingPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), wireframePipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), blendPipelineLayout, nullptr);
 
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), geometryDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), lightingDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), geometryDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), blendDescriptorSetLayout, nullptr);
+
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
-
-    resourceManager.getGrid().cleanup(vulkanDevice, maxFramesInFlight);
-  
-
-    for (VkFramebuffer framebuffer : framebuffers) {
-        vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffer, nullptr);
-    }
-   
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), blendDescriptorPool, nullptr);
 }
