@@ -13,7 +13,6 @@ public:
     ~HeatSystem();
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void swapBuffers(ResourceManager& resourceManager);
 
     void generateTetrahedralMesh(ResourceManager& resourceManager);
     void initializeSurfaceBuffer(ResourceManager& resourceManager);
@@ -47,17 +46,17 @@ public:
     void cleanup(VulkanDevice& vulkanDevice);
 
     // Getters
-    VkPipeline getHeatPipeline() const { 
-        return tetraPipeline; 
+    VkPipeline getHeatPipeline() const {
+        return tetraPipeline;
     }
-    VkPipelineLayout getHeatPipelineLayout() const { 
-        return tetraPipelineLayout; 
+    VkPipelineLayout getHeatPipelineLayout() const {
+        return tetraPipelineLayout;
     }
     const std::vector<VkDescriptorSet>& getHeatDescriptorSets() const {
         return tetraDescriptorSets;
     }
-    HeatSource& getHeatSource() { 
-        return *heatSource; 
+    HeatSource& getHeatSource() {
+        return *heatSource;
     }
 
     const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const {

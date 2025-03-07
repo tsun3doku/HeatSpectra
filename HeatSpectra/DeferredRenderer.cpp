@@ -10,9 +10,9 @@
 #include "DeferredRenderer.hpp"
 
 DeferredRenderer::DeferredRenderer(VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat, VkExtent2D swapchainExtent, uint32_t maxFramesInFlight)
-	: vulkanDevice(vulkanDevice) {
-	createRenderPass(vulkanDevice, swapchainImageFormat);
-	createImageViews(vulkanDevice, swapchainImageFormat, swapchainExtent, maxFramesInFlight);
+    : vulkanDevice(vulkanDevice) {
+    createRenderPass(vulkanDevice, swapchainImageFormat);
+    createImageViews(vulkanDevice, swapchainImageFormat, swapchainExtent, maxFramesInFlight);
 }
 
 DeferredRenderer::~DeferredRenderer() {
@@ -160,7 +160,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Geometry Subpass with depth resolve chain
     VkSubpassDescription2 geometrySubpass = {};
     geometrySubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
-    geometrySubpass.pNext = &depthResolve; 
+    geometrySubpass.pNext = &depthResolve;
     geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     geometrySubpass.colorAttachmentCount = 3;
     geometrySubpass.pColorAttachments = geometryColorRefs;
@@ -418,7 +418,7 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthResolveImages[i], depthResolveMemories[i],
             VK_SAMPLE_COUNT_1_BIT);
-        depthResolveViews[i] = createImageView(vulkanDevice,depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+        depthResolveViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
         // Grid image creation (multisampled)
         createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,

@@ -29,21 +29,21 @@ public:
 		return *grid;
 	}
 
-	Model& getSimModel() { 
-		return *simModel; 
+	Model& getSimModel() {
+		return *simModel;
 	}
-	Model& getVisModel() { 
-		return *visModel; 
+	Model& getVisModel() {
+		return *visModel;
 	}
-	Model& getHeatModel() { 
-		return *heatModel; 
+	Model& getHeatModel() {
+		return *heatModel;
 	}
 
-	HeatSource& getHeatSource() { 
-		return *heatSource; 
+	HeatSource& getHeatSource() {
+		return *heatSource;
 	}
-	HeatSystem& getHeatSystem() { 
-		return *heatSystem; 
+	HeatSystem& getHeatSystem() {
+		return *heatSystem;
 	}
 
 private:

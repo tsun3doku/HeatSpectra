@@ -1,10 +1,15 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 #include <array>
+#include <unordered_map>
+#include <unordered_set>
+#include <glm/gtx/norm.hpp>
+#include <algorithm>
 
 #include "VulkanDevice.hpp"
 #include "MemoryAllocator.hpp"
@@ -266,6 +271,124 @@ void Model::setSubdivisionLevel(int level) {
     subdivisionLevel = level;
 }
 
+void Model::buildEdgeFaceMap() {
+
+    edgeFaceMap.clear();
+
+
+
+    for (size_t idx = 0; idx < indices.size(); idx += 3) {
+
+        if (idx + 2 >= indices.size()) break;
+
+
+
+        for (int e = 0; e < 3; e++) {
+
+            uint32_t v0 = indices[idx + e];
+
+            uint32_t v1 = indices[idx + ((e + 1) % 3)];
+
+            Edge edge(std::min(v0, v1), std::max(v0, v1));
+
+            FaceRef faceRef = { static_cast<uint32_t>(idx), static_cast<uint8_t>(e) };
+
+            edgeFaceMap[edge].push_back(faceRef);
+
+        }
+
+    }
+
+}
+
+void Model::buildVertexAdjacency() {
+    vertexAdjacency.clear();
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        uint32_t v0 = indices[i];
+        uint32_t v1 = indices[i + 1];
+        uint32_t v2 = indices[i + 2];
+
+        vertexAdjacency[v0].insert(v1);
+        vertexAdjacency[v0].insert(v2);
+        vertexAdjacency[v1].insert(v0);
+        vertexAdjacency[v1].insert(v2);
+        vertexAdjacency[v2].insert(v0);
+        vertexAdjacency[v2].insert(v1);
+    }
+}
+
+void Model::equalizeFaceAreas() {
+    std::vector<glm::vec3> centroids(indices.size() / 3);
+
+    // Calculate face centroids
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        centroids[i / 3] = (vertices[indices[i]].pos +
+            vertices[indices[i + 1]].pos +
+            vertices[indices[i + 2]].pos) / 3.0f;
+    }
+
+    // Adjust vertices toward centroids (mild relaxation)
+    const float relaxation = 0.15f; // [0 = no change, 0.5 = full]
+    std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
+    std::vector<int> vertexCounts(vertices.size(), 0);
+
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        glm::vec3 centroid = centroids[i / 3];
+        for (int j = 0; j < 3; j++) {
+            uint32_t idx = indices[i + j];
+            newPositions[idx] += centroid;
+            vertexCounts[idx]++;
+        }
+    }
+
+    for (size_t i = 0; i < vertices.size(); i++) {
+        if (vertexCounts[i] > 0) {
+            vertices[i].pos = glm::mix(vertices[i].pos,
+                newPositions[i] / float(vertexCounts[i]),
+                relaxation);
+        }
+    }
+}
+
+void Model::weldVertices(float epsilon) {
+    std::vector<Vertex> newVertices;
+    std::unordered_map<glm::vec3, uint32_t, Vec3Hash> posMap;
+    std::vector<uint32_t> oldToNew(vertices.size()); 
+
+    auto quantize = [epsilon](float val) {
+        return std::round(val / epsilon) * epsilon;
+        };
+
+    // Create new vertices and build index map
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        const auto& v = vertices[i];
+        glm::vec3 qpos = {
+            quantize(v.pos.x),
+            quantize(v.pos.y),
+            quantize(v.pos.z)
+        };
+
+        if (auto it = posMap.find(qpos); it != posMap.end()) {
+            oldToNew[i] = it->second;
+        }
+        else {
+            uint32_t newIndex = static_cast<uint32_t>(newVertices.size());
+            posMap[qpos] = newIndex;
+            oldToNew[i] = newIndex;
+            newVertices.push_back(v);
+        }
+    }
+
+    std::vector<uint32_t> newIndices;
+    newIndices.reserve(indices.size());
+    for (auto oldIndex : indices) {
+        newIndices.push_back(oldToNew[oldIndex]);
+    }
+
+    vertices = std::move(newVertices);
+    indices = std::move(newIndices);
+}
+
 void Model::subdivide() {
     for (int i = 0; i < subdivisionLevel; i++) {
         std::vector<Vertex> newVertices = vertices;
@@ -314,7 +437,7 @@ void Model::subdivide() {
             uint32_t b = safeGetMidpoint(v1, v2);
             uint32_t c = safeGetMidpoint(v2, v0);
             //std::cout << "Subdividing..." << std::endl;
-           
+
             // Only add valid new triangles
             if (a != b && b != c && c != a) {
                 newIndices.insert(newIndices.end(), { v0, a, c });
@@ -326,6 +449,168 @@ void Model::subdivide() {
 
         vertices = newVertices;
         indices = newIndices;
+    }
+}
+
+void Model::voronoiTessellate(int iterations) {
+    for (int currentIter = 0; currentIter < iterations; currentIter++) {
+        std::vector<Vertex> newVertices = vertices;
+        std::vector<uint32_t> newIndices;
+        std::unordered_map<Edge, uint32_t, EdgeHash> edgeMidpoints;
+
+        // First pass: Create edge midpoints
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            const uint32_t v0 = indices[i];
+            const uint32_t v1 = indices[i + 1];
+            const uint32_t v2 = indices[i + 2];
+
+            auto createMidpoint = [&](uint32_t a, uint32_t b) {
+                Edge edge(std::min(a, b), std::max(a, b));
+                if (edgeMidpoints.count(edge)) return edgeMidpoints[edge];
+
+                Vertex mid;
+                mid.pos = (vertices[a].pos + vertices[b].pos) * 0.5f;
+                mid.normal = glm::normalize(vertices[a].normal + vertices[b].normal);
+                mid.texCoord = (vertices[a].texCoord + vertices[b].texCoord) * 0.5f;
+                mid.color = (vertices[a].color + vertices[b].color) * 0.5f;
+
+                const uint32_t midIdx = static_cast<uint32_t>(newVertices.size());
+                newVertices.push_back(mid);
+                edgeMidpoints[edge] = midIdx;
+                return midIdx;
+                };
+
+            createMidpoint(v0, v1);
+            createMidpoint(v1, v2);
+            createMidpoint(v2, v0);
+        }
+
+        // Second pass: Create centroids and triangles
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            const uint32_t v0 = indices[i];
+            const uint32_t v1 = indices[i + 1];
+            const uint32_t v2 = indices[i + 2];
+
+            // Create centroid
+            Vertex centroid;
+            centroid.pos = (vertices[v0].pos + vertices[v1].pos + vertices[v2].pos) / 3.0f;
+            centroid.normal = glm::normalize(vertices[v0].normal + vertices[v1].normal + vertices[v2].normal);
+            centroid.texCoord = (vertices[v0].texCoord + vertices[v1].texCoord + vertices[v2].texCoord) / 3.0f;
+            centroid.color = (vertices[v0].color + vertices[v1].color + vertices[v2].color) / 3.0f;
+            const uint32_t centroidIdx = static_cast<uint32_t>(newVertices.size());
+            newVertices.push_back(centroid);
+
+            // Get midpoints
+            Edge e0(std::min(v0, v1), std::max(v0, v1));
+            Edge e1(std::min(v1, v2), std::max(v1, v2));
+            Edge e2(std::min(v2, v0), std::max(v2, v0));
+            const uint32_t m0 = edgeMidpoints[e0];
+            const uint32_t m1 = edgeMidpoints[e1];
+            const uint32_t m2 = edgeMidpoints[e2];
+
+            // Add 6 new triangles per original triangle
+            newIndices.insert(newIndices.end(), { v0, m0, centroidIdx });
+            newIndices.insert(newIndices.end(), { m0, v1, centroidIdx });
+            newIndices.insert(newIndices.end(), { v1, m1, centroidIdx });
+            newIndices.insert(newIndices.end(), { m1, v2, centroidIdx });
+            newIndices.insert(newIndices.end(), { v2, m2, centroidIdx });
+            newIndices.insert(newIndices.end(), { m2, v0, centroidIdx });
+        }
+
+        vertices = newVertices;
+        indices = newIndices;
+        buildEdgeFaceMap();
+    }
+}
+
+void Model::midpointSubdivide(int iterations, bool preserveShape) {
+    for (int iter = 0; iter < iterations; iter++) {
+        std::unordered_map<Edge, uint32_t, EdgeHash> edgeMap;
+        std::vector<Vertex> newVertices = vertices;
+        std::vector<uint32_t> newIndices;
+
+        // Lambda to get/create edge midpoints
+        auto getMidpoint = [&](uint32_t a, uint32_t b) {
+            Edge edge(std::min(a, b), std::max(a, b));
+            if (edgeMap.count(edge)) return edgeMap[edge];
+
+            Vertex mid;
+            if (preserveShape) {
+                // Pure midpoint without smoothing
+                mid.pos = (vertices[a].pos + vertices[b].pos) * 0.5f;
+                mid.normal = glm::normalize(vertices[a].normal + vertices[b].normal);
+                mid.texCoord = (vertices[a].texCoord + vertices[b].texCoord) * 0.5f;
+            }
+            else {
+                // Optional: Add smoothing for non-FEA use
+                mid.pos = vertices[a].pos * 0.5f + vertices[b].pos * 0.5f;
+                mid.normal = glm::normalize(vertices[a].normal + vertices[b].normal);
+                mid.texCoord = (vertices[a].texCoord + vertices[b].texCoord) * 0.5f;
+            }
+            mid.color = (vertices[a].color + vertices[b].color) * 0.5f;
+
+            edgeMap[edge] = static_cast<uint32_t>(newVertices.size());
+            newVertices.push_back(mid);
+            return edgeMap[edge];
+            };
+
+        // Process each triangle
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            uint32_t v0 = indices[i];
+            uint32_t v1 = indices[i + 1];
+            uint32_t v2 = indices[i + 2];
+
+            uint32_t m0 = getMidpoint(v0, v1);
+            uint32_t m1 = getMidpoint(v1, v2);
+            uint32_t m2 = getMidpoint(v2, v0);
+
+            // Split into 4 sub-triangles
+            newIndices.insert(newIndices.end(), { v0, m0, m2 });
+            newIndices.insert(newIndices.end(), { m0, v1, m1 });
+            newIndices.insert(newIndices.end(), { m2, m0, m1 });
+            newIndices.insert(newIndices.end(), { m2, m1, v2 });
+        }
+
+        vertices = newVertices;
+        indices = newIndices;
+        buildEdgeFaceMap();
+    }
+
+    if (preserveShape) equalizeFaceAreas();
+}
+
+void Model::laplacianSmooth(float factor) {
+    buildVertexAdjacency();
+    std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
+    std::vector<int> neighborCounts(vertices.size(), 0);
+
+    for (const auto& [vIdx, neighbors] : vertexAdjacency) {
+        for (uint32_t n : neighbors) {
+            newPositions[vIdx] += vertices[n].pos;
+            neighborCounts[vIdx]++;
+        }
+    }
+
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        if (neighborCounts[i] > 0) {
+            glm::vec3 avg = newPositions[i] / float(neighborCounts[i]);
+            vertices[i].pos = glm::mix(vertices[i].pos, avg, factor);
+        }
+    }
+}
+
+void Model::uniformSubdivide(int iterations, float smoothingFactor) {
+    for (int iter = 0; iter < iterations; iter++) {
+        midpointSubdivide(1, false);
+        weldVertices(0.0001f); 
+        laplacianSmooth(smoothingFactor);
+        equalizeFaceAreas();
+    }
+
+    weldVertices(0.0001f); 
+    for (int i = 0; i < 2; i++) {
+        equalizeFaceAreas();
+        laplacianSmooth(0.1f);
     }
 }
 

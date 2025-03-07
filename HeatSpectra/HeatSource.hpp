@@ -11,6 +11,8 @@ public:
     HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
     ~HeatSource();
 
+    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
     void initializeSurfaceBuffer(Model& heatModel);
 

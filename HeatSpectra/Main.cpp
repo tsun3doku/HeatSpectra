@@ -1,6 +1,6 @@
 #define GLFW_INCLUDE_VULKAN                       
 #include <GLFW/glfw3.h>                                                   
-                      
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -52,7 +52,7 @@ const bool enableValidationLayers = true;
 
 VkResult static CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
     const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     }
@@ -62,7 +62,7 @@ VkResult static CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugU
 }
 
 void static DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
         func(instance, debugMessenger, pAllocator);
     }
@@ -98,7 +98,7 @@ private:
 
     //HDR hdr;
     std::unique_ptr<DeferredRenderer> deferredRenderer;
-    std::unique_ptr<GBuffer> gbuffer; 
+    std::unique_ptr<GBuffer> gbuffer;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -113,8 +113,8 @@ private:
 
     bool framebufferResized = false;
     bool wireframeEnabled = false;
-    std::atomic<bool> isCameraUpdated { 
-        false 
+    std::atomic<bool> isCameraUpdated{
+        false
     };
 
     void initWindow() {
@@ -126,14 +126,14 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
         glfwSetWindowUserPointer(window, this);
         glfwSetScrollCallback(window, scroll_callback);
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);  
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
         glfwSetKeyCallback(window, key_callback);
 
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;   
+        app->framebufferResized = true;
 
         WIDTH = width;
         HEIGHT = height;
@@ -184,12 +184,12 @@ private:
 
         // Create ResourceManager 
         resourceManager = std::make_unique<ResourceManager>(
-            vulkanDevice, 
+            vulkanDevice,
             *memoryAllocator,
             *uniformBufferManager,
-            renderPass, 
+            renderPass,
             MAXFRAMESINFLIGHT);
-        
+
         resourceManager->initialize();
 
         // Create HeatSystem
@@ -238,7 +238,7 @@ private:
             lastTime = currentTime;
 
             glfwPollEvents();
-            camera.processKeyInput(window, deltaTime); 
+            camera.processKeyInput(window, deltaTime);
             camera.processMouseMovement(window);
             isCameraUpdated.store(true, std::memory_order_release);
         }
@@ -259,7 +259,7 @@ private:
             }
             drawFrame();
 
-            while (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - lastFrameTime).count() < targetFrameTime) {            
+            while (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - lastFrameTime).count() < targetFrameTime) {
             }
 
             lastFrameTime = std::chrono::high_resolution_clock::now();
@@ -274,12 +274,12 @@ private:
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
 
-    void cleanupSwapChain() {    
+    void cleanupSwapChain() {
         vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-        gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);       
-        deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);             
-        
+        gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+        deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);
+
         gbuffer->freeCommandBuffers(vulkanDevice);
 
         for (auto imageView : swapChainImageViews) {
@@ -298,7 +298,7 @@ private:
                 return;
             glfwWaitEvents();
             glfwGetFramebufferSize(window, &width, &height);
-           
+
         }
 
         vkDeviceWaitIdle(vulkanDevice.getDevice());
@@ -329,7 +329,7 @@ private:
         gbuffer->createFramebuffers(vulkanDevice, *deferredRenderer, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
-        
+
         currentFrame = 0;
     }
 
@@ -342,11 +342,11 @@ private:
     }
 
     void cleanupTextures() {
-        
+
     }
 
     void cleanupScene() {
-        resourceManager->cleanup();     
+        resourceManager->cleanup();
     }
 
     void cleanupSyncObjects() {
@@ -548,7 +548,7 @@ private:
             }
         }
     }
-  
+
     void drawFrame() {
         // Wait for previous frame's fence
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -570,7 +570,7 @@ private:
         VkCommandBuffer commandBuffer = gbuffer->getCommandBuffers()[currentFrame];
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
-        
+
         UniformBufferObject ubo{};
         uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, camera, ubo);
         GridUniformBufferObject gridUbo{};
@@ -580,7 +580,7 @@ private:
 
         VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
         vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-        
+
         VkCommandBufferBeginInfo computeBeginInfo{};
         computeBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         computeBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -603,7 +603,7 @@ private:
         std::array<VkPipelineStageFlags, 2> waitStages = {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT }; // For image available semaphore
-        std::array<VkSemaphore, 2> waitSemaphores = {computeFinishedSemaphores[currentFrame],imageAvailableSemaphores[currentFrame]};
+        std::array<VkSemaphore, 2> waitSemaphores = { computeFinishedSemaphores[currentFrame],imageAvailableSemaphores[currentFrame] };
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -704,10 +704,10 @@ private:
         if (enableValidationLayers) {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
-        
+
         return extensions;
     }
-    
+
     bool checkValidationLayerSupport() {
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -730,11 +730,11 @@ private:
             }
         }
 
-        return true;      
+        return true;
     }
 
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
-        VkDebugUtilsMessageTypeFlagsEXT messageType, 
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        VkDebugUtilsMessageTypeFlagsEXT messageType,
         const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
         std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
@@ -744,7 +744,7 @@ private:
 
 int main() {
     App app;
-  
+
     try {
         app.run();
     }

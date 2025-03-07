@@ -37,10 +37,10 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
         // Check if the device supports the requested version
         if (deviceProperties.apiVersion < requestedApiVersion) {
             std::cerr << "Warning: Device does not support the requested Vulkan API version. "
-            << "Supported version: "
-            << VK_API_VERSION_MAJOR(deviceProperties.apiVersion) << "."
-            << VK_API_VERSION_MINOR(deviceProperties.apiVersion) << "."
-            << VK_API_VERSION_PATCH(deviceProperties.apiVersion) << std::endl;
+                << "Supported version: "
+                << VK_API_VERSION_MAJOR(deviceProperties.apiVersion) << "."
+                << VK_API_VERSION_MINOR(deviceProperties.apiVersion) << "."
+                << VK_API_VERSION_PATCH(deviceProperties.apiVersion) << std::endl;
         }
     }
     else {
@@ -72,7 +72,7 @@ void VulkanDevice::cleanup() {
 void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-   
+
     if (deviceCount == 0) {
         throw std::runtime_error("Failed to find GPUs with Vulkan support");
     }
@@ -184,7 +184,7 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     }
 
     this->depthResolveMode = chosenResolveMode;
- 
+
     VkPhysicalDeviceVulkan12Features vulkan12Features{};
     vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vulkan12Features.descriptorIndexing = VK_TRUE;

@@ -1,12 +1,13 @@
 #pragma once
-
+#define GLM_ENABLE_EXPERIMENTAL
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <array>
@@ -122,8 +123,18 @@ public:
     void createIndexBuffer();
     void createSurfaceBuffer();
 
+    void equalizeFaceAreas();
+    void buildEdgeFaceMap();
+    void buildVertexAdjacency();
+    void weldVertices(float epsilon);
+
     void setSubdivisionLevel(int level);
     void subdivide();
+
+    void voronoiTessellate(int iterations);
+    void midpointSubdivide(int iterations, bool preserveShape);
+    void uniformSubdivide(int iterations, float smoothingFactor);
+    void laplacianSmooth(float factor);
 
     void recreateBuffers();
     void cleanup();
@@ -215,4 +226,11 @@ private:
     glm::vec3 modelPosition{};
     glm::mat4 modelMatrix = glm::mat4(1.0f);
     int subdivisionLevel = 0;
+    int iterations = 0;
+    float epsilon = 0.00001f;
+    float smoothingFactor = 0.0;
+    bool preserveShape = false;
+
+    std::unordered_map<Edge, std::vector<FaceRef>, EdgeHash> edgeFaceMap;
+    std::unordered_map<uint32_t, std::unordered_set<uint32_t>> vertexAdjacency;
 }; 

@@ -22,7 +22,7 @@
 GBuffer::GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
     uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), deferredRenderer(deferredRenderer), resourceManager(resourceManager), heatSystem(heatSystem), uniformBufferManager(uniformBufferManager) {
-    
+
     createFramebuffers(vulkanDevice, deferredRenderer, swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
     createGeometryDescriptorPool(vulkanDevice, maxFramesInFlight);
@@ -66,7 +66,7 @@ void GBuffer::freeCommandBuffers(VulkanDevice& vulkanDevice) {
     vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
     gbufferCommandBuffers.clear();
 }
-       
+
 void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
     size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
     framebuffers.resize(totalFramebuffers);
@@ -202,7 +202,7 @@ void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice
     uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboBinding.descriptorCount = 1;
     uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; // Used in vertex and frag shader
-    uboBinding.pImmutableSamplers = nullptr; 
+    uboBinding.pImmutableSamplers = nullptr;
 
     std::array<VkDescriptorSetLayoutBinding, 1> bindings = { uboBinding };
 
@@ -462,8 +462,8 @@ void GBuffer::createBlendDescriptorSets(const VulkanDevice& vulkanDevice, Deferr
 }
 
 void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
-    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv"); 
-    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv"); 
+    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv");
+    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv");
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
@@ -552,9 +552,9 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
 
     VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
     for (int i = 0; i < 3; ++i) {
-        colorBlendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | 
-            VK_COLOR_COMPONENT_G_BIT | 
-            VK_COLOR_COMPONENT_B_BIT | 
+        colorBlendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
             VK_COLOR_COMPONENT_A_BIT;
         colorBlendAttachments[i].blendEnable = VK_FALSE;
     }
@@ -578,7 +578,7 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
     // Create pipeline layout
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1; 
+    layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
     layoutInfo.pushConstantRangeCount = 0;
     layoutInfo.pPushConstantRanges = nullptr;
@@ -614,16 +614,16 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
 void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent) {
     auto vertShaderCode = readFile("shaders/lighting_vert.spv");
     auto fragShaderCode = readFile("shaders/lighting_frag.spv");
-   
+
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
- 
+
     VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
     vertShaderStageInfo.module = vertShaderModule;
     vertShaderStageInfo.pName = "main";
-   
+
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -631,24 +631,24 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     fragShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-    
+
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 0;
     vertexInputInfo.pVertexBindingDescriptions = nullptr;
     vertexInputInfo.vertexAttributeDescriptionCount = 0;
     vertexInputInfo.pVertexAttributeDescriptions = nullptr;
-    
+
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
-   
+
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
-   
+
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable = VK_FALSE;
@@ -658,12 +658,12 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
-  
+
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; 
-   
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_FALSE;
@@ -683,7 +683,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
 
     depthStencil.front = stencilOp;
     depthStencil.back = stencilOp;
-    
+
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
     colorBlendAttachment.colorWriteMask =
         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -695,7 +695,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     colorBlending.logicOp = VK_LOGIC_OP_COPY;
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
-    
+
     std::vector<VkDynamicState> dynamicStates = {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
@@ -705,7 +705,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
-    
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -714,7 +714,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &lightingPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create lighting pipeline layout");
     }
-    
+
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.stageCount = 2;
@@ -734,7 +734,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &lightingPipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create lighting pipeline");
     }
-    
+
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
@@ -768,7 +768,7 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
-    std::vector<VkVertexInputAttributeDescription> positionAttribute = { vertexAttributes[0] }; 
+    std::vector<VkVertexInputAttributeDescription> positionAttribute = { vertexAttributes[0] };
 
     // Set vertex attribute descriptions
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(positionAttribute.size());
@@ -792,7 +792,7 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_NONE; 
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -828,10 +828,10 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
 
     // Color blending should match geometry subpass
     VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
-   
-    colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | 
-        VK_COLOR_COMPONENT_G_BIT | 
-        VK_COLOR_COMPONENT_B_BIT | 
+
+    colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+        VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT |
         VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachments[0].blendEnable = VK_TRUE;
     colorBlendAttachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -848,13 +848,13 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 3; 
+    colorBlending.attachmentCount = 3;
     colorBlending.pAttachments = colorBlendAttachments;
 
     std::vector<VkDynamicState> dynamicStates = {
     VK_DYNAMIC_STATE_VIEWPORT,
     VK_DYNAMIC_STATE_SCISSOR,
-    VK_DYNAMIC_STATE_LINE_WIDTH 
+    VK_DYNAMIC_STATE_LINE_WIDTH
     };
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -865,7 +865,7 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout; 
+    pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &wireframePipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create wireframe pipeline layout");
@@ -1126,18 +1126,18 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Draw visModel 
-    VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer()};
-    VkDeviceSize vertexOffsets[] = { 
-    resourceManager.getVisModel().getVertexBufferOffset(),      
-    resourceManager.getVisModel().getSurfaceVertexBufferOffset() 
+    VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer() };
+    VkDeviceSize vertexOffsets[] = {
+    resourceManager.getVisModel().getVertexBufferOffset(),
+    resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
     vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
-    
+
     // Draw heatModel
-    VkBuffer heatSourceVertexBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(),resourceManager.getHeatModel().getSurfaceVertexBuffer()};
+    VkBuffer heatSourceVertexBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(),resourceManager.getHeatModel().getSurfaceVertexBuffer() };
     VkDeviceSize heatSourceOffsets[] = {
     resourceManager.getHeatModel().getVertexBufferOffset(),
     resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
@@ -1146,7 +1146,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getHeatModel().getIndices().size()), 1, 0, 0, 0);
-    
+
     // Draw wireframe
     if (drawWireframe) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline);
@@ -1186,9 +1186,9 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
 void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     for (uint32_t i = 0; i < framebuffers.size(); ++i) {
-        if (framebuffers[i] != VK_NULL_HANDLE) { 
+        if (framebuffers[i] != VK_NULL_HANDLE) {
             vkDestroyFramebuffer(vulkanDevice.getDevice(), framebuffers[i], nullptr);
-            framebuffers[i] = VK_NULL_HANDLE; 
+            framebuffers[i] = VK_NULL_HANDLE;
         }
     }
     framebuffers.clear();

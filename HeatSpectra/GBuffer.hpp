@@ -10,7 +10,7 @@ class DeferredRenderer;
 class MemoryAllocator;
 class VulkanDevice;
 
-const std::vector<float> clearColorValues = { {0.012f, 0.014f, 0.015f, 1.0f} };
+const std::vector<float> clearColorValues = { {0.013f, 0.0138f, 0.0135f, 1.0f} };
 
 class GBuffer {
 public:
@@ -69,9 +69,9 @@ private:
     DeferredRenderer& deferredRenderer;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
-    
+
     HeatSystem& heatSystem;
-   
+
     uint32_t currentFrame = 0;
 
     VkFormat findDepthFormat(VkPhysicalDevice physicalDevice);

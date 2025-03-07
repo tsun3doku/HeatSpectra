@@ -14,8 +14,8 @@
 #include "ResourceManager.hpp"
 
 
-ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, VkRenderPass renderPass,  uint32_t maxFramesInFlight)
-	: vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager) {
+ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, VkRenderPass renderPass, uint32_t maxFramesInFlight)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager) {
 
     simModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
     visModel = std::make_unique<Model>(vulkanDevice, memoryAllocator);
@@ -30,13 +30,19 @@ void ResourceManager::initialize() {
     simModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
 
     visModel->init(vulkanDevice, memoryAllocator, MODEL_PATH);
-    visModel->setSubdivisionLevel(3);
-    visModel->subdivide();
+    //visModel->setSubdivisionLevel(2);
+    //visModel->subdivide();
+    //visModel->voronoiTessellate(2);
+    //visModel->midpointSubdivide(2, true);
+    visModel->uniformSubdivide(2, 0.25f);
     visModel->recreateBuffers();
 
     heatModel->init(vulkanDevice, memoryAllocator, HEATSOURCE_PATH);
-    heatModel->setSubdivisionLevel(2);
-    heatModel->subdivide();
+    //heatModel->setSubdivisionLevel(2);
+    //heatModel->subdivide();
+    //heatModel->voronoiTessellate(2);
+    //heatModel->midpointSubdivide(2, true);
+    heatModel->uniformSubdivide(2, 0.25f);
     heatModel->recreateBuffers();
 }
 

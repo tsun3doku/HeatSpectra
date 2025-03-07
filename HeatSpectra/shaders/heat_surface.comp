@@ -88,4 +88,3 @@ void main() {
     float normalized = clamp(finalTemp / temperatureScale, 0.0, 1.0);
     surfaceBuffer.vertices[vertexID].color = vec4(temperatureToColor(normalized), 1.0);
 }
-

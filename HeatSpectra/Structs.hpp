@@ -103,3 +103,30 @@ struct HeatSourceVertex {
     float temperature;
     float padding[3];
 };  // 32 bytes
+
+struct FaceRef {
+    uint32_t baseIndex;
+    uint8_t edgeNum;
+};
+
+struct Edge {
+    uint32_t first, second;
+    Edge(uint32_t a, uint32_t b) : first(std::min(a, b)), second(std::max(a, b)) {}
+    bool operator==(const Edge& other) const {
+        return first == other.first && second == other.second;
+    }
+};
+
+struct EdgeHash {
+    size_t operator()(const Edge& e) const {
+        return std::hash<uint32_t>()(e.first) ^ (std::hash<uint32_t>()(e.second) << 1);
+    }
+};
+
+struct Vec3Hash {
+    size_t operator()(const glm::vec3& v) const {
+        return std::hash<float>{}(v.x) ^
+            (std::hash<float>{}(v.y) << 1) ^
+            (std::hash<float>{}(v.z) << 2);
+    }
+};

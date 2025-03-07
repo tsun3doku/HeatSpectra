@@ -10,9 +10,9 @@
 #include "Model.hpp"
 #include "HeatSource.hpp"
 
-HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight) 
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator),heatModel(&heatModel) {
-    
+HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), heatModel(&heatModel) {
+
     createSourceBuffer(vulkanDevice, heatModel);
     initializeSurfaceBuffer(heatModel);
     createHeatSourceDescriptorPool(vulkanDevice, maxFramesInFlight);
@@ -22,6 +22,13 @@ HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
 }
 
 HeatSource::~HeatSource() {
+}
+
+void HeatSource::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+    createHeatSourceDescriptorPool(vulkanDevice, maxFramesInFlight);
+    createHeatSourceDescriptorSetLayout(vulkanDevice);
+    createHeatSourcePipeline(vulkanDevice);
+    createHeatSourceDescriptorSets(vulkanDevice, maxFramesInFlight);
 }
 
 void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel) {
@@ -120,7 +127,7 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
 }
 
 void HeatSource::controller(GLFWwindow* window, float deltaTime) {
-    float moveSpeed = 0.1f * deltaTime; 
+    float moveSpeed = 0.1f * deltaTime;
     glm::vec3 currentPosition = heatModel->getModelPosition();
 
     if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
@@ -265,11 +272,11 @@ void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t c
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, heatSourcePipeline);
 
     vkCmdPushConstants(
-        commandBuffer, 
-        heatSourcePipelineLayout, 
-        VK_SHADER_STAGE_COMPUTE_BIT, 
-        0, 
-        sizeof(HeatSourcePushConstant), 
+        commandBuffer,
+        heatSourcePipelineLayout,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        0,
+        sizeof(HeatSourcePushConstant),
         &heatSourcePushConstant);
 
     vkCmdBindDescriptorSets(
@@ -299,4 +306,3 @@ void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
 void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
     memoryAllocator.free(sourceBuffer, sourceBufferOffset_);
 }
-

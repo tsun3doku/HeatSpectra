@@ -89,18 +89,18 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     for (uint32_t i = 0; i < maxFramesInFlight; ++i) {
         VkBufferCopy copyRegion{};
         copyRegion.size = sizeof(float) * feaMesh.elements.size();
-        
+
         // Read buffer copy
         copyRegion.srcOffset = oldReadOffsets[i];
         copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
-        vkCmdCopyBuffer(copyCmd, oldReadBuffers[i], 
-                        tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
+        vkCmdCopyBuffer(copyCmd, oldReadBuffers[i],
+            tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
 
         // Write buffer copy
         copyRegion.srcOffset = oldWriteOffsets[i];
         copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
-        vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i], 
-                        tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+        vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i],
+            tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
     }
     endSingleTimeCommands(vulkanDevice, copyCmd);
 
@@ -115,6 +115,7 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     createTetraDescriptorSetLayout(vulkanDevice);
     createTetraPipeline(vulkanDevice);
     createSurfacePipeline(vulkanDevice);
+    heatSource->recreateResources(vulkanDevice, maxFramesInFlight);
 
     createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
     createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
@@ -684,10 +685,10 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
     allocInfo.pSetLayouts = layouts.data();
 
     tetraDescriptorSets.resize(maxFramesInFlight);
-    if (tetraDescriptorPool == VK_NULL_HANDLE) {    
+    if (tetraDescriptorPool == VK_NULL_HANDLE) {
         throw std::runtime_error("Invalid descriptor pool");
     }
-    if (tetraDescriptorSetLayout == VK_NULL_HANDLE) {    
+    if (tetraDescriptorSetLayout == VK_NULL_HANDLE) {
         throw std::runtime_error("Invalid descriptor set layout");
     }
     if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, tetraDescriptorSets.data()) != VK_SUCCESS) {
@@ -773,7 +774,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
 }
 
 void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
-    auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv"); 
+    auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv");
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
