@@ -19,6 +19,15 @@
     <Filter Include="Libs">
       <UniqueIdentifier>{be5aec8d-c0bf-4e2a-811f-84a0160c7adf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Libs\isotropicremesher">
+      <UniqueIdentifier>{14e73e59-3d54-4827-9ad1-7879e4b6889b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Libs\isotropicremesher\Header Files">
+      <UniqueIdentifier>{420fdf70-170f-4f6e-b1f4-5747a2716f76}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Libs\isotropicremesher\Source Files">
+      <UniqueIdentifier>{f22e9c95-0b6b-47dc-ac40-6c2424242b5d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -74,6 +83,15 @@
     </ClCompile>
     <ClCompile Include="DeferredRenderer.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\isotropicremesher\src\axisalignedboundingboxtree.cpp">
+      <Filter>Libs\isotropicremesher\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\isotropicremesher\src\isotropichalfedgemesh.cpp">
+      <Filter>Libs\isotropicremesher\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\isotropicremesher\src\isotropicremesher.cpp">
+      <Filter>Libs\isotropicremesher\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -168,6 +186,27 @@
     </ClInclude>
     <ClInclude Include="DeferredRenderer.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\axisalignedboundingbox.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\axisalignedboundingboxtree.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\double.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\isotropichalfedgemesh.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\isotropicremesher.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\vector2.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\isotropicremesher\src\vector3.h">
+      <Filter>Libs\isotropicremesher\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

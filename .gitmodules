@@ -4,3 +4,12 @@
 [submodule "HeatSpectra/libs/tinyply"]
 	path = HeatSpectra/libs/tinyply
 	url = https://github.com/ddiakopoulos/tinyply.git
+[submodule "HeatSpectra/libs/isotropicremesher"]
+	path = HeatSpectra/libs/isotropicremesher
+	url = https://github.com/huxingyi/isotropicremesher
+[submodule "HeatSpectra/libs/stb"]
+	path = HeatSpectra/libs/stb
+	url = https://github.com/nothings/stb
+[submodule "HeatSpectra/libs/tinyobjloader"]
+	path = HeatSpectra/libs/tinyobjloader
+	url = https://github.com/tinyobjloader/tinyobjloader

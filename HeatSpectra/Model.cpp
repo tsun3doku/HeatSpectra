@@ -272,33 +272,22 @@ void Model::setSubdivisionLevel(int level) {
 }
 
 void Model::buildEdgeFaceMap() {
-
     edgeFaceMap.clear();
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        if (i + 2 >= indices.size()) continue; 
 
+        for (int j = 0; j < 3; j++) {
+            uint32_t v0 = indices[i + j];
+            uint32_t v1 = indices[i + (j + 1) % 3];
+            if (v0 >= vertices.size() || v1 >= vertices.size()) continue; 
 
-
-    for (size_t idx = 0; idx < indices.size(); idx += 3) {
-
-        if (idx + 2 >= indices.size()) break;
-
-
-
-        for (int e = 0; e < 3; e++) {
-
-            uint32_t v0 = indices[idx + e];
-
-            uint32_t v1 = indices[idx + ((e + 1) % 3)];
-
-            Edge edge(std::min(v0, v1), std::max(v0, v1));
-
-            FaceRef faceRef = { static_cast<uint32_t>(idx), static_cast<uint8_t>(e) };
-
-            edgeFaceMap[edge].push_back(faceRef);
-
+            Edge e(v0, v1);
+            FaceRef faceRef;
+            faceRef.baseIndex = i;
+            faceRef.edgeNum = j;
+            edgeFaceMap[e].push_back(faceRef);
         }
-
     }
-
 }
 
 void Model::buildVertexAdjacency() {
@@ -389,6 +378,122 @@ void Model::weldVertices(float epsilon) {
     indices = std::move(newIndices);
 }
 
+void Model::recalculateNormals() {
+    // Reset all normals
+    for (auto& vertex : vertices) {
+        vertex.normal = glm::vec3(0.0f);
+    }
+
+    // Edge angle threshold for sharp edges (in radians)
+    float sharpAngleThreshold = 20.0f * (3.14159f / 180.0f);
+
+    // Create a map to track which faces contribute to which vertex normals
+    std::unordered_map<uint32_t, std::vector<glm::vec3>> vertexFaceNormals;
+
+    // Calculate face normals and accumulate
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        uint32_t i0 = indices[i];
+        uint32_t i1 = indices[i + 1];
+        uint32_t i2 = indices[i + 2];
+
+        glm::vec3 v0 = vertices[i0].pos;
+        glm::vec3 v1 = vertices[i1].pos;
+        glm::vec3 v2 = vertices[i2].pos;
+
+        glm::vec3 faceNormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+
+        // Store face normal for each vertex
+        vertexFaceNormals[i0].push_back(faceNormal);
+        vertexFaceNormals[i1].push_back(faceNormal);
+        vertexFaceNormals[i2].push_back(faceNormal);
+    }
+
+    // Process each vertex to determine if it's on a sharp edge
+    for (auto& pair : vertexFaceNormals) {
+        uint32_t vertexIndex = pair.first;
+        std::vector<glm::vec3>& faceNormals = pair.second;
+
+        // Check if this vertex is on a sharp edge by looking at face normal angles
+        bool hasSharpEdge = false;
+        for (size_t i = 0; i < faceNormals.size(); i++) {
+            for (size_t j = i + 1; j < faceNormals.size(); j++) {
+                float angle = glm::acos(glm::clamp(glm::dot(faceNormals[i], faceNormals[j]), -1.0f, 1.0f));
+                if (angle > sharpAngleThreshold) {
+                    hasSharpEdge = true;
+                    break;
+                }
+            }
+            if (hasSharpEdge) break;
+        }
+
+        if (hasSharpEdge) {
+            // For vertices on sharp edges, group similar-facing normals
+            std::vector<glm::vec3> normalGroups;
+            std::vector<int> normalGroupCounts;
+
+            for (const auto& faceNormal : faceNormals) {
+                bool foundGroup = false;
+                for (size_t i = 0; i < normalGroups.size(); i++) {
+                    float angle = glm::acos(glm::clamp(glm::dot(normalGroups[i], faceNormal), -1.0f, 1.0f));
+                    if (angle < sharpAngleThreshold) {
+                        // Add to existing group
+                        normalGroups[i] = (normalGroups[i] * float(normalGroupCounts[i]) + faceNormal) / float(normalGroupCounts[i] + 1);
+                        normalGroupCounts[i]++;
+                        foundGroup = true;
+                        break;
+                    }
+                }
+
+                if (!foundGroup) {
+                    // Create new group
+                    normalGroups.push_back(faceNormal);
+                    normalGroupCounts.push_back(1);
+                }
+            }
+
+            // Find the dominant normal group
+            int maxCount = 0;
+            glm::vec3 dominantNormal(0.0f);
+            for (size_t i = 0; i < normalGroups.size(); i++) {
+                if (normalGroupCounts[i] > maxCount) {
+                    maxCount = normalGroupCounts[i];
+                    dominantNormal = normalGroups[i];
+                }
+            }
+
+            vertices[vertexIndex].normal = glm::normalize(dominantNormal);
+        }
+        else {
+            // For smooth vertices, average all face normals
+            glm::vec3 avgNormal(0.0f);
+            for (const auto& normal : faceNormals) {
+                avgNormal += normal;
+            }
+            vertices[vertexIndex].normal = glm::normalize(avgNormal);
+        }
+    }
+}
+
+void Model::laplacianSmooth(float factor) {
+    buildVertexAdjacency();
+    std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
+    std::vector<int> neighborCounts(vertices.size(), 0);
+
+    for (const auto& [vIdx, neighbors] : vertexAdjacency) {
+        for (uint32_t n : neighbors) {
+            newPositions[vIdx] += vertices[n].pos;
+            neighborCounts[vIdx]++;
+        }
+    }
+
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        if (neighborCounts[i] > 0) {
+            glm::vec3 avg = newPositions[i] / float(neighborCounts[i]);
+            vertices[i].pos = glm::mix(vertices[i].pos, avg, factor);
+        }
+    }
+}
+
 void Model::subdivide() {
     for (int i = 0; i < subdivisionLevel; i++) {
         std::vector<Vertex> newVertices = vertices;
@@ -450,6 +555,7 @@ void Model::subdivide() {
         vertices = newVertices;
         indices = newIndices;
     }
+    recreateBuffers();
 }
 
 void Model::voronoiTessellate(int iterations) {
@@ -521,6 +627,7 @@ void Model::voronoiTessellate(int iterations) {
         indices = newIndices;
         buildEdgeFaceMap();
     }
+    recreateBuffers();
 }
 
 void Model::midpointSubdivide(int iterations, bool preserveShape) {
@@ -579,26 +686,6 @@ void Model::midpointSubdivide(int iterations, bool preserveShape) {
     if (preserveShape) equalizeFaceAreas();
 }
 
-void Model::laplacianSmooth(float factor) {
-    buildVertexAdjacency();
-    std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
-    std::vector<int> neighborCounts(vertices.size(), 0);
-
-    for (const auto& [vIdx, neighbors] : vertexAdjacency) {
-        for (uint32_t n : neighbors) {
-            newPositions[vIdx] += vertices[n].pos;
-            neighborCounts[vIdx]++;
-        }
-    }
-
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        if (neighborCounts[i] > 0) {
-            glm::vec3 avg = newPositions[i] / float(neighborCounts[i]);
-            vertices[i].pos = glm::mix(vertices[i].pos, avg, factor);
-        }
-    }
-}
-
 void Model::uniformSubdivide(int iterations, float smoothingFactor) {
     for (int iter = 0; iter < iterations; iter++) {
         midpointSubdivide(1, false);
@@ -612,6 +699,101 @@ void Model::uniformSubdivide(int iterations, float smoothingFactor) {
         equalizeFaceAreas();
         laplacianSmooth(0.1f);
     }
+    recreateBuffers();
+}
+
+void Model::isotropicRemesh(float targetEdgeLength, int iterations) {
+    // Store original vertices for attribute preservation
+    std::vector<Vertex> originalVertices = vertices;
+
+    // Convert to remesher format
+    std::vector<Vector3> remeshVertices;
+    std::vector<std::vector<size_t>> remeshTriangles;
+
+    for (const auto& vertex : vertices) {
+        remeshVertices.emplace_back(vertex.pos.x, vertex.pos.y, vertex.pos.z);
+    }
+
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        remeshTriangles.push_back({
+            static_cast<size_t>(indices[i]),
+            static_cast<size_t>(indices[i + 1]),
+            static_cast<size_t>(indices[i + 2])
+            });
+    }
+
+    // Create and configure remesher
+    IsotropicRemesher remesher(&remeshVertices, &remeshTriangles);
+    remesher.setTargetEdgeLength(targetEdgeLength);
+
+    // Use a lower angle threshold to better detect sharp edges
+    // Adjust this value to control which edges are considered "sharp"
+    remesher.setSharpEdgeIncludedAngle(30.0);
+
+    // Pre-detection of sharp features
+    auto* halfedgeMesh = remesher.remeshedHalfedgeMesh();
+    halfedgeMesh->updateTriangleNormals();
+    halfedgeMesh->featureEdges(25.0 * (M_PI / 180.0)); // Convert to radians
+    halfedgeMesh->featureBoundaries(); // Mark boundaries as features
+
+    remesher.remesh(iterations);
+
+    IsotropicHalfedgeMesh* result = remesher.remeshedHalfedgeMesh();
+    std::vector<Vertex> newVertices;
+    std::vector<uint32_t> newIndices;
+    std::unordered_map<IsotropicHalfedgeMesh::Vertex*, uint32_t> vertexMap;
+
+    // Process all faces
+    for (auto* face = result->moveToNextFace(nullptr);
+        face != nullptr;
+        face = result->moveToNextFace(face)) {
+
+        auto* he = face->halfedge;
+        for (int i = 0; i < 3; i++) {
+            auto* hv = he->startVertex;
+
+            // Find or create new vertex
+            if (!vertexMap.count(hv)) {
+                Vertex newVertex;
+                newVertex.pos = { hv->position.x(), hv->position.y(), hv->position.z() };
+
+                // Preserve original attributes if possible
+                if (hv->originalIndex < originalVertices.size()) {
+                    newVertex.normal = originalVertices[hv->originalIndex].normal;
+                    newVertex.texCoord = originalVertices[hv->originalIndex].texCoord;
+                    newVertex.color = originalVertices[hv->originalIndex].color;
+                }
+                else {
+                    // For new vertices, interpolate attributes from neighboring vertices
+                    newVertex.normal = glm::vec3(0.0f);
+                    newVertex.texCoord = glm::vec2(0.0f);
+                    newVertex.color = glm::vec3(0.8f, 0.8f, 0.8f); // Default color
+                }
+
+                if (hv->featured) {
+                    newVertex.color = glm::vec3(1.0f, 0.0f, 0.0f); // Highlight feature edges
+                }
+
+                vertexMap[hv] = static_cast<uint32_t>(newVertices.size());
+                newVertices.push_back(newVertex);
+            }
+
+            newIndices.push_back(vertexMap[hv]);
+            he = he->nextHalfedge;
+        }
+    }
+
+    // Update model data
+    vertices = newVertices;
+    indices = newIndices;
+
+    // Recalculate normals while preserving sharp edges
+    recalculateNormals();
+
+    // Optional: less aggressive welding to preserve sharpness
+    weldVertices(0.000001f);
+    laplacianSmooth(.25);
+    recreateBuffers();
 }
 
 void Model::cleanup() {

@@ -34,16 +34,16 @@ void ResourceManager::initialize() {
     //visModel->subdivide();
     //visModel->voronoiTessellate(2);
     //visModel->midpointSubdivide(2, true);
-    visModel->uniformSubdivide(2, 0.25f);
-    visModel->recreateBuffers();
+    //visModel->uniformSubdivide(2, 0.25f);
+    visModel->isotropicRemesh(0.005f, 5);
 
     heatModel->init(vulkanDevice, memoryAllocator, HEATSOURCE_PATH);
     //heatModel->setSubdivisionLevel(2);
     //heatModel->subdivide();
     //heatModel->voronoiTessellate(2);
     //heatModel->midpointSubdivide(2, true);
-    heatModel->uniformSubdivide(2, 0.25f);
-    heatModel->recreateBuffers();
+    //heatModel->uniformSubdivide(2, 0.25f);
+    heatModel->isotropicRemesh(0.005f, 5);
 }
 
 void ResourceManager::cleanup() {

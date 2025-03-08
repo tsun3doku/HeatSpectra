@@ -12,6 +12,8 @@
 #include <vector>
 #include <array>
 
+#include "isotropicremesher.h"
+#include "isotropichalfedgemesh.h"
 #include "File_utils.h" 
 #include "Structs.hpp"
 
@@ -21,8 +23,6 @@ class MemoryAllocator;
 
 const std::string MODEL_PATH = "models/teapot.obj"; 
 const std::string TEXTURE_PATH = "textures/texture.jpg"; 
-
-static int iterations = 2;
 
 struct Vertex {
     glm::vec3 pos;      // Vertex position
@@ -123,10 +123,12 @@ public:
     void createIndexBuffer();
     void createSurfaceBuffer();
 
-    void equalizeFaceAreas();
     void buildEdgeFaceMap();
     void buildVertexAdjacency();
+    void equalizeFaceAreas();
     void weldVertices(float epsilon);
+    void laplacianSmooth(float factor);
+    void recalculateNormals();
 
     void setSubdivisionLevel(int level);
     void subdivide();
@@ -134,7 +136,7 @@ public:
     void voronoiTessellate(int iterations);
     void midpointSubdivide(int iterations, bool preserveShape);
     void uniformSubdivide(int iterations, float smoothingFactor);
-    void laplacianSmooth(float factor);
+    void isotropicRemesh(float targetEdgeLength, int iterations);
 
     void recreateBuffers();
     void cleanup();
@@ -229,6 +231,7 @@ private:
     int iterations = 0;
     float epsilon = 0.00001f;
     float smoothingFactor = 0.0;
+    float modelScale = 0.2f;
     bool preserveShape = false;
 
     std::unordered_map<Edge, std::vector<FaceRef>, EdgeHash> edgeFaceMap;

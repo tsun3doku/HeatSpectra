@@ -119,7 +119,17 @@ struct Edge {
 
 struct EdgeHash {
     size_t operator()(const Edge& e) const {
-        return std::hash<uint32_t>()(e.first) ^ (std::hash<uint32_t>()(e.second) << 1);
+        size_t seed = 0;
+        hash_combine(seed, e.first);
+        hash_combine(seed, e.second);
+        return seed;
+    }
+
+private:
+    template <class T>
+    inline void hash_combine(size_t& seed, const T& v) const {
+        std::hash<T> hasher;
+        seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
 };
 
