@@ -9,7 +9,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 - Visual Studio 2022
 
 ## Quick Start
-Download and run HeatSpectra.exe within the 'x64/Release' folder. Requires Windows 10 and a Vulkan capable GPU.
+Download and run HeatSpectra.exe within the `x64/Release` folder. Requires Windows 10 and a Vulkan capable GPU.
 
 ## Setup
 1. Clone the repository
