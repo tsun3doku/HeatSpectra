@@ -5,15 +5,12 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 ![Heat Transfer Capture](x64/Release/capture.png)
 
 ## Requirements
-- Vulkan SDK
-- GLFW
-- GLM
+- Vulkan SDK 1.3
 - Visual Studio 2022
-- TetGen for mesh generation
 
 ## Setup
 1. Clone the repository
-2. Build shaders using `compile.bat`
+2. Build shaders using `compile.bat` in `shaders` folder
 3. Open solution in Visual Studio 2022
 4. Build and run in Release mode
 
