@@ -57,7 +57,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
 
-    const float timeScale = 1.0f;
+    const float timeScale = 10.0f;
     float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count() * timeScale;
     lastTime = currentTime;
 
@@ -86,7 +86,7 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
 
     // Copy data from old buffers to new for each frame
     VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
-    for (uint32_t i = 0; i < maxFramesInFlight; ++i) {
+    for (uint32_t i = 0; i < maxFramesInFlight; i++) {
         VkBufferCopy copyRegion{};
         copyRegion.size = sizeof(float) * feaMesh.elements.size();
 
@@ -104,7 +104,7 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     }
     endSingleTimeCommands(vulkanDevice, copyCmd);
 
-    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
         memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
         memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
     }
@@ -122,6 +122,21 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
 }
 
+void HeatSystem::processResetRequest() {
+    if (needsReset.exchange(false, std::memory_order_acq_rel)) {
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
+        initializeTetra(vulkanDevice);
+    }
+}
+
+void HeatSystem::setActive(bool active) {
+    isActive = active;
+}
+
+void HeatSystem::requestReset() {
+    needsReset.store(true, std::memory_order_release);
+}
+
 void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
     const auto& vertices = resourceManager.getSimModel().getVertices();
     const auto& indices = resourceManager.getSimModel().getIndices();
@@ -132,7 +147,7 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
     if (indices.empty()) {
         throw std::runtime_error("Indices vector is empty!");
     }
-    for (size_t i = 0; i < indices.size(); ++i) {
+    for (size_t i = 0; i < indices.size(); i++) {
         if (indices[i] >= vertices.size()) {
             std::cerr << "Error: indices[" << i << "] = " << indices[i] << ", but vertices.size() = " << vertices.size() << std::endl;
             throw std::runtime_error("Index out of range!");
@@ -185,7 +200,7 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
         in.pointmarkerlist[i] = 1;
     }
 
-    for (int i = 0; i < in.numberoffacets; ++i) {
+    for (int i = 0; i < in.numberoffacets; i++) {
         int numVertices = 3;
         in.facetmarkerlist[i] = 1;
         tetgenio::facet& f = in.facetlist[i];
@@ -411,6 +426,10 @@ void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
     VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
     VkBufferCopy copyRegion = { stagingOffset, resourceManager.getVisModel().getSurfaceBufferOffset(), bufferSize };
     vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceBuffer(), 1, &copyRegion);
+
+    // Copy to surface vertex buffer
+    VkBufferCopy vertexCopyRegion = {stagingOffset, resourceManager.getVisModel().getSurfaceVertexBufferOffset(), bufferSize};
+    vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceVertexBuffer(), 1, &vertexCopyRegion);
     endSingleTimeCommands(vulkanDevice, copyCmd);
 
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -481,11 +500,11 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
     for (const auto& neighbors : feaMesh.neighbors) {
         uint32_t count = std::min(static_cast<uint32_t>(neighbors.size()), MAX_NEIGHBORS);
         neighborData.push_back(count);
-        for (uint32_t i = 0; i < count; ++i) {
+        for (uint32_t i = 0; i < count; i++) {
             neighborData.push_back(neighbors[i]);
         }
 
-        for (uint32_t i = count; i < MAX_NEIGHBORS; ++i) {
+        for (uint32_t i = count; i < MAX_NEIGHBORS; i++) {
             neighborData.push_back(-1);
         }
     }
@@ -544,8 +563,7 @@ void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
 }
 
 void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
-    std::cout << "\n=== Initial Tetra Values ===\n";
-
+   
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
         feaMesh.elements[i].temperature = 1.0f;
@@ -555,15 +573,8 @@ void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
         feaMesh.elements[i].conductivity = 237.0f;
         feaMesh.elements[i].coolingRate = 0.1f;
 
-        std::cout << "Tetra " << i << ": temp = " << feaMesh.elements[i].temperature
-            << ", volume = " << feaMesh.elements[i].volume
-            << ", vertices = ["
-            << feaMesh.elements[i].vertices[0] << ", "
-            << feaMesh.elements[i].vertices[1] << ", "
-            << feaMesh.elements[i].vertices[2] << ", "
-            << feaMesh.elements[i].vertices[3] << "]\n";
-    }
 
+    }
     // Map and copy the updated elements to GPU buffer
     memcpy(mappedTetraData, feaMesh.elements.data(), sizeof(TetrahedralElement) * feaMesh.elements.size());
 
@@ -986,11 +997,18 @@ void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceM
 }
 
 void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame) {
+    // Check if reset is needed before beginning command buffer
+    processResetRequest();
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin recording compute command buffer");
+    }
+
+    if (!isActive) {
+        vkEndCommandBuffer(commandBuffer);
+        return;
     }
 
     // --- Heat Source Compute Pass ---

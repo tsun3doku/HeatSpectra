@@ -1,16 +1,23 @@
 #pragma once
 
+class iODT;
+class SignpostMesh;
 class Model;
 class Grid;
+class Camera;
 class HeatSource;
 class HeatSystem;
 class UniformBufferManager;
 class MemoryAllocator;
 class VulkanDevice;
 
+const std::string MODEL_PATH	= "models/teapot.obj";
+const std::string TEXTURE_PATH	= "textures/texture.jpg";
+
 class ResourceManager {
 public:
-	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, VkRenderPass renderPass, uint32_t maxFramesInFlight);
+	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, 
+		VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight);
 	~ResourceManager();
 
 	// Delete copy operations
@@ -22,6 +29,8 @@ public:
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
 	void initialize();
+	void initializeRemesher();
+	void performRemeshing(float targetEdgeLength, int iterations);
 	void cleanup();
 
 	// Getters
@@ -50,6 +59,7 @@ private:
 	VulkanDevice& vulkanDevice;
 	MemoryAllocator& memoryAllocator;
 	UniformBufferManager& uniformBufferManager;
+	Camera& camera;
 
 	std::unique_ptr<Grid> grid;
 	std::unique_ptr<Model> simModel;
@@ -57,4 +67,7 @@ private:
 	std::unique_ptr<Model> heatModel;
 	std::unique_ptr<HeatSource> heatSource;
 	std::unique_ptr<HeatSystem> heatSystem;
+
+	std::unique_ptr<iODT> remesher;
+	std::unique_ptr<SignpostMesh> signpostMesh;
 };

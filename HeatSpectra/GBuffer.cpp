@@ -1098,7 +1098,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     clearValues[4].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Albedo Resolve
     clearValues[5].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Normal Resolve
     clearValues[6].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position Resolve
-    clearValues[7].color = { 1.0f, 0 };                     // Depth Resolve
+    clearValues[7].depthStencil = { 1.0f, 0 };              // Depth Resolve
     clearValues[8].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };  // Swapchain
     clearValues[9].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Grid
     clearValues[10].color = { { 0.0f, 0.0f, 0.0f, 0.0f } }; // Grid Resolve
@@ -1126,13 +1126,20 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Draw visModel 
+    VkBuffer visIndexBuffer = resourceManager.getVisModel().getIndexBuffer();
+    std::cout << "[RECORD] frame " << currentFrame
+        << " vkCmdBindVertexBuffers: VB=" << resourceManager.getVisModel().getVertexBuffer()
+        << ", offset=" << resourceManager.getVisModel().getVertexBufferOffset() << "\n";
+    std::cout << "[RECORD] frame " << currentFrame
+        << " vkCmdBindIndexBuffer:  IB=" << visIndexBuffer
+        << ", offset=" << resourceManager.getVisModel().getIndexBufferOffset() << "\n";
     VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer() };
     VkDeviceSize vertexOffsets[] = {
     resourceManager.getVisModel().getVertexBufferOffset(),
     resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(commandBuffer, visIndexBuffer, resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
 

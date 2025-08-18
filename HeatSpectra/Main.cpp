@@ -111,10 +111,15 @@ private:
     Camera camera;
     glm::vec3 center;
 
+    double mouseX = 0.0, mouseY = 0.0;
     bool framebufferResized = false;
     bool wireframeEnabled = false;
+
     std::atomic<bool> isCameraUpdated{
         false
+    };
+    std::atomic<bool> edgeSelectionRequested{ 
+        false 
     };
 
     void initWindow() {
@@ -148,6 +153,20 @@ private:
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
         if (key == GLFW_KEY_H && action == GLFW_PRESS) {
             app->wireframeEnabled = !app->wireframeEnabled;
+        }
+        // Edge highlight selection
+        if (key == GLFW_KEY_M && action == GLFW_PRESS) {
+            glfwGetCursorPos(window, &app->mouseX, &app->mouseY);
+            app->edgeSelectionRequested.store(true, std::memory_order_release);
+        }
+        // Toggle simulation
+        if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+            bool newState = !app->heatSystem->getIsActive();
+            app->heatSystem->setActive(newState);
+        }
+        // Reset simulation
+        if (key == GLFW_KEY_R && action == GLFW_PRESS && (mods & GLFW_MOD_CONTROL)) {
+            app->heatSystem->requestReset();
         }
     }
 
@@ -188,6 +207,7 @@ private:
             *memoryAllocator,
             *uniformBufferManager,
             renderPass,
+            camera,
             MAXFRAMESINFLIGHT);
 
         resourceManager->initialize();
@@ -257,6 +277,9 @@ private:
                 camera.update(deltaTime);
                 isCameraUpdated.store(false, std::memory_order_release);
             }
+            //if (edgeSelectionRequested.exchange(false, std::memory_order_acq_rel)) {
+            //    resourceManager->getSimModel().handleEdgeSelection(camera, static_cast<int>(mouseX), static_cast<int>(HEIGHT - mouseY), WIDTH, HEIGHT);
+            //}
             drawFrame();
 
             while (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - lastFrameTime).count() < targetFrameTime) {
@@ -586,28 +609,37 @@ private:
         computeBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         heatSystem->update(vulkanDevice, window, *resourceManager, *uniformBufferManager, ubo, WIDTH, HEIGHT);
-        heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
+        if (heatSystem->getIsActive()) {
+            heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
 
-        VkSubmitInfo computeSubmitInfo{};
-        computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        computeSubmitInfo.commandBufferCount = 1;
-        computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
-        computeSubmitInfo.signalSemaphoreCount = 1;
-        computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
+            VkSubmitInfo computeSubmitInfo{};
+            computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            computeSubmitInfo.commandBufferCount = 1;
+            computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
+            computeSubmitInfo.signalSemaphoreCount = 1;
+            computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
-        vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
+            vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
+        }
+
+        std::vector<VkSemaphore> waitSemaphores;
+        std::vector<VkPipelineStageFlags> waitStages;
+
+        if (heatSystem->getIsActive()) {
+            waitSemaphores = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
+            waitStages = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        }
+        else {
+            waitSemaphores = { imageAvailableSemaphores[currentFrame] };
+            waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        }
 
         // Graphics pass
         gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled);
 
-        std::array<VkPipelineStageFlags, 2> waitStages = {
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,              // For compute semaphore
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT }; // For image available semaphore
-        std::array<VkSemaphore, 2> waitSemaphores = { computeFinishedSemaphores[currentFrame],imageAvailableSemaphores[currentFrame] };
-
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        graphicsSubmitInfo.waitSemaphoreCount = 2;
+        graphicsSubmitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
         graphicsSubmitInfo.pWaitSemaphores = waitSemaphores.data(); // Wait for compute and image acquisition
         graphicsSubmitInfo.pWaitDstStageMask = waitStages.data();
         graphicsSubmitInfo.commandBufferCount = 1;

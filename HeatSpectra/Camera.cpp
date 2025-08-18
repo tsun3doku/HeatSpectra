@@ -1,6 +1,4 @@
 #include "Camera.hpp"
-#include <GLFW/glfw3.h>
-#include <iostream>
 
 void Camera::update(float deltaTime) {
     glm::mat4 rotationMatrix = getRotationMatrix();

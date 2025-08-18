@@ -31,7 +31,6 @@ public:
     }
 
     float radius = 3.0f; // Camera distance from origin
-
     float sensitivity = 0.3f;  // Mouse interaction speed
 
 private:
@@ -42,6 +41,9 @@ private:
     glm::vec3 velocity = glm::vec3(0.0f);  // Movement velocity (WASD)
 
     glm::mat4 getRotationMatrix() const;  // Rotation matrix based on pitch and yaw
+    glm::mat4 getProjMatrix(float aspectRatio) const {
+    return glm::perspective(glm::radians(currentFov), aspectRatio, nearPlane, farPlane);
+}
 
     float pitch = 0.0f;
     float yaw = -90.0f;

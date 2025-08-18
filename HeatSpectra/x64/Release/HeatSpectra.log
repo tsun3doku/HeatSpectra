@@ -1,56 +1,51 @@
-﻿  Camera.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(80,19): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(81,21): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(120,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(121,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+﻿  AABBTree.cpp
+  GLM_GTX_hash requires C++11 standard library support
+  Camera.cpp
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(78,19): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(79,21): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(118,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(119,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   CommandBufferManager.cpp
   DeferredRenderer.cpp
   GBuffer.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+  GeodesicTracer.cpp
   Grid.cpp
+  HalfEdgeMesh.cpp
+  GLM_GTX_hash requires C++11 standard library support
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(170,18): warning C4267: 'argument': conversion from 'size_t' to 'unsigned int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(180,58): warning C4267: 'argument': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1277,41): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1317,14): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1381,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1386,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1391,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1448,16): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1456,18): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1458,18): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1543,17): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1545,17): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1557,16): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1765,22): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1779,29): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1788,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
   HDR.cpp
   HeatSource.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
   HeatSystem.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(151,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(167,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(179,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(226,20): warning C4101: 'error_code': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(663,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(700,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(854,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(960,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(979,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-  axisalignedboundingboxtree.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         with
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         [
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:             _Ty=double
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         ]
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         and
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         [
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:             _Ty2=float
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include\utility(247,54): warning C4244:         ]
-  isotropichalfedgemesh.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\isotropichalfedgemesh.cpp(111,41): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\isotropichalfedgemesh.cpp(416,17): warning C4244: 'argument': conversion from 'size_t' to 'double', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\isotropichalfedgemesh.cpp(458,22): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\isotropichalfedgemesh.cpp(462,22): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\isotropichalfedgemesh.cpp(583,41): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-  isotropicremesher.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(166,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(182,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(194,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(241,20): warning C4101: 'error_code': unreferenced local variable
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(674,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(711,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(865,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(971,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(990,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+  iODT.cpp
+  GLM_GTX_hash requires C++11 standard library support
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\iODT.cpp(430,23): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
   predicates.cxx
   tetgen.cxx
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(2249,20): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'size_t'
@@ -101,27 +96,21 @@ C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\
   MemoryAllocator.cpp
   Model.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.cpp(286,33): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.cpp(524,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
   ResourceManager.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+  SignPostMesh.cpp
+  GLM_GTX_hash requires C++11 standard library support
   VulkanDevice.cpp
   file_utils.cpp
+  Compiling...
   Main.cpp
   GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(179,40): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\isotropicremesher\src\vector2.h(192,47): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
   UniformBufferManager.cpp
-  Compiling...
   VulkanImage.cpp
-LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   Generating code
-  3547 of 7342 functions (48.3%) were compiled, the rest were copied from previous compilation.
-    1880 functions were new in current compilation
-    630 functions had inline decision re-evaluated but remain unchanged
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.hpp(150): warning C4172: returning address of local variable or temporary
+  3233 of 5454 functions (59.3%) were compiled, the rest were copied from previous compilation.
+    297 functions were new in current compilation
+    100 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe

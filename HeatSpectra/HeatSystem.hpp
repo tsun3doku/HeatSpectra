@@ -13,6 +13,9 @@ public:
     ~HeatSystem();
     void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void processResetRequest();
+    void requestReset();
+    void setActive(bool active);
 
     void generateTetrahedralMesh(ResourceManager& resourceManager);
     void initializeSurfaceBuffer(ResourceManager& resourceManager);
@@ -63,6 +66,10 @@ public:
         return computeCommandBuffers;
     }
 
+    bool getIsActive() const { 
+        return isActive; 
+    }   
+
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
@@ -111,4 +118,9 @@ private:
 
     VkPipelineLayout surfacePipelineLayout;
     VkPipeline surfacePipeline;
+
+    bool isActive = false;
+    std::atomic<bool> needsReset{ 
+        false 
+    };
 };

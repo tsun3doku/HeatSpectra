@@ -1,8 +1,10 @@
 #pragma once
-
+#define GLFW_INCLUDE_VULKAN                       
+#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <memory>
 #include <cstdint>
 
 //
@@ -53,6 +55,7 @@ struct HitResult {
     float distance;
     uint32_t vertexIndex;
     uint32_t vertexIndices[3];
+    int edgeIndex = -1; 
 };
 
 struct TimeUniform {
@@ -105,7 +108,7 @@ struct HeatSourceVertex {
 };  // 32 bytes
 
 struct FaceRef {
-    uint32_t baseIndex;
+    uint32_t faceIndex;
     uint8_t edgeNum;
 };
 
@@ -115,6 +118,15 @@ struct Edge {
     bool operator==(const Edge& other) const {
         return first == other.first && second == other.second;
     }
+};
+
+struct EdgeData {
+    uint32_t v1, v2;
+    float length;
+    bool isFeature = false;
+    bool isConstraint = false;
+    std::vector<uint32_t> adjacentFaces;
+    float targetLength = 0.0f;
 };
 
 struct EdgeHash {
@@ -139,4 +151,45 @@ struct Vec3Hash {
             (std::hash<float>{}(v.y) << 1) ^
             (std::hash<float>{}(v.z) << 2);
     }
+};
+
+// Axis-Aligned Bounding Box
+struct AABB {
+    glm::vec3 min{ FLT_MAX };
+    glm::vec3 max{ -FLT_MAX };
+
+    void expand(const glm::vec3& point) {
+        min = glm::min(min, point);
+        max = glm::max(max, point);
+    }
+
+    void expand(const AABB& other) {
+        min = glm::min(min, other.min);
+        max = glm::max(max, other.max);
+    }
+
+    bool contains(const glm::vec3& point) const {
+        return (point.x >= min.x && point.x <= max.x) &&
+            (point.y >= min.y && point.y <= max.y) &&
+            (point.z >= min.z && point.z <= max.z);
+    }
+
+    bool intersects(const AABB& other) const {
+        return (min.x <= other.max.x && max.x >= other.min.x) &&
+            (min.y <= other.max.y && max.y >= other.min.y) &&
+            (min.z <= other.max.z && max.z >= other.min.z);
+    }
+
+    glm::vec3 center() const {
+        return (min + max) * 0.5f;
+    }
+};
+
+// Node for AABB Tree
+struct AABBNode {
+    AABB bounds;
+    std::vector<uint32_t> triangleIndices;
+    std::unique_ptr<AABBNode> left;
+    std::unique_ptr<AABBNode> right;
+    bool isLeaf = false;
 };

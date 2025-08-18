@@ -3,26 +3,26 @@
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h> 
+
 #include <glm/glm.hpp>
 #include <glm/gtx/hash.hpp>
 
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
 #include <vector>
 #include <array>
 
-#include "isotropicremesher.h"
-#include "isotropichalfedgemesh.h"
 #include "File_utils.h" 
 #include "Structs.hpp"
 
-
+class AABBTree;
+class Camera;
 class VulkanDevice;
 class MemoryAllocator;
-
-const std::string MODEL_PATH = "models/teapot.obj"; 
-const std::string TEXTURE_PATH = "textures/texture.jpg"; 
 
 struct Vertex {
     glm::vec3 pos;      // Vertex position
@@ -35,17 +35,17 @@ struct Vertex {
 
         // Main vertex binding (positions, normals, texcoords)
         VkVertexInputBindingDescription mainBinding{};
-        mainBinding.binding = 0;
-        mainBinding.stride = sizeof(Vertex); 
-        mainBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        bindingDescriptions[0] = mainBinding;
+        mainBinding.binding         = 0;
+        mainBinding.stride          = sizeof(Vertex); 
+        mainBinding.inputRate       = VK_VERTEX_INPUT_RATE_VERTEX;
+        bindingDescriptions[0]      = mainBinding;
 
         // Surface binding (dynamic color from compute shader)
         VkVertexInputBindingDescription surfaceBinding{};
-        surfaceBinding.binding = 1;
-        surfaceBinding.stride = sizeof(SurfaceVertex); 
-        surfaceBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        bindingDescriptions[1] = surfaceBinding;
+        surfaceBinding.binding      = 1;
+        surfaceBinding.stride       = sizeof(SurfaceVertex); 
+        surfaceBinding.inputRate    = VK_VERTEX_INPUT_RATE_VERTEX;
+        bindingDescriptions[1]      = surfaceBinding;
 
         return bindingDescriptions;
     }
@@ -54,25 +54,25 @@ struct Vertex {
     static std::array<VkVertexInputAttributeDescription, 4> getVertexAttributes() {
         std::array<VkVertexInputAttributeDescription, 4> vertexAttributes{};
 
-        vertexAttributes[0].binding = 0;
-        vertexAttributes[0].location = 0;
-        vertexAttributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vertexAttributes[0].offset = offsetof(Vertex, pos);
+        vertexAttributes[0].binding     = 0;
+        vertexAttributes[0].location    = 0;
+        vertexAttributes[0].format      = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[0].offset      = offsetof(Vertex, pos);
 
-        vertexAttributes[1].binding = 0;
-        vertexAttributes[1].location = 1;
-        vertexAttributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vertexAttributes[1].offset = offsetof(Vertex, color);
+        vertexAttributes[1].binding     = 0;
+        vertexAttributes[1].location    = 1;
+        vertexAttributes[1].format      = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[1].offset      = offsetof(Vertex, color);
 
-        vertexAttributes[2].binding = 0;
-        vertexAttributes[2].location = 2;
-        vertexAttributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-        vertexAttributes[2].offset = offsetof(Vertex, normal);
+        vertexAttributes[2].binding     = 0;
+        vertexAttributes[2].location    = 2;
+        vertexAttributes[2].format      = VK_FORMAT_R32G32B32_SFLOAT;
+        vertexAttributes[2].offset      = offsetof(Vertex, normal);
 
-        vertexAttributes[3].binding = 0;
-        vertexAttributes[3].location = 3;
-        vertexAttributes[3].format = VK_FORMAT_R32G32_SFLOAT;
-        vertexAttributes[3].offset = offsetof(Vertex, texCoord);
+        vertexAttributes[3].binding     = 0;
+        vertexAttributes[3].location    = 3;
+        vertexAttributes[3].format      = VK_FORMAT_R32G32_SFLOAT;
+        vertexAttributes[3].offset      = offsetof(Vertex, texCoord);
 
         return vertexAttributes;
     }
@@ -80,15 +80,15 @@ struct Vertex {
     static std::array<VkVertexInputAttributeDescription, 2> getSurfaceVertexAttributes() {
         std::array<VkVertexInputAttributeDescription, 2> surfaceVertexAttributes{};
 
-        surfaceVertexAttributes[0].binding = 1;
+        surfaceVertexAttributes[0].binding  = 1;
         surfaceVertexAttributes[0].location = 4;
-        surfaceVertexAttributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        surfaceVertexAttributes[0].offset = offsetof(SurfaceVertex, position); 
+        surfaceVertexAttributes[0].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
+        surfaceVertexAttributes[0].offset   = offsetof(SurfaceVertex, position); 
 
-        surfaceVertexAttributes[1].binding = 1;
+        surfaceVertexAttributes[1].binding  = 1;
         surfaceVertexAttributes[1].location = 5;
-        surfaceVertexAttributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        surfaceVertexAttributes[1].offset = offsetof(SurfaceVertex, color);
+        surfaceVertexAttributes[1].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
+        surfaceVertexAttributes[1].offset   = offsetof(SurfaceVertex, color);
 
         return surfaceVertexAttributes;
     }
@@ -114,29 +114,24 @@ namespace std {
 
 class Model {
 public:
-    Model(VulkanDevice& device, MemoryAllocator& allocator);
+    Model(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera);
     ~Model();
-    void init(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, const std::string modelPath);
+    void init(const std::string modelPath);
 
     void loadModel(const std::string& modelPath);
+    void buildAABBTree();
+
     void createVertexBuffer();
     void createIndexBuffer();
     void createSurfaceBuffer();
 
-    void buildEdgeFaceMap();
-    void buildVertexAdjacency();
     void equalizeFaceAreas();
     void weldVertices(float epsilon);
-    void laplacianSmooth(float factor);
     void recalculateNormals();
-
-    void setSubdivisionLevel(int level);
-    void subdivide();
-
-    void voronoiTessellate(int iterations);
-    void midpointSubdivide(int iterations, bool preserveShape);
-    void uniformSubdivide(int iterations, float smoothingFactor);
-    void isotropicRemesh(float targetEdgeLength, int iterations);
+    void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
+    void updateVertexBuffer();
+    void updateIndexBuffer();
+    void saveOBJ(const std::string& path) const;
 
     void recreateBuffers();
     void cleanup();
@@ -145,6 +140,7 @@ public:
     std::array<glm::vec3, 8> calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
    
     HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
+    void markEdge(uint32_t triIndex, int edgeNum);
 
     // Getters
     const std::vector<Vertex>& getVertices() const {
@@ -156,7 +152,9 @@ public:
     const std::vector<uint32_t>& getIndices() const {
         return indices;
     }
-    
+
+    glm::vec3 getFaceNormal(uint32_t faceIndex) const;
+
     VkBuffer getVertexBuffer() {
         return vertexBuffer;
     }
@@ -193,8 +191,8 @@ public:
         return modelMatrix;
     }
 
-    int getSubdivisionLevel() {
-        return subdivisionLevel;
+    std::unique_ptr<AABBTree>& getAABBTree() {
+        return aabbTree;
     }
 
     // Setters
@@ -204,10 +202,19 @@ public:
     void setModelMatrix(const glm::mat4& matrix) {
         modelMatrix = matrix;
     }
+    void setIndices(const std::vector<uint32_t>& newIndices) {
+        indices = newIndices;
+    }
+    void setVertices(const std::vector<Vertex>& newVertices) { 
+        vertices = newVertices; 
+    }
 
 private:
-    VulkanDevice* vulkanDevice = nullptr;
-    MemoryAllocator* memoryAllocator;
+    VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
+    Camera& camera;
+
+    std::unique_ptr<AABBTree> aabbTree;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
@@ -227,13 +234,7 @@ private:
 
     glm::vec3 modelPosition{};
     glm::mat4 modelMatrix = glm::mat4(1.0f);
-    int subdivisionLevel = 0;
-    int iterations = 0;
-    float epsilon = 0.00001f;
-    float smoothingFactor = 0.0;
-    float modelScale = 0.2f;
-    bool preserveShape = false;
 
-    std::unordered_map<Edge, std::vector<FaceRef>, EdgeHash> edgeFaceMap;
-    std::unordered_map<uint32_t, std::unordered_set<uint32_t>> vertexAdjacency;
+    std::vector<glm::vec3> faceNormals;
+    std::unordered_set<Edge, EdgeHash> featuredEdges;
 }; 
