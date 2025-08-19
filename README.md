@@ -5,19 +5,27 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 ![Heat Transfer Capture](x64/Release/capture.png)
 
 ## Requirements
-- Vulkan SDK 1.3
-- Visual Studio 2022
+- Windows 10
+- Vulkan SDK 1.1 - 1.3
+- Visual Studio 
 
 ## Quick Start
-Download and run HeatSpectra.exe within the `x64/Release` folder. Requires Windows 10 and a Vulkan capable GPU.
+1. Download the latest release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page
+2. Extract the zip file
+3. Run HeatSpectra.exe
+
+### Hardware Requirements
+- GPU with Vulkan 1.1 or higher support ([Check GPU compatibility](https://vulkan.gpuinfo.org/))
 
 ## Setup
 1. Clone the repository
 2. Build shaders using `compile.bat` in `shaders` folder
-3. Open solution in Visual Studio 2022
+3. Open solution in Visual Studio
 4. Build and run in Release mode
 
 ## Controls
 - W A S D Q E camera controls
+- Spacebar to start simulation
 - Arrow keys for heat source control
 - H key for wireframe view
+
