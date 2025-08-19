@@ -6,7 +6,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 
 ## Requirements
 - Windows 10
-- Vulkan SDK 1.1 - 1.3
+- Vulkan SDK 1.3
 - Visual Studio 
 
 ## Quick Start
@@ -15,7 +15,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 3. Run HeatSpectra.exe
 
 ### Hardware Requirements
-- GPU with Vulkan 1.1 or higher support ([Check GPU compatibility](https://vulkan.gpuinfo.org/))
+- GPU with Vulkan 1.3 or higher support ([Check GPU compatibility](https://vulkan.gpuinfo.org/))
 
 ## Setup
 1. Clone the repository
