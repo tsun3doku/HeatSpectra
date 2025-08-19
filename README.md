@@ -10,7 +10,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 - Visual Studio 
 
 ## Quick Start
-1. Download the latest release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page
+1. Download the latest demo release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page
 2. Extract the zip file
 3. Run HeatSpectra.exe
 
