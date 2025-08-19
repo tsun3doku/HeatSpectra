@@ -408,25 +408,13 @@ private:
             throw std::runtime_error("Validation layers requested, but not available");
         }
 
-        // Try to query instance version
-        uint32_t apiVersion = VK_API_VERSION_1_1;  // Start with 1.1 as minimum
-        #if defined(VK_VERSION_1_1)
-            PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion = 
-                (PFN_vkEnumerateInstanceVersion)vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion");
-            if (vkEnumerateInstanceVersion) {
-                vkEnumerateInstanceVersion(&apiVersion);
-            }
-        #endif
-
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "HeatSpectra";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        
-        // Try Vulkan 1.3 and fallback to 1.1 if not supported
-        appInfo.apiVersion = (apiVersion >= VK_API_VERSION_1_3) ? VK_API_VERSION_1_3 : VK_API_VERSION_1_1;
+        appInfo.apiVersion = VK_API_VERSION_1_3;  // Require Vulkan 1.3
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
