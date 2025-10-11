@@ -195,6 +195,7 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.sampleRateShading = VK_TRUE;
     deviceFeatures.samplerAnisotropy = VK_TRUE;
+    deviceFeatures.wideLines = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
     deviceFeatures.independentBlend = VK_TRUE;
 

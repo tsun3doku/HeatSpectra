@@ -114,6 +114,7 @@ private:
     double mouseX = 0.0, mouseY = 0.0;
     bool framebufferResized = false;
     bool wireframeEnabled = false;
+    bool commonSubdivisionEnabled = false;
 
     std::atomic<bool> isCameraUpdated{
         false
@@ -143,7 +144,6 @@ private:
         WIDTH = width;
         HEIGHT = height;
     }
-
     static void scroll_callback(GLFWwindow* window, double xOffset, double yOffset) {
         auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
         app->camera.processMouseScroll(xOffset, yOffset);
@@ -154,10 +154,8 @@ private:
         if (key == GLFW_KEY_H && action == GLFW_PRESS) {
             app->wireframeEnabled = !app->wireframeEnabled;
         }
-        // Edge highlight selection
-        if (key == GLFW_KEY_M && action == GLFW_PRESS) {
-            glfwGetCursorPos(window, &app->mouseX, &app->mouseY);
-            app->edgeSelectionRequested.store(true, std::memory_order_release);
+        if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+            app->commonSubdivisionEnabled = !app->commonSubdivisionEnabled;
         }
         // Toggle simulation
         if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
@@ -438,7 +436,7 @@ private:
 
             // Enable both BEST_PRACTICES and DEBUG_PRINTF
             VkValidationFeatureEnableEXT enabledValidationFeatures[] = {
-                VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+                //VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
                 VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
             };
             validationFeatures.enabledValidationFeatureCount = sizeof(enabledValidationFeatures) / sizeof(VkValidationFeatureEnableEXT);
@@ -635,12 +633,12 @@ private:
         }
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled);
+        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         graphicsSubmitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
-        graphicsSubmitInfo.pWaitSemaphores = waitSemaphores.data(); // Wait for compute and image acquisition
+        graphicsSubmitInfo.pWaitSemaphores = waitSemaphores.data();
         graphicsSubmitInfo.pWaitDstStageMask = waitStages.data();
         graphicsSubmitInfo.commandBufferCount = 1;
         graphicsSubmitInfo.pCommandBuffers = &commandBuffer;

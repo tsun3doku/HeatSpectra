@@ -2,6 +2,10 @@
 #include <glm/gtc/constants.hpp>
 
 #include <iostream>
+#include <fstream>
+#include <cmath>
+#include <complex>
+#include <map>
 #include "glm/gtx/string_cast.hpp"
 #include "glm/gtc/constants.hpp"
 #include <chrono>
@@ -18,93 +22,73 @@ std::ostream& operator<<(std::ostream& os, const GeodesicTracer::SurfacePoint::T
     default:                                         os << "UNKNOWN"; break;
     }
     return os;
-}   
+}
 
-iODT::iODT(Model& model, SignpostMesh& mesh) : model(model), mesh(mesh), tracer(mesh) {
+iODT::iODT(Model& model, SignpostMesh& mesh) : model(model), mesh(mesh), tracer(mesh), tracerInput(inputMesh) {
+    // Build the extrinsic input mesh 
+    inputMesh.buildFromModel(model);
+    auto& inputConn = inputMesh.getConnectivity();
+    inputMesh.updateAllCornerAngles({});
+    inputMesh.computeCornerScaledAngles();
+    inputMesh.updateAllSignposts();
+
+    inputMesh.computeVertexAngleScales();
+    inputMesh.buildHalfedgeVectorsInVertex();
+    inputMesh.buildHalfedgeVectorsInFace();
+
     // Build the intrinsic mesh
     mesh.buildFromModel(model);
     auto& conn = mesh.getConnectivity();
-    conn.rebuildConnectivity();
-    conn.rebuildEdges();
-    conn.rebuildOpposites();
-    conn.initializeIntrinsicLengths();
     mesh.updateAllCornerAngles({});
+    mesh.computeCornerScaledAngles();
     mesh.updateAllSignposts();
+
+    mesh.computeVertexAngleScales();
     mesh.buildHalfedgeVectorsInVertex();
     mesh.buildHalfedgeVectorsInFace();
+
+    // Initialize vertex locations for tracing   
+    initializeVertexLocations();
+
+    // All edges start as original
+    const auto& edges = conn.getEdges();
+    for (size_t i = 0; i < edges.size(); ++i) {
+        if (edges[i].halfEdgeIdx != INVALID_INDEX) {
+            conn.getEdges()[i].isOriginal = true;
+        }
+    }
 }
 
-bool iODT::optimalDelaunayTriangulation(int maxIterations)
-{
+bool iODT::optimalDelaunayTriangulation(int maxIterations) {
     auto& conn = mesh.getConnectivity();
 
-    //  Clear tracking 
+    // Clear tracking 
     insertedVertices.clear();
     recentlySplit.clear();
 
     // 1) Make mesh Delaunay
+    std::cout << "\nDelaunay Flipping Phase " << std::endl;
+    conn.makeDelaunay(maxIterations);
+    std::cout << " Done.\n";
 
-    std::cout << "\n Delaunay Flipping Phase " << std::endl;
-
-    for (int iter = 0; iter < maxIterations; ++iter) {
-#ifndef NDEBUG
-        std::cout << "Delaunay pass " << (iter + 1) << "/" << maxIterations << "...\n";
-#endif
-        int flips = conn.makeDelaunay(1);
-        if (flips == 0) {
-            std::cout << "  no more flips needed.\n";
-            break;
-        }
-    }
-
-    conn.initializeIntrinsicLengths();
-    mesh.updateAllCornerAngles({});
-    mesh.updateAllSignposts();
-    mesh.buildHalfedgeVectorsInVertex();
+    mesh.computeCornerScaledAngles();
+    mesh.computeVertexAngleScales();
     mesh.buildHalfedgeVectorsInFace();
 
-    
     // 2) Delaunay refinement to improve triangle quality
-    std::cout << "\n Delaunay Refinement Phase " << std::endl;
+    std::cout << "\nDelaunay Refinement Phase " << std::endl;
     if (!delaunayRefinement()) {
-        std::cerr << "Warning: Delaunay refinement failed" << std::endl;
+        //std::cerr << "Warning: Delaunay refinement failed" << std::endl;
     }
 
-  
-    // 3) Global delaunay call
-    std::cout << "\n Final Global Delaunay" << std::endl;
-
-    for (int iter = 0; iter < maxIterations; ++iter) {
-        std::cout << "Global Delaunay pass " << (iter + 1) << "/" << maxIterations << "...\n";
-        int flips = conn.makeDelaunay(1);
-        if (flips == 0) {
-            std::cout << "  no more flips needed.\n";
-            break;
-        }
-    }
-    conn.rebuildEdges();
-    conn.rebuildConnectivity();
-    conn.initializeIntrinsicLengths();
-    mesh.updateAllCornerAngles({});
-    mesh.updateAllSignposts();
-    mesh.buildHalfedgeVectorsInVertex();
-    mesh.buildHalfedgeVectorsInFace();  
-    
-    /*
     // 4) Optimal positioning of inserted vertices
-    //std::cout << "\n Repositioning Phase" << std::endl;
-    repositionInsertedVertices(4, 1e-4, 0.07); // Max edge length 
-    // Update intrinsic data after repositioning
-    conn.initializeIntrinsicLengths();
-    mesh.updateAllCornerAngles({});
-    mesh.updateAllSignposts();
-    mesh.buildHalfedgeVectorsInVertex();
-    mesh.buildHalfedgeVectorsInFace();
-    */
+    std::cout << "\nRepositioning Phase" << std::endl;
+    repositionInsertedVertices(5, 1e-4, 0.018);
+    std::cout << " Done.\n";
 
-    // 5) Push the result back to the model and GPU
-    mesh.applyToModel(model);
-    model.recreateBuffers();
+    // 5) (OPTIONAL) Push the intrinsic result back to the model and GPU for debugging
+    //mesh.applyToModel(model);
+    //model.recreateBuffers();
 
     return true;
 }
@@ -116,194 +100,261 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
     auto& edges = conn.getEdges();
     auto& halfEdges = conn.getHalfEdges();
 
-#ifndef NDEBUG
-    std::cout << "Repositioning of " << insertedVertices.size() << " inserted vertices\n";
-#endif
+    //std::cout << "[Reposition] Repositioning of " << insertedVertices.size() << " inserted vertices\n";
     if (insertedVertices.empty()) {
-#ifndef NDEBUG
-        std::cout << "  No inserted vertices to reposition\n";
-#endif
+        //std::cout << "[Reposition] No inserted vertices to reposition\n";
         return;
     }
 
-    const double EPS_LEN = 1e-12;
-    const double DAMPING = 0.5;          // intrinsic step damping (0..1)
-    const double START_EPS = 1e-8;       // small barycentric offset to avoid exact-vertex starts
+    const double EPS_LEN = 1e-12;        // Small length offset
+    const double STEP_SIZE = 0.25;       // Intrinsic step size (0-1), higher = faster convergence *LOWER THIS TO PREVENT INTERSECTIONS*
+    const double START_EPS = 1e-8;       // Small barycentric offset 
 
     for (int iter = 0; iter < maxIters; ++iter) {
         // Edge splitting phase
-#ifndef NDEBUG
-        std::cout << "Iteration " << (iter + 1) << " - Edge splitting phase\n";
-#endif
+        //std::cout << "[Reposition] Iteration " << (iter + 1) << " - Edge splitting phase\n";
         int splitCount = 0;
-        
-        // Collect edges to split (do collection first to avoid invalidating iterators)
-        std::vector<std::pair<uint32_t, uint32_t>> edgesToSplit; // pair of (edgeIdx, heIdx)
+
+        // Collect edges to split
+        std::cout << " Splitting long edges..." << std::endl;
+        std::vector<std::pair<uint32_t, uint32_t>> edgesToSplit;
         for (uint32_t e = 0; e < edges.size(); ++e) {
-            if (edges[e].halfEdgeIdx == INVALID_INDEX) continue;
-            
+            if (edges[e].halfEdgeIdx == INVALID_INDEX)
+                continue;
+
             uint32_t he = edges[e].halfEdgeIdx;
-            double length = halfEdges[he].intrinsicLength;
-            
+            double length = edges[e].intrinsicLength;
+
             if (length > maxEdgeLength) {
-                edgesToSplit.push_back({e, he});
+                edgesToSplit.push_back({ e, he });
             }
         }
-        
-        // Split collected edges
+
+        // Split collected edges and track newly inserted vertices
+        std::vector<uint32_t> newlyInsertedVertices;
         for (const auto& [edgeIdx, heIdx] : edgesToSplit) {
             uint32_t newVertex = INVALID_INDEX;
             uint32_t diagFront = INVALID_INDEX;
             uint32_t diagBack = INVALID_INDEX;
-            
+
             if (splitEdge(edgeIdx, newVertex, diagFront, diagBack, heIdx, 0.5)) {
                 insertedVertices.insert(newVertex);
+                newlyInsertedVertices.push_back(newVertex);
                 splitCount++;
             }
         }
-        
-#ifndef NDEBUG
-        std::cout << "  Split " << splitCount << " edges\n";
-#endif
-        
+
+        //std::cout << "[Reposition] Split " << splitCount << " edges\n";
+
         if (splitCount > 0) {
-            // Update mesh data after splits
-            mesh.updateAllCornerAngles({});
-            mesh.updateAllSignposts();
-            mesh.buildHalfedgeVectorsInVertex();
+            // Update local faces and vertices after splits
+            for (uint32_t vIdx : newlyInsertedVertices) {
+                if (vIdx >= verts.size()) continue;
+
+                // Update corner angles for all incident faces
+                auto faces = conn.getVertexFaces(vIdx);
+                for (uint32_t fIdx : faces) {
+                    if (fIdx != HalfEdgeMesh::INVALID_INDEX) {
+                        mesh.updateCornerAnglesForFace(fIdx);
+                    }
+                }
+
+                // Update signpost angles for incoming halfedges
+                auto outgoingHEs = conn.getVertexHalfEdges(vIdx);
+                for (uint32_t heOut : outgoingHEs) {
+                    uint32_t twinHe = halfEdges[heOut].opposite;
+                    if (twinHe != HalfEdgeMesh::INVALID_INDEX) {
+                        mesh.updateAngleFromCWNeighbor(twinHe);
+                    }
+                }
+            }
+
             mesh.buildHalfedgeVectorsInFace();
+
+            // Perform local Delaunay operation on edges around newly inserted vertices
+            for (uint32_t newV : newlyInsertedVertices) {
+                if (newV >= conn.getVertices().size()) continue;
+
+                std::vector<uint32_t> localEdges;
+                for (uint32_t he : conn.getVertexHalfEdges(newV)) {
+                    uint32_t edgeIdx = conn.getEdgeFromHalfEdge(he);
+                    if (edgeIdx != HalfEdgeMesh::INVALID_INDEX && !conn.getEdges()[edgeIdx].isOriginal) {
+                        localEdges.push_back(edgeIdx);
+                    }
+                }
+                conn.makeDelaunay(5, &localEdges);
+            }
         }
 
         // Vertex repositioning phase
-#ifndef NDEBUG
-        std::cout << "Iteration " << (iter + 1) << " - Vertex repositioning phase\n";
-#endif
+        //std::cout << "[Reposition] Iteration " << (iter + 1) << " - Vertex repositioning phase\n";
         double maxMove = 0.0;
         int movedCount = 0;
 
-        // track which vertices get an update this iteration 
-        std::unordered_set<uint32_t> updatedThisIter;
-
+        // Process each vertex
+        int processedCount = 0;
         for (uint32_t vIdx : insertedVertices) {
-            if (vIdx >= verts.size()) continue;
-            if (conn.isBoundaryVertex(vIdx)) continue;
+            if (vIdx >= verts.size())
+                continue;
+            if (conn.isBoundaryVertex(vIdx))
+                continue;
 
-            // Calculate reference face, local corner, and area weighted average vector
+            // Calculate weighted circumcenter displacement
             uint32_t refFace = HalfEdgeMesh::INVALID_INDEX;
             int localRefIdx = -1;
             glm::dvec2 avgVec(0.0);
             double avgLen = 0.0;
             bool ok = computeWeightedCircumcenter(vIdx, refFace, localRefIdx, avgVec, avgLen);
-            if (!ok || avgLen <= EPS_LEN) continue;
 
-            // compute direction in reference chart
-            glm::dvec2 dir2d = avgVec / avgLen;
+            if (!ok || avgLen <= EPS_LEN)
+                continue;
 
-            // compute step: damped average length
-            double stepLen = avgLen * DAMPING;
+            // Damped average length
+            double stepLen = avgLen * STEP_SIZE;
 
-            // start bary slightly inside the reference triangle (avoid exact-vertex start)
-            glm::dvec3 startBary(START_EPS, START_EPS, START_EPS);
-            startBary[localRefIdx] = 1.0 - 2.0 * START_EPS;
+            // Record movement for convergence tracking
+            double moveLen = stepLen;
 
-            // --- intrinsic trace: follow averaged direction for stepLen ---
-            GeodesicTracer::GeodesicTraceResult tr =
-                tracer.traceFromFace(refFace, startBary, dir2d, stepLen);
-            if (!tr.success) continue;
+            if (moveLen > tol)
+                ++movedCount;
+            if (moveLen > maxMove)
+                maxMove = moveLen;
 
-            // record movement metrics
-            double moveLen = tr.distance;
-            if (moveLen > tol) ++movedCount;
-            if (moveLen > maxMove) maxMove = moveLen;
+            // Trace from vertex along displacement vector on intrinsic mesh
+            glm::dvec2 displacement2D = avgVec * STEP_SIZE;
+            double stepLength = glm::length(displacement2D);
 
-            // store intrinsic exit point for final 3D evaluation
-            insertedLocation[vIdx] = tr.exitPoint;
-            updatedThisIter.insert(vIdx);
-        } // end loop over insertedVertices
+            if (stepLength < 1e-12) {
+                //std::cout << "[Reposition] Step length too small for vertex " << vIdx << "\n";
+                continue;
+            }
 
-        // Logging
-#ifndef NDEBUG
-        std::cout << "  Iteration " << (iter + 1)
-            << ": moved " << movedCount
-            << " vertices, max intrinsic step = " << maxMove << "\n";
-#endif
+            glm::dvec2 dir2D = glm::normalize(displacement2D);
 
+            // Build 2D ring with vertex at origin
+            auto ring = conn.buildVertexRing2D(vIdx);
+
+            if (ring.neighborVertexIndices.empty()) {
+                //std::cout << "[Reposition] No neighbors for vertex " << vIdx << "\n";
+                continue;
+            }
+
+            // New position in ring coords is the displacement from origin
+            glm::dvec2 newPos2D = avgVec * STEP_SIZE;
+
+            //std::cout << "[Reposition] Ring has " << ring.neighborVertexIndices.size() << " neighbors\n";
+            //std::cout << "[Reposition] New position in ring: (" << newPos2D.x << ", " << newPos2D.y << ")\n";
+
+            // Update all edge lengths in the ring
+            auto outgoingHEs = conn.getVertexHalfEdges(vIdx);
+            for (size_t i = 0; i < ring.neighborVertexIndices.size(); ++i) {
+                uint32_t neighborIdx = ring.neighborVertexIndices[i];
+                uint32_t edgeIdx = ring.edgeIndices[i];
+                glm::dvec2 neighborPos2D = ring.neighborPositions2D[i];
+
+                double newLength = glm::length(neighborPos2D - newPos2D);
+                edges[edgeIdx].intrinsicLength = newLength;
+            }
+
+            // Update geometry for affected faces only 
+            for (uint32_t fIdx : ring.faceIndices) {
+                mesh.updateCornerAnglesForFace(fIdx);
+            }
+
+            // Update the vertex's surface point correspondence on input mesh
+            GeodesicTracer::SurfacePoint dummyLoc;
+            dummyLoc.type = GeodesicTracer::SurfacePoint::Type::VERTEX;
+            dummyLoc.elementId = vIdx;
+
+            bool resolveSuccess = resolveVertex(vIdx, dummyLoc);
+            if (!resolveSuccess) {
+                //std::cout << "  [Reposition] Failed to resolve vertex " << vIdx << " to input mesh\n";
+            }
+        }
         // Convergence test
         if (maxMove < tol) {
-#ifndef NDEBUG
-            std::cout << "  Converged after " << (iter + 1) << " iterations\n";
-#endif
+            //std::cout << " [Reposition] Converged after " << (iter + 1) << " iterations\n";
+            std::cout << " Done.\n";
             break;
         }
-    } 
+    }
 
-    // Update metrics
-    mesh.updateAllCornerAngles({});
-    mesh.updateAllSignposts();
-    mesh.buildHalfedgeVectorsInVertex();
+    // Final geometry update 
+    mesh.computeCornerScaledAngles();
+    mesh.computeVertexAngleScales();
     mesh.buildHalfedgeVectorsInFace();
+    mesh.buildHalfedgeVectorsInVertex();
 
-    // Update 3d positions for inserted vertices
+    // Update signpost angles for all inserted vertices
     for (uint32_t vIdx : insertedVertices) {
-        auto it = insertedLocation.find(vIdx);
-        if (it == insertedLocation.end()) continue;
+        if (vIdx >= verts.size()) continue;
+        auto outgoingHEs = conn.getVertexHalfEdges(vIdx);
+        for (uint32_t heOut : outgoingHEs) {
+            uint32_t heIn = halfEdges[heOut].opposite;
+            if (heIn != HalfEdgeMesh::INVALID_INDEX) {
+                mesh.updateAngleFromCWNeighbor(heIn);
+            }
+        }
+    }
+
+    // Update 3D positions for inserted vertices based on their updated input locations
+    for (uint32_t vIdx : insertedVertices) {
+        auto it = intrinsicVertexLocations.find(vIdx);
+
+        if (it == intrinsicVertexLocations.end())
+            continue;
+
         const GeodesicTracer::SurfacePoint& sp = it->second;
-        glm::dvec3 p3 = tracer.evaluateSurfacePoint(sp);
+        glm::dvec3 p3 = tracerInput.evaluateSurfacePoint(sp);  // Use tracerInput to evaluate on input mesh
         verts[vIdx].position = glm::vec3(p3);
     }
-#ifndef NDEBUG
-    std::cout << "Repositioning complete\n";
-#endif
+    //std::cout << "[Reposition] Repositioning complete\n";
 }
 
 bool iODT::delaunayRefinement() {
-    const float MIN_ANGLE = 0.0f * glm::pi<float>() / 180.0f;
-    const float MAX_AREA = 0.001f;
-    const float MIN_AREA = 1e-4f;
+    const float MIN_ANGLE = 35.0f * glm::pi<float>() / 180.0f;      // Keep min angle under 40
+    const float MAX_AREA = 100.0f;                                  // Outdated, better to rely on edge length control in repositionInsertedVertices
+    const float MIN_AREA = 1e-4f;                                   // For degenerate models
 
     auto& conn = mesh.getConnectivity();
 
     std::unordered_set<uint32_t> processedFaces;
 
     for (int iter = 0; iter < 100; ++iter) {
-#ifndef NDEBUG
-        std::cout << "Refinement iteration " << (iter + 1) << "\n";
-#endif
+        std::cout << " Refinement iteration " << (iter + 1) << "\n";
 
         mesh.updateAllCornerAngles({});
         auto cands = findRefinementCandidates(MIN_ANGLE, MAX_AREA);
         if (cands.empty()) {
-#ifndef NDEBUG
-            std::cout << "Done.\n";
-#endif
+            std::cout << " Done.\n";
             return true;
         }
 
         std::sort(cands.begin(), cands.end(),
-            [&](auto const& a, auto const& b) { 
-                return a.priority > b.priority; 
+            [&](auto const& a, auto const& b) {
+                return a.priority > b.priority;
             });
 
         bool did = false;
 
         // Skip only for this iteration
-        std::unordered_set<uint32_t> skipFaces; 
+        std::unordered_set<uint32_t> skipFaces;
 
         // snapshot of global insertedVertices to detect new inserts added this iteration
         std::unordered_set<uint32_t> prevInserted = insertedVertices;
         // Set of inserts in this iteration
-        std::unordered_set<uint32_t> iterNewVerts; 
+        std::unordered_set<uint32_t> iterNewVerts;
 
         auto markNeighborsOf = [&](uint32_t v) {
             if (v >= conn.getVertices().size()) return;
             auto& H = conn.getHalfEdges();
             for (auto he : conn.getVertexHalfEdges(v)) {
-                if (he == HalfEdgeMesh::INVALID_INDEX) 
+                if (he == HalfEdgeMesh::INVALID_INDEX)
                     continue;
                 uint32_t fidx = H[he].face;
                 if (fidx != HalfEdgeMesh::INVALID_INDEX) {
                     // skip for the rest of this iteration
-                    skipFaces.insert(fidx); 
+                    skipFaces.insert(fidx);
                 }
             }
             };
@@ -311,34 +362,34 @@ bool iODT::delaunayRefinement() {
         for (auto const& C : cands) {
 
             // Mid iteration skipping
-            if (processedFaces.count(C.faceIdx)) 
+            if (processedFaces.count(C.faceIdx))
                 continue;
-            if (skipFaces.count(C.faceIdx))      
+            if (skipFaces.count(C.faceIdx))
                 continue;
 
-            // revalidate
+            // Revalidate candidate
             float  areaNow = mesh.computeFaceArea(C.faceIdx);
             double minAngNow = computeMinAngle(C.faceIdx);
-            if (areaNow < MIN_AREA) 
+            if (areaNow < MIN_AREA)
                 continue;
 
             bool angleBadNow = (MIN_ANGLE > 0.f) ? (minAngNow < MIN_ANGLE) : false;
             bool areaBadNow = (MAX_AREA > 0.f) ? (areaNow > MAX_AREA) : false;
             if (!(angleBadNow || areaBadNow)) {
                 // Not a candidate
-                continue; 
+                continue;
             }
 
             // Refine
             uint32_t newV = UINT32_MAX;
             bool success = insertCircumcenter(C.faceIdx, newV);
-            if (!success) 
+            if (!success)
                 continue;
 
             did = true;
             processedFaces.insert(C.faceIdx);
 
-            // collect vertices actually created by this call
+            // Collect vertices for current iteration
             std::vector<uint32_t> createdNow;
             if (newV != UINT32_MAX && newV < conn.getVertices().size()) {
                 if (!iterNewVerts.count(newV)) {
@@ -347,7 +398,7 @@ bool iODT::delaunayRefinement() {
                 }
             }
             else {
-                // detect new ones via global set diff
+                // Detect new vertices by global set difference
                 for (uint32_t v : insertedVertices) {
                     if (!prevInserted.count(v) && !iterNewVerts.count(v)) {
                         createdNow.push_back(v);
@@ -356,27 +407,32 @@ bool iODT::delaunayRefinement() {
                 }
             }
 
-            // skip neighbors of newly created verts for the rest of THIS iteration
+            // Perform local Delaunay operation on edges around newly inserted vertex
+            if (newV != UINT32_MAX && newV < conn.getVertices().size()) {
+                std::vector<uint32_t> localEdges;
+                for (uint32_t he : conn.getVertexHalfEdges(newV)) {
+                    uint32_t edgeIdx = conn.getEdgeFromHalfEdge(he);
+                    if (edgeIdx != HalfEdgeMesh::INVALID_INDEX && !conn.getEdges()[edgeIdx].isOriginal) {
+                        localEdges.push_back(edgeIdx);
+                    }
+                }
+                conn.makeDelaunay(5, &localEdges);
+            }
+
+            // skip neighbors of newly created verts for the rest of this iteration
             for (uint32_t v : createdNow) {
                 markNeighborsOf(v);
             }
-
-            // keep state consistent before next candidate
-#ifndef NDEBUG
-            std::cout << "Updating corner angles and signposts after flips...\n";
-#endif
-            mesh.updateAllCornerAngles({});
-            mesh.updateAllSignposts();
-            mesh.buildHalfedgeVectorsInVertex();
-            mesh.buildHalfedgeVectorsInFace();
         }
 
         if (!did) {
-            std::cout << "No refinement possible.\n";
+            //std::cout << "No refinement possible.\n";
             return true;
         }
-
-        // next iteration: full rescan; skipFaces is cleared by scope
+        // Update halfedge vectors at the end of iteration
+        mesh.computeVertexAngleScales();
+        mesh.buildHalfedgeVectorsInVertex();
+        mesh.buildHalfedgeVectorsInFace();
     }
 
     std::cout << "Reached max iterations\n";
@@ -391,36 +447,42 @@ std::vector<iODT::RefinementCandidate>iODT::findRefinementCandidates(float minAn
     std::vector<RefinementCandidate> out;
     out.reserve(F.size());
 
-#ifndef NDEBUG
-    std::cout << "  [DEBUG] minAngleThreshold (rad) = "
+    /*
+    std::cout << "  [RefinementCandidates] minAngleThreshold (rad) = "
         << minAngleThreshold << " ("
         << (minAngleThreshold * 180.0f / glm::pi<float>())
         << " deg), maxAreaThreshold = " << maxAreaThreshold << "\n";
-#endif
-
+    */
     int totalFaces = 0, skippedMinArea = 0, skippedZeroAngle = 0, skippedNotBad = 0, addedCandidates = 0;
 
     for (uint32_t f = 0; f < F.size(); ++f) {
         ++totalFaces;
-        if (F[f].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) continue;
+
+        if (F[f].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX)
+            continue;
 
         float  area = mesh.computeFaceArea(f);
         double minAng = computeMinAngle(f);
 
-        if (area < MIN_AREA) { ++skippedMinArea;  continue; }
-        if (minAng <= 0.0) { ++skippedZeroAngle; continue; }
+        if (area < MIN_AREA) {
+            ++skippedMinArea;
+            continue;
+        }
+        if (minAng <= 0.0) {
+            ++skippedZeroAngle;
+            continue;
+        }
 
         bool angleBad = (minAngleThreshold > 0.f) ? (minAng < minAngleThreshold) : false;
         bool areaBad = (maxAreaThreshold > 0.f) ? (area > maxAreaThreshold) : false;
 
         if (!(angleBad || areaBad)) {
-#ifndef NDEBUG
-            std::cout << "[DEBUG] skip face " << f
+            /*
+            std::cout << "[RefinementCandidates] skip face " << f
                 << " minAng=" << minAng << " thresh=" << minAngleThreshold
                 << " area=" << area << " maxArea=" << maxAreaThreshold
                 << " angleBad=" << angleBad << " areaBad=" << areaBad << "\n";
-#endif
-            
+            */
             ++skippedNotBad;
             continue;
         }
@@ -441,13 +503,13 @@ std::vector<iODT::RefinementCandidate>iODT::findRefinementCandidates(float minAn
         ++addedCandidates;
     }
 
-#ifndef NDEBUG
-    std::cout << "  [DEBUG] Face filtering: total=" << totalFaces
+    /*
+    std::cout << "  [RefinementCandidates] Face filtering: total=" << totalFaces
         << " skippedMinArea=" << skippedMinArea
         << " skippedZeroAngle=" << skippedZeroAngle
         << " skippedNotBad=" << skippedNotBad
         << " candidates=" << addedCandidates << std::endl;
-#endif
+    */
 
     return out;
 }
@@ -457,33 +519,24 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
     auto& halfEdges = conn.getHalfEdges();
     const auto& faces = conn.getFaces();
 
-#ifndef NDEBUG
-    std::cout << "[insertCircumcenter] called on faceIdx = " << faceIdx << std::endl;
-#endif
+    //std::cout << "[insertCircumcenter] called on faceIdx = " << faceIdx << std::endl;
 
     // 1) Validate face index
     if (faceIdx >= faces.size()) {
-#ifndef NDEBUG
-        std::cout << "  -> faceIdx out of range. Returning false.\n";
-#endif
+        //std::cout << "  -> faceIdx out of range. Returning false.\n";
         return false;
     }
     if (faces[faceIdx].halfEdgeIdx == INVALID_INDEX) {
-#ifndef NDEBUG
-        std::cout << "  -> face " << faceIdx << " already invalidated. Returning false.\n";
-#endif
+        //std::cout << "  -> face " << faceIdx << " already invalidated. Returning false.\n";
         return false;
     }
 
     // 2) Reject tiny faces
     float area = mesh.computeFaceArea(faceIdx);
-#ifndef NDEBUG
-    std::cout << "  -> face area = " << area << std::endl;
-#endif
+    //std::cout << "  -> face area = " << area << std::endl;
+
     if (area < 1e-8f) {
-#ifndef NDEBUG
-        std::cout << "  -> area < 1e-8, skipping insertion.\n";
-#endif
+        //std::cout << "  -> area < 1e-8, skipping insertion.\n";
         return false;
     }
 
@@ -496,23 +549,19 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
     if (!std::isfinite(cc2d.x) || !std::isfinite(cc2d.y))
         return false;
 
-#ifndef NDEBUG
-    std::cout << "[insertCircumcenter] circumcenter 2D coords=(" << cc2d.x << "," << cc2d.y << ")" << std::endl;
-#endif
+    //std::cout << "[insertCircumcenter] circumcenter 2D coords=(" << cc2d.x << "," << cc2d.y << ")" << std::endl;
 
     // 5) Pick corner furthest the circumcenter (smallest barycentric)
     glm::dvec3 circumcenterBary = mesh.computeBarycentric2D(cc2d, P0, P1, P2);
     int corner = 0;
 
-#ifndef NDEBUG
-    std::cout << "[insertCircumcenter] circumcenter bary coords=(" << circumcenterBary.x << "," << circumcenterBary.y << "," << circumcenterBary.z << ")" << std::endl;
-#endif
+    //std::cout << "[insertCircumcenter] circumcenter bary coords=(" << circumcenterBary.x << "," << circumcenterBary.y << "," << circumcenterBary.z << ")" << std::endl;
 
     if (circumcenterBary.y < circumcenterBary.x)
         corner = 1;
     if (circumcenterBary.z < circumcenterBary[corner])
         corner = 2;
-    
+
     constexpr double EPS = 1e-4;
     glm::dvec3 cornerB(EPS);
     cornerB[corner] = 1.0 - 2.0 * EPS;
@@ -532,7 +581,16 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
 
     dir2D /= length;
 
-    // 7) Trace across face/faces
+    // 7) Trace across face/faces   
+    auto faceHalfedges = conn.getFaceHalfEdges(faceIdx);
+    uint32_t startVertex = HalfEdgeMesh::INVALID_INDEX;
+    if (cornerB.z > 0.99)
+        startVertex = faceHalfedges[2]; // mostly at corner 2
+    else if (cornerB.y > 0.99)
+        startVertex = faceHalfedges[1]; // mostly at corner 1  
+    else if (cornerB.x > 0.99)
+        startVertex = faceHalfedges[0]; // mostly at corner 0
+
     GeodesicTracer::GeodesicTraceResult intrinsicRes = tracer.traceFromFace(
         faceIdx,     // start face
         cornerB,     // start corner bary
@@ -541,28 +599,23 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
     );
 
     if (!intrinsicRes.success) {
-#ifndef NDEBUG
-        std::cout << "Intrinsic trace failed" << std::endl;
-#endif
+        //std::cout << "Intrinsic trace failed" << std::endl;
         return false;
     }
 
-    // 8) Pick insertion type
+    // Pick insertion type
     GeodesicTracer::SurfacePoint& surfacePoint = intrinsicRes.exitPoint;
- 
-#ifndef NDEBUG
+
+    /*
     std::cout << "[insertCircumcenter] Intrinsic surface point of CC is type:" << surfacePoint.type
-        << " with bary:(" << surfacePoint.baryCoords.x << "," << surfacePoint.baryCoords.y 
+        << " with bary:(" << surfacePoint.baryCoords.x << "," << surfacePoint.baryCoords.y
         << "," << surfacePoint.baryCoords.z << ")" << std::endl;
-#endif
+    */
 
     if (surfacePoint.type == GeodesicTracer::SurfacePoint::Type::VERTEX) {
-#ifndef NDEBUG
-        std::cout << "[insertCircumcenter] trace hit existing vertex "
-            << surfacePoint.elementId << ", skipping insertion\n";
-#endif
-         
-        return false; 
+        //std::cout << "[insertCircumcenter] trace hit existing vertex " << surfacePoint.elementId << ", skipping insertion\n";
+
+        return false;
     }
 
     // Record point location
@@ -572,35 +625,27 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
         // EDGE split
         uint32_t edgeIdx = surfacePoint.elementId;
         double split = surfacePoint.split;
-        
+
         // Pick a halfedge on the edge to pass to splitEdge
         uint32_t heSplit = conn.getEdges()[edgeIdx].halfEdgeIdx;
         if (heSplit == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-            std::cout << "[insertCircumcenter] invalid halfedge for edge " << edgeIdx << std::endl;
-#endif
+            //std::cout << "[insertCircumcenter] invalid halfedge for edge " << edgeIdx << std::endl;
             return false;
         }
 
-#ifndef NDEBUG
-        std::cout << "[insertCircumcenter] splitting edge " << edgeIdx << " at t=" << split << " using halfedge " << heSplit << std::endl;
-#endif
-        
+        //std::cout << "[insertCircumcenter] splitting edge " << edgeIdx << " at t=" << split << " using halfedge " << heSplit << std::endl;
+
+        auto& edges = conn.getEdges();
         splitEdge(edgeIdx, outNewVertex, outNewVertex, outNewVertex, heSplit, split);
-        insertedLocation[outNewVertex] = pendingInsert;
 
-        mesh.updateAllCornerAngles({});
-        mesh.updateAllSignposts();
-        mesh.buildHalfedgeVectorsInVertex();
-        mesh.buildHalfedgeVectorsInFace();
         return true;
-
-    } else {
-        // FACE insert (circumcenter in start face)
+    }
+    else {
+        // FACE insert 
         uint32_t targetFace = surfacePoint.elementId;
         glm::dvec3 targetBary = surfacePoint.baryCoords;
 
-        // 9) Layout target face and calculate split radii
+        // Layout target face and calculate split radii
         auto triangleTarget = mesh.layoutTriangle(targetFace);
         glm::dvec2 V0 = triangleTarget.vertices[0], V1 = triangleTarget.vertices[1], V2 = triangleTarget.vertices[2];
         glm::dvec2 s2D = V0 * targetBary.x + V1 * targetBary.y + V2 * targetBary.z;
@@ -608,61 +653,81 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
         double R1 = glm::length(s2D - V1);
         double R2 = glm::length(s2D - V2);
 
-        // 11) Trace target face to find the 3D position
-        //    startHe = the halfedge of the original faceIdx at the chosen corner
+        //  Get the halfedge of the original face at the chosen corner
         auto startHEs = conn.getFaceHalfEdges(faceIdx);
-        uint32_t startHe = startHEs[corner];
+        uint32_t intrinsicStartHe = startHEs[corner];
+        uint32_t intrinsicStartVertex = halfEdges[intrinsicStartHe].origin;
 
-#ifndef NDEBUG
-        std::cout << "[insertCircumcenter] using startHe=" << startHe
-            << " (origin vertex=" << halfEdges[startHe].origin << ")\n";
-        std::cout << "[insertCircumcenter] calling resolveVertex..." << std::endl;
-#endif
-        glm::dvec3 resolvedPos;
-        if (!tracer.resolveVertex(faceIdx, startHe, intrinsicRes, resolvedPos)) {
-#ifndef NDEBUG
-            std::cout << "[insertCircumcenter] resolveVertex failed\n";
-#endif
-            return false;
+        //std::cout << "[insertCircumcenter] using intrinsic startHe=" << intrinsicStartHe << " (intrinsic vertex=" << intrinsicStartVertex << ")\n";
+        //std::cout << "[insertCircumcenter] calling resolveVertex..." << std::endl;
+
+        // Get the three original vertices of the face before splitting it
+        auto oldHEs = conn.getFaceHalfEdges(targetFace);
+        std::vector<uint32_t> oldVerts;
+        for (uint32_t he : oldHEs) {
+            oldVerts.push_back(conn.getHalfEdges()[he].origin);
         }
 
-        // 10) Intrinsic split
+        // 11) Create the vertex topologically
         uint32_t newV = conn.splitTriangleIntrinsic(targetFace, R0, R1, R2);
-        insertedLocation[newV] = pendingInsert;
         if (newV == HalfEdgeMesh::INVALID_INDEX)
             return false;
 
-        mesh.updateAllCornerAngles({});
-        mesh.updateAllSignposts();
-        mesh.buildHalfedgeVectorsInVertex();
-        mesh.buildHalfedgeVectorsInFace();
+        // Resize buffers after topology change
+        auto& halfEdges = conn.getHalfEdges();
+        auto& vertices = conn.getVertices();
 
-        // 13) Mark only new edges as not original
-        for (uint32_t he : conn.getVertexHalfEdges(newV)) {
-            uint32_t e = conn.getEdgeIndexFromHalfEdge(he);
-            if (e < conn.getEdges().size()) {
-                conn.getEdges()[e].isOriginal = false;
+        // Resize halfedge vectors buffer
+        mesh.getHalfedgeVectorsInVertex().resize(halfEdges.size(), glm::dvec2(0.0));
+
+        // Resize vertex buffers
+        mesh.getVertexAngleScales().resize(vertices.size(), 1.0);
+        mesh.getVertexAngleSums().resize(vertices.size(), 2.0 * glm::pi<double>());
+
+        // Get the three new faces surrounding the vertex
+        auto newFaces = conn.getVertexFaces(newV);
+
+        // Update the corner angles for only the new faces
+        for (uint32_t fIdx : newFaces) {
+            if (fIdx != HalfEdgeMesh::INVALID_INDEX) {
+                mesh.updateCornerAnglesForFace(fIdx);
             }
         }
-        conn.getVertices()[newV].position = resolvedPos;
+
+        // Set the new vertex target angle sum before computing scales
+        auto& vertexAngleSums = mesh.getVertexAngleSums();
+        vertexAngleSums.resize(std::max<size_t>(vertexAngleSums.size(), newV + 1));
+        vertexAngleSums[newV] = 2.0 * glm::pi<double>();
+
+        // Now calculate vertex scales 
+        mesh.computeVertexAngleScales();
+
+        // Let resolveVertex handle signpost angle calculations
+        if (!resolveVertex(newV, intrinsicRes.exitPoint)) {
+            //std::cout << "[insertCircumcenter] resolveVertex failed\n";
+            return false;
+        }
+
+        // Update halfedge vectors after vertex resolution (MAY NOT BE NEEDED)
+        //mesh.buildHalfedgeVectorsInVertex();
+        //mesh.buildHalfedgeVectorsInFace();
+
         insertedVertices.insert(newV);
         outNewVertex = newV;
 
-#ifndef NDEBUG
+        /*
         std::cout << "[insertCircumcenter]  final 3D pos of newv=" << outNewVertex
             << " is " << conn.getVertices()[outNewVertex].position.x << ","
             << conn.getVertices()[outNewVertex].position.y << ","
             << conn.getVertices()[outNewVertex].position.z << "\n";
+        */
 
         if (targetFace != HalfEdgeMesh::INVALID_INDEX) {
-            std::cout << "[insertCircumcenter] Successfully inserted vertex on face="
-                << targetFace << std::endl;
+            //std::cout << "[insertCircumcenter] Successfully inserted vertex on face=" << targetFace << std::endl;
         }
         else {
-            std::cout << "[insertCircumcenter] Failed to insert vertex newV=" << outNewVertex
-                << " on face=" << targetFace << "\n";
+            //std::cout << "[insertCircumcenter] Failed to insert vertex newV=" << outNewVertex << " on face=" << targetFace << "\n";
         }
-#endif
 
         return true;
     }
@@ -670,89 +735,71 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
 
 bool iODT::splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiagFront, uint32_t& outDiagBack, uint32_t HESplit, double t) {
     auto& conn = mesh.getConnectivity();
+    auto& verts = conn.getVertices();
     auto& edges = conn.getEdges();
     auto& halfEdges = conn.getHalfEdges();
     auto& faces = conn.getFaces();
 
     if (edgeIdx >= edges.size()) {
-#ifndef NDEBUG
-        std::cout << "[splitEdge] Invalid edge index\n";
-#endif
+        //std::cout << "[splitEdge] Invalid edge index\n";
         return false;
     }
 
-    // 1) Use the provided halfedge directly
+    // Use the passed in halfedge 
     uint32_t parentHE = HESplit;
     uint32_t oppHE = halfEdges[parentHE].opposite;
 
     // Verify the halfedge actually belongs to this edge
-    uint32_t edgeFromHE = conn.getEdgeIndexFromHalfEdge(HESplit);
+    uint32_t edgeFromHE = conn.getEdgeFromHalfEdge(HESplit);
     if (edgeFromHE != edgeIdx) {
-#ifndef NDEBUG
-        std::cout << "[splitEdge] Provided halfedge " << HESplit
-            << " doesn't belong to edge " << edgeIdx << ", aborting\n";
-#endif
+        //std::cout << "[splitEdge] Halfedge " << HESplit << " doesn't belong to edge " << edgeIdx << ", aborting\n";
         return false;
     }
 
     uint32_t originalVA = halfEdges[parentHE].origin;
     uint32_t originalVB = halfEdges[halfEdges[parentHE].next].origin;
 
-#ifndef NDEBUG
+    /*
     std::cout << "[splitEdge] Splitting edge " << edgeIdx
         << " between vertices " << originalVA << " -> " << originalVB
         << " using halfedge " << HESplit << std::endl;
-#endif
-
-    // 2) Set split fraction
+    */
+    // Set split fraction
     double splitFraction = t;
-#ifndef NDEBUG
-    std::cout << "[splitEdge] Using provided split fraction: " << splitFraction << "\n";
-#endif
 
-    // 3) Get original halfedge length and compute child lengths
-    double originalLength = halfEdges[parentHE].intrinsicLength;
+    //std::cout << "[splitEdge] Using split fraction: " << splitFraction << "\n";
+
+    // Get original edge length and calculate child lengths
+    double originalLength = conn.getIntrinsicLengthFromHalfEdge(parentHE);
 
     if (originalLength <= 1e-12) {
-#ifndef NDEBUG
-        std::cout << "[splitEdge] Halfedge had " << originalLength << " intrinsic length, skipping\n";
-#endif
+        //std::cout << "[splitEdge] Edge had " << originalLength << " intrinsic length, skipping\n";
         return false;
     }
 
     double La = splitFraction * originalLength;
     double Lb = (1.0 - splitFraction) * originalLength;
 
-#ifndef NDEBUG
-    std::cout << "[splitEdge] originalLength=" << originalLength
-        << " -> La=" << La << ", Lb=" << Lb << std::endl;
-#endif
+    //std::cout << "[splitEdge] originalLength=" << originalLength << " -> La=" << La << ", Lb=" << Lb << std::endl;
 
-    // 4) Precompute diagonal lengths before split
+    // Precalculate diagonal lengths before split
     std::vector<double> precomputedDiagonals;
     uint32_t face1 = halfEdges[parentHE].face;
     uint32_t face2 = (oppHE != HalfEdgeMesh::INVALID_INDEX)
         ? halfEdges[oppHE].face : HalfEdgeMesh::INVALID_INDEX;
 
-#ifndef NDEBUG
-    std::cout << "[splitEdge] Computing diagonals for face1=" << face1
-        << " and face2=" << face2 << std::endl;
-#endif
+    //std::cout << "[splitEdge] Calculating diagonals for face1=" << face1 << " and face2=" << face2 << std::endl;
 
     double diagLen1 = 0.0;
     if (face1 != HalfEdgeMesh::INVALID_INDEX) {
         diagLen1 = mesh.computeSplitDiagonalLength(face1, originalVA, originalVB, splitFraction);
-#ifndef NDEBUG
-        std::cout << "[splitEdge] Face1 (" << face1 << ") diagonal length: " << diagLen1 << std::endl;
-#endif
+        //std::cout << "[splitEdge] Face1 (" << face1 << ") diagonal length: " << diagLen1 << std::endl;
     }
 
     double diagLen2 = 0.0;
     if (face2 != HalfEdgeMesh::INVALID_INDEX) {
         diagLen2 = mesh.computeSplitDiagonalLength(face2, originalVA, originalVB, splitFraction);
-#ifndef NDEBUG
-        std::cout << "[splitEdge] Face2 (" << face2 << ") diagonal length: " << diagLen2 << std::endl;
-#endif
+        //std::cout << "[splitEdge] Face2 (" << face2 << ") diagonal length: " << diagLen2 << std::endl;
     }
 
     precomputedDiagonals = { diagLen1, diagLen2 };
@@ -761,9 +808,7 @@ bool iODT::splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiag
     edges[edgeIdx].halfEdgeIdx = parentHE;
     auto R = conn.splitEdgeTopo(edgeIdx, splitFraction);
     if (R.newV == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-        std::cout << "[splitEdge] splitEdgeTopo failed\n";
-#endif
+        //std::cout << "[splitEdge] splitEdgeTopo failed\n";
         return false;
     }
 
@@ -772,483 +817,424 @@ bool iODT::splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiag
     uint32_t diagBack = R.diagBack;
     conn.getVertices()[newV].halfEdgeIdx = R.heB;
 
-    uint32_t heA = R.heA;         // first child of split edge
-    uint32_t heB = R.heB;         // second child of split edge
-    uint32_t dF = diagFront;      // new diagonal front
-    uint32_t dB = diagBack;       // new diagonal back
-
-#ifndef NDEBUG
-    std::cout << "[DEBUG] splitEdgeTopo results: newV=" << newV
-        << ", R.heA=" << R.heA << " (origin=" << halfEdges[R.heA].origin << ")"
-        << ", R.heB=" << R.heB << " (origin=" << halfEdges[R.heB].origin << ")" << std::endl;
-#endif
-
-    // 7) Apply diagonal lengths
+    // Set diagonal lengths before corner angle calculations
     for (int i = 0; i < 2; ++i) {
         uint32_t diagHE = (i == 0 ? R.diagFront : R.diagBack);
         double L = precomputedDiagonals[i];
-        if (diagHE == HalfEdgeMesh::INVALID_INDEX) continue;
+        if (diagHE == HalfEdgeMesh::INVALID_INDEX)
+            continue;
 
-        halfEdges[diagHE].intrinsicLength = L;
-        uint32_t opp = halfEdges[diagHE].opposite;
-        if (opp != HalfEdgeMesh::INVALID_INDEX)
-            halfEdges[opp].intrinsicLength = L;
-    }
-
-    // 8) Update geometry in correct order
-#ifndef NDEBUG
-    std::cout << "[splitEdge] Updating intrinsic geometry..." << std::endl;
-#endif
-
-    // First: Update corner angles for the affected faces
-    std::unordered_set<uint32_t> affectedFaces;
-    if (diagFront != HalfEdgeMesh::INVALID_INDEX) {
-        uint32_t frontFace = halfEdges[diagFront].face;
-        if (frontFace != HalfEdgeMesh::INVALID_INDEX) {
-            affectedFaces.insert(frontFace);
-        }
-    }
-    if (diagBack != HalfEdgeMesh::INVALID_INDEX) {
-        uint32_t backFace = halfEdges[diagBack].face;
-        if (backFace != HalfEdgeMesh::INVALID_INDEX) {
-            affectedFaces.insert(backFace);
+        uint32_t diagEdgeIdx = conn.getEdgeFromHalfEdge(diagHE);
+        if (diagEdgeIdx != HalfEdgeMesh::INVALID_INDEX && diagEdgeIdx < edges.size()) {
+            edges[diagEdgeIdx].intrinsicLength = L;
+            //std::cout << "[splitEdge] Set diagonal edge " << diagEdgeIdx << " length to " << L << std::endl;
         }
     }
 
-    // Update metric data
-    mesh.updateAllCornerAngles({});
-    mesh.updateAllSignposts();
-    mesh.buildHalfedgeVectorsInVertex();
-    mesh.buildHalfedgeVectorsInFace();
+    // Resize buffers for the new vertex
+    mesh.getVertexAngleScales().resize(conn.getVertices().size(), 1.0);
+    mesh.getVertexAngleSums().resize(conn.getVertices().size(), 2.0 * glm::pi<double>());
+    mesh.getHalfedgeVectorsInVertex().resize(conn.getHalfEdges().size(), glm::dvec2(0.0));
 
-    // 9) Vertex resolution using SurfacePoint
-    auto& verts = conn.getVertices();
+    // Set the target angle sum for the new vertex
+    bool isBoundary = (oppHE == HalfEdgeMesh::INVALID_INDEX ||
+        halfEdges[oppHE].face == HalfEdgeMesh::INVALID_INDEX);
+    mesh.getVertexAngleSums()[newV] = isBoundary ? glm::pi<double>() : 2.0 * glm::pi<double>();
 
-    // Set up SurfacePoint for the split location
+    //std::cout << "[splitEdge] Set vertex " << newV << " angle sum to " << (isBoundary ? "pi" : "2pi") << " (boundary=" << isBoundary << ")" << std::endl;
+
+    // Update the corner angles only for affected faces
+    auto adjacentFaces = conn.getVertexFaces(newV);
+    for (uint32_t fIdx : adjacentFaces) {
+        if (fIdx != HalfEdgeMesh::INVALID_INDEX) {
+            mesh.updateCornerAnglesForFace(fIdx);
+            //std::cout << "[splitEdge] Updated corner angles for face " << fIdx << std::endl;
+        }
+    }
+
+    // Create surface point for the split location on the intrinsic mesh
     GeodesicTracer::SurfacePoint loc;
     loc.type = GeodesicTracer::SurfacePoint::Type::EDGE;
-    loc.elementId = edgeIdx;
+    loc.elementId = edgeIdx; // The intrinsic edge being split
+    loc.split = splitFraction;
     loc.baryCoords = glm::dvec3(1.0 - splitFraction, splitFraction, 0.0);
 
-#ifndef NDEBUG
-    std::cout << "[splitEdge] SurfacePoint on edge "
-        << edgeIdx << " at t=" << splitFraction << std::endl;
-#endif
+    //std::cout << "[splitEdge] Created INTRINSIC EDGE SurfacePoint: edgeId=" << edgeIdx << " split=" << splitFraction << std::endl;
 
-    // Find 3D position using linear interpolation
-    tracer.resolveVertexLinear(newV, loc, heA, heB);
-#ifndef NDEBUG
-    std::cout << "[splitEdge] Successfully resolved vertex position using linear interpolation\n";
-#endif
+    // Let resolveVertex handle signpost angle calculations
+    if (!resolveVertex(newV, loc)) {
+        //std::cout << "[splitEdge] ERROR: resolveVertex failed for new vertex " << newV << std::endl;
+        return false;
+    }
+    //std::cout << "[splitEdge] Successfully resolved vertex position using geodesic tracing\n";
 
-    // 10) Track inserted vertex and inserted surface point location
-    insertedLocation[newV] = loc;
+    // Print final 3D position
+    if (newV < verts.size()) {
+        const auto& pos = verts[newV].position;
+        //std::cout << "[splitEdge] final 3D pos of newv=" << newV << " is " << pos.x << "," << pos.y << "," << pos.z << std::endl;
+    }
+
+    // Track inserted vertex and inserted surface point location
     insertedVertices.insert(newV);
 
     outNewVertex = newV;
     outDiagFront = diagFront;
     outDiagBack = diagBack;
 
-#ifndef NDEBUG
-    std::cout << "[splitEdge] SUCCESS: newV=" << newV
-        << ", diagFront=" << diagFront << ", diagBack=" << diagBack << std::endl;
-#endif
+    //std::cout << "[splitEdge] SUCCESS: newV=" << newV << ", diagFront=" << diagFront << ", diagBack=" << diagBack << std::endl;
+
     return true;
 }
 
 bool iODT::computeWeightedCircumcenter(uint32_t vertIdx, uint32_t& outRefFace, int& outLocalRefIdx, glm::dvec2& outAvgVec, double& outAvgLen) {
-    constexpr bool DEBUG = false;
-    const double START_EPS = 1e-6;
     const double EPS_LEN = 1e-12;
 
     auto& conn = mesh.getConnectivity();
     const auto& HEs = conn.getHalfEdges();
-    const auto& hvf = mesh.getHalfedgeVectorsInFace(); // used by rotateVectorAcrossEdge
 
     outRefFace = HalfEdgeMesh::INVALID_INDEX;
     outLocalRefIdx = -1;
     outAvgVec = glm::dvec2(0.0);
     outAvgLen = 0.0;
 
-    // ring + incident faces
-    std::vector<uint32_t> ringHEs = conn.getVertexHalfEdges(vertIdx);
-    if (ringHEs.empty()) {
-        if (DEBUG) std::cout << "[WCC] vert " << vertIdx << " no halfedges\n";
+    // Build 2D ring with vertex at origin 
+    auto ring = conn.buildVertexRing2D(vertIdx);
+    if (ring.neighborVertexIndices.empty()) {
         return false;
     }
 
-    std::vector<uint32_t> incidentFaces;
-    incidentFaces.reserve(ringHEs.size());
-    for (uint32_t he : ringHEs) {
-        if (he == HalfEdgeMesh::INVALID_INDEX) continue;
-        uint32_t f = HEs[he].face;
-        if (f == HalfEdgeMesh::INVALID_INDEX) continue;
-        if (std::find(incidentFaces.begin(), incidentFaces.end(), f) == incidentFaces.end())
-            incidentFaces.push_back(f);
-    }
-    if (incidentFaces.empty()) {
-        if (DEBUG) std::cout << "[WCC] vert " << vertIdx << " has no incident faces\n";
-        return false;
+    // Pick first face as reference 
+    if (!ring.faceIndices.empty()) {
+        outRefFace = ring.faceIndices[0];
+        outLocalRefIdx = 0; // Vertex is at origin in ring coords
     }
 
-    // pick reference face & local corner
-    for (uint32_t f : incidentFaces) {
-        auto tri = mesh.layoutTriangle(f);
-        for (int i = 0; i < 3; ++i)
-            if ((uint32_t)tri.indices[i] == vertIdx) {
-                outRefFace = f;
-                outLocalRefIdx = i;
-                break;
-            }
-        if (outRefFace != HalfEdgeMesh::INVALID_INDEX) break;
-    }
-    if (outRefFace == HalfEdgeMesh::INVALID_INDEX) {
-        if (DEBUG) std::cout << "[WCC] vert " << vertIdx << " no reference face\n";
-        return false;
-    }
-
-    // reference corner halfedge (origin == vertIdx)
-    uint32_t heRefCorner = HalfEdgeMesh::INVALID_INDEX;
-    for (uint32_t fhe : conn.getFaceHalfEdges(outRefFace)) {
-        if (fhe != HalfEdgeMesh::INVALID_INDEX && HEs[fhe].origin == vertIdx) {
-            heRefCorner = fhe;
-            break;
-        }
-    }
-    if (heRefCorner == HalfEdgeMesh::INVALID_INDEX) {
-        if (DEBUG) std::cout << "[WCC] vert " << vertIdx << " no heRefCorner\n";
-        return false;
-    }
-
-    // Precompute ref chart->signpost rotation
-    auto triRef = mesh.layoutTriangle(outRefFace);
-    glm::dvec2 eRefChart = hvf.size() == HEs.size()
-        ? hvf[heRefCorner]
-        : (triRef.vertices[(outLocalRefIdx + 1) % 3] - triRef.vertices[outLocalRefIdx]);
-
-    double refChartAngle = std::atan2(eRefChart.y, eRefChart.x);
-    double angleRefCorner = HEs[heRefCorner].signpostAngle;
-
-    auto normPi = [](double a)->double {
-        while (a <= -glm::pi<double>()) a += 2.0 * glm::pi<double>();
-        while (a > glm::pi<double>()) a -= 2.0 * glm::pi<double>();
-        return a;
-        };
-    angleRefCorner = normPi(angleRefCorner);
-    refChartAngle = normPi(refChartAngle);
-    const double rotateChartToRefSignpost = normPi(angleRefCorner - refChartAngle);
-
-    if (DEBUG) {
-        auto triR = mesh.layoutTriangle(outRefFace);
-        
-        // Print info about all incident faces
-        std::cout << "[WCC] vert " << vertIdx << " incident faces (" << incidentFaces.size() << " total):\n";
-        for (uint32_t f : incidentFaces) {
-            double minAngle = computeMinAngle(f);
-            double area = mesh.computeFaceArea(f);
-            auto tri = mesh.layoutTriangle(f);
-            std::cout << "  face " << f << ": min angle=" << (minAngle * 180.0 / glm::pi<double>()) 
-                     << " deg, area=" << area 
-                     << ", vertices=[" << tri.indices[0] << "," << tri.indices[1] << "," << tri.indices[2] << "]\n";
-        }
-    }
-
-    auto rotate2 = [](const glm::dvec2& v, double ang)->glm::dvec2 {
-        double c = std::cos(ang), s = std::sin(ang);
-        return { c * v.x - s * v.y, s * v.x + c * v.y };
-        };
-
-    // transportAroundVertex helper 
-    auto transportAroundVertex = [&](uint32_t startFace, uint32_t heStartCorner,
-        uint32_t targetFace, const glm::dvec2& vecStart)
-        -> std::pair<bool, glm::dvec2>
-        {
-            if (startFace == targetFace) return { true, vecStart };
-            glm::dvec2 bestVec(0.0); bool got = false;
-            struct Attempt { bool forward; };
-            Attempt attempts[2] = { {true},{false} };
-            int ringCap = std::max<int>(8, (int)incidentFaces.size() + 4);
-
-            for (const auto& at : attempts) {
-                uint32_t currFace = startFace;
-                uint32_t heCorner = heStartCorner;
-                glm::dvec2 v = vecStart;
-
-                for (int steps = 0; steps < ringCap && currFace != targetFace; ++steps) {
-                    if (at.forward) {
-                        uint32_t oldHe = heCorner;
-                        uint32_t newHe = HEs[oldHe].opposite;
-                        if (newHe == HalfEdgeMesh::INVALID_INDEX) break;
-                        uint32_t nextFace = HEs[newHe].face;
-                        if (nextFace == HalfEdgeMesh::INVALID_INDEX) break;
-                        v = tracer.rotateVectorAcrossEdge(mesh, currFace, oldHe, nextFace, newHe, v);
-                        uint32_t nextCorner = HEs[newHe].next;
-                        if (nextCorner == HalfEdgeMesh::INVALID_INDEX || HEs[nextCorner].origin != vertIdx) break;
-                        currFace = nextFace; heCorner = nextCorner;
-                    }
-                    else {
-                        uint32_t oldHe = HEs[heCorner].prev;
-                        if (oldHe == HalfEdgeMesh::INVALID_INDEX) break;
-                        uint32_t newHe = HEs[oldHe].opposite;
-                        if (newHe == HalfEdgeMesh::INVALID_INDEX) break;
-                        uint32_t nextFace = HEs[newHe].face;
-                        if (nextFace == HalfEdgeMesh::INVALID_INDEX) break;
-                        v = tracer.rotateVectorAcrossEdge(mesh, currFace, oldHe, nextFace, newHe, v);
-                        uint32_t nextCorner = newHe;
-                        if (HEs[nextCorner].origin != vertIdx) break;
-                        currFace = nextFace; heCorner = nextCorner;
-                    }
-                }
-                if (currFace == targetFace) { bestVec = v; got = true; break; }
-            }
-            return { got, bestVec };
-        };
-
+    // Calculate area weighted average of vectors to circumcenters in ring coordinates
     glm::dvec2 accum(0.0);
     double accumW = 0.0;
     int successCount = 0;
 
-    for (uint32_t f : incidentFaces) {
+    // Calculate circumcenter for each neighbor pair
+    for (size_t i = 0; i < ring.neighborVertexIndices.size(); ++i) {
+        size_t nextI = (i + 1) % ring.neighborVertexIndices.size();
+
+        // Find which face this corresponds to (face with halfedge from center to neighbor[i])
+        uint32_t f = HalfEdgeMesh::INVALID_INDEX;
+        if (i < ring.faceIndices.size()) {
+            f = ring.faceIndices[i];
+        }
+
+        if (f == HalfEdgeMesh::INVALID_INDEX)
+            continue;
+
         double area = mesh.computeFaceArea(f);
-        if (!(area > 0.0)) continue;
+        if (!(area > 0.0))
+            continue;
 
-        auto tri = mesh.layoutTriangle(f);
-        glm::dvec2 cc2d = mesh.computeCircumcenter2D(
-            tri.vertices[0], tri.vertices[1], tri.vertices[2]);
-        if (!std::isfinite(cc2d.x) || !std::isfinite(cc2d.y)) continue;
+        // Get the face's vertices in ring coordinates
+        // Face is formed by center vertex and two consecutive neighbors
+        glm::dvec2 v0 = glm::dvec2(0.0, 0.0); // Center vertex at origin
+        glm::dvec2 v1 = ring.neighborPositions2D[i];
+        glm::dvec2 v2 = ring.neighborPositions2D[nextI];
 
-        int localIdx = -1;
-        for (int i = 0; i < 3; ++i)
-            if ((uint32_t)tri.indices[i] == vertIdx) { localIdx = i; break; }
-        if (localIdx < 0) continue;
-
-        glm::dvec3 startBary(START_EPS, START_EPS, START_EPS);
-        startBary[localIdx] = 1.0 - 2.0 * START_EPS;
-
-        glm::dvec2 vCorner = tri.vertices[localIdx];
-        glm::dvec2 dir = cc2d - vCorner;
-        double L = glm::length(dir);
-        if (L <= EPS_LEN) continue;
-        glm::dvec2 dirN = dir / L;
-
-        auto tr = tracer.traceFromFace(f, startBary, dirN, L);
-        if (!tr.success || tr.finalFaceIdx == GeodesicTracer::INVALID_INDEX) continue;
-
-        auto triExit = mesh.layoutTriangle(tr.finalFaceIdx);
-
-        // displacement = weighted sum of (Vi - Vcorner) using baryCoords, no absolute chart
-        int localExit = -1;
-        // If we hit an edge, try to find the vertex in one of the adjacent faces
-        if (tr.exitPoint.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
-            uint32_t edgeIdx = tr.exitPoint.elementId;
-            auto& edges = conn.getEdges();
-            if (edgeIdx < edges.size()) {
-                uint32_t he = edges[edgeIdx].halfEdgeIdx;
-                if (he != HalfEdgeMesh::INVALID_INDEX) {
-                    // Try both faces adjacent to the edge
-                    uint32_t face1 = HEs[he].face;
-                    uint32_t face2 = HalfEdgeMesh::INVALID_INDEX;
-
-                    // Safely get the opposite face
-                    uint32_t oppHe = HEs[he].opposite;
-                    if (oppHe != HalfEdgeMesh::INVALID_INDEX) {
-                        face2 = HEs[oppHe].face;
-                    }
-
-                    // Validate and get edge endpoints
-                    uint32_t v0 = HEs[he].origin;
-                    uint32_t nextHe = HEs[he].next;
-                    if (nextHe == HalfEdgeMesh::INVALID_INDEX) continue;
-                    uint32_t v1 = HEs[nextHe].origin;
-
-                    // Validate and clamp split parameter
-                    double t = tr.exitPoint.split;
-                    if (!std::isfinite(t)) continue;
-                    t = glm::clamp(t, 0.0, 1.0);
-
-                    uint32_t chosenFace = HalfEdgeMesh::INVALID_INDEX;
-                    glm::dvec3 useBary(0.0);
-                    auto chosenLayout = triExit; // Use same type as triExit
-                    int chosenLocalExit = -1;
-
-                    // Check first face
-                    if (face1 != HalfEdgeMesh::INVALID_INDEX) {
-                        auto triFace1 = mesh.layoutTriangle(face1);
-                        // Find local indices for edge endpoints in this face
-                        int local_v0 = -1, local_v1 = -1;
-                        for (int i = 0; i < 3; ++i) {
-                            if ((uint32_t)triFace1.indices[i] == v0) local_v0 = i;
-                            if ((uint32_t)triFace1.indices[i] == v1) local_v1 = i;
-                            if ((uint32_t)triFace1.indices[i] == vertIdx) chosenLocalExit = i;
-                        }
-                        if (local_v0 >= 0 && local_v1 >= 0 && chosenLocalExit >= 0) {
-                            // Compute proper barycentric coordinates using local indices
-                            glm::dvec2 edgePos = triFace1.vertices[local_v0] * (1.0 - t) +
-                                triFace1.vertices[local_v1] * t;
-                            useBary = mesh.computeBarycentric2D(edgePos,
-                                triFace1.vertices[0],
-                                triFace1.vertices[1],
-                                triFace1.vertices[2]);
-                            chosenFace = face1;
-                            chosenLayout = triFace1;
-                            localExit = chosenLocalExit;
-                        }
-                    }
-
-                    // If not found, check second face
-                    if (localExit < 0 && face2 != HalfEdgeMesh::INVALID_INDEX) {
-                        auto triFace2 = mesh.layoutTriangle(face2);
-                        // Find local indices for edge endpoints in this face
-                        int local_v0 = -1, local_v1 = -1;
-                        for (int i = 0; i < 3; ++i) {
-                            if ((uint32_t)triFace2.indices[i] == v0) local_v0 = i;
-                            if ((uint32_t)triFace2.indices[i] == v1) local_v1 = i;
-                            if ((uint32_t)triFace2.indices[i] == vertIdx) chosenLocalExit = i;
-                        }
-                        if (local_v0 >= 0 && local_v1 >= 0 && chosenLocalExit >= 0) {
-                            // Compute proper barycentric coordinates using local indices
-                            glm::dvec2 edgePos = triFace2.vertices[local_v0] * (1.0 - t) +
-                                triFace2.vertices[local_v1] * t;
-                            useBary = mesh.computeBarycentric2D(edgePos,
-                                triFace2.vertices[0],
-                                triFace2.vertices[1],
-                                triFace2.vertices[2]);
-                            chosenFace = face2;
-                            chosenLayout = triFace2;
-                            localExit = chosenLocalExit;
-                        }
-                    }
-
-                    // Apply changes only if we found a valid face
-                    if (chosenFace != HalfEdgeMesh::INVALID_INDEX) {
-                        tr.finalFaceIdx = chosenFace;
-                        tr.baryCoords = useBary;
-                        triExit = chosenLayout;
-                    }
-                }
-            }
-        }
-        else {
-            // Normal case: check the exit face
-            for (int i = 0; i < 3; ++i)
-                if ((uint32_t)triExit.indices[i] == vertIdx) { localExit = i; break; }
-        }
-        if (localExit < 0) continue;        glm::dvec2 dispInExit(0.0);
-        for (int i = 0; i < 3; ++i) {
-            if (i == localExit) continue;
-            dispInExit += tr.baryCoords[i] * (triExit.vertices[i] - triExit.vertices[localExit]);
-        }
-        if (!std::isfinite(dispInExit.x) || !std::isfinite(dispInExit.y)) continue;
-        if (glm::length(dispInExit) <= EPS_LEN) continue;
-
-        uint32_t heExitCorner = HalfEdgeMesh::INVALID_INDEX;
-        for (uint32_t fhe : conn.getFaceHalfEdges(tr.finalFaceIdx)) {
-            if (fhe != HalfEdgeMesh::INVALID_INDEX && HEs[fhe].origin == vertIdx) {
-                heExitCorner = fhe; break;
-            }
-        }
-        if (heExitCorner == HalfEdgeMesh::INVALID_INDEX) continue;
-
-        auto [ok, dispInRefChart] = transportAroundVertex(
-            tr.finalFaceIdx, heExitCorner, outRefFace, dispInExit);
-
-        if (!ok) {
-            double angleExitCorner = normPi(HEs[heExitCorner].signpostAngle);
-            double delta = normPi(angleRefCorner - angleExitCorner);
-            dispInRefChart = rotate2(dispInExit, delta);
-            if (DEBUG) {
-                std::cout << "  [WCC] face " << f
-                    << " transport FAIL -> fallback corner delta=" << delta
-                    << " heExitCorner=" << heExitCorner
-                    << " finalFace=" << tr.finalFaceIdx << "\n";
-            }
+        // Calculate circumcenter in ring coordinates
+        glm::dvec2 cc2d = mesh.computeCircumcenter2D(v0, v1, v2);
+        if (!std::isfinite(cc2d.x) || !std::isfinite(cc2d.y)) {
+            continue;
         }
 
-        glm::dvec2 dispInRefSignpost = rotate2(dispInRefChart, rotateChartToRefSignpost);
-        double dispLen = glm::length(dispInRefSignpost);
-        if (dispLen <= EPS_LEN) continue;
+        // Vector from vertex (at origin) to circumcenter
+        glm::dvec2 vectorToCircumcenter = cc2d;
 
-            if (DEBUG) {
-#ifndef NDEBUG
-                std::cout << "  [WCC] face " << f
-                    << " area=" << area
-                    << " tr.finalFace=" << tr.finalFaceIdx
-                    << " heExitCorner=" << heExitCorner
-                    << " dispLen=" << dispLen
-                    << " (transported & signpost-aligned)\n";
-#endif
-            }        accum += area * dispInRefSignpost;
+        double L = glm::length(vectorToCircumcenter);
+        if (L <= EPS_LEN)
+            continue;
+
+        // Area weighted accumulation
+        accum += area * vectorToCircumcenter;
         accumW += area;
         ++successCount;
     }
 
     if (!(accumW > 0.0) || successCount == 0) {
-        if (DEBUG) std::cout << "[WCC] vert " << vertIdx
-            << " no successful contributions\n";
         return false;
     }
 
     outAvgVec = accum / accumW;
     outAvgLen = glm::length(outAvgVec);
 
-    if (DEBUG) {
-        std::cout << "[WCC] vert " << vertIdx
-            << " successCount=" << successCount
-            << " outAvgVec=(" << outAvgVec.x << "," << outAvgVec.y << ")"
-            << " outAvgLen=" << outAvgLen << "\n";
-    }
     return true;
 }
 
-bool iODT::traceWeightedVector(uint32_t vertIdx, double stepLen, GeodesicTracer::GeodesicTraceResult& outTrace) {
-    constexpr bool DEBUG = true;
-    const double START_EPS = 1e-8;
+bool iODT::resolveVertex(uint32_t newVertexIdx, const GeodesicTracer::SurfacePoint& intrinsicPoint) {
+    auto& conn = mesh.getConnectivity();
+    auto& inputConn = inputMesh.getConnectivity();
+    const auto& verts = conn.getVertices();
+    const auto& halfEdges = conn.getHalfEdges();
 
-    uint32_t refFace;
-    int localRefIdx;
-    glm::dvec2 avgVec;
-    double avgLen;
+    //std::cout << "[resolveVertex] Resolving vertex " << newVertexIdx << " following Geometry Central pattern\n";
 
-    if (!computeWeightedCircumcenter(vertIdx, refFace, localRefIdx, avgVec, avgLen)) {
-        outTrace.success = false;
+    // Calculate angular coordinates for the halfedges
+    auto outgoingHEs = conn.getVertexHalfEdges(newVertexIdx);
+    std::vector<uint32_t> incomingHEs;
+    for (uint32_t heOut : outgoingHEs) {
+        uint32_t twinHe = halfEdges[heOut].opposite;
+        if (twinHe != HalfEdgeMesh::INVALID_INDEX) {
+            incomingHEs.push_back(twinHe);
+        }
+    }
+
+    // Call updateAngleFromCWNeighbor on all incoming halfedges first 
+    for (uint32_t heIn : incomingHEs) {
+        double originalAngle = halfEdges[heIn].signpostAngle;
+        mesh.updateAngleFromCWNeighbor(heIn);
+        //std::cout << "[resolveVertex] Updated angle for incoming he=" << heIn << " from " << originalAngle << " to " << halfEdges[heIn].signpostAngle << "\n";
+    }
+
+    // Set up bases on the intrinsic faces
+    auto adjacentFaces = conn.getVertexFaces(newVertexIdx);
+    for (uint32_t fIdx : adjacentFaces) {
+        if (fIdx != HalfEdgeMesh::INVALID_INDEX) {
+            // Update face coordinate system for this specific face
+            mesh.updateCornerAnglesForFace(fIdx);
+            //std::cout << "[resolveVertex] Updated face basis for face " << fIdx << "\n";
+        }
+    }
+
+    if (incomingHEs.empty()) {
+        //std::cout << "[resolveVertex] No incoming halfedges for vertex " << newVertexIdx << std::endl;
         return false;
     }
 
-    if (avgLen <= 0.0) {
-        outTrace.success = false;
-        return false;
+    // Choose best adjacent vertex to trace from
+    // Priority: original vertices (1) > inserted vertices (2) > boundary vertices (3)
+    uint32_t inputTraceHe = incomingHEs[0]; // default
+    int bestPriority = 9999;
+    double bestLength = std::numeric_limits<double>::max();
+
+    for (uint32_t heIn : incomingHEs) {
+        //std::cout << "[resolveVertex] Processing incoming halfedge " << heIn << "\n";
+
+        uint32_t adjacentVertex = halfEdges[heIn].origin;
+
+        // Skip vertices that don't have input location mapping
+        if (intrinsicVertexLocations.find(adjacentVertex) == intrinsicVertexLocations.end()) {
+            //std::cout << "[resolveVertex] Skipping adjacent vertex " << adjacentVertex << " - no input location mapping\n";
+            continue;
+        }
+        //std::cout << "[resolveVertex] Considering adjacent vertex " << adjacentVertex << " with input location mapping\n";
+
+        // Calculate priority (lower is better) 
+        int priority = 2; // Default: inserted vertex
+
+        // Check if it's an original vertex 
+        if (verts[adjacentVertex].originalIndex != HalfEdgeMesh::INVALID_INDEX) {
+            priority = 1; // Original vertices have most stable locations
+        }
+
+        // Check if its a boundary edge
+        uint32_t edgeIdx = halfEdges[heIn].edgeIdx;
+        if (edgeIdx != HalfEdgeMesh::INVALID_INDEX) {
+            const auto& edges = conn.getEdges();
+            if (edgeIdx < edges.size()) {
+                uint32_t oppositeHe = halfEdges[heIn].opposite;
+                if (oppositeHe == HalfEdgeMesh::INVALID_INDEX ||
+                    halfEdges[oppositeHe].face == HalfEdgeMesh::INVALID_INDEX) {
+                    priority = 3;
+                }
+            }
+        }
+
+        // Calculate edge length for tie break
+        double edgeLength = conn.getIntrinsicLengthFromHalfEdge(heIn);
+
+        // Select best candidate 
+        if (priority < bestPriority || (priority == bestPriority && edgeLength < bestLength)) {
+            bestPriority = priority;
+            bestLength = edgeLength;
+            inputTraceHe = heIn;
+        }
     }
 
-    glm::dvec2 dir = avgVec / avgLen;
+    // Get the adjacent vertex to trace from 
+    uint32_t traceFromVertex = halfEdges[inputTraceHe].origin;
+    //std::cout << "[resolveVertex] Selected trace halfedge " << inputTraceHe << " from vertex " << traceFromVertex << " (priority=" << bestPriority << ")\n";
 
-    glm::dvec3 startBary(START_EPS, START_EPS, START_EPS);
-    startBary[localRefIdx] = 1.0 - 2.0 * START_EPS;
-
-    outTrace = tracer.traceFromFace(refFace, startBary, dir, stepLen);
-
-    if (DEBUG) {
-        if (outTrace.success && outTrace.finalFaceIdx != GeodesicTracer::INVALID_INDEX) {
-            auto triExit = mesh.layoutTriangle(outTrace.finalFaceIdx);
-            glm::dvec2 exitChart = triExit.vertices[0] * outTrace.baryCoords.x
-                + triExit.vertices[1] * outTrace.baryCoords.y
-                + triExit.vertices[2] * outTrace.baryCoords.z;
-            glm::dvec2 exitInRef = (outTrace.finalFaceIdx == refFace)
-                ? exitChart
-                : tracer.chartLocal2D(mesh, outTrace.finalFaceIdx, refFace, exitChart);
-#ifndef NDEBUG
-            std::cout << "[traceWeightedVector] vert=" << vertIdx
-                << " stepLen=" << stepLen
-                << " exitInRef=(" << exitInRef.x << "," << exitInRef.y << ")\n";
-#endif
+    // Make sure trace vertex has input location mapping
+    if (intrinsicVertexLocations.find(traceFromVertex) == intrinsicVertexLocations.end()) {
+        // Initialize original vertex location
+        if (traceFromVertex < verts.size() && verts[traceFromVertex].originalIndex != HalfEdgeMesh::INVALID_INDEX) {
+            GeodesicTracer::SurfacePoint location;
+            location.type = GeodesicTracer::SurfacePoint::Type::VERTEX;
+            location.elementId = verts[traceFromVertex].originalIndex;
+            location.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
+            location.split = 0.0;
+            intrinsicVertexLocations[traceFromVertex] = location;
+            //std::cout << "[resolveVertex] Initialized input location for original vertex " << traceFromVertex << std::endl;
         }
         else {
-#ifndef NDEBUG
-            std::cout << "[traceWeightedVector] trace failed for vert=" << vertIdx << "\n";
-#endif
+            //std::cout << "[resolveVertex] ERROR: No input location for trace vertex " << traceFromVertex << std::endl;
+            return false;
         }
     }
 
-    return outTrace.success;
+    // Trace from adjacent vertex to new vertex on input mesh 
+    GeodesicTracer::SurfacePoint startPoint = intrinsicVertexLocations[traceFromVertex];
+
+    // Get the outgoing halfedge from traceFromVertex that points to newVertexIdx
+    uint32_t outgoingTraceHe = halfEdges[inputTraceHe].opposite;
+    if (outgoingTraceHe == HalfEdgeMesh::INVALID_INDEX) {
+        //std::cout << "[resolveVertex] ERROR: No outgoing halfedge for trace\n";
+        return false;
+    }
+
+    // Get intrinsic direction vector from the adjacent vertex's frame
+    glm::dvec2 intrinsicTraceVec = mesh.halfedgeVector(inputTraceHe);
+    double traceLength = conn.getIntrinsicLengthFromHalfEdge(inputTraceHe);
+
+    //std::cout << "[resolveVertex] Tracing on INPUT mesh from vertex " << traceFromVertex << " to vertex " << newVertexIdx << std::endl;
+    //std::cout << "[resolveVertex] Intrinsic trace vector=(" << intrinsicTraceVec.x << "," << intrinsicTraceVec.y << ") length=" << traceLength << std::endl;
+
+    // Trace on input mesh to find where new vertex should be placed
+    GeodesicTracer::GeodesicTraceResult inputTrace;
+    if (startPoint.type == GeodesicTracer::SurfacePoint::Type::VERTEX) {
+        // Find reference face for vertex tracing
+        auto outgoingHEs_input = inputConn.getVertexHalfEdges(startPoint.elementId);
+        uint32_t refFace = HalfEdgeMesh::INVALID_INDEX;
+        for (uint32_t he : outgoingHEs_input) {
+            uint32_t face = inputConn.getHalfEdges()[he].face;
+            if (face != HalfEdgeMesh::INVALID_INDEX) {
+                refFace = face;
+                break;
+            }
+        }
+
+        if (refFace != HalfEdgeMesh::INVALID_INDEX) {
+            GeodesicTracer::GeodesicTraceResult baseResult;
+            baseResult.success = true;
+            baseResult.distance = 0.0;
+            inputTrace = tracerInput.traceFromVertex(startPoint.elementId, refFace, intrinsicTraceVec, traceLength, baseResult, traceLength);
+        }
+    }
+    else if (startPoint.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
+        // Get resolution face for this vertex
+        uint32_t refFace = HalfEdgeMesh::INVALID_INDEX;
+        auto rfIt = vertexResolutionFaces.find(traceFromVertex);
+        if (rfIt != vertexResolutionFaces.end()) {
+            refFace = rfIt->second;
+        }
+        inputTrace = tracerInput.traceFromEdge(startPoint.elementId, startPoint.split, intrinsicTraceVec, traceLength, outgoingTraceHe, refFace);
+    }
+    else if (startPoint.type == GeodesicTracer::SurfacePoint::Type::FACE) {
+        inputTrace = tracerInput.traceFromFace(startPoint.elementId, startPoint.baryCoords, intrinsicTraceVec, traceLength);
+    }
+
+    if (!inputTrace.success) {
+        //std::cout << "[resolveVertex] Input trace failed\n";
+        return false;
+    }
+
+    // Set vertex location on input mesh using the actual exit point from trace
+    GeodesicTracer::SurfacePoint newInputLocation = inputTrace.exitPoint;
+    intrinsicVertexLocations[newVertexIdx] = newInputLocation;
+
+    // Store which input face was used for tracing for tangent space alignment
+    uint32_t resolutionFace = inputTrace.finalFaceIdx;
+    if (resolutionFace == HalfEdgeMesh::INVALID_INDEX && !inputTrace.steps.empty()) {
+        // Fallback: use the last face 
+        resolutionFace = inputTrace.steps.back().finalBary.x >= 0 ? inputTrace.finalFaceIdx : HalfEdgeMesh::INVALID_INDEX;
+    }
+    if (resolutionFace != HalfEdgeMesh::INVALID_INDEX) {
+        vertexResolutionFaces[newVertexIdx] = resolutionFace;
+        //std::cout << "[resolveVertex] Stored resolution face=" << resolutionFace << " for vertex " << newVertexIdx << std::endl;
+    }
+
+    /*
+    std::cout << "[resolveVertex] Set input location for vertex " << newVertexIdx
+              << " to " << (newInputLocation.type == GeodesicTracer::SurfacePoint::Type::FACE ? "FACE" :
+                           newInputLocation.type == GeodesicTracer::SurfacePoint::Type::EDGE ? "EDGE" : "VERTEX")
+              << " " << newInputLocation.elementId << std::endl;
+    */
+
+    // Set the actual 3D position from the trace result
+    auto& verticesMutable = const_cast<std::vector<HalfEdgeMesh::Vertex>&>(verts);
+    verticesMutable[newVertexIdx].position = inputTrace.position3D;
+
+    // Align the new vertex's tangent space to that of the input mesh
+    // Get the arrival direction from the input mesh trace
+    glm::dvec2 outgoingVec(0.0);
+    if (!inputTrace.steps.empty()) {
+        const auto& finalStep = inputTrace.steps.back();
+        // This is the outgoing vector 
+        outgoingVec = -finalStep.dir2D;
+        //std::cout << "[resolveVertex] Using outgoing vector (" << outgoingVec.x << "," << outgoingVec.y << ")" << std::endl;
+    }
+    else {
+        //std::cout << "[resolveVertex] WARNING: No trace steps available, using default vector (1,0)\n";
+        outgoingVec = glm::dvec2(1.0, 0.0);
+    }
+
+    // Calculate incoming angle
+    double incomingAngle = std::atan2(outgoingVec.y, outgoingVec.x);
+    double standardizedAngle = mesh.standardizeAngleForVertex(newVertexIdx, incomingAngle);
+
+    // Set incoming = 0 for boundary halfedges
+    if (!conn.isInteriorHalfEdge(inputTraceHe)) {
+        standardizedAngle = 0.0;
+        //std::cout << "[resolveVertex] Traced halfedge is boundary, setting incomingAngle = 0.0\n";
+    }
+
+    // Set signpost angle for the traced halfedge opposite
+    auto& halfEdgesMutable = const_cast<std::vector<HalfEdgeMesh::HalfEdge>&>(halfEdges);
+    if (outgoingTraceHe != HalfEdgeMesh::INVALID_INDEX) {
+        halfEdgesMutable[outgoingTraceHe].signpostAngle = standardizedAngle;
+        //std::cout << "[resolveVertex] Set signpost angle " << standardizedAngle << " for halfedge " << outgoingTraceHe << std::endl;
+    }
+
+    // Custom loop to orbit CCW from inputTraceHe
+    uint32_t firstHe = outgoingTraceHe;
+    uint32_t currHe = HalfEdgeMesh::INVALID_INDEX;
+
+    // Find currHe = firstHe.next().next().opp()
+    if (firstHe != HalfEdgeMesh::INVALID_INDEX) {
+        uint32_t nextHe = halfEdges[firstHe].next;
+        if (nextHe != HalfEdgeMesh::INVALID_INDEX) {
+            nextHe = halfEdges[nextHe].next;
+            if (nextHe != HalfEdgeMesh::INVALID_INDEX) {
+                currHe = halfEdges[nextHe].opposite;
+            }
+        }
+    }
+
+    // Orbit CCW updating angles
+    while (currHe != HalfEdgeMesh::INVALID_INDEX && currHe != firstHe) {
+        mesh.updateAngleFromCWNeighbor(currHe);
+        //std::cout << "[resolveVertex] Updated signpost angle " << halfEdges[currHe].signpostAngle << " for halfedge " << currHe << std::endl;
+
+        // Check if this is a boundary halfedge
+        if (!conn.isInteriorHalfEdge(currHe)) {
+            //std::cout << "[resolveVertex] Hit boundary halfedge " << currHe << ", stopping orbit\n";
+            break;
+        }
+
+        // Move to next: currHe = currHe.next().next().opp()
+        uint32_t nextHe = halfEdges[currHe].next;
+        if (nextHe != HalfEdgeMesh::INVALID_INDEX) {
+            nextHe = halfEdges[nextHe].next;
+            if (nextHe != HalfEdgeMesh::INVALID_INDEX) {
+                currHe = halfEdges[nextHe].opposite;
+            }
+            else {
+                break;
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+    //std::cout << "[resolveVertex] Successfully resolved vertex " << newVertexIdx << std::endl;
+    return true;
 }
 
 double iODT::computeMinAngle(uint32_t faceIdx) {
@@ -1266,17 +1252,17 @@ double iODT::computeMinAngle(uint32_t faceIdx) {
         return 0.0f;
     }
 
-    // Get the edge lengths directly from the halfedges
-    double a = halfEdges[faceEdges[0]].intrinsicLength;
-    double b = halfEdges[faceEdges[1]].intrinsicLength;
-    double c = halfEdges[faceEdges[2]].intrinsicLength;
+    // Get the edge lengths from edge objects
+    double a = conn.getIntrinsicLengthFromHalfEdge(faceEdges[0]);
+    double b = conn.getIntrinsicLengthFromHalfEdge(faceEdges[1]);
+    double c = conn.getIntrinsicLengthFromHalfEdge(faceEdges[2]);
 
-    // Ensure minimum positive length for numerical stability
+    // Minimum positive length for numerical stability
     a = std::max(a, 1e-5);
     b = std::max(b, 1e-5);
     c = std::max(c, 1e-5);
 
-    // Compute angles using the law of cosines
+    // Calculate angles using the law of cosines
     double cosA = (b * b + c * c - a * a) / (2.0f * b * c);
     double cosB = (a * a + c * c - b * b) / (2.0f * a * c);
     double cosC = (a * a + b * b - c * c) / (2.0f * a * b);
@@ -1293,4 +1279,548 @@ double iODT::computeMinAngle(uint32_t faceIdx) {
 
     // Return the minimum angle
     return std::min(std::min(angleA, angleB), angleC);
+}
+
+bool iODT::isEdgeOriginal(uint32_t edgeIdx) const {
+    auto& conn = mesh.getConnectivity();
+    const auto& edges = conn.getEdges();
+    return edgeIdx < edges.size() ? edges[edgeIdx].isOriginal : false;
+}
+
+void iODT::initializeVertexLocations() {
+    auto& conn = mesh.getConnectivity();
+    const auto& vertices = conn.getVertices();
+
+    // Initialize all original vertices to map 1:1 to input model vertices
+    for (uint32_t vIdx = 0; vIdx < vertices.size(); ++vIdx) {
+        if (vertices[vIdx].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) continue;
+
+        // Initialize all original vertices 
+        if (vertices[vIdx].originalIndex != HalfEdgeMesh::INVALID_INDEX) {
+            GeodesicTracer::SurfacePoint location;
+            location.type = GeodesicTracer::SurfacePoint::Type::VERTEX;
+            location.elementId = vertices[vIdx].originalIndex;
+            location.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
+            location.split = 0.0;
+
+            intrinsicVertexLocations[vIdx] = location;
+        }
+    }
+
+    //std::cout << "[initializeVertexLocations] Initialized " << intrinsicVertexLocations.size() << " vertex locations for original vertices\n";
+}
+
+void iODT::updateVertexLocation(uint32_t intrinsicVertexId, const GeodesicTracer::SurfacePoint& locationOnInput) {
+    intrinsicVertexLocations[intrinsicVertexId] = locationOnInput;
+}
+
+std::vector<GeodesicTracer::SurfacePoint> iODT::traceIntrinsicHalfedgeAlongInput(uint32_t intrinsicHalfedgeIdx) {
+    auto& conn = mesh.getConnectivity();
+    const auto& HEs = conn.getHalfEdges();
+    const auto& inputVertices = inputMesh.getConnectivity().getVertices();
+
+    if (intrinsicHalfedgeIdx >= HEs.size())
+        return {};
+
+    const auto& intrinsicHE = HEs[intrinsicHalfedgeIdx];
+    uint32_t intrinsicStartV = intrinsicHE.origin;
+    uint32_t intrinsicEndV = HEs[intrinsicHE.next].origin;
+    uint32_t intrinsicEdgeIdx = conn.getEdgeFromHalfEdge(intrinsicHalfedgeIdx);
+
+    //std::cout << "[traceIntrinsicHalfedge] Tracing intrinsic halfedge " << intrinsicHalfedgeIdx << " (" << intrinsicStartV << "->" << intrinsicEndV << ") for edge " << intrinsicEdgeIdx << "\n";
+
+    // Short circuit for original edges
+    if (isEdgeOriginal(intrinsicEdgeIdx)) {
+        auto itA = intrinsicVertexLocations.find(intrinsicStartV);
+        auto itB = intrinsicVertexLocations.find(intrinsicEndV);
+        if (itA == intrinsicVertexLocations.end() || itB == intrinsicVertexLocations.end()) {
+            //std::cout << "[traceIntrinsicHalfedge] Missing vertex locations for original edge\n";
+            return {};
+        }
+        return { itA->second, itB->second };
+    }
+
+    // Lookup mapped endpoints
+    auto itStart = intrinsicVertexLocations.find(intrinsicStartV);
+    auto itEnd = intrinsicVertexLocations.find(intrinsicEndV);
+
+    if (itStart == intrinsicVertexLocations.end()) {
+        //std::cout << "[traceIntrinsicHalfedge] Missing input mapping for start vertex " << intrinsicStartV << std::endl;
+        return {};
+    }
+    if (itEnd == intrinsicVertexLocations.end()) {
+        //std::cout << "[traceIntrinsicHalfedge] Missing input mapping for end vertex " << intrinsicEndV << std::endl;
+        return {};
+    }
+
+    // Check if the mapped vertices exist in input mesh
+    GeodesicTracer::SurfacePoint startSP = itStart->second;
+    if (startSP.type == GeodesicTracer::SurfacePoint::Type::VERTEX &&
+        startSP.elementId >= inputVertices.size()) {
+        //std::cout << "[traceIntrinsicHalfedge] Start vertex " << intrinsicStartV << " maps to invalid input vertex " << startSP.elementId << " (input mesh size=" << inputVertices.size() << ")" << std::endl;
+        return {};
+    }
+    GeodesicTracer::SurfacePoint endSP = itEnd->second;
+
+    // Get intrinsic vector
+    glm::dvec2 traceVec = mesh.halfedgeVector(intrinsicHalfedgeIdx);
+    double traceLen = glm::length(traceVec);
+
+    if (traceLen < 1e-12)
+        return { startSP, endSP };
+
+    glm::dvec2 traceDir = traceVec / traceLen;
+
+    GeodesicTracer::GeodesicTraceResult base;
+    base.success = true;
+    base.pathPoints.clear();
+    base.pathPoints.push_back(startSP);
+    base.distance = 0.0;
+
+    // DEBUG: Print signpost angles for start vertex
+    uint32_t startVertex = startSP.elementId;
+    if (startSP.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
+        // For edge tracing, get the actual start vertex from the intrinsic halfedge
+        auto& meshConn = mesh.getConnectivity();
+        const auto& halfEdge = meshConn.getHalfEdges()[intrinsicHalfedgeIdx];
+        startVertex = halfEdge.origin;
+    }
+
+    auto& meshConn = mesh.getConnectivity();
+    auto outgoingHalfedges = meshConn.getVertexHalfEdges(startVertex);
+    //std::cout << "[DEBUG] Signpost angles for vertex " << startVertex << " (found " << outgoingHalfedges.size() << " halfedges):\n";
+    for (uint32_t he : outgoingHalfedges) {
+        if (he == HalfEdgeMesh::INVALID_INDEX) continue;
+        const auto& heData = meshConn.getHalfEdges()[he];
+        uint32_t endVertex = heData.next != HalfEdgeMesh::INVALID_INDEX ?
+            meshConn.getHalfEdges()[heData.next].origin : HalfEdgeMesh::INVALID_INDEX;
+        //std::cout << "  he" << he << " (" << startVertex << "->" << endVertex << "): " << heData.signpostAngle << std::endl;
+    }
+
+    // Trace on input mesh based on start point type
+    GeodesicTracer::GeodesicTraceResult result;
+
+    if (startSP.type == GeodesicTracer::SurfacePoint::Type::VERTEX) {
+        // Pick a reference face adjacent to the start vertex. Prioritize the stored resolution face.
+        uint32_t refFace = HalfEdgeMesh::INVALID_INDEX;
+        auto it = vertexResolutionFaces.find(intrinsicStartV);
+        if (it != vertexResolutionFaces.end()) {
+            refFace = it->second;
+            //std::cout << "[traceIntrinsicHalfedge] Using stored resolution face " << refFace << " for start vertex " << intrinsicStartV << std::endl;
+        }
+
+        // Fallback to finding any adjacent face if no resolution face is stored
+        if (refFace == HalfEdgeMesh::INVALID_INDEX) {
+            auto& inputConn = inputMesh.getConnectivity();
+            auto outgoingHalfedges = inputConn.getVertexHalfEdges(startSP.elementId);
+            for (uint32_t he : outgoingHalfedges) {
+                if (he == HalfEdgeMesh::INVALID_INDEX)
+                    continue;
+                uint32_t f = inputConn.getHalfEdges()[he].face;
+                if (f != HalfEdgeMesh::INVALID_INDEX) {
+                    refFace = f;
+                    break;
+                }
+            }
+            //std::cout << "[traceIntrinsicHalfedge] Using fallback to find refFace " << refFace << " for start vertex " << intrinsicStartV << std::endl;
+        }
+
+        //std::cout << "[traceIntrinsicHalfedge] Tracing from VERTEX " << startSP.elementId << " dir=(" << traceDir.x << "," << traceDir.y << ") len=" << traceLen << "\n";
+
+        result = tracerInput.traceFromVertex(startSP.elementId, refFace, traceDir, traceLen, base, traceLen);
+    }
+    else if (startSP.type == GeodesicTracer::SurfacePoint::Type::FACE) {
+        //std::cout << "[traceIntrinsicHalfedge] Tracing from FACE " << startSP.elementId << " dir=(" << traceDir.x << "," << traceDir.y << ") len=" << traceLen << "\n";
+
+        result = tracerInput.traceFromFace(startSP.elementId, startSP.baryCoords, traceDir, traceLen);
+    }
+    else if (startSP.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
+        /*
+        std::cout << "[traceIntrinsicHalfedge] Tracing from EDGE " << startSP.elementId
+                  << " bary=(" << startSP.baryCoords.x << "," << startSP.baryCoords.y << ")"
+                  << " dir=(" << traceDir.x << "," << traceDir.y << ") len=" << traceLen << "\n";
+        */
+
+        // Get the resolution face for the start vertex (which face's chart the direction is expressed in)
+        uint32_t resolutionFace = HalfEdgeMesh::INVALID_INDEX;
+        auto it = vertexResolutionFaces.find(startVertex);
+        if (it != vertexResolutionFaces.end()) {
+            resolutionFace = it->second;
+            //std::cout << "[traceIntrinsicHalfedge] Found resolution face=" << resolutionFace << " for start vertex " << startVertex << std::endl;
+        }
+        else {
+            //std::cout << "[traceIntrinsicHalfedge] WARNING: No resolution face stored for vertex " << startVertex << std::endl;
+        }
+
+        result = tracerInput.traceFromEdge(startSP.elementId, startSP.split, traceDir, traceLen, intrinsicHalfedgeIdx, resolutionFace);
+    }
+
+    if (result.success) {
+        return result.pathPoints;
+    }
+    else {
+        //std::cout << "[traceIntrinsicHalfedge] tracer failed, returning endpoints\n";
+        return { startSP, endSP };
+    }
+}
+
+std::vector<glm::vec3> iODT::mergeNearbyPoints(const std::vector<glm::vec3>& points, double tolerance) const {
+    if (points.empty()) return points;
+
+    std::vector<glm::vec3> merged;
+    merged.reserve(points.size());
+
+    for (const auto& point : points) {
+        bool foundNearby = false;
+
+        // Check if this point is close to any already added point
+        for (auto& existing : merged) {
+            if (glm::length(point - existing) <= tolerance) {
+                // Merge by averaging positions 
+                existing = (existing + point) * 0.5f;
+                foundNearby = true;
+                break;
+            }
+        }
+
+        // If no nearby point found, add this as a new point
+        if (!foundNearby) {
+            merged.push_back(point);
+        }
+    }
+
+    if (merged.size() != points.size()) {
+        //std::cout << "[mergeNearbyPoints] Merged " << points.size() << " points -> " << merged.size() << " points (tolerance=" << tolerance << ")" << std::endl;
+    }
+    return merged;
+}
+
+void iODT::createCommonSubdivision(Model& overlayModel) const {
+    auto& conn = mesh.getConnectivity();
+    const auto& faces = conn.getFaces();
+    const auto& halfEdges = conn.getHalfEdges();
+
+    // Generate distinct colors for each intrinsic face using golden ratio spacing
+    std::vector<glm::vec3> faceColors(faces.size());
+    const float goldenRatioConjugate = 0.618033988749895f;
+    float hue = 0.0f;
+
+    for (size_t i = 0; i < faceColors.size(); ++i) {
+        hue = std::fmod(hue + goldenRatioConjugate, 1.0f);
+        // Vary saturation and value for wider color range
+        float saturation = 0.55f + 0.2f * std::sin(static_cast<float>(i) * 0.8f);
+        float value = 0.5f + 0.05f * std::cos(static_cast<float>(i) * 0.65f);
+
+        // HSV to RGB conversion
+        float c = value * saturation;
+        float x = c * (1.0f - std::abs(std::fmod(hue * 6.0f, 2.0f) - 1.0f));
+        float m = value - c;
+
+        glm::vec3 rgb;
+        if (hue < 1.0f / 6.0f) rgb = glm::vec3(c, x, 0);
+        else if (hue < 2.0f / 6.0f) rgb = glm::vec3(x, c, 0);
+        else if (hue < 3.0f / 6.0f) rgb = glm::vec3(0, c, x);
+        else if (hue < 4.0f / 6.0f) rgb = glm::vec3(0, x, c);
+        else if (hue < 5.0f / 6.0f) rgb = glm::vec3(x, 0, c);
+        else rgb = glm::vec3(c, 0, x);
+
+        faceColors[i] = rgb + glm::vec3(m);
+    }
+
+    // Collect all polyline points from all faces and build face data
+    std::vector<glm::vec3> allPoints;
+    struct FacePolylines {
+        uint32_t faceIdx;
+        std::vector<std::vector<size_t>> edgePointIndices; // Indices into allPoints
+    };
+    std::vector<FacePolylines> faceData;
+
+    for (uint32_t faceIdx = 0; faceIdx < faces.size(); ++faceIdx) {
+        if (faces[faceIdx].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) {
+            continue;
+        }
+
+        // Get the 3 halfedges of this face
+        uint32_t he0 = faces[faceIdx].halfEdgeIdx;
+        uint32_t he1 = halfEdges[he0].next;
+        uint32_t he2 = halfEdges[he1].next;
+
+        if (he0 == HalfEdgeMesh::INVALID_INDEX ||
+            he1 == HalfEdgeMesh::INVALID_INDEX ||
+            he2 == HalfEdgeMesh::INVALID_INDEX) {
+            continue;
+        }
+
+        // Get polylines for each edge
+        std::vector<glm::vec3> poly0 = getCommonSubdivision(he0);
+        std::vector<glm::vec3> poly1 = getCommonSubdivision(he1);
+        std::vector<glm::vec3> poly2 = getCommonSubdivision(he2);
+
+        if (poly0.empty() || poly1.empty() || poly2.empty()) {
+            continue;
+        }
+
+        // Store face data and collect points
+        FacePolylines fpData;
+        fpData.faceIdx = faceIdx;
+        fpData.edgePointIndices.resize(3);
+
+        // Add poly0 points
+        for (const auto& pt : poly0) {
+            fpData.edgePointIndices[0].push_back(allPoints.size());
+            allPoints.push_back(pt);
+        }
+
+        // Add poly1 points
+        for (const auto& pt : poly1) {
+            fpData.edgePointIndices[1].push_back(allPoints.size());
+            allPoints.push_back(pt);
+        }
+
+        // Add poly2 points
+        for (const auto& pt : poly2) {
+            fpData.edgePointIndices[2].push_back(allPoints.size());
+            allPoints.push_back(pt);
+        }
+
+        faceData.push_back(fpData);
+    }
+
+    // Merge nearby points globally
+    //std::cout << "[createCommonSubdivision] Collected " << allPoints.size() << " points from " << faceData.size() << " faces\n";
+    constexpr double MERGE_TOLERANCE = 1e-5;
+    std::vector<glm::vec3> mergedPoints = mergeNearbyPoints(allPoints, MERGE_TOLERANCE);
+    //std::cout << "[createCommonSubdivision] Merged to " << mergedPoints.size() << " unique points\n";
+
+    // Build mapping from original points to merged points
+    std::vector<uint32_t> pointMapping(allPoints.size());
+    for (size_t i = 0; i < allPoints.size(); ++i) {
+        for (size_t j = 0; j < mergedPoints.size(); ++j) {
+            if (glm::length(allPoints[i] - mergedPoints[j]) <= MERGE_TOLERANCE) {
+                pointMapping[i] = static_cast<uint32_t>(j);
+                break;
+            }
+        }
+    }
+
+    // Build triangles using merged vertices
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    // Group points by input face, triangulate within each
+    const uint32_t INVALID_INDEX = HalfEdgeMesh::INVALID_INDEX;
+
+    // Store surface points for each original point during collection phase
+    std::vector<GeodesicTracer::SurfacePoint> allOriginalSurfacePoints(allPoints.size());
+
+    // Recollect surface points with proper indexing
+    size_t pointIdx = 0;
+    for (uint32_t faceIdx = 0; faceIdx < faces.size(); ++faceIdx) {
+        if (faces[faceIdx].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) continue;
+
+        uint32_t he0 = faces[faceIdx].halfEdgeIdx;
+        uint32_t he1 = halfEdges[he0].next;
+        uint32_t he2 = halfEdges[he1].next;
+
+        if (he0 == HalfEdgeMesh::INVALID_INDEX || he1 == HalfEdgeMesh::INVALID_INDEX || he2 == HalfEdgeMesh::INVALID_INDEX) continue;
+
+        // Get surface points for each edge
+        auto sp0 = const_cast<iODT*>(this)->traceIntrinsicHalfedgeAlongInput(he0);
+        auto sp1 = const_cast<iODT*>(this)->traceIntrinsicHalfedgeAlongInput(he1);
+        auto sp2 = const_cast<iODT*>(this)->traceIntrinsicHalfedgeAlongInput(he2);
+
+        if (sp0.empty() || sp1.empty() || sp2.empty()) continue;
+
+        // Store surface points
+        for (const auto& sp : sp0) {
+            if (pointIdx < allOriginalSurfacePoints.size()) {
+                allOriginalSurfacePoints[pointIdx++] = sp;
+            }
+        }
+        for (const auto& sp : sp1) {
+            if (pointIdx < allOriginalSurfacePoints.size()) {
+                allOriginalSurfacePoints[pointIdx++] = sp;
+            }
+        }
+        for (const auto& sp : sp2) {
+            if (pointIdx < allOriginalSurfacePoints.size()) {
+                allOriginalSurfacePoints[pointIdx++] = sp;
+            }
+        }
+    }
+
+    for (const auto& fpData : faceData) {
+        glm::vec3 color = faceColors[fpData.faceIdx];
+
+        // Collect point indices and their surface points
+        std::vector<GeodesicTracer::SurfacePoint> allSurfacePoints;
+        std::vector<uint32_t> allPointIndices;
+
+        // Get points for each edge
+        for (size_t edgeIdx = 0; edgeIdx < 3; ++edgeIdx) {
+            const auto& edgeIndices = fpData.edgePointIndices[edgeIdx];
+
+            for (size_t i = 0; i < edgeIndices.size(); ++i) {
+                if (edgeIdx < 2 || i < edgeIndices.size() - 1) { // Skip last point of last edge
+                    size_t origIdx = edgeIndices[i];
+                    if (origIdx < allOriginalSurfacePoints.size()) {
+                        allSurfacePoints.push_back(allOriginalSurfacePoints[origIdx]);
+                        allPointIndices.push_back(pointMapping[origIdx]);
+                    }
+                }
+            }
+        }
+
+        // Add boundary points to all adjacent faces
+        std::map<uint32_t, std::vector<size_t>> pointsByInputFace;
+        auto& inputConn = inputMesh.getConnectivity();
+
+        for (size_t i = 0; i < allSurfacePoints.size(); ++i) {
+            std::vector<uint32_t> adjacentFaces;
+
+            if (allSurfacePoints[i].type == GeodesicTracer::SurfacePoint::Type::FACE) {
+                // Point is inside a face
+                adjacentFaces.push_back(allSurfacePoints[i].elementId);
+            }
+            else if (allSurfacePoints[i].type == GeodesicTracer::SurfacePoint::Type::EDGE) {
+                // Add both adjacent faces if point is on an edge
+                uint32_t edgeId = allSurfacePoints[i].elementId;
+                uint32_t he = inputConn.getEdges()[edgeId].halfEdgeIdx;
+                if (he != INVALID_INDEX) {
+                    uint32_t face1 = inputConn.getHalfEdges()[he].face;
+                    if (face1 != INVALID_INDEX) {
+                        adjacentFaces.push_back(face1);
+                    }
+
+                    uint32_t oppositeHe = inputConn.getHalfEdges()[he].opposite;
+                    if (oppositeHe != INVALID_INDEX) {
+                        uint32_t face2 = inputConn.getHalfEdges()[oppositeHe].face;
+                        if (face2 != INVALID_INDEX) {
+                            adjacentFaces.push_back(face2);
+                        }
+                    }
+                }
+            }
+            else if (allSurfacePoints[i].type == GeodesicTracer::SurfacePoint::Type::VERTEX) {
+                // Add all adjacent faces if point is on a vertex
+                uint32_t vertId = allSurfacePoints[i].elementId;
+                auto vertexHalfedges = inputConn.getVertexHalfEdges(vertId);
+                for (uint32_t he : vertexHalfedges) {
+                    uint32_t faceId = inputConn.getHalfEdges()[he].face;
+                    if (faceId != INVALID_INDEX) {
+                        adjacentFaces.push_back(faceId);
+                    }
+                }
+            }
+
+            // Add this point to all adjacent faces
+            for (uint32_t faceId : adjacentFaces) {
+                pointsByInputFace[faceId].push_back(i);
+            }
+        }
+
+        // For each input face, triangulate the points within it
+        for (const auto& [inputFaceId, pointIndices] : pointsByInputFace) {
+            if (pointIndices.size() < 3)
+                continue;
+
+            // Simple fan triangulation from first point
+            uint32_t anchor = allPointIndices[pointIndices[0]];
+            glm::vec3 anchorPos = mergedPoints[anchor];
+
+            for (size_t i = 1; i + 1 < pointIndices.size(); ++i) {
+                uint32_t idx1 = allPointIndices[pointIndices[i]];
+                uint32_t idx2 = allPointIndices[pointIndices[i + 1]];
+
+                if (anchor == idx1 || idx1 == idx2 || idx2 == anchor)
+                    continue;
+
+                glm::vec3 p0 = anchorPos;
+                glm::vec3 p1 = mergedPoints[idx1];
+                glm::vec3 p2 = mergedPoints[idx2];
+
+                glm::vec3 edge1 = p1 - p0;
+                glm::vec3 edge2 = p2 - p0;
+                glm::vec3 normal = glm::cross(edge1, edge2);
+                float area = glm::length(normal);
+
+                if (area < 1e-8f) continue;
+                normal = glm::normalize(normal);
+
+                uint32_t baseIdx = static_cast<uint32_t>(vertices.size());
+
+                Vertex v0, v1, v2;
+                v0.pos = p0;
+                v1.pos = p1;
+                v2.pos = p2;
+
+                v0.normal = v1.normal = v2.normal = normal;
+                v0.color = v1.color = v2.color = color;
+                v0.texCoord = v1.texCoord = v2.texCoord = glm::vec2(0.0f);
+
+                vertices.push_back(v0);
+                vertices.push_back(v1);
+                vertices.push_back(v2);
+
+                indices.push_back(baseIdx);
+                indices.push_back(baseIdx + 1);
+                indices.push_back(baseIdx + 2);
+            }
+        }
+    }
+
+    // Update the common subdivision model
+    overlayModel.setVertices(vertices);
+    overlayModel.setIndices(indices);
+    overlayModel.recreateBuffers();
+}
+
+std::vector<glm::vec3> iODT::getCommonSubdivision(uint32_t intrinsicHalfedgeIdx) const {
+    std::vector<glm::vec3> polyline;
+
+    // Trace the intrinsic halfedge to get surface points
+    auto pathPoints = const_cast<iODT*>(this)->traceIntrinsicHalfedgeAlongInput(intrinsicHalfedgeIdx);
+
+    // Convert surface points to 3D positions
+    for (const auto& sp : pathPoints) {
+        glm::dvec3 pos3D = tracerInput.evaluateSurfacePoint(sp);
+        polyline.push_back(glm::vec3(pos3D));
+    }
+
+    return polyline;
+}
+
+void iODT::saveCommonSubdivisionOBJ(const std::string& filename, const Model& overlayModel) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "[saveIntrinsicOverlayOBJ] Failed to open file: " << filename << std::endl;
+        return;
+    }
+
+    // Extract vertices from the overlay model
+    const auto& vertices = overlayModel.getVertices();
+    const auto& indices = overlayModel.getIndices();
+
+    // Write vertices
+    for (const auto& vertex : vertices) {
+        file << "v " << vertex.pos.x << " " << vertex.pos.y << " " << vertex.pos.z << "\n";
+    }
+
+    // Write vertex colors
+    for (const auto& vertex : vertices) {
+        file << "vc " << vertex.color.r << " " << vertex.color.g << " " << vertex.color.b << "\n";
+    }
+
+    // Write face elements (indices come in triplets for triangles)
+    uint32_t faceCount = 0;
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        if (i + 2 < indices.size()) {
+            // OBJ uses 1-based indexing
+            file << "f " << (indices[i] + 1) << " " << (indices[i + 1] + 1) << " " << (indices[i + 2] + 1) << "\n";
+            faceCount++;
+        }
+    }
+
+    file.close();
+    std::cout << "[saveIntrinsicOverlayOBJ] Saved " << vertices.size() << " vertices and " << faceCount << " faces to " << filename << std::endl;
 }

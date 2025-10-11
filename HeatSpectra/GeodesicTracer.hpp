@@ -9,7 +9,7 @@ class SignpostMesh;
 class GeodesicTracer {
 public:
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
-    static constexpr double EDGE_SNAP_MIN = 1e-3;
+    static constexpr double BARY_SNAP_TOL = 1e-5;  // Tolerance for barycentric edge snapping - increased from 1e-9 for better trace detection
     GeodesicTracer(SignpostMesh& mesh);
 
     struct SurfacePoint {
@@ -60,20 +60,10 @@ public:
         uint32_t finalFaceIdx;                  // Face index the trace lands on
         std::vector<FaceStepResult> steps;
         SurfacePoint exitPoint;                 // Surface type of trace target point
+        std::vector<SurfacePoint> pathPoints;   // Sequence of points along the trace path
 
         GeodesicTraceResult() 
             : success(false), position3D(0.0,0.0,0.0), baryCoords(0.0,0.0,0.0), distance(0.0), finalFaceIdx(INVALID_INDEX), exitPoint() {}
-    };
-
-    struct GeodesicState {
-        uint32_t currentFace;                   // Current face trace is on
-        glm::dvec2 currentPoint2D;              // Position in current face's 2D layout
-        glm::dvec2 direction2D;                 // Direction in current face's 2D layout
-        double remainingDistance;                   
-        bool isValid;                               
-
-        GeodesicState() 
-            : currentFace(INVALID_INDEX), currentPoint2D(0.0), direction2D(0.0), remainingDistance(0.0), isValid(true) {}
     };
 
     struct GeodesicTraceOptions {
@@ -81,19 +71,20 @@ public:
         bool includePath                        = false;
     };
 
-    GeodesicTraceResult traceFromVertex(uint32_t vertexIdx, uint32_t refFace, const glm::dvec2& dirInRefFace, double remaining, GeodesicTraceResult& baseResult, double totalLength) const;
+    GeodesicTraceResult traceFromVertex(uint32_t vertexIdx,
+        uint32_t refFace,
+        const glm::dvec2& dirInRefVertex,
+        double remaining,
+        GeodesicTraceResult& baseResult,
+        double totalLength) const;
     GeodesicTraceResult traceFromFace(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec2& cartesianDir, double length) const;
+    GeodesicTraceResult traceFromEdge(uint32_t startEdgeIdx, double startSplit, const glm::dvec2& cartesianDir, double length, uint32_t intrinsicHalfedgeIdx = INVALID_INDEX, uint32_t resolutionFace = INVALID_INDEX) const;
     FaceStepResult traceInFace(const SurfacePoint& startP, const glm::dvec2& dir2D, double length) const;
 
     glm::dvec3 evaluateSurfacePoint(const SurfacePoint& point) const;
     glm::dvec2 chartLocal2D(const SignpostMesh& mesh, uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const;
     glm::dvec2 rotateVectorAcrossEdge(const SignpostMesh& mesh, uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const;
     bool solveRayEdge(const glm::dvec2& rayDir, const glm::dvec2& edgeVec, const glm::dvec2& b, double& out_t, double& out_u) const;
-    bool resolveVertexLinear(uint32_t newV, const SurfacePoint& location, uint32_t heA = INVALID_INDEX, uint32_t heB = INVALID_INDEX);
-    bool resolveVertex(uint32_t startFace, uint32_t startHe, const GeodesicTraceResult& result, glm::dvec3& outPos3D);
-
-    glm::dvec2 computeTangentVector(uint32_t startVertex, const SurfacePoint& target);
-    uint32_t findStartingHalfEdge(uint32_t startVertex, uint32_t faceIdx, const glm::dvec2& tangentVector) const;
 
 private:
     SignpostMesh& mesh;

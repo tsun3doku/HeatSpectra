@@ -140,7 +140,7 @@ void UniformBufferManager::updateUniformBuffer(VkExtent2D swapChainExtent, uint3
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
     ubo.proj[1][1] *= -1;
 
-    ubo.color = glm::vec3(0.044f, 0.04f, 0.044f);
+    ubo.color = glm::vec3(0.044f, 0.044f, 0.044f);
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }

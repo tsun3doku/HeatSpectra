@@ -48,18 +48,39 @@ public:
 
     // Helpers
     bool computeWeightedCircumcenter(uint32_t vertIdx, uint32_t& outRefFace, int& outLocalRefIdx, glm::dvec2& outAvgVec, double& outAvgLen);
-    bool traceWeightedVector(uint32_t vertIdx, double stepLen, GeodesicTracer::GeodesicTraceResult& outTrace);
+    bool resolveVertex(uint32_t newVertexIdx, const GeodesicTracer::SurfacePoint& intrinsicPoint);
 
     // Quality metrics
     double computeMinAngle( uint32_t faceIdx);
 
+    // Intrinsic edge tracing 
+    void initializeVertexLocations();
+    std::vector<GeodesicTracer::SurfacePoint> traceIntrinsicHalfedgeAlongInput(uint32_t intrinsicHalfedgeIdx);
+    
+    // Correspondence mapping functions
+    void updateVertexLocation(uint32_t intrinsicVertexId, const GeodesicTracer::SurfacePoint& locationOnInput);
+
+    // Visualization helpers
+    void createCommonSubdivision(Model& overlayModel) const;
+    std::vector<glm::vec3> getCommonSubdivision(uint32_t intrinsicHalfedgeIdx) const;
+    void saveCommonSubdivisionOBJ(const std::string& filename, const Model& overlayModel) const;
+    std::vector<glm::vec3> mergeNearbyPoints(const std::vector<glm::vec3>& points, double tolerance) const;
 
 private:
-    Model& model;
-    SignpostMesh& mesh;
-    GeodesicTracer tracer;
+    Model& model;                   // Base input model
+    SignpostMesh& mesh;             // Intrinsic mesh
+    SignpostMesh inputMesh;         // Input mesh (unchanged connectivity)
+    GeodesicTracer tracer;          // Tracer for the intrinsic mesh
+    GeodesicTracer tracerInput;     // Tracer for the input mesh
 
     std::set<std::pair<uint32_t, uint32_t>> recentlySplit;
     std::unordered_set<uint32_t> insertedVertices;
-    std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint> insertedLocation;
+    
+    // Maps every intrinsic vertex to a location on the original mesh surface
+    std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint> intrinsicVertexLocations;
+    
+    // Tracks which input face was used during vertex resolution
+    std::unordered_map<uint32_t, uint32_t> vertexResolutionFaces;
+    
+    bool isEdgeOriginal(uint32_t edgeIdx) const;
 };

@@ -4,6 +4,8 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <complex>
+#include <cmath>
 #include <limits>
 #include <iostream>
 
@@ -13,213 +15,207 @@
 GeodesicTracer::GeodesicTracer(SignpostMesh& mesh) : mesh(mesh) {
 }
 
-GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex( uint32_t vertexIdx, uint32_t refFace, const glm::dvec2& dirInRefFace, double remaining, GeodesicTraceResult& baseResult, double totalLength) const
+static inline double cross2d(const glm::dvec2& a, const glm::dvec2& b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t vertexIdx, uint32_t refFace, const glm::dvec2& dirInRefVertex,
+    double remaining, GeodesicTraceResult& baseResult, double totalLength) const
 {
     const auto& conn = mesh.getConnectivity();
     const auto& halfEdges = conn.getHalfEdges();
-
-#ifndef NDEBUG
-    std::cout << "[traceFromVertex] START vertex=" << vertexIdx
-        << " refFace=" << refFace
-        << " remaining=" << remaining
-        << " dirInRef=(" << dirInRefFace.x << "," << dirInRefFace.y << ")\n";
-#endif
+    const auto& hvv_vert = mesh.getHalfedgeVectorsInVertex();
+    const auto& hvf_face = mesh.getHalfedgeVectorsInFace();
+    const auto& verts = conn.getVertices();
+    const auto& vAngleSums = mesh.getVertexAngleSums();
 
     GeodesicTraceResult fail = baseResult;
-    if (remaining <= 1e-12) return fail;
+    if (remaining <= 1e-12)
+        return fail;
 
-    auto angleCCW = [](const glm::dvec2& a, const glm::dvec2& b) {
-        double cr = a.x * b.y - a.y * b.x;
-        double dt = a.x * b.x + a.y * b.y;
-        double ang = std::atan2(cr, dt); // (-pi, pi]
-        if (ang < 0.0) ang += 2.0 * glm::pi<double>();
-        return ang; // [0, 2pi)
-        };
-    auto unitSafe = [](glm::dvec2 v) {
-        double L = glm::length(v);
-        return (L > 0.0) ? (v / L) : glm::dvec2(1.0, 0.0);
-        };
-    auto headOf = [&](uint32_t he) { return halfEdges[halfEdges[he].next].origin; };
+    glm::dvec2 dirVertex = glm::normalize(dirInRefVertex);
 
-    // Reference face geometry at the vertex 
-    auto triRef = mesh.layoutTriangle(refFace);
-    int lRef = -1;
-    for (int k = 0; k < 3; ++k) if (triRef.indices[k] == vertexIdx) { lRef = k; break; }
-    if (lRef < 0) {
-#ifndef NDEBUG
-        std::cout << "[traceFromVertex] vertex not in refFace -> terminate\n";
-#endif
+    // Bounds check for vertex index
+    const auto& vertices = conn.getVertices();
+    if (vertexIdx >= vertices.size()) {
+        //std::cout << "[traceFromVertex] ERROR: vertexIdx " << vertexIdx << " out of bounds (size=" << vertices.size() << ")\n";
         return fail;
     }
 
-    int lNext = (lRef + 1) % 3;                  // neighbor “next” in face indexing
-    int lPrev = (lRef + 2) % 3;                  // neighbor “prev” in face indexing
-    uint32_t v = triRef.indices[lRef];
-    uint32_t vNext = triRef.indices[lNext];
-    uint32_t vPrev = triRef.indices[lPrev];
+    uint32_t firstHe = vertices[vertexIdx].halfEdgeIdx;
+    if (firstHe == HalfEdgeMesh::INVALID_INDEX) {
+        //std::cout << "[traceFromVertex] vertex has no halfedge\n";
+        return fail;
+    }
 
-    glm::dvec2 pV = triRef.vertices[lRef];
-    glm::dvec2 pNext = triRef.vertices[lNext];
-    glm::dvec2 pPrev = triRef.vertices[lPrev];
+    uint32_t currHe = firstHe;
+    uint32_t wedgeHe = HalfEdgeMesh::INVALID_INDEX;
+    double minCross = 1e9;
+    double WEDGE_EPS= 1e-8;
+    uint32_t minCrossHe = HalfEdgeMesh::INVALID_INDEX;
 
-    glm::dvec2 rayPrev = unitSafe(pPrev - pV);   // v -> prev
-    glm::dvec2 rayNext = unitSafe(pNext - pV);   // v -> next
-    glm::dvec2 dirRef = unitSafe(dirInRefFace);
+    const auto& HEs = conn.getHalfEdges();
+    int guard = 0;
+    do {
+        // Standardized traversal (next->next->opposite)
+        uint32_t next1 = HEs[currHe].next;
+        if (next1 == HalfEdgeMesh::INVALID_INDEX) 
+            break;
+        uint32_t next2 = HEs[next1].next;
+        if (next2 == HalfEdgeMesh::INVALID_INDEX) 
+            break;
+        uint32_t nextHe = HEs[next2].opposite;
+        if (nextHe == HalfEdgeMesh::INVALID_INDEX) 
+            break;
 
-    // Compute raw CCW angle and normalize to the interior corner (<= pi)
-    double raw = angleCCW(rayPrev, rayNext);     // could be > pi in chart
-    glm::dvec2 startRay, endRay;
-    uint32_t  startNbr, endNbr;
-    double    alpha;                             // interior corner
+        glm::dvec2 vecA = glm::normalize(hvv_vert[currHe]);
+        glm::dvec2 vecB = glm::normalize(hvv_vert[nextHe]);
 
-    if (raw <= glm::pi<double>()) {
-        // interior wedge is CCW from prev -> next
-        startRay = rayPrev;   endRay = rayNext;
-        startNbr = vPrev;     endNbr = vNext;
-        alpha = raw;
+        double crossA = cross2d(vecA, dirVertex);
+        double crossB = cross2d(vecB, dirVertex);
+
+        // Wedge test
+        if (crossA > 0.0 && crossB <= WEDGE_EPS) {
+            wedgeHe = currHe;
+            break;
+        }
+
+        // numeric fallback: remember closest
+        double ca = std::abs(crossA);
+        if (ca < minCross) { minCross = ca; minCrossHe = currHe; }
+        double cb = std::abs(crossB);
+        if (cb < minCross) { minCross = cb; minCrossHe = nextHe; }
+
+        currHe = nextHe;
+        if (++guard > 100) break;
+    } while (currHe != firstHe);
+
+    if (wedgeHe == HalfEdgeMesh::INVALID_INDEX) {
+        wedgeHe = minCrossHe; // numeric fallback
+    }
+
+    if (wedgeHe == HalfEdgeMesh::INVALID_INDEX) {
+        //std::cout << "[traceFromVertex] No wedge found\n";
+        return fail;
+    }
+
+    //std::cout << "[traceFromVertex] wedgeHe=" << wedgeHe << " wedgeVec=(" << hvv_vert[wedgeHe].x << "," << hvv_vert[wedgeHe].y << ")" << " wedgeLen=" << glm::length(hvv_vert[wedgeHe]) << "\n";
+
+    uint32_t startFace = halfEdges[wedgeHe].face;
+    //std::cout << "[traceFromVertex] startFace=" << startFace << "\n";
+
+    // vertex chart unit start direction 
+    glm::dvec2 intervalStart = glm::normalize(hvv_vert[wedgeHe]);
+
+    // Power scaling based on vertex angle sum 
+    bool isBoundaryVertex = false;
+    uint32_t probe = wedgeHe;
+    do {
+        if (halfEdges[probe].opposite == HalfEdgeMesh::INVALID_INDEX) {
+            isBoundaryVertex = true;
+            break;
+        }
+        // Standardized traversal 
+        uint32_t next1 = halfEdges[probe].next;
+        if (next1 == HalfEdgeMesh::INVALID_INDEX) { isBoundaryVertex = true; break; }
+        uint32_t next2 = halfEdges[next1].next;
+        if (next2 == HalfEdgeMesh::INVALID_INDEX) { isBoundaryVertex = true; break; }
+        probe = halfEdges[next2].opposite;
+        if (probe == HalfEdgeMesh::INVALID_INDEX) { isBoundaryVertex = true; break; }
+    } while (probe != wedgeHe);
+
+    // Input mesh's expected vertex angle sum
+    double targetAngleSum = isBoundaryVertex ? glm::pi<double>() : 2.0 * glm::pi<double>();
+    // Intrinsic mesh's vertex angle sum
+    double geometricAngleSum = (vertexIdx < vAngleSums.size()) ? vAngleSums[vertexIdx] : targetAngleSum;
+
+    /*
+    std::cout << "[traceFromVertex] Angles: vertex " << vertexIdx
+        << " geometricAngleSum=" << geometricAngleSum
+        << " targetAngleSum=" << targetAngleSum
+        << " isBoundaryVertex=" << (isBoundaryVertex ? "YES" : "NO")
+        << "\n";
+    */
+
+    double power = geometricAngleSum / targetAngleSum;
+
+    // Convert to complex representation for power transform 
+    std::complex<double> intervalStartComplex(intervalStart.x, intervalStart.y);
+    std::complex<double> dirVertexComplex(dirVertex.x, dirVertex.y);
+    
+    // Compute relative direction as complex division
+    std::complex<double> traceDirRelativeToStart = dirVertexComplex / intervalStartComplex;
+    
+    // Apply power transform 
+    std::complex<double> poweredDir = std::pow(traceDirRelativeToStart, power);
+    
+    // Convert back to angle
+    double newA = std::arg(poweredDir);
+
+    // DEBUG: show result of power scaling
+    {
+        double angleStart = std::atan2(intervalStart.y, intervalStart.x);
+        double angleDir = std::atan2(dirVertex.y, dirVertex.x);
+        glm::dvec2 rotatedVertexDir(std::cos(angleStart + newA), std::sin(angleStart + newA));
+        double heLen = glm::length(hvv_vert[wedgeHe]);
+        glm::dvec2 rotatedVertexVec = rotatedVertexDir * heLen;
+
+        /*
+        std::cout << "[traceFromVertex] angleStart=" << angleStart << " angleDir=" << angleDir << "\n";
+        std::cout << "  traceDirRelative=(" << traceDirRelativeToStart.real() << "," << traceDirRelativeToStart.imag() << ")\n";
+        std::cout << "  power=" << power << " poweredDir=(" << poweredDir.real() << "," << poweredDir.imag() << ")\n";
+        std::cout << "  newA=" << newA << " rotatedVertexDir=(" << rotatedVertexDir.x << "," << rotatedVertexDir.y << ")\n";
+        */
+    }
+
+    // Convert to face coordinates
+    glm::dvec2 startDirInFace = glm::normalize(hvf_face[wedgeHe]);
+    double startFaceAngle = std::atan2(startDirInFace.y, startDirInFace.x);
+
+    double traceFaceAngle = startFaceAngle + newA;
+    glm::dvec2 traceDirInFace(std::cos(traceFaceAngle), std::sin(traceFaceAngle));
+
+    // Set up starting bary at vertex corner
+    auto triStart = mesh.layoutTriangle(startFace);
+    int lV = -1;
+
+    for (int k = 0; k < 3; ++k) 
+        if (triStart.indices[k] == vertexIdx) { 
+        lV = k; 
+        break; 
+    }
+
+    constexpr double TINY = 1e-9;
+    glm::dvec3 startBary(0.0);
+    if (lV >= 0) {
+        startBary[lV] = 1.0 - 2.0 * TINY;
+        startBary[(lV + 1) % 3] = TINY;
+        startBary[(lV + 2) % 3] = TINY;
     }
     else {
-        // interior wedge is CCW from next -> prev (swap)
-        startRay = rayNext;   endRay = rayPrev;
-        startNbr = vNext;     endNbr = vPrev;
-        alpha = 2.0 * glm::pi<double>() - raw;
+        // Fallback: place at the first corner
+        //std::cout << "[traceFromVertex] Fallback start bary" << startFace << std::endl;
+        startBary = glm::dvec3(1.0 - 2.0 * TINY, TINY, TINY);
     }
 
-    double theta = angleCCW(startRay, dirRef);   // measure from the interior start ray
-#ifndef NDEBUG
-    std::cout << "[traceFromVertex] raw=" << raw
-        << " alpha=" << alpha
-        << " theta=" << theta
-        << " startNbr=" << startNbr
-        << " endNbr=" << endNbr << "\n";
-#endif
+    //std::cout << "[traceFromVertex] power=" << power << " traceFaceAngle=" << traceFaceAngle << "\n";
 
-    // If the direction lies in the interior wedge of refFace, continue in that direction
-    if (theta <= alpha + 1e-14) {
-#ifndef NDEBUG
-        std::cout << "[traceFromVertex] chosenFace=refFace (direction in normalized interior wedge)\n";
-#endif
-        constexpr double TINY = 1e-9;
-        glm::dvec3 startBary(0.0);
-        startBary[lRef] = 1.0 - 2.0 * TINY;
-        startBary[lNext] = TINY;
-        startBary[lPrev] = TINY;
+    auto cont = traceFromFace(startFace, startBary, glm::normalize(traceDirInFace), remaining);
+    cont.pathPoints.insert(cont.pathPoints.begin(), baseResult.pathPoints.begin(), baseResult.pathPoints.end());
+    cont.steps.insert(cont.steps.begin(), baseResult.steps.begin(), baseResult.steps.end());
+    cont.distance += (totalLength - remaining);
 
-        auto cont = traceFromFace(refFace, startBary, dirRef, remaining);
-
-        double baseTraveled = totalLength - remaining;
-        cont.distance += baseTraveled;
-        cont.steps.insert(cont.steps.begin(), baseResult.steps.begin(), baseResult.steps.end());
-        return cont;
-    }
-
-    // Else rotate past this corner by theta - alpha and move to the face across 
-    double residual = theta - alpha;
-    uint32_t currFace = refFace;
-    // Crossing boundary
-    uint32_t currCommonNeighbor = endNbr;  
-    glm::dvec2 dirLocal = dirRef;
-
-    auto findFaceHEonUndirectedEdge = [&](uint32_t face, uint32_t a, uint32_t b)->uint32_t {
-        auto fHEs = conn.getFaceHalfEdges(face);
-        for (uint32_t he : fHEs) {
-            uint32_t o = halfEdges[he].origin;
-            uint32_t h = headOf(he);
-            if ((o == a && h == b) || (o == b && h == a)) return he;
-        }
-        return HalfEdgeMesh::INVALID_INDEX;
-        };
-
-    for (int guard = 0; guard < 1000; ++guard) {
-        // Move to the face across the edge (v, currCommonNeighbor)
-        uint32_t heOnCurr = findFaceHEonUndirectedEdge(currFace, v, currCommonNeighbor);
-        if (heOnCurr == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-            std::cout << "[traceFromVertex] missing HE on (v," << currCommonNeighbor << ") -> terminate\n";
-#endif
-            return fail;
-        }
-        uint32_t opp = halfEdges[heOnCurr].opposite;
-        if (opp == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-            std::cout << "[traceFromVertex] boundary encountered while rotating around vertex -> terminate\n";
-#endif
-            return fail;
-        }
-        uint32_t nextFace = halfEdges[opp].face;
-
-        // Transport the direction into nextFace
-        dirLocal = rotateVectorAcrossEdge(mesh, currFace, heOnCurr, nextFace, opp, dirLocal);
-
-        // Build wedge at (nextFace, v)
-        auto triN = mesh.layoutTriangle(nextFace);
-        int lNv = -1; for (int k = 0; k < 3; ++k) if (triN.indices[k] == v) { lNv = k; break; }
-        int lShared = -1; for (int k = 0; k < 3; ++k) if (triN.indices[k] == currCommonNeighbor) { lShared = k; break; }
-        if (lNv < 0 || lShared < 0) { 
-#ifndef NDEBUG
-            std::cout << "[traceFromVertex] topology error\n"; 
-#endif
-            return fail; 
-        }
-        int lOther = 3 - lNv - lShared;
-
-        glm::dvec2 pVn = triN.vertices[lNv];
-        glm::dvec2 pSh = triN.vertices[lShared];
-        glm::dvec2 pOt = triN.vertices[lOther];
-
-        glm::dvec2 rayShared = unitSafe(pSh - pVn);
-        glm::dvec2 rayOther = unitSafe(pOt - pVn);
-
-        // Normalize this corner to its interior (<= pi) but keep the start as the shared edge by measuring theta from rayShared
-        double rawN = angleCCW(rayShared, rayOther);
-        double alphaN = (rawN <= glm::pi<double>()) ? rawN : (2.0 * glm::pi<double>() - rawN);
-        double thetaN = angleCCW(rayShared, unitSafe(dirLocal));
-
-#ifndef NDEBUG
-        std::cout << "[traceFromVertex] walk: currFace=" << currFace
-            << " -> nextFace=" << nextFace
-            << " residual=" << residual
-            << " rawN=" << rawN
-            << " alphaN=" << alphaN
-            << " thetaN=" << thetaN << "\n";
-#endif
-
-        if (residual <= alphaN + 1e-14) {
-            // The direction falls in this next face
-            constexpr double TINY = 1e-9;
-            glm::dvec3 startBary(0.0);
-            startBary[lNv] = 1.0 - 2.0 * TINY;
-            startBary[lShared] = TINY;
-            startBary[lOther] = TINY;
-
-            auto cont = traceFromFace(nextFace, startBary, unitSafe(dirLocal), remaining);
-
-            double baseTraveled = totalLength - remaining;
-            cont.distance += baseTraveled;
-            cont.steps.insert(cont.steps.begin(), baseResult.steps.begin(), baseResult.steps.end());
-            return cont;
-        }
-
-        // Not yet; consume this corner and advance around v:
-        residual -= alphaN;
-        currFace = nextFace;
-        currCommonNeighbor = triN.indices[lOther]; // cross the OTHER edge next
-    }
-
-#ifndef NDEBUG
-    std::cout << "[traceFromVertex] guard limit reached -> terminate\n";
-#endif
-    return fail;
+    return cont;
 }
 
 GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec2& cartesianDir, double length) const
 {
-#ifndef NDEBUG
+    /*
     std::cout << "[traceFromFace] START: face=" << startFaceIdx
         << " bary=(" << startBary.x << "," << startBary.y << "," << startBary.z << ")"
         << " dir=(" << cartesianDir.x << "," << cartesianDir.y << ")"
         << " length=" << length << std::endl;
-#endif
+    */
 
     GeodesicTraceResult result;
     result.success = false;
@@ -240,23 +236,24 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         result.position3D = evaluateSurfacePoint(sp);
         result.baryCoords = startBary;
         result.finalFaceIdx = startFaceIdx;
+        result.pathPoints.push_back(sp);
         return result;
     }
 
-    // Initialize state
+    // Initialize state variables at function scope
     double remaining = length;
     uint32_t currFace = startFaceIdx;
     glm::dvec2 dir2D = glm::normalize(cartesianDir);
-
-#ifndef NDEBUG
-    std::cout << "[traceFromFace] normalized dir2D=(" << dir2D.x << "," << dir2D.y << ")" << std::endl;
-#endif
-
-    // Create initial surface point
     SurfacePoint currPoint;
     currPoint.type = SurfacePoint::Type::FACE;
     currPoint.elementId = currFace;
     currPoint.baryCoords = startBary;
+
+    // Initialize and push start point
+    result.pathPoints.clear();
+    result.pathPoints.push_back(currPoint);
+
+    //std::cout << "[traceFromFace] normalized dir2D=(" << dir2D.x << "," << dir2D.y << ")" << std::endl;
 
     const auto& conn = mesh.getConnectivity();
     const auto& halfEdges = conn.getHalfEdges();
@@ -264,65 +261,118 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
     // Tolerance for remaining distance
     constexpr double EPS_REMAIN = 1e-12;
-    constexpr double EDGE_SNAP_MIN = 1e-9; 
-
-    // Parameters for vertex continuation
-    constexpr double FORWARD_EPS = 1e-6;
-    constexpr double BARY_MOVE_TOL = 1e-4;
-    constexpr double TINY = 1e-9;
+    constexpr double VERTEX_SNAP_FRAC = 1e-2;
 
     // Main loop
     for (int iter = 0; iter < options.maxIters && remaining > EPS_REMAIN; ++iter) {
-#ifndef NDEBUG
-        std::cout << "[traceFromFace] iter=" << iter << " currFace=" << currFace
-            << " remaining=" << remaining << std::endl;
-#endif
+        //std::cout << "[traceFromFace] iter=" << iter << " currFace=" << currFace << " remaining=" << remaining << std::endl;
 
         // Take one step across the current triangle
         FaceStepResult step = traceInFace(currPoint, dir2D, remaining);
         result.steps.push_back(step);
 
         if (!step.success) {
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] traceInFace failed at iter=" << iter << std::endl;
-#endif
+            //std::cout << "[traceFromFace] traceInFace failed at iter=" << iter << std::endl;
             break;
         }
 
         // Update remaining distance
         remaining -= step.distanceTraveled;
 
+        //std::cout << "[traceFromFace] STEP: distanceTraveled=" << step.distanceTraveled << " remaining=" << remaining << " (was " << (remaining + step.distanceTraveled) << ")\n";
+
         // Use the final barycentric coordinates from the step
         glm::dvec3 bary = step.finalBary;
 
         // Handle vertex hit
         if (step.hitVertex) {
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] step hit vertex=" << step.vertexIdx
-                << " at t=" << step.distanceTraveled
-                << " remaining=" << remaining << std::endl;
-#endif
+            //std::cout << "[traceFromFace] step hit vertex=" << step.vertexIdx << " at t=" << step.distanceTraveled << " remaining=" << remaining << std::endl;
+
+            // Create vertex surface point
+            SurfacePoint vertexPoint;
+            vertexPoint.type = SurfacePoint::Type::VERTEX;
+            vertexPoint.elementId = step.vertexIdx;
+
+            // Add vertex point to path
+            result.pathPoints.push_back(vertexPoint);
 
             // Trace end point on vertex
             if (remaining <= EPS_REMAIN) {
-                SurfacePoint vertexExit;
-                vertexExit.type = SurfacePoint::Type::VERTEX;
-                vertexExit.elementId = step.vertexIdx;
-
                 result.success = true;
                 result.finalFaceIdx = currFace;
                 result.distance = length - remaining;
                 result.baryCoords = step.finalBary;
-                result.exitPoint = vertexExit;
-                result.position3D = glm::vec3(evaluateSurfacePoint(vertexExit));
-#ifndef NDEBUG
-                std::cout << "[traceFromFace] evaluating position directly \n" << std::endl;
-#endif
+                result.exitPoint = vertexPoint;
+                result.position3D = glm::vec3(evaluateSurfacePoint(vertexPoint));
+                //std::cout << "[traceFromFace] evaluating position directly \n" << std::endl;
                 return result;
             }
 
-            // Find correct direction to trace from vertex
-            return traceFromVertex(step.vertexIdx, currFace, dir2D, remaining, result, length);
+            // Face to vertex direction conversion
+            const auto& hvf_face = mesh.getHalfedgeVectorsInFace();   
+            const auto& hvv_vert = mesh.getHalfedgeVectorsInVertex();
+            const auto& vertices = conn.getVertices();
+
+            // Find the halfedge incoming to the vertex in the current face
+            uint32_t inHe = HalfEdgeMesh::INVALID_INDEX;
+            auto faceHEs = conn.getFaceHalfEdges(currFace);
+            for(size_t i = 0; i < faceHEs.size(); ++i) {
+                uint32_t he = faceHEs[i];
+                uint32_t nextHe = halfEdges[he].next;
+                // The vertex of a corner is the origin of the next halfedge
+                if (nextHe != HalfEdgeMesh::INVALID_INDEX && halfEdges[nextHe].origin == step.vertexIdx) {
+                    inHe = he;
+                    break;
+                }
+            }
+
+            if (inHe == HalfEdgeMesh::INVALID_INDEX || halfEdges[inHe].opposite == HalfEdgeMesh::INVALID_INDEX) {
+                //std::cerr << "[traceFromFace] ERROR: Could not find valid half-edge for vertex " << step.vertexIdx << " in face " << currFace << std::endl;
+                return traceFromVertex(step.vertexIdx, currFace, glm::normalize(dir2D), remaining, result, length);
+            }
+            
+            uint32_t outgoingHe = halfEdges[inHe].opposite;
+
+            // Get the basis vectors
+            // Face basis: vector along the incoming edge 
+            glm::dvec2 faceBase = hvf_face[inHe];
+            // Vertex basis: vector along the halfedge that points back to the face 
+            glm::dvec2 vertBase = hvv_vert[outgoingHe];         
+            
+            double fbLen = glm::length(faceBase);
+            double vbLen = glm::length(vertBase);
+            
+            glm::dvec2 dirVertex;
+            if (fbLen > 1e-12 && vbLen > 1e-12) {
+                // Normalize basis vectors
+                faceBase /= fbLen;
+                vertBase /= vbLen;
+                
+                // Calculate the angle of the incoming direction relative to the face's edge vector
+                double angFaceBase = std::atan2(faceBase.y, faceBase.x);
+                double angDir = std::atan2(dir2D.y, dir2D.x);
+                double relAngle = angDir - angFaceBase;
+                
+                // Apply the relative angle to the vertex's corresponding edge vector
+                double angVertBase = std::atan2(vertBase.y, vertBase.x);
+                double finalAngle = angVertBase + relAngle + glm::pi<double>();
+                
+                // Convert back to vector
+                dirVertex = glm::dvec2(std::cos(finalAngle), std::sin(finalAngle));
+                
+                /*
+                std::cout << "[traceFromFace] Converted dir: face=(" << dir2D.x << "," << dir2D.y 
+                         << ") -> vertex=(" << dirVertex.x << "," << dirVertex.y 
+                         << ") using inHe=" << inHe 
+                         << " outgoingHe=" << outgoingHe << std::endl;
+                */
+            } else {
+                //std::cout << "[traceFromFace] WARNING: Zero length basis vectors, using normalized dir2D\n";
+                dirVertex = glm::normalize(dir2D);
+            }
+
+            // Call vertex tracer in vertex's frame direction
+            return traceFromVertex(step.vertexIdx, currFace, dirVertex, remaining, result, length);
         }
 
         // Handle inside face
@@ -330,10 +380,8 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             // Trace end point inside face
             if (remaining <= EPS_REMAIN) {
 
-                // thresholds (tune as needed)
-                constexpr double SNAP_BARY = 1e-2;
-                constexpr double VERTEX_SNAP_FRAC = 1e-3;
-                constexpr double EDGE_SNAP_FRAC = 1e-2;
+                // Thresholds for snapping
+                constexpr double BARY_SNAP_TOL = 1e-9; 
                 constexpr double MIN_EDGE_LEN = 1e-12;
 
                 // Validate bary coords 
@@ -343,9 +391,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
                 // If bary is garbage, clamp and renormalize 
                 if (!baryOk) {
-#ifndef NDEBUG
-                    std::cout << "[traceFromFace] WARNING: invalid barycentrics, sanitizing\n";
-#endif
+                    //std::cout << "[traceFromFace] WARNING: invalid barycentrics, sanitizing\n";
                     faceB.x = std::max(0.0, faceB.x);
                     faceB.y = std::max(0.0, faceB.y);
                     faceB.z = std::max(0.0, faceB.z);
@@ -360,10 +406,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                 glm::dvec2 s2D = V0 * faceB.x + V1 * faceB.y + V2 * faceB.z;
 
                 // compute local edge lengths and average for scale aware thresholds
-                double L01 = glm::length(V1 - V0);
-                double L12 = glm::length(V2 - V1);
-                double L20 = glm::length(V0 - V2);
-                double avgEdge = (L01 + L12 + L20) / 3.0;
+                double avgEdge = (glm::length(V1 - V0) + glm::length(V2 - V1) + glm::length(V0 - V2)) / 3.0;
                 if (avgEdge < MIN_EDGE_LEN) avgEdge = MIN_EDGE_LEN;
 
                 // 1) Vertex snap
@@ -373,115 +416,195 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                 double vertexThresh = VERTEX_SNAP_FRAC * avgEdge;
 
                 if (d0 <= vertexThresh || d1 <= vertexThresh || d2 <= vertexThresh) {
-                    uint32_t vIdx;
+                    uint32_t vIdx = 0;
                     auto fhe = conn.getFaceHalfEdges(currFace);
-                    if (d0 <= vertexThresh) vIdx = conn.getHalfEdges()[fhe[0]].origin;
-                    else if (d1 <= vertexThresh) vIdx = conn.getHalfEdges()[fhe[1]].origin;
-                    else vIdx = conn.getHalfEdges()[fhe[2]].origin;
 
-#ifndef NDEBUG
-                    std::cout << "[traceFromFace] Vertex snap: min=" << std::min(std::min(d0, d1), d2)
-                        << " <= " << vertexThresh << " -> vertex " << vIdx << "\n";
-#endif
-
-                    SurfacePoint vertexExit;
-                    vertexExit.type = SurfacePoint::Type::VERTEX;
-                    vertexExit.elementId = vIdx;
-
-                    result.success = true;
-                    result.finalFaceIdx = currFace;
-                    result.distance = length - remaining;
-                    result.baryCoords = faceB;
-                    result.exitPoint = vertexExit;
-                    result.position3D = glm::vec3(evaluateSurfacePoint(vertexExit));
-                    return result;
-                }
-
-                // 2) Edge snap: Calculate distance to each segment and pick nearest if within threshold
-                auto distPointToSegment = [](const glm::dvec2& p, const glm::dvec2& a, const glm::dvec2& b) {
-                    glm::dvec2 ab = b - a; double ab2 = glm::dot(ab, ab);
-                    if (ab2 == 0.0) return std::pair<double, double>(glm::length(p - a), 0.0);
-                    double t = glm::dot(p - a, ab) / ab2;
-                    t = std::max(0.0, std::min(1.0, t));
-                    glm::dvec2 proj = a + t * ab;
-                    return std::pair<double, double>(glm::length(p - proj), t);
-                    };
-
-                auto e0 = distPointToSegment(s2D, V0, V1);
-                auto e1 = distPointToSegment(s2D, V1, V2);
-                auto e2 = distPointToSegment(s2D, V2, V0);
-
-                // Choose nearest edge
-                double minDist = e0.first; int bestEdge = 0; double bestT = e0.second; double bestEdgeLen = L01;
-                if (e1.first < minDist) { minDist = e1.first; bestEdge = 1; bestT = e1.second; bestEdgeLen = L12; }
-                if (e2.first < minDist) { minDist = e2.first; bestEdge = 2; bestT = e2.second; bestEdgeLen = L20; }
-
-                double edgeThresh = EDGE_SNAP_FRAC * bestEdgeLen;
-
-                if (minDist <= edgeThresh && bestEdgeLen > MIN_EDGE_LEN) {
-                    // Map bestEdge to halfedge index on this face 
-                    auto faceHEs = conn.getFaceHalfEdges(currFace);
-                    uint32_t heOnEdge = faceHEs[bestEdge];
-                    uint32_t edgeIdx = conn.getEdgeIndexFromHalfEdge(heOnEdge);
-
-                    // Compute canonical halfedge and canonical endpoints
-                    uint32_t canonicalHe = edgesRef[edgeIdx].halfEdgeIdx;
-                    uint32_t vA = 0u, vB = 0u;
-                    if (canonicalHe != HalfEdgeMesh::INVALID_INDEX) {
-                        uint32_t oppCanon = halfEdges[canonicalHe].opposite;
-                        vA = halfEdges[canonicalHe].origin;
-                        vB = (oppCanon != HalfEdgeMesh::INVALID_INDEX) ? halfEdges[oppCanon].origin : halfEdges[canonicalHe].origin;
-                    }
-                    else {
-                        // fallback to face-local + opposite if no canonical halfedge available
-                        vA = halfEdges[heOnEdge].origin;
-                        uint32_t opp = halfEdges[heOnEdge].opposite;
-                        if (opp != HalfEdgeMesh::INVALID_INDEX) vB = halfEdges[opp].origin;
-                        else {
-                            uint32_t nextHe = halfEdges[heOnEdge].next;
-                            vB = (nextHe != HalfEdgeMesh::INVALID_INDEX) ? halfEdges[nextHe].origin : vA;
+                    // Bounds check for face halfedges access
+                    bool validVertex = false;
+                    if (fhe.size() >= 3) {
+                        // Bounds check for halfedges array access
+                        const auto& halfEdgesRef = conn.getHalfEdges();
+                        if (fhe[0] < halfEdgesRef.size() && fhe[1] < halfEdgesRef.size() && fhe[2] < halfEdgesRef.size()) {
+                            if (d0 <= vertexThresh) vIdx = halfEdgesRef[fhe[0]].origin;
+                            else if (d1 <= vertexThresh) vIdx = halfEdgesRef[fhe[1]].origin;
+                            else vIdx = halfEdgesRef[fhe[2]].origin;
+                            validVertex = true;
                         }
                     }
 
-                    // canonical split (flip if canonical exists and orientation differs)
-                    double face_t = bestT;
-                    double splitCanon = face_t;
-                    if (canonicalHe != HalfEdgeMesh::INVALID_INDEX) {
-                        if (halfEdges[heOnEdge].origin != halfEdges[canonicalHe].origin) splitCanon = 1.0 - face_t;
+                    if (validVertex) {
+                        //std::cout << "[traceFromFace] Vertex snap: min=" << std::min(std::min(d0, d1), d2) << " <= " << vertexThresh << " -> vertex " << vIdx << "\n";
+
+                        SurfacePoint vertexExit;
+                        vertexExit.type = SurfacePoint::Type::VERTEX;
+                        vertexExit.elementId = vIdx;
+
+                        // VERTEX exit
+                        result.success = true;
+                        result.finalFaceIdx = currFace;
+                        result.distance = length - remaining;
+                        result.baryCoords = faceB;
+                        result.exitPoint = vertexExit;
+                        result.position3D = glm::vec3(evaluateSurfacePoint(vertexExit));
+                        result.pathPoints.push_back(vertexExit);
+                        return result;
                     }
-
-                    // Build canonical EDGE SurfacePoint: bary = (1-t, t, 0) where bary.y == t
-                    SurfacePoint edgeExit;
-                    edgeExit.type = SurfacePoint::Type::EDGE;
-                    edgeExit.elementId = edgeIdx;
-                    edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
-                    edgeExit.split = splitCanon;
-
-                    // Compute 3D position directly from canonical endpoints (unambiguous)
-                    const auto& vertsRef = conn.getVertices();
-                    glm::dvec3 pA = glm::dvec3(vertsRef[vA].position);
-                    glm::dvec3 pB = glm::dvec3(vertsRef[vB].position);
-                    glm::dvec3 pEdge = (1.0 - splitCanon) * pA + splitCanon * pB;
-
-#ifndef NDEBUG
-                    std::cout << "[traceFromFace] Edge snap: dist=" << minDist << " <= " << edgeThresh
-                        << " ; edge=" << edgeIdx << " t(face)=" << bestT << " t(canonical)=" << splitCanon
-                        << " endpoints=(" << vA << "," << vB << ")\n";
-#endif
-
-                    result.success = true;
-                    result.finalFaceIdx = currFace;
-                    result.distance = length - remaining;
-                    result.baryCoords = faceB;
-                    result.exitPoint = edgeExit;
-                    result.position3D = glm::vec3(pEdge); // Canonical interpolation
-                    return result;
+                    else {
+                        //std::cout << "[traceFromFace] Invalid face/halfedge data for vertex snap, falling back to edge/face snap\n";
+                    }
                 }
 
-                // FACE exit
-#ifndef NDEBUG
-                std::cout << "[traceFromFace] FACE exit with remaining distance=" << remaining << "\n";
-#endif
+                // Find the minimum barycentric coordinate
+                double min_bary = faceB.x;
+                int min_idx = 0;
+                if (faceB.y < min_bary) { min_bary = faceB.y; min_idx = 1; }
+                if (faceB.z < min_bary) { min_bary = faceB.z; min_idx = 2; }
+
+                // The edge opposite to the vertex with minimum barycentric coordinate
+                int edge_idx = (min_idx + 1) % 3;
+                
+                // Calculate t from barycentric coordinates
+                int vert_p_idx = edge_idx;              // First vertex of the edge
+                int vert_q_idx = (edge_idx + 1) % 3;    // Second vertex of the edge
+                double lambda_sum = faceB[vert_p_idx] + faceB[vert_q_idx];
+                
+                // t is the normalized coordinate of the second vertex
+                double t = 0.5; // Default to midpoint
+                if (lambda_sum > 1e-12) {
+                    t = faceB[vert_q_idx] / lambda_sum;
+                }
+                
+                int bestEdge = edge_idx;
+                double bestT = t;
+
+                // Check if the smallest barycentric coordinate is near zero
+                if (min_bary < BARY_SNAP_TOL) {
+                    // Map bestEdge to halfedge index on this face 
+                    auto faceHEs = conn.getFaceHalfEdges(currFace);
+                    if (bestEdge >= static_cast<int>(faceHEs.size())) {
+                        //std::cout << "[traceFromFace] bestEdge=" << bestEdge << " >= faceHEs.size()=" << faceHEs.size() << ", falling back to FACE exit\n";
+                    }
+                    else {
+                        uint32_t heOnEdge = faceHEs[bestEdge];
+                        uint32_t edgeIdx = conn.getEdgeFromHalfEdge(heOnEdge);
+
+                        // Check if edge index is valid
+                        if (edgeIdx != HalfEdgeMesh::INVALID_INDEX && edgeIdx < edgesRef.size()) {
+                            // Compute canonical halfedge and canonical endpoints
+                            uint32_t canonicalHe = edgesRef[edgeIdx].halfEdgeIdx;
+                            uint32_t vA = 0u, vB = 0u;
+
+                            // Add bounds checking for canonical halfedge
+                            if (canonicalHe != HalfEdgeMesh::INVALID_INDEX && canonicalHe < halfEdges.size()) {
+                                uint32_t oppCanon = halfEdges[canonicalHe].opposite;
+                                vA = halfEdges[canonicalHe].origin;
+
+                                // Bounds check for opposite halfedge
+                                if (oppCanon != HalfEdgeMesh::INVALID_INDEX && oppCanon < halfEdges.size()) {
+                                    vB = halfEdges[oppCanon].origin;
+                                }
+                                else {
+                                    vB = halfEdges[canonicalHe].origin; // fallback
+                                }
+                            }
+                            else {
+                                // fallback to face local if no canonical halfedge 
+                                if (heOnEdge < halfEdges.size()) {
+                                    vA = halfEdges[heOnEdge].origin;
+                                    uint32_t opp = halfEdges[heOnEdge].opposite;
+                                    if (opp != HalfEdgeMesh::INVALID_INDEX && opp < halfEdges.size()) {
+                                        vB = halfEdges[opp].origin;
+                                    }
+                                    else {
+                                        uint32_t nextHe = halfEdges[heOnEdge].next;
+                                        if (nextHe != HalfEdgeMesh::INVALID_INDEX && nextHe < halfEdges.size()) {
+                                            vB = halfEdges[nextHe].origin;
+                                        }
+                                        else {
+                                            vB = vA; // fallback
+                                        }
+                                    }
+                                }
+                                else {
+                                    //std::cout << "[traceFromFace] heOnEdge=" << heOnEdge << " >= halfEdges.size()=" << halfEdges.size() << ", falling back to FACE exit\n";
+                                    // Fall back to FACE exit 
+                                    goto face_exit;
+                                }
+                            }
+
+                            // Bounds check for vertices
+                            const auto& vertsRef = conn.getVertices();
+                            if (vA >= vertsRef.size() || vB >= vertsRef.size()) {
+                                //std::cout << "[traceFromFace] Invalid vertex indices: vA=" << vA << " vB=" << vB << " >= vertsRef.size()=" << vertsRef.size() << ", falling back to FACE exit\n";
+                                // Fall back to FACE exit
+                                goto face_exit;
+                            }
+
+                            // Flip if canonical exists and orientation is different
+                            double face_t = bestT;
+                            double splitCanon = face_t;
+                            if (canonicalHe != HalfEdgeMesh::INVALID_INDEX && canonicalHe < halfEdges.size()) {
+                                if (heOnEdge < halfEdges.size() && halfEdges[heOnEdge].origin != halfEdges[canonicalHe].origin) {
+                                    splitCanon = 1.0 - face_t;
+                                }
+                            }
+
+                            // Snap to vertex if very close to endpoints 
+                            SurfacePoint edgeExit;
+                            
+                            if (splitCanon < VERTEX_SNAP_FRAC) {
+                                edgeExit.type = SurfacePoint::Type::VERTEX;
+                                edgeExit.elementId = vA;
+                                edgeExit.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
+                                edgeExit.split = 0.0;
+                            } else if (splitCanon > (1.0 - VERTEX_SNAP_FRAC)) {
+                                edgeExit.type = SurfacePoint::Type::VERTEX;
+                                edgeExit.elementId = vB;
+                                edgeExit.baryCoords = glm::dvec3(0.0, 1.0, 0.0);
+                                edgeExit.split = 1.0;
+                            } else {
+                                edgeExit.type = SurfacePoint::Type::EDGE;
+                                edgeExit.elementId = edgeIdx;
+                                edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
+                                edgeExit.split = splitCanon;
+                            }
+
+                            // Compute 3D position
+                            glm::dvec3 pA = glm::dvec3(vertsRef[vA].position);
+                            glm::dvec3 pB = glm::dvec3(vertsRef[vB].position);
+                            glm::dvec3 pEdge;
+                            if (edgeExit.split == 0.0) {
+                                pEdge = pA;
+                            } else if (edgeExit.split == 1.0) {
+                                pEdge = pB;
+                            } else {
+                                pEdge = (1.0 - splitCanon) * pA + splitCanon * pB;
+                            }
+
+                            /*
+                            std::cout << "[traceFromFace] Barycentric edge snap: min_bary=" << min_bary << " < " << BARY_SNAP_TOL
+                                << " ; edge=" << edgeIdx << " t(face)=" << bestT << " t(canonical)=" << splitCanon
+                                << " endpoints=(" << vA << "," << vB << ")\n";
+                            */
+
+                            result.success = true;
+                            result.finalFaceIdx = currFace;
+                            result.distance = length - remaining;
+                            result.baryCoords = faceB;
+                            result.exitPoint = edgeExit;
+                            result.position3D = glm::vec3(pEdge); // Canonical interpolation
+                            result.pathPoints.push_back(edgeExit);
+                            return result;
+                        }
+                        else {
+                            //std::cout << "[traceFromFace] Invalid edge index " << edgeIdx << " for halfedge " << heOnEdge << ", falling back to FACE exit\n";
+                        }
+                    }
+                }
+
+            // FACE exit
+            face_exit:
+                //std::cout << "[traceFromFace] FACE exit with remaining distance=" << remaining << "\n";
                 result.success = true;
                 result.finalFaceIdx = currFace;
                 result.distance = length - remaining;
@@ -493,30 +616,25 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                 exitPoint.baryCoords = faceB;
                 result.exitPoint = exitPoint;
                 result.position3D = glm::vec3(evaluateSurfacePoint(exitPoint));
-
-#ifndef NDEBUG
-                std::cout << "[traceFromFace] Exit point of type=FACE with bary="
-                    << exitPoint.baryCoords.x << "," << exitPoint.baryCoords.y << "," << exitPoint.baryCoords.z << ")" << std::endl;
-#endif
+                result.pathPoints.push_back(exitPoint); 
 
                 return result;
-            }
-            else {
-                // Continue tracing even if wrongly stopped inside face
-#ifndef NDEBUG
-                std::cout << "[traceFromFace] ended inside face but remaining > 0, continuing from bary\n";
-#endif
-                currPoint.elementId = currFace;
-                currPoint.baryCoords = bary;
-                continue;
             }
         }
 
         // hitEdge == true
-        // Build exit EDGE surface point 
-        uint32_t edgeIdx = conn.getEdgeIndexFromHalfEdge(step.halfEdgeIdx);
+        uint32_t edgeIdx = conn.getEdgeFromHalfEdge(step.halfEdgeIdx);
 
-        // canonical endpoints for the hit edge
+        if (edgeIdx == HalfEdgeMesh::INVALID_INDEX || edgeIdx >= edgesRef.size()) {
+            //std::cout << "[traceFromFace] Invalid edge index " << edgeIdx << " for step halfedge " << step.halfEdgeIdx << ", aborting trace\n";
+            result.success = false;
+            result.baryCoords = currPoint.baryCoords;
+            result.position3D = glm::vec3(evaluateSurfacePoint(currPoint));
+            result.distance = length - remaining;
+            return result;
+        }
+
+        // Canonical endpoints for the hit edge
         double face_t = step.edgeParam;
         uint32_t canonicalHe = edgesRef[edgeIdx].halfEdgeIdx;
         uint32_t vA = 0u, vB = 0u;
@@ -543,44 +661,42 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             if (halfEdges[step.halfEdgeIdx].origin != halfEdges[canonicalHe].origin) splitCanon = 1.0 - face_t;
         }
 
-        // Build EDGE SurfacePoint in canonical bary form
+        // Snap to vertex if very close to endpoints 
         SurfacePoint edgeExit;
-        edgeExit.type = SurfacePoint::Type::EDGE;
-        edgeExit.elementId = edgeIdx;
-        edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
-        edgeExit.split = splitCanon;
+        
+        if (splitCanon < VERTEX_SNAP_FRAC) {
+            edgeExit.type = SurfacePoint::Type::VERTEX;
+            edgeExit.elementId = vA;
+            edgeExit.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
+            edgeExit.split = 0.0;
+        } else if (splitCanon > (1.0 - VERTEX_SNAP_FRAC)) {
+            edgeExit.type = SurfacePoint::Type::VERTEX;
+            edgeExit.elementId = vB;
+            edgeExit.baryCoords = glm::dvec3(0.0, 1.0, 0.0);
+            edgeExit.split = 1.0;
+        } else {
+            edgeExit.type = SurfacePoint::Type::EDGE;
+            edgeExit.elementId = edgeIdx;
+            edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
+            edgeExit.split = splitCanon;
+        }
 
         // compute canonical 3D point
         const auto& vertsRef = conn.getVertices();
         glm::dvec3 pA = glm::dvec3(vertsRef[vA].position);
         glm::dvec3 pB = glm::dvec3(vertsRef[vB].position);
-        glm::dvec3 pEdge = (1.0 - splitCanon) * pA + splitCanon * pB;
+        glm::dvec3 pEdge;
+        if (edgeExit.split == 0.0) {
+            pEdge = pA;
+        } else if (edgeExit.split == 1.0) {
+            pEdge = pB;
+        } else {
+            pEdge = (1.0 - splitCanon) * pA + splitCanon * pB;
+        }
 
-        // Trace end point lies on edge
+        // EDGE exit
         if (remaining <= EPS_REMAIN) {
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] EDGE exit at HE=" << step.halfEdgeIdx << " (Edge=" << edgeIdx << ") bary=(x="
-                << bary.x << ",y=" << bary.y << ",z=" << bary.z << ")\n";
-#endif
-            result.success = true;
-            result.finalFaceIdx = currFace;
-            result.distance = length - remaining;
-            result.baryCoords = bary;
-            result.exitPoint = edgeExit;
-            result.position3D = glm::vec3(pEdge);
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] Trace hit fraction =" << splitCanon << std::endl;
-#endif
-            return result;
-        }
-
-        // Check if remaining distance is very small and snap to edge instead of crossing
-        if (remaining <= EDGE_SNAP_MIN) {
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] EDGE SNAP: remaining=" << remaining
-                << " < threshold=" << EDGE_SNAP_MIN
-                << ", snapping to edge instead of crossing\n";
-#endif
+            //std::cout << "[traceFromFace] EDGE exit: remaining=" << remaining << "\n";
 
             result.success = true;
             result.finalFaceIdx = currFace;
@@ -588,16 +704,14 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             result.baryCoords = bary;
             result.exitPoint = edgeExit;
             result.position3D = glm::vec3(pEdge);
+            result.pathPoints.push_back(edgeExit);
             return result;
         }
 
-        // Ege crossing 
         uint32_t oppositeHE = halfEdges[step.halfEdgeIdx].opposite;
         if (oppositeHE == HalfEdgeMesh::INVALID_INDEX) {
             // Hit boundary 
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] Hit boundary at edge " << edgeIdx << std::endl;
-#endif
+            //std::cout << "[traceFromFace] Hit boundary at edge " << edgeIdx << std::endl;
             result.success = false;
             result.baryCoords = bary;
             result.position3D = glm::vec3(pEdge);
@@ -607,9 +721,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
         uint32_t nextFace = halfEdges[oppositeHE].face;
         if (nextFace == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-            std::cout << "[traceFromFace] Invalid next face from oppositeHE=" << oppositeHE << std::endl;
-#endif
+            //std::cout << "[traceFromFace] Invalid next face from oppositeHE=" << oppositeHE << std::endl;
             result.success = false;
             result.baryCoords = bary;
             result.position3D = glm::vec3(pEdge);
@@ -617,10 +729,10 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             return result;
         }
 
-#ifndef NDEBUG
-        std::cout << "[traceFromFace] crossing to nextFace=" << nextFace
-            << " via edge=" << edgeIdx << " and remaining=" << remaining << std::endl;
-#endif
+        //std::cout << "[traceFromFace] crossing to nextFace=" << nextFace << " via edge=" << edgeIdx << " and remaining=" << remaining << std::endl;
+
+        // Add edge crossing point to path
+        result.pathPoints.push_back(edgeExit);
 
         // Transport direction using vector rotation
         dir2D = rotateVectorAcrossEdge(mesh,
@@ -628,10 +740,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             nextFace, oppositeHE,
             dir2D);
 
-#ifndef NDEBUG
-        std::cout << "[traceFromFace] dir transported to next face=("
-            << dir2D.x << "," << dir2D.y << ")" << std::endl;
-#endif
+        //std::cout << "[traceFromFace] dir transported to next face=(" << dir2D.x << "," << dir2D.y << ")" << std::endl;
 
         // Reproject point into next face's chart
         auto tri2D = mesh.layoutTriangle(currFace);
@@ -641,11 +750,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
         glm::dvec2 next2D = chartLocal2D(mesh, currFace, nextFace, exit2D);
 
-#ifndef NDEBUG
-        std::cout << "[traceFromFace] reprojected point: ("
-            << exit2D.x << "," << exit2D.y << ") -> ("
-            << next2D.x << "," << next2D.y << ")" << std::endl;
-#endif
+        //std::cout << "[traceFromFace] reprojected point: (" << exit2D.x << "," << exit2D.y << ") -> (" << next2D.x << "," << next2D.y << ")" << std::endl;
 
         // Convert to barycentric in next face
         auto nextTri2D = mesh.layoutTriangle(nextFace);
@@ -654,25 +759,26 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             nextTri2D.vertices[0], nextTri2D.vertices[1], nextTri2D.vertices[2]
         );
 
-#ifndef NDEBUG
-        std::cout << "[traceFromFace] next bary=("
-            << nextBary.x << "," << nextBary.y << "," << nextBary.z << ")" << std::endl;
-#endif
+        //std::cout << "[traceFromFace] next bary=(" << nextBary.x << "," << nextBary.y << "," << nextBary.z << ")" << std::endl;
 
         currFace = nextFace;
         currPoint.elementId = currFace;
         currPoint.baryCoords = nextBary;
     }
 
-#ifndef NDEBUG
-    std::cout << "[traceFromFace] FAILED: reached max iterations or error" << std::endl;
-#endif
+    //std::cout << "[traceFromFace] FAILED: reached max iterations or error" << std::endl;
 
-    // Fallback - return current position
+    // Add final point to path 
+    if (result.pathPoints.empty() || result.pathPoints.back().elementId != currPoint.elementId) {
+        result.pathPoints.push_back(currPoint);
+    }
+
+    // Fallback: return current position
     result.success = false;
     result.baryCoords = currPoint.baryCoords;
     result.position3D = glm::vec3(evaluateSurfacePoint(currPoint));
     result.distance = length - remaining;
+    result.finalFaceIdx = currFace;
 
     return result;
 }
@@ -695,48 +801,10 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
     auto triangle2D = mesh.layoutTriangle(start.elementId);
     const glm::dvec2* V = triangle2D.vertices;
 
-    // DEBUG: SHOULD REMOVE SOON (kept as in original)
-    {
-        const auto& conn = mesh.getConnectivity();
-        auto faceHEs_conn = conn.getFaceHalfEdges(start.elementId);
-
-#ifndef NDEBUG
-        std::cout << "[TraceInFace] face=" << start.elementId << "  chart coords:\n";
-        for (int i = 0; i < 3; ++i) {
-            std::cout << "    layout V" << i << ": idx=" << triangle2D.indices[i]
-                << "  chart=(" << V[i].x << "," << V[i].y << ")\n";
-        }
-#endif
-
-        uint32_t anchor = conn.getFaces()[start.elementId].halfEdgeIdx;
-#ifndef NDEBUG
-        std::cout << "[TraceInFace] face anchor he=" << anchor << "\n";
-#endif
-        uint32_t he = anchor;
-        for (int i = 0; i < 3; ++i) {
-            if (he == INVALID_INDEX) break;
-#ifndef NDEBUG
-            std::cout << "    conn he[" << i << "]=" << he
-                << " origin=" << conn.getHalfEdges()[he].origin
-                << " face=" << conn.getHalfEdges()[he].face
-                << " next=" << conn.getHalfEdges()[he].next << "\n";
-#endif
-            he = conn.getHalfEdges()[he].next;
-        }
-
-#ifndef NDEBUG
-        std::cout << "[TraceInFace] getFaceHalfEdges returned: ";
-        for (auto fh : faceHEs_conn) std::cout << fh << "(" << conn.getHalfEdges()[fh].origin << ") ";
-        std::cout << std::endl;
-#endif
-    }
-
     // Convert start bary to 2D point
     glm::dvec2 start2D = V[0] * start.baryCoords.x + V[1] * start.baryCoords.y + V[2] * start.baryCoords.z;
 
-#ifndef NDEBUG
-    std::cout << "[TraceInFace] 2D start point=(" << start2D.x << "," << start2D.y << ")\n";
-#endif
+    //std::cout << "[TraceInFace] 2D start point=(" << start2D.x << "," << start2D.y << ")\n";
 
     const double U_EPS = 1e-8;
     const double T_EPS = 1e-8;
@@ -763,11 +831,11 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
         // 1) If trace starts on vertex a or b then skip the edge
         if (nudgedBary[a] > 1.0 - T_EPS || nudgedBary[b] > 1.0 - T_EPS)
             continue;
-
+        /*
         // 2) Skip opposite edge too (start is effectively on that edge)
         if (nudgedBary[opp] < T_EPS)
             continue;
-
+        */
         glm::dvec2 P = V[i];
         glm::dvec2 Q = V[(i + 1) % 3];
         glm::dvec2 edgeVec = Q - P;
@@ -795,10 +863,8 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
             else if (u >= 1.0 - U_EPS) whichVertexLocal = b; // hits Q
 
             if (whichVertexLocal != -1) {
-#ifndef NDEBUG
-                std::cout << "[TraceInFace] Edge endpoint vertex hit candidate: local_idx=" << whichVertexLocal
-                    << " u=" << u << " t=" << t << " global_idx=" << triangle2D.indices[whichVertexLocal] << "\n";
-#endif
+                //std::cout << "[TraceInFace] vertex hit candidate: local_idx=" << whichVertexLocal << " u=" << u << " t=" << t << " global_idx=" << triangle2D.indices[whichVertexLocal] << "\n";
+
                 if (t < bestVertexT) {
                     bestVertexT = t;
                     bestVertexLocal = whichVertexLocal;
@@ -816,10 +882,10 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
         result.hitEdge = true;
         result.localEdgeIndex = bestEdge;
         result.edgeParam = bestU;
-#ifndef NDEBUG
-        std::cout  << "[TraceInFace] 2D edge hit=(" << exit2D.x << "," << exit2D.y << ")\n";
-        std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
-#endif
+
+        //std::cout << "[TraceInFace] 2D edge hit=(" << exit2D.x << "," << exit2D.y << ")\n";
+        //std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
+
         // Map to halfedge index
         const auto& conn = mesh.getConnectivity();
         auto faceHEs = conn.getFaceHalfEdges(start.elementId);
@@ -830,7 +896,7 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
             result.halfEdgeIdx = INVALID_INDEX;
         }
 
-        // Also detect vertex-in-edge endpoints (rare here because u was interior), but keep safety:
+        // Also detect vertex in edge endpoints 
         int maybeVertex = -1;
         for (int vi = 0; vi < 3; ++vi) {
             if (result.finalBary[vi] > 1.0 - VERT_EPS) {
@@ -868,10 +934,8 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
 
         result.success = true;
         result.dir2D = dir2D;
-#ifndef NDEBUG
-        std::cout << "[traceInFace] 2D vertex hit=(" << vertex2D.x << "," << vertex2D.y << ")" << " Idx=" << result.vertexIdx <<  " t=" << bestVertexT << "\n";
-        std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
-#endif
+        //std::cout << "[traceInFace] 2D vertex hit=(" << vertex2D.x << "," << vertex2D.y << ")" << " Idx=" << result.vertexIdx << " t=" << bestVertexT << "\n";
+        //std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
         return result;
     }
 
@@ -882,10 +946,10 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
         result.distanceTraveled = maxLength;
         result.hitEdge = false;
         result.hitVertex = false;
-#ifndef NDEBUG
-        std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
-        std::cout << "[traceInFace] final bary:(" << result.finalBary.x << "," << result.finalBary.y << "," << result.finalBary.z << ")" << std::endl;
-#endif
+
+        //std::cout << "[traceInFace] 2D end point:(" << end2D.x << "," << end2D.y << ")" << std::endl;
+        //std::cout << "[traceInFace] final bary:(" << result.finalBary.x << "," << result.finalBary.y << "," << result.finalBary.z << ")" << std::endl;
+
         // detect if the computed final bary is numerically at a vertex
         // First check if barycentric coordinates are valid (non-negative and sum to ~1)
         double barySum = result.finalBary.x + result.finalBary.y + result.finalBary.z;
@@ -894,24 +958,53 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
             result.finalBary.y >= -VERT_EPS &&
             result.finalBary.z >= -VERT_EPS;
 
-        if (validBary) {
-            for (int vi = 0; vi < 3; ++vi) {
-                if (result.finalBary[vi] > 1.0 - VERT_EPS) {
-#ifndef NDEBUG
-                    std::cout << "[TraceInFace] Final bary vertex hit: local_idx=" << vi
-                        << " bary=" << result.finalBary[vi]
-                        << " global_idx=" << triangle2D.indices[vi] << "\n";
-#endif
-                    result.hitVertex = true;
-                    result.vertexIdx = triangle2D.indices[vi];
-                    break;
-                }
-            }
-        }
+                if (validBary) {
+                    // First check for vertex hits (higher priority than edge hits)
+                    for (int vi = 0; vi < 3; ++vi) {
+                        if (result.finalBary[vi] > 1.0 - VERT_EPS) {
+                            //std::cout << "[TraceInFace] Final bary vertex hit: local_idx=" << vi << " bary=" << result.finalBary[vi] << " global_idx=" << triangle2D.indices[vi] << "\n";
 
-        result.success = true;
-        result.dir2D = dir2D;
-        return result;
+                            result.hitVertex = true;
+                            result.vertexIdx = triangle2D.indices[vi];
+                            break;
+                        }
+                    }
+                    
+                    // If not at a vertex, check for edge proximity using barycentric coordinates
+                    if (!result.hitVertex) {
+                        double minBary = result.finalBary[0];
+                        int minIdx = 0;
+                        if (result.finalBary[1] < minBary) { minBary = result.finalBary[1]; minIdx = 1; }
+                        if (result.finalBary[2] < minBary) { minBary = result.finalBary[2]; minIdx = 2; }
+                        
+                        if (minBary < BARY_SNAP_TOL) {
+                            // Edge is opposite to vertex with minimum barycentric coordinate
+                            int edgeIdx = (minIdx + 1) % 3;
+                            // Calculate split parameter from other two coordinates
+                            int vp = edgeIdx;  // First vertex of edge
+                            int vq = (edgeIdx + 1) % 3;  // Second vertex of edge
+                            double edgeSum = result.finalBary[vp] + result.finalBary[vq];
+                            double t = (edgeSum > 1e-12) ? result.finalBary[vq] / edgeSum : 0.5;
+
+                            // Set edge hit info
+                            result.hitEdge = true;
+                            result.localEdgeIndex = edgeIdx;
+                            result.edgeParam = t;
+
+                            // Map to halfedge
+                            const auto& conn = mesh.getConnectivity();
+                            auto faceHEs = conn.getFaceHalfEdges(start.elementId);
+                            if (result.localEdgeIndex < static_cast<int>(faceHEs.size())) {
+                                result.halfEdgeIdx = faceHEs[result.localEdgeIndex];
+                            }
+
+                            //std::cout << "[TraceInFace] Final bary edge hit: min_coord=" << minBary << " < " << BARY_SNAP_TOL << " t=" << t << "\n";
+                        }
+                    }
+                }        
+                result.success = true;
+                result.dir2D = dir2D;
+                return result;
     }
 }
 
@@ -926,20 +1019,16 @@ glm::dvec3 GeodesicTracer::evaluateSurfacePoint(const SurfacePoint& point) const
     case SurfacePoint::Type::VERTEX: {
         uint32_t vIdx = point.elementId;
         if (vIdx >= verts.size()) {
-#ifndef NDEBUG
-            std::cerr << "[evaluateSurfacePoint] VERTEX: invalid index " << vIdx << "\n";
-#endif
-                return glm::dvec3(0.0);
+            //std::cerr << "[evaluateSurfacePoint] VERTEX: invalid index " << vIdx << "\n";
+            return glm::dvec3(0.0);
         }
         return glm::dvec3(verts[vIdx].position);
     }
     case SurfacePoint::Type::EDGE: {
         uint32_t eIdx = point.elementId;
         if (eIdx >= edges.size()) {
-#ifndef NDEBUG
-            std::cerr << "[evaluateSurfacePoint] EDGE: invalid edge index " << eIdx << "\n";
-#endif
-                return glm::dvec3(0.0);
+            //std::cerr << "[evaluateSurfacePoint] EDGE: invalid edge index " << eIdx << "\n";
+            return glm::dvec3(0.0);
         }
         // get halfedges
         uint32_t he0 = edges[eIdx].halfEdgeIdx;
@@ -955,17 +1044,13 @@ glm::dvec3 GeodesicTracer::evaluateSurfacePoint(const SurfacePoint& point) const
     case SurfacePoint::Type::FACE: {
         uint32_t fIdx = point.elementId;
         if (fIdx >= faces.size()) {
-#ifndef NDEBUG
-            std::cerr << "[evaluateSurfacePoint] FACE: invalid face index " << fIdx << "\n";
-#endif
-                return glm::dvec3(0.0);
+            //std::cerr << "[evaluateSurfacePoint] FACE: invalid face index " << fIdx << "\n";
+            return glm::dvec3(0.0);
         }
         auto fv = conn.getFaceVertices(fIdx);
         if (fv.size() != 3) {
-#ifndef NDEBUG
-            std::cerr << "[evaluateSurfacePoint] FACE: non-triangular face\n";
-#endif
-                return glm::dvec3(0.0);
+            //std::cerr << "[evaluateSurfacePoint] FACE: non-triangular face\n";
+            return glm::dvec3(0.0);
         }
         double x = point.baryCoords.x;
         double y = point.baryCoords.y;
@@ -976,15 +1061,12 @@ glm::dvec3 GeodesicTracer::evaluateSurfacePoint(const SurfacePoint& point) const
         return x * P0 + y * P1 + z * P2;
     }
     }
-#ifndef NDEBUG
-    std::cerr << "[evaluateSurfacePoint] unknown SurfacePoint type\n";
-#endif
-        return glm::dvec3(0.0);
+    //std::cerr << "[evaluateSurfacePoint] unknown SurfacePoint type\n";
+    return glm::dvec3(0.0);
 }
 
 glm::dvec2 GeodesicTracer::chartLocal2D(const SignpostMesh& mesh, uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const {
-    // ONLY MAPS ADJACENT FACES
-
+    // ***ONLY MAPS ADJACENT FACES***
     const double EPS = 1e-12;
     auto oldTri = mesh.layoutTriangle(oldFaceIdx);
     auto newTri = mesh.layoutTriangle(newFaceIdx);
@@ -1021,7 +1103,7 @@ glm::dvec2 GeodesicTracer::chartLocal2D(const SignpostMesh& mesh, uint32_t oldFa
         double u;
         if (sum > EPS) {
             // Parameter from A to B
-            u = wB / sum;               
+            u = wB / sum;
         }
         else {
             // Fallback: project oldPoint2D onto old edge if degenerate
@@ -1063,7 +1145,7 @@ glm::dvec2 GeodesicTracer::rotateVectorAcrossEdge(const SignpostMesh& mesh, uint
 
     glm::dvec2 eOld = glm::normalize(hvf[oldHe]);
     // Flip opposite direction
-    glm::dvec2 eNew = glm::normalize(-hvf[newHe]); 
+    glm::dvec2 eNew = glm::normalize(-hvf[newHe]);
 
     double cosTheta = glm::dot(eOld, eNew);
     double sinTheta = eOld.x * eNew.y - eOld.y * eNew.x;
@@ -1080,374 +1162,143 @@ bool GeodesicTracer::solveRayEdge(const glm::dvec2& rayDir, const glm::dvec2& ed
 {
     double det = rayDir.x * (-edgeVec.y) - rayDir.y * (-edgeVec.x);
 
-#ifndef NDEBUG
-    std::cout << "[solveRayEdge] rayDir=(" << rayDir.x << "," << rayDir.y
-        << ") edgeVec=(" << edgeVec.x << "," << edgeVec.y
-        << ") b=(" << b.x << "," << b.y << ") det=" << det << std::endl;
-#endif
+    //std::cout << "[solveRayEdge] rayDir=(" << rayDir.x << "," << rayDir.y << ") edgeVec=(" << edgeVec.x << "," << edgeVec.y << ") b=(" << b.x << "," << b.y << ") det=" << det << std::endl;
 
     if (std::abs(det) < 1e-12) {
-#ifndef NDEBUG
-        std::cout << "[solveRayEdge] parallel/degenerate, returning false" << std::endl;
-#endif
+        //std::cout << "[solveRayEdge] parallel/degenerate, returning false" << std::endl;
         return false;
     }
 
     out_t = (b.y * edgeVec.x - b.x * edgeVec.y) / det;
     out_u = (rayDir.x * b.y - rayDir.y * b.x) / det;
 
-#ifndef NDEBUG
-    std::cout << "[solveRayEdge] result: t=" << out_t << " u=" << out_u << std::endl;
-#endif
-
+    //std::cout << "[solveRayEdge] result: t=" << out_t << " u=" << out_u << std::endl;
     return true;
 }
 
-bool GeodesicTracer::resolveVertexLinear(uint32_t newV, const SurfacePoint& location, uint32_t heA, uint32_t heB) {
-    auto& conn = mesh.getConnectivity();
-    const auto& halfEdges = conn.getHalfEdges();
-    auto& vertices = conn.getVertices();
+GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromEdge(uint32_t startEdgeIdx, double startSplit, const glm::dvec2& cartesianDir, double length, uint32_t intrinsicHalfedgeIdx, uint32_t resolutionFace) const {
+    /*
+    std::cout << "[traceFromEdge] Starting edge trace from edge " << startEdgeIdx 
+              << " split=" << startSplit
+              << " dir=(" << cartesianDir.x << "," << cartesianDir.y << ")" 
+              << " length=" << length 
+              << " intrinsicHE=" << intrinsicHalfedgeIdx 
+              << " resolutionFace=" << resolutionFace << std::endl;
+    */
 
-    // For VERTEX type, copy the position
-    if (location.type == SurfacePoint::Type::VERTEX) {
-        if (location.elementId < vertices.size()) {
-            vertices[newV].position = vertices[location.elementId].position;
-            return true;
-        }
-        return false;
-    }
+    GeodesicTraceResult result;
+    result.success = false;
 
-    // For EDGE type, interpolate between endpoints
-    if (location.type == SurfacePoint::Type::EDGE) {
-        if (heA != INVALID_INDEX && heB != INVALID_INDEX) {
-            uint32_t origV0 = halfEdges[heA].origin;
-            uint32_t origV1 = halfEdges[halfEdges[heB].opposite].origin;
-            double t = location.baryCoords.y;
-
-            vertices[newV].position = glm::mix(
-                vertices[origV0].position,
-                vertices[origV1].position,
-                float(t)
-            );
-            return true;
-        }
-        // Fallback to direct evaluation
-        vertices[newV].position = glm::vec3(evaluateSurfacePoint(location));
-        return true;
-    }
-
-    // Fallback
-    vertices[newV].position = glm::vec3(evaluateSurfacePoint(location));
-    return true;
-}
-
-bool GeodesicTracer::resolveVertex(uint32_t startFace, uint32_t startHe, const GeodesicTraceResult& result, glm::dvec3& outPos3D) {
-    auto& conn = mesh.getConnectivity();
-    auto& verts = conn.getVertices();
-    const auto& halfEdges = conn.getHalfEdges();
-
-    // If no edges crossed, get final position directly
-    bool anyCrossed = false;
-    for (auto const& step : result.steps) {
-        if (step.success && step.hitEdge) { 
-            anyCrossed = true; 
-            break; 
-        }
-    }
-    if (!anyCrossed) {
-        outPos3D = glm::vec3(result.position3D);
-        return true;
-    }
-
-    // Use exitPoint if available
-    uint32_t intrinsicFace = result.finalFaceIdx;
-    glm::dvec3 intrinsicBary = result.baryCoords;
-    if (result.exitPoint.type == SurfacePoint::Type::EDGE ||
-        result.exitPoint.type == SurfacePoint::Type::FACE) {
-        intrinsicFace = result.exitPoint.elementId;
-        intrinsicBary = result.exitPoint.baryCoords;
-        if (result.exitPoint.type == SurfacePoint::Type::EDGE) {
-            uint32_t edgeIdx = result.exitPoint.elementId;
-            const auto& edges = conn.getEdges();
-            uint32_t he = edges[edgeIdx].halfEdgeIdx;
-            intrinsicFace = halfEdges[he].face;
-            if (intrinsicFace == HalfEdgeMesh::INVALID_INDEX) {
-                uint32_t opp = halfEdges[he].opposite;
-                if (opp != HalfEdgeMesh::INVALID_INDEX)
-                    intrinsicFace = halfEdges[opp].face;
-            }
-        }
-    }
-
-    if (intrinsicFace == HalfEdgeMesh::INVALID_INDEX) {
-#ifndef NDEBUG
-        std::cout << "[resolveVertex] intrinsic face is invalid, evaluating directly" << std::endl;
-#endif
-        outPos3D = glm::vec3(evaluateSurfacePoint(SurfacePoint(intrinsicFace, intrinsicBary)));
-        return true;
-    }
-
-    // Safely reject close corner insertions
-    double maxBary = std::max(std::max(intrinsicBary.x, intrinsicBary.y), intrinsicBary.z);
-    const double BARY_REJECT = 0.98;
-    if (maxBary >= BARY_REJECT) {
-#ifndef NDEBUG
-        std::cout << "[resolveVertex] Insertion too close to corner, rejecting \n";
-#endif
-        return false; 
-    }
-
-    // Layout 2d triangle
-    auto intrinsicTri2D = mesh.layoutTriangle(intrinsicFace);
-
-    // Reject insertions too close to an existing vertex
-    {
-        glm::dvec2 P0 = intrinsicTri2D.vertices[0];
-        glm::dvec2 P1 = intrinsicTri2D.vertices[1];
-        glm::dvec2 P2 = intrinsicTri2D.vertices[2];
-        glm::dvec2 ip = P0 * intrinsicBary.x + P1 * intrinsicBary.y + P2 * intrinsicBary.z;
-
-        // Average edge length of target face
-        double L01 = glm::length(P1 - P0);
-        double L12 = glm::length(P2 - P1);
-        double L20 = glm::length(P0 - P2);
-        double avgLength = (L01 + L12 + L20) / 3.0;
-
-        // Distance to nearest vertex
-        double d0 = glm::length(ip - P0);
-        double d1 = glm::length(ip - P1);
-        double d2 = glm::length(ip - P2);
-        double dminVert = std::min(std::min(d0, d1), d2);    
-
-        // Threshold
-        const double VERT_FRACTION = 0.4;   // 4% of average length
-
-        if (dminVert < VERT_FRACTION * avgLength) {
-#ifndef NDEBUG
-            std::cout << "[resolveVertex] Insertion too close to an existing vertex, rejecting \n";
-#endif
-            return false;
-        }
-    }
-
-    // Step 1: Layout intrinsic face and compute intrinsic direction 
-#ifndef NDEBUG
-    std::cout << "[resolveVertex] intrinsicFace=" << intrinsicFace
-        << " intrinsicBary=(" << intrinsicBary.x << "," << intrinsicBary.y << "," << intrinsicBary.z << ")\n";
-#endif
-    glm::dvec2 intrinsicPoint2D =
-        intrinsicTri2D.vertices[0] * intrinsicBary.x +
-        intrinsicTri2D.vertices[1] * intrinsicBary.y +
-        intrinsicTri2D.vertices[2] * intrinsicBary.z;
-
-    // Choose a corner to start from (smallest bary coord)
-    int traceCorner = 0;
-    double smallest = intrinsicBary.x;
-
-    if (intrinsicBary.y < smallest) { 
-        smallest = intrinsicBary.y; 
-        traceCorner = 1; 
-    }
-    if (intrinsicBary.z < smallest) { 
-        smallest = intrinsicBary.z; 
-        traceCorner = 2; 
-    }
-
-    auto faceVerts = conn.getFaceVertices(intrinsicFace);
-    if (faceVerts.size() != 3) {
-        outPos3D = glm::vec3(evaluateSurfacePoint(
-            SurfacePoint(intrinsicFace, intrinsicBary)));
-        return true;
-    }
-
-    uint32_t traceVertexIdx = faceVerts[traceCorner];
-
-    glm::dvec2 intrinsicStart2D = intrinsicTri2D.vertices[traceCorner];
-    glm::dvec2 intrinsicVec2D = intrinsicPoint2D - intrinsicStart2D;
-    double intrinsicLen = glm::length(intrinsicVec2D);
-
-    if (intrinsicLen < 1e-12) {
-        // At the vertex already
-        outPos3D = verts[traceVertexIdx].position;
-        return true;
-    }
-
-    // Step 2: Pick a starting face and rotate vector into it 
-    auto intrinsicFaceHEs = conn.getFaceHalfEdges(intrinsicFace);
-    uint32_t startHeForTrace = intrinsicFaceHEs[traceCorner];
-    uint32_t startFaceForTrace = halfEdges[startHeForTrace].face;
-    if (startFaceForTrace == HalfEdgeMesh::INVALID_INDEX) {
-        uint32_t opp = halfEdges[startHeForTrace].opposite;
-        if (opp == HalfEdgeMesh::INVALID_INDEX) {
-            outPos3D = glm::vec3(evaluateSurfacePoint(
-                SurfacePoint(intrinsicFace, intrinsicBary)));
-            return true;
-        }
-        startFaceForTrace = halfEdges[opp].face;
-    }
-
-    glm::dvec2 faceDir2D = intrinsicVec2D / intrinsicLen; // normalized in intrinsic chart
-
-    // If starting face != intrinsicFace, rotate vector across the edge
-    if (startFaceForTrace != intrinsicFace) {
-        uint32_t oppHE = halfEdges[startHeForTrace].opposite;
-        faceDir2D = rotateVectorAcrossEdge(mesh,
-            intrinsicFace, startHeForTrace,
-            startFaceForTrace, oppHE,
-            faceDir2D);
-    }
-
-    // Step 3: Build nudged barycentric start in the chosen face 
-    double eps = 1e-6;
-    auto startFaceHEs = conn.getFaceHalfEdges(startFaceForTrace);
-    int localCorner = 0;
-    for (int i = 0; i < (int)startFaceHEs.size(); ++i) {
-        if (startFaceHEs[i] == startHeForTrace) { localCorner = i; break; }
-    }
-    glm::dvec3 startBary(0.0);
-    startBary[localCorner] = 1.0 - 2.0 * eps;
-    startBary[(localCorner + 1) % 3] = eps;
-    startBary[(localCorner + 2) % 3] = eps;
-
-
-    // Step 4: Now call the extrinsic tracer and use the intrinsic length so the geodesic distance matches the intrinsic trace
-#ifndef NDEBUG
-    std::cout << "[resolveVertex] calling extrinsic trace on start face=" << startFaceForTrace
-        << " start bary=(" << startBary.x << "," << startBary.y << "," << startBary.z << ") "
-        << "length=" << intrinsicLen << std::endl;
-#endif
-    auto extrinsicTrace = traceFromFace(startFaceForTrace,
-        startBary,
-        faceDir2D,
-        intrinsicLen);
-
-    if (extrinsicTrace.success) {
-        outPos3D = extrinsicTrace.position3D;
-        return true;
-    }
-
-    // Fallback: replay intrinsic steps and evaluate directly ---
-    {
-        SurfacePoint startSP(startFace, startBary);
-        glm::dvec3 pos3D = evaluateSurfacePoint(startSP);
-        uint32_t currFace = startFace;
-
-        for (size_t i = 0; i < result.steps.size(); ++i) {
-            const FaceStepResult& step = result.steps[i];
-            if (!step.success) break;
-
-            SurfacePoint faceSP(currFace, step.finalBary);
-            pos3D = evaluateSurfacePoint(faceSP);
-
-            if (!step.hitEdge) {
-                outPos3D = glm::vec3(pos3D);
-                return true;
-            }
-
-            uint32_t oppHE = halfEdges[step.halfEdgeIdx].opposite;
-            if (oppHE == HalfEdgeMesh::INVALID_INDEX) {
-                outPos3D = glm::vec3(pos3D);
-                return true;
-            }
-            uint32_t nextFace = halfEdges[oppHE].face;
-            if (nextFace == HalfEdgeMesh::INVALID_INDEX) {
-                outPos3D = glm::vec3(pos3D);
-                return true;
-            }
-            currFace = nextFace;
-        }
-
-        outPos3D = glm::vec3(evaluateSurfacePoint(
-            SurfacePoint(intrinsicFace, intrinsicBary)));
-        return true;
-    }
-}
-
-glm::dvec2 GeodesicTracer::computeTangentVector(uint32_t startVertex, const SurfacePoint& target) {
     const auto& conn = mesh.getConnectivity();
-    const auto& halfEdges = conn.getHalfEdges();
-    const auto& halfedgeVectors = mesh.getHalfedgeVectorsInVertex();
     const auto& edges = conn.getEdges();
+    const auto& halfEdges = conn.getHalfEdges();
 
-    if (target.type == SurfacePoint::Type::EDGE) {
-        uint32_t eid = target.elementId;
-        if (eid >= edges.size()) return glm::dvec2(0.0);
-
-        // Look for the halfedge around startVertex *on* that edge
-        for (uint32_t he : conn.getVertexHalfEdges(startVertex)) {
-            if (conn.getEdgeIndexFromHalfEdge(he) == eid) {
-                // t is fraction along the edge, L is the intrinsic length
-                double t = target.baryCoords.y;
-                double L = halfEdges[he].intrinsicLength;
-                // build tangent in *vertex* chart, scaled by true arc-length
-                return halfedgeVectors[he] * (t * L);
-            }
-        }
+    // Get both halfedges of the edge
+    uint32_t canonicalHe = edges[startEdgeIdx].halfEdgeIdx;
+    if (canonicalHe == HalfEdgeMesh::INVALID_INDEX) {
+        //std::cout << "[traceFromEdge] Edge has no canonical halfedge" << std::endl;
+        return result;
     }
 
-    if (target.type == SurfacePoint::Type::FACE) {
-        uint32_t faceIdx = target.elementId;
+    uint32_t oppHe = halfEdges[canonicalHe].opposite;
 
-        // Find halfedge from startVertex that belongs to this face
-        uint32_t faceHE = INVALID_INDEX;
-        for (uint32_t he : conn.getVertexHalfEdges(startVertex)) {
-            if (halfEdges[he].face == faceIdx) {
-                faceHE = he;
-                break;
-            }
-        }
-
-        if (faceHE != INVALID_INDEX) {
-            // barycentric weights on the two edges emanating from startVertex
-            // in that triangle
-            auto faceHEs = conn.getFaceHalfEdges(faceIdx);
-            int idx = -1;
-            for (int i = 0; i < 3; ++i) {
-                if (halfEdges[faceHEs[i]].origin == startVertex) {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx >= 0) {
-                uint32_t heOutA = faceHEs[(idx + 1) % 3];
-                uint32_t heOutB = faceHEs[(idx + 2) % 3];
-                double wA = target.baryCoords[(idx + 1) % 3];
-                double wB = target.baryCoords[(idx + 2) % 3];
-                double LA = halfEdges[heOutA].intrinsicLength;
-                double LB = halfEdges[heOutB].intrinsicLength;
-
-                // blend the vertex chart vectors
-                glm::dvec2 dir = wA * halfedgeVectors[heOutA] * LA
-                    + wB * halfedgeVectors[heOutB] * LB;
-                if (wA + wB > 1e-12) dir /= (wA + wB);
-                return dir;
-            }
-        }
+    if (oppHe == HalfEdgeMesh::INVALID_INDEX) {
+        //std::cout << "[traceFromEdge] Boundary edge" << std::endl;
+        result.success = false;
+        SurfacePoint edgePoint;
+        edgePoint.type = SurfacePoint::Type::EDGE;
+        edgePoint.elementId = startEdgeIdx;
+        edgePoint.split = startSplit;
+        edgePoint.baryCoords = glm::dvec3(1.0 - startSplit, startSplit, 0.0);
+        result.exitPoint = edgePoint;
+        result.position3D = glm::vec3(evaluateSurfacePoint(edgePoint));
+        return result;
     }
 
-    return glm::dvec2(0.0);
-}
+    // Get the two adjacent faces
+    uint32_t face1 = halfEdges[canonicalHe].face;
+    uint32_t face2 = halfEdges[oppHe].face;
 
-uint32_t GeodesicTracer::findStartingHalfEdge(uint32_t startVertex, uint32_t faceIdx, const glm::dvec2& tangentVector) const {
-    auto& conn = mesh.getConnectivity();
-    auto& halfEdges = conn.getHalfEdges();
-    auto& halfedgeVectors = mesh.getHalfedgeVectorsInVertex();
-    auto faceHEs = conn.getFaceHalfEdges(faceIdx);
+    //std::cout << "[traceFromEdge] Edge halfedges: canonical=" << canonicalHe << " (face=" << face1 << "), opp=" << oppHe << " (face=" << face2 << ")" << std::endl;
 
-    glm::dvec2 dir = glm::normalize(tangentVector);
-    double   best = -2;
-    uint32_t bestHE = INVALID_INDEX;
-
-    for (uint32_t he : faceHEs) {
-        if (halfEdges[he].origin != startVertex) continue;
-        glm::dvec2 v = halfedgeVectors[he];
-        if (glm::length(v) < 1e-12) continue;
-        v = glm::normalize(v);
-        double d = glm::dot(v, dir);
-        if (d > best) {
-            best = d;
-            bestHE = he;
+    const auto& hvf = mesh.getHalfedgeVectorsInFace();
+    
+    uint32_t sourceFace = resolutionFace;  // The face the direction is expressed in
+    uint32_t traceHe, targetFace;
+    double tEdge;
+    glm::dvec2 dirInTargetFace;
+    
+    // If no resolution face, default to canonical face
+    if (sourceFace == HalfEdgeMesh::INVALID_INDEX) {
+        sourceFace = face1;
+        std::cout << "[traceFromEdge] No resolution face provided, defaulting to face1=" << sourceFace << std::endl;
+    }
+    
+    // Find the face to trace into based on which direction points into which face
+    if (sourceFace == face1) {
+        // Direction is in face1's chart, now check if it points into face1 or face2
+        glm::dvec2 normal1(-hvf[canonicalHe].y, hvf[canonicalHe].x);
+        double projIntoFace1 = glm::dot(cartesianDir, normal1);
+        
+        if (projIntoFace1 > 0) {
+            // Points into face1
+            traceHe = canonicalHe;
+            targetFace = face1;
+            tEdge = startSplit;
+            dirInTargetFace = cartesianDir;
+        } else {
+            // Points into face2, now rotate from face1 to face2
+            traceHe = oppHe;
+            targetFace = face2;
+            tEdge = 1.0 - startSplit;
+            dirInTargetFace = rotateVectorAcrossEdge(mesh, face1, canonicalHe, face2, oppHe, cartesianDir);
+        }
+    } else {  
+        // Direction is in face2's chart, now check if it points into face2 or face1
+        glm::dvec2 normal2(-hvf[oppHe].y, hvf[oppHe].x);
+        double projIntoFace2 = glm::dot(cartesianDir, normal2);
+        
+        if (projIntoFace2 > 0) {
+            // Points into face2
+            traceHe = oppHe;
+            targetFace = face2;
+            tEdge = 1.0 - startSplit;
+            dirInTargetFace = cartesianDir;
+        } else {
+            // Points into face1, now rotate from face2 to face1
+            traceHe = canonicalHe;
+            targetFace = face1;
+            tEdge = startSplit;
+            dirInTargetFace = rotateVectorAcrossEdge(mesh, face2, oppHe, face1, canonicalHe, cartesianDir);
         }
     }
-    return bestHE;
+    
+    //std::cout << "[traceFromEdge] Final: targetFace=" << targetFace << " dir=(" << dirInTargetFace.x << "," << dirInTargetFace.y << ")" << std::endl;
+
+    // Set starting barycentric coordinates on the edge in the target face
+    auto faceHEs = conn.getFaceHalfEdges(targetFace);
+    int edgeOrigin = -1;
+    for (int i = 0; i < 3; ++i) {
+        if (faceHEs[i] == traceHe) {
+            edgeOrigin = i;
+            break;
+        }
+    }
+    
+    if (edgeOrigin == -1) {
+        //std::cout << "[traceFromEdge] Could not find halfedge " << traceHe << " in face " << targetFace << std::endl;
+        return result;
+    }
+
+    // Convert edge split to barycentric coordinates
+    // tEdge represents how far along the halfedge from origin to target
+    int edgeTarget = (edgeOrigin + 1) % 3;
+    glm::dvec3 startPoint(0.0);
+    startPoint[edgeOrigin] = 1.0 - tEdge;       // Origin vertex gets (1-t)
+    startPoint[edgeTarget] = tEdge;             // Target vertex gets t
+
+    //std::cout << "[traceFromEdge] Final: face=" << targetFace << " startBary=(" << startPoint.x << "," << startPoint.y << "," << startPoint.z << ") dir=(" << dirInTargetFace.x << "," << dirInTargetFace.y << ")" << std::endl;
+
+    // Send to face tracer
+    return traceFromFace(targetFace, startPoint, dirInTargetFace, length);
 }

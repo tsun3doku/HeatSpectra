@@ -36,12 +36,11 @@ public:
 		uint32_t prev			= INVALID_INDEX;
 		uint32_t opposite		= INVALID_INDEX;
 		uint32_t face			= INVALID_INDEX;
+		uint32_t edgeIdx		= INVALID_INDEX;	
 
 		double cornerAngle		= 0.0;
-		double intrinsicLength	= 0.0;  
 		double signpostAngle	= 0.0;    
 		bool isFeature			= false;
-
 	};
 
 	struct Split {
@@ -50,6 +49,20 @@ public:
 		uint32_t heB			= INVALID_INDEX;	
 		uint32_t diagFront		= INVALID_INDEX;
 		uint32_t diagBack		= INVALID_INDEX;
+	};
+
+	struct Triangle2D {
+		glm::dvec2 vertices[3]	= { glm::dvec2(0,0), glm::dvec2(0,0), glm::dvec2(0,0) };
+		uint32_t indices[3]		= { 0,0,0 };
+		double edgeLengths[3]	= { 0,0,0 };
+	};
+
+	struct VertexRing2D {
+		uint32_t centerVertexIdx = INVALID_INDEX;
+		std::vector<uint32_t> neighborVertexIndices;  // Ordered CCW around center
+		std::vector<glm::dvec2> neighborPositions2D;  // Positions in 2D chart (center at origin)
+		std::vector<uint32_t> edgeIndices;            // Edge from center to each neighbor
+		std::vector<uint32_t> faceIndices;            // Faces in the ring
 	};
 
 	struct pair_hash {
@@ -65,18 +78,16 @@ public:
 	void buildFromModel(const class Model& srcModel);
 	void applyToModel(class Model& dstModel) const;
 	void initializeIntrinsicLengths();
-	void rebuildEdges();
-	void rebuildConnectivity();
 	void rebuildFaceConnectivity(uint32_t faceIdx);
-	void rebuildOpposites();
-	void updateIntrinsicLength(uint32_t heIdx);
+	Triangle2D layoutTriangle(uint32_t faceIdx) const;
 	std::array<glm::dvec2,4> layoutDiamond(uint32_t heIdx) const;
+	VertexRing2D buildVertexRing2D(uint32_t vertexIdx) const;
 	bool isManifold() const;
 
 	// Delaunay
-	bool flipEdge(uint32_t halfEdgeIdx);
+	bool flipEdge(uint32_t edgeIdx);
 	bool isDelaunayEdge(uint32_t heIdx) const;
-	int makeDelaunay(int maxInterations);
+	int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
 
 	// Refinement
 	uint32_t addIntrinsicVertex();
@@ -87,12 +98,17 @@ public:
 	void removeVertex(uint32_t v);
 
 	std::vector<uint32_t> getVertexHalfEdges(uint32_t vertexIdx) const;
+	std::vector<uint32_t> getVertexFaces(uint32_t vertexIdx) const;
 	std::vector<uint32_t> getFaceHalfEdges(uint32_t faceIdx) const;
 	std::vector<uint32_t> getFaceVertices(uint32_t faceIdx) const;
 	std::vector<uint32_t> getNeighboringHalfEdges(uint32_t heIdx) const;
+	std::pair<uint32_t, uint32_t> getEdgeVertices(uint32_t edgeIdx) const;
+	uint32_t getEdgeFromHalfEdge(uint32_t heIdx) const;
+
 	uint32_t findEdge(uint32_t v1, uint32_t v2) const;
 	uint32_t findFace(uint32_t e1, uint32_t e2) const;
 	bool isBoundaryVertex(uint32_t vertexIdx) const;
+	bool isInteriorHalfEdge(uint32_t heIdx) const;
 	size_t countBoundaryEdges() const;
 
 	// Iterative traversal
@@ -131,15 +147,17 @@ public:
 		return faces;
 	}
 
-	glm::vec3 getPositionFromHalfEdge(uint32_t halfEdgeIdx) const {
-		return vertices[halfEdges[halfEdgeIdx].origin].position;
+	glm::vec3 getPositionFromHalfEdge(uint32_t heIdx) const {
+		return vertices[halfEdges[heIdx].origin].position;
 	}
 
 	double getIntrinsicLengthFromHalfEdge(uint32_t halfEdgeIdx) const {
-		return halfEdgeIdx < halfEdges.size() ? halfEdges[halfEdgeIdx].intrinsicLength : 0.0;
+		uint32_t edgeIdx = getEdgeFromHalfEdge(halfEdgeIdx);
+		if (edgeIdx == INVALID_INDEX || edgeIdx >= edges.size()) {
+			return 0.0;
+		}
+		return edges[edgeIdx].intrinsicLength;
 	}
-
-	uint32_t getEdgeIndexFromHalfEdge(uint32_t halfEdgeIdx) const;
 
 	std::vector<glm::vec3> getVertexPositions() const;
 

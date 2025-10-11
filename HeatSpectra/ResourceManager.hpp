@@ -30,7 +30,7 @@ public:
 
 	void initialize();
 	void initializeRemesher();
-	void performRemeshing(float targetEdgeLength, int iterations);
+	void performRemeshing(int iterations);
 	void cleanup();
 
 	// Getters
@@ -46,6 +46,9 @@ public:
 	}
 	Model& getHeatModel() {
 		return *heatModel;
+	}
+	Model& getCommonSubdivision() {
+		return *commonSubdivision;
 	}
 
 	HeatSource& getHeatSource() {
@@ -64,6 +67,7 @@ private:
 	std::unique_ptr<Grid> grid;
 	std::unique_ptr<Model> simModel;
 	std::unique_ptr<Model> visModel;
+	std::unique_ptr<Model> commonSubdivision;
 	std::unique_ptr<Model> heatModel;
 	std::unique_ptr<HeatSource> heatSource;
 	std::unique_ptr<HeatSystem> heatSystem;

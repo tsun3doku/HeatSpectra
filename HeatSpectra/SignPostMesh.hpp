@@ -30,12 +30,11 @@ public:
     // Construction
     void buildFromModel(const Model& srcModel);
     void applyToModel(Model& dstModel) const;
-    void initializeIntrinsicGeometry();
     Triangle2D layoutTriangle(uint32_t faceIdx) const;
 
     // Intrinsic operations
-    void updateSignpostAngles(uint32_t vertexIdx);
     void updateAllSignposts();
+    glm::dvec2 halfedgeVector(uint32_t heIdx) const;
     void buildHalfedgeVectorsInVertex();
     void buildHalfedgeVectorsInFace();
 
@@ -46,9 +45,15 @@ public:
 
     // Angle operations
     double computeAngleFromLengths(double a, double b, double c, uint32_t faceIdx) const;
+    void computeCornerScaledAngles();
+    void computeVertexAngleScales();
     void updateCornerAnglesForFace(uint32_t faceIdx);
     void updateAllCornerAngles(const std::unordered_set<uint32_t>& skipFaces);
-
+    
+    // Signpost angle operations
+    double standardizeAngleForVertex(uint32_t vertexIdx, double angleRad) const;
+    void updateAngleFromCWNeighbor(uint32_t heIdx);
+    
     // Face operations
     float computeFaceArea(uint32_t faceIdx) const;
     std::vector<float> getAllFaceAreas() const;
@@ -74,8 +79,26 @@ public:
     const std::vector<glm::dvec2>& getHalfedgeVectorsInVertex() const { 
         return halfedgeVectorsInVertex; 
     }
+    std::vector<glm::dvec2>& getHalfedgeVectorsInVertex() {
+        return halfedgeVectorsInVertex;
+    }
     const std::vector<glm::dvec2>& getHalfedgeVectorsInFace() const {
         return halfedgeVectorsInFace;
+    }
+    const std::vector<double>& getVertexAngleSums() const {
+        return vertexAngleSums;
+    }
+    std::vector<double>& getVertexAngleSums() {
+        return vertexAngleSums;
+    }
+    const std::vector<double>& getVertexAngleScales() const {
+        return vertexAngleScales;
+    }
+    std::vector<double>& getVertexAngleScales() {
+        return vertexAngleScales;
+    }
+    double getVertexAngleSum(uint32_t vertexIdx) const {
+        return (vertexIdx < vertexAngleSums.size()) ? vertexAngleSums[vertexIdx] : 0.0;
     }
     double getCornerAngle(uint32_t halfEdgeIdx) const;
 
@@ -83,6 +106,8 @@ private:
     HalfEdgeMesh conn;
     std::vector<glm::vec3> faceNormals;
     std::vector<double> vertexAngleSums;
+    std::vector<double> vertexAngleScales;  
+    std::vector<double> cornerScaledAngles;
     std::vector<glm::dvec2> halfedgeVectorsInVertex;
     std::vector<glm::dvec2> halfedgeVectorsInFace;
 };

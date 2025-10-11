@@ -34,14 +34,15 @@ public:
     void createBlendDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight);
 
     void createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
-    void createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent);
     void createWireframePipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
+    void createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent);
+    void createIntrinsicOverlayPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
     void createBlendPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
     void recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews,
-        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe);
+        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -101,6 +102,9 @@ private:
 
     VkPipeline wireframePipeline;
     VkPipelineLayout wireframePipelineLayout;
+
+    VkPipeline intrinsicOverlayPipeline;
+    VkPipelineLayout intrinsicOverlayPipelineLayout;
 
     VkPipeline blendPipeline;
     VkPipelineLayout blendPipelineLayout;

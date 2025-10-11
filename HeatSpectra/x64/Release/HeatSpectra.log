@@ -1,37 +1,7 @@
-﻿  AABBTree.cpp
-  GLM_GTX_hash requires C++11 standard library support
-  Camera.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(78,19): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(79,21): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(118,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(119,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-  CommandBufferManager.cpp
-  DeferredRenderer.cpp
-  GBuffer.cpp
+﻿  GBuffer.cpp
   GLM_GTX_hash requires C++11 standard library support
   GeodesicTracer.cpp
   Grid.cpp
-  HalfEdgeMesh.cpp
-  GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(170,18): warning C4267: 'argument': conversion from 'size_t' to 'unsigned int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(180,58): warning C4267: 'argument': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1277,41): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1317,14): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1381,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1386,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1391,20): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1448,16): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1456,18): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1458,18): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1543,17): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1545,17): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1557,16): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1765,22): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1779,29): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HalfEdgeMesh.cpp(1788,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-  HDR.cpp
-  HeatSource.cpp
-  GLM_GTX_hash requires C++11 standard library support
   HeatSystem.cpp
   GLM_GTX_hash requires C++11 standard library support
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(166,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
@@ -43,74 +13,18 @@ C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(865,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(971,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(990,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-  iODT.cpp
-  GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\iODT.cpp(430,23): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-  predicates.cxx
-  tetgen.cxx
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(2249,20): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'size_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(2255,22): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'size_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(2255,22): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 5 has type 'size_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(2318,28): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'size_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(3400,42): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(6699,8): warning C4101: 'theta': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(6700,8): warning C4101: 'ori': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(6698,22): warning C4101: 'np': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(11119,24): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(14173,21): warning C4101: 'ang_tol': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(26347,26): warning C4018: '<': signed/unsigned mismatch
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(27086,37): warning C4244: '*=': conversion from 'double' to 'long', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(27808,37): warning C4244: '*=': conversion from 'double' to 'long', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(28818,37): warning C4244: '*=': conversion from 'double' to 'long', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(29261,23): warning C4244: '=': conversion from 'double' to 'long', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(29268,44): warning C4244: '=': conversion from 'double' to 'long', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(31990,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(31993,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32001,19): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32004,19): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32013,19): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32016,19): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32030,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32033,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32039,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32042,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32056,16): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32059,16): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32065,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32068,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32078,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32081,18): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32093,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32096,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32178,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32178,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 6 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32191,24): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32196,26): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32215,22): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 1 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32215,22): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 6 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32232,16): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 5 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32241,20): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 5 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(32289,24): warning C4477: 'printf' : format string '%lu' requires an argument of type 'unsigned long', but variadic argument 5 has type 'uintptr_t'
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(35800,18): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx(35811,33): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-  MemoryAllocator.cpp
-  Model.cpp
+  Main.cpp
   GLM_GTX_hash requires C++11 standard library support
   ResourceManager.cpp
   GLM_GTX_hash requires C++11 standard library support
   SignPostMesh.cpp
   GLM_GTX_hash requires C++11 standard library support
-  VulkanDevice.cpp
-  file_utils.cpp
-  Compiling...
-  Main.cpp
+  iODT.cpp
   GLM_GTX_hash requires C++11 standard library support
-  UniformBufferManager.cpp
-  VulkanImage.cpp
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\iODT.cpp(449,23): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
   Generating code
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.hpp(150): warning C4172: returning address of local variable or temporary
-  3233 of 5454 functions (59.3%) were compiled, the rest were copied from previous compilation.
-    297 functions were new in current compilation
-    100 functions had inline decision re-evaluated but remain unchanged
+  2247 of 7107 functions (31.6%) were compiled, the rest were copied from previous compilation.
+    114 functions were new in current compilation
+    360 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
