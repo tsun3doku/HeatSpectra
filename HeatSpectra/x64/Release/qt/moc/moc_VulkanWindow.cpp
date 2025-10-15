@@ -38,24 +38,10 @@ template <> constexpr inline auto VulkanWindow::qt_create_metaobjectdata<qt_meta
 {
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
-        "VulkanWindow",
-        "frameReady",
-        "",
-        "resized",
-        "width",
-        "height",
-        "requestFrame"
+        "VulkanWindow"
     };
 
     QtMocHelpers::UintData qt_methods {
-        // Signal 'frameReady'
-        QtMocHelpers::SignalData<void()>(1, 2, QMC::AccessPublic, QMetaType::Void),
-        // Signal 'resized'
-        QtMocHelpers::SignalData<void(int, int)>(3, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::Int, 4 }, { QMetaType::Int, 5 },
-        }}),
-        // Slot 'requestFrame'
-        QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -77,20 +63,10 @@ Q_CONSTINIT const QMetaObject VulkanWindow::staticMetaObject = { {
 void VulkanWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
 {
     auto *_t = static_cast<VulkanWindow *>(_o);
-    if (_c == QMetaObject::InvokeMetaMethod) {
-        switch (_id) {
-        case 0: _t->frameReady(); break;
-        case 1: _t->resized((*reinterpret_cast< std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast< std::add_pointer_t<int>>(_a[2]))); break;
-        case 2: _t->requestFrame(); break;
-        default: ;
-        }
-    }
-    if (_c == QMetaObject::IndexOfMethod) {
-        if (QtMocHelpers::indexOfMethod<void (VulkanWindow::*)()>(_a, &VulkanWindow::frameReady, 0))
-            return;
-        if (QtMocHelpers::indexOfMethod<void (VulkanWindow::*)(int , int )>(_a, &VulkanWindow::resized, 1))
-            return;
-    }
+    (void)_t;
+    (void)_c;
+    (void)_id;
+    (void)_a;
 }
 
 const QMetaObject *VulkanWindow::metaObject() const
@@ -109,30 +85,6 @@ void *VulkanWindow::qt_metacast(const char *_clname)
 int VulkanWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 {
     _id = QWindow::qt_metacall(_c, _id, _a);
-    if (_id < 0)
-        return _id;
-    if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 3)
-            qt_static_metacall(this, _c, _id, _a);
-        _id -= 3;
-    }
-    if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 3)
-            *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 3;
-    }
     return _id;
-}
-
-// SIGNAL 0
-void VulkanWindow::frameReady()
-{
-    QMetaObject::activate(this, &staticMetaObject, 0, nullptr);
-}
-
-// SIGNAL 1
-void VulkanWindow::resized(int _t1, int _t2)
-{
-    QMetaObject::activate<void>(this, &staticMetaObject, 1, nullptr, _t1, _t2);
 }
 QT_WARNING_POP

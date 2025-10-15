@@ -69,7 +69,7 @@ std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, V
         size = (size + alignment - 1) & ~(alignment - 1);
     }
     
-    // Add padding to prevent buffer aliasing (best-fit alone doesn't prevent address reuse)
+    // Add padding to prevent buffer aliasing
     const VkDeviceSize SAFETY_PADDING = 1024;
     size += SAFETY_PADDING;
 
@@ -78,7 +78,7 @@ std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, V
     while (true) {
         auto& poolVector = pools[key];
 
-        // Best-fit allocation: find smallest block that fits
+        // Best fit allocation: find smallest block that fits
         for (auto& poolPtr : poolVector) {
             MemoryPool& pool = *poolPtr;
             

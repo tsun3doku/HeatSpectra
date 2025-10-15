@@ -19,9 +19,9 @@
 #include "VulkanDevice.hpp"
 #include "GBuffer.hpp"
 
-GBuffer::GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
+GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager,
     uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), deferredRenderer(deferredRenderer), resourceManager(resourceManager), heatSystem(heatSystem), uniformBufferManager(uniformBufferManager) {
+    : vulkanDevice(vulkanDevice) {
 
     createFramebuffers(vulkanDevice, deferredRenderer, swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
@@ -577,13 +577,18 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Create pipeline layout
+    // Create pipeline layout with push constant for heat mode
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(int32_t);
+
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
-    layoutInfo.pushConstantRangeCount = 0;
-    layoutInfo.pPushConstantRanges = nullptr;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &geometryPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
@@ -864,10 +869,18 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
+    // Add push constant for heat mode (same as geometry pipeline)
+    VkPushConstantRange wireframePushConstantRange{};
+    wireframePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    wireframePushConstantRange.offset = 0;
+    wireframePushConstantRange.size = sizeof(int32_t);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &wireframePushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &wireframePipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create wireframe pipeline layout");
@@ -1202,7 +1215,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
+void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -1281,6 +1294,10 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     
+    // Push constant: use surface buffer only when heat sim is active
+    int32_t useHeatColors = heatSystem.getIsActive() ? 1 : 0;
+    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+    
     // Push vismodel furthest away from camera 
     vkCmdSetDepthBias(commandBuffer, 2.0f, 0.0f, 2.0f);
     
@@ -1316,19 +1333,22 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     // Draw wireframe on top
     if (drawWireframe) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline);
+        vkCmdPushConstants(commandBuffer, wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
         vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
         vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
     }
 
-    // Draw heat source model
+    // Draw heat source model (uses surface buffer when heat sim is active)
     VkBuffer heatBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(), resourceManager.getHeatModel().getSurfaceVertexBuffer() };
     VkDeviceSize heatOffsets[] = {
     resourceManager.getHeatModel().getVertexBufferOffset(),
     resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
     };
+    // Heat model also uses surface colors when heat sim is active
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
+    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatBuffers, heatOffsets);
     vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
@@ -1374,7 +1394,7 @@ void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t max
 }
 
 void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    resourceManager.getGrid().cleanup(vulkanDevice);
+    // Note: Grid cleanup is handled by ResourceManager
 
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);

@@ -63,6 +63,7 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkSemaphore> computeFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
+    std::vector<VkFence> computeInFlightFences;
     uint32_t currentFrame;
     uint32_t frameRate;
     

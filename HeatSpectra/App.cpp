@@ -272,11 +272,9 @@ void App::initRenderResources() {
         // Create GBuffer last since it depends on all other components
         gbuffer = std::make_unique<GBuffer>(
             vulkanDevice,
-            *memoryAllocator,
             *deferredRenderer,
             *resourceManager,
             *uniformBufferManager,
-            *heatSystem,
             WIDTH, HEIGHT,
             swapChainExtent,
             swapChainImageViews,
@@ -426,6 +424,7 @@ void App::recreateSwapChain() {
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), computeFinishedSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
+            vkDestroyFence(vulkanDevice.getDevice(), computeInFlightFences[i], nullptr);
         }
 
         cleanupSwapChain();
@@ -468,6 +467,7 @@ void App::cleanupSyncObjects() {
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), computeFinishedSemaphores[i], nullptr);
             vkDestroyFence(vulkanDevice.getDevice(), inFlightFences[i], nullptr);
+            vkDestroyFence(vulkanDevice.getDevice(), computeInFlightFences[i], nullptr);
         }
     }
 
@@ -665,6 +665,7 @@ void App::createSyncObjects() {
         renderFinishedSemaphores.resize(MAXFRAMESINFLIGHT);
         computeFinishedSemaphores.resize(MAXFRAMESINFLIGHT);
         inFlightFences.resize(MAXFRAMESINFLIGHT);
+        computeInFlightFences.resize(MAXFRAMESINFLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -677,7 +678,8 @@ void App::createSyncObjects() {
             if (vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(vulkanDevice.getDevice(), &semaphoreInfo, nullptr, &computeFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+                vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS ||
+                vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &computeInFlightFences[i]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create synchronization objects for a frame");
             }
         }
@@ -732,6 +734,10 @@ void App::drawFrame() {
         heatSystem->update(vulkanDevice, upPressed, downPressed, leftPressed, rightPressed, 
                           *resourceManager, *uniformBufferManager, ubo, WIDTH, HEIGHT);
         if (heatSystem->getIsActive()) {
+            // Wait for previous compute to finish
+            vkWaitForFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+            vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
+
             heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
 
             VkSubmitInfo computeSubmitInfo{};
@@ -741,7 +747,7 @@ void App::drawFrame() {
             computeSubmitInfo.signalSemaphoreCount = 1;
             computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
-            vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE);
+            vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, computeInFlightFences[currentFrame]);
         }
 
         std::vector<VkSemaphore> waitSemaphores;
@@ -757,7 +763,7 @@ void App::drawFrame() {
         }
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
+        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, *heatSystem, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

@@ -20,6 +20,7 @@
 
 void Model::init(const std::string modelPath) {
     loadModel(modelPath);
+    recalculateNormals();  // Calculate proper normals based on geometry
   
     createVertexBuffer();
     createIndexBuffer();

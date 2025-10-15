@@ -91,7 +91,7 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     const auto& modelVerts = heatModel.getVertices();
     for (size_t i = 0; i < modelVerts.size(); i++) {
         surfaceVertices[i].position = glm::vec4(modelVerts[i].pos, 1.0);
-        surfaceVertices[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        surfaceVertices[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Shader uses base vertex data
     }
 
     // Copy data to staging buffer

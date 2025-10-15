@@ -92,4 +92,5 @@ void ResourceManager::cleanup() {
     visModel->cleanup();
     heatModel->cleanup();
     commonSubdivision->cleanup();
+    grid->cleanup(vulkanDevice);
 }

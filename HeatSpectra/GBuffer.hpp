@@ -14,7 +14,7 @@ const std::vector<float> clearColorValues = { {0.013f, 0.0138f, 0.0135f, 1.0f} }
 
 class GBuffer {
 public:
-    GBuffer(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, HeatSystem& heatSystem,
+    GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager,
         uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe);
     ~GBuffer();
 
@@ -41,7 +41,7 @@ public:
 
     void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void freeCommandBuffers(VulkanDevice& vulkanDevice);
-    void recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, std::vector<VkImageView> swapChainImageViews,
+    void recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews,
         uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision);
 
     void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
@@ -66,12 +66,6 @@ public:
 
 private:
     VulkanDevice& vulkanDevice;
-    MemoryAllocator& memoryAllocator;
-    DeferredRenderer& deferredRenderer;
-    ResourceManager& resourceManager;
-    UniformBufferManager& uniformBufferManager;
-
-    HeatSystem& heatSystem;
 
     uint32_t currentFrame = 0;
 

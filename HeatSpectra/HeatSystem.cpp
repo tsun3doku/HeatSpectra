@@ -428,7 +428,7 @@ void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
     const auto& modelVertices = resourceManager.getVisModel().getVertices();
     for (size_t i = 0; i < resourceManager.getVisModel().getVertexCount(); i++) {
         surfaceVertices[i].position = glm::vec4(modelVertices[i].pos, 1.0);
-        surfaceVertices[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        surfaceVertices[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // Will be overwritten by heat compute shader
     }
 
     // Copy to staging buffer
