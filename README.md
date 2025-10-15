@@ -24,9 +24,7 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 4. Build and run in Release mode
 
 ## Controls
-- W A S D Q E camera controls
-- 'Spacebar' to start simulation
 -  Arrow keys for heat source control
-- 'H' for wireframe view
-- 'C' for remeshed overlay
 
+## TODO
+- Remeshing is currently cosmetic only

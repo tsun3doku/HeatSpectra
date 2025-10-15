@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+#include <vector>
+
 class GBuffer;
 class VulkanDevice;
 

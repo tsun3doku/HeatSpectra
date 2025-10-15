@@ -1,6 +1,4 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
+#include <vulkan/vulkan.h>
 #include <stb_image.h>
 
 #include "CommandBufferManager.hpp"
@@ -9,7 +7,6 @@
 #include <stdexcept>
 #include <iostream>
 
-// Create an image (e.g., for texture, framebuffer, etc.)
 void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, 
     VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT) {
     VkImageCreateInfo imageInfo{};
@@ -46,9 +43,8 @@ void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t heig
     vkBindImageMemory(vulkanDevice.getDevice(), image, imageMemory, 0);
 }
 
-// Transition image layout for operations (e.g., from undefined to transfer destination or shader-readable)
 void transitionImageLayout(VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-    // Start single-time command buffer
+    // Start single time command buffer
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
 
     VkImageMemoryBarrier barrier{};
