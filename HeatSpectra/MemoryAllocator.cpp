@@ -68,32 +68,45 @@ std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, V
     if (alignment > 0) {
         size = (size + alignment - 1) & ~(alignment - 1);
     }
+    
+    // Add padding to prevent buffer aliasing (best-fit alone doesn't prevent address reuse)
+    const VkDeviceSize SAFETY_PADDING = 1024;
+    size += SAFETY_PADDING;
 
     auto key = std::make_pair(usage, memProps);
 
     while (true) {
         auto& poolVector = pools[key];
 
-        // Iterate through unique_ptrs
+        // Best-fit allocation: find smallest block that fits
         for (auto& poolPtr : poolVector) {
             MemoryPool& pool = *poolPtr;
+            
+            VkDeviceSize bestSize = VK_WHOLE_SIZE;
+            auto bestIt = pool.blocks.end();
+            
             for (auto it = pool.blocks.begin(); it != pool.blocks.end(); ++it) {
-                if (it->isFree && it->size >= size) {
-                    // Save the allocation offset
-                    VkDeviceSize allocOffset = it->offset;
-
-                    if (it->size > size) {
-                        // Adjust the current free block to account for the allocation
-                        it->offset += size;
-                        it->size -= size;
-                    }
-                    else {
-                        // If the block exactly fits, mark it as allocated
-                        it->isFree = false;
-                    }
-
-                    return { pool.buffer, allocOffset };
+                if (it->isFree && it->size >= size && it->size < bestSize) {
+                    bestSize = it->size;
+                    bestIt = it;
                 }
+            }
+            
+            if (bestIt != pool.blocks.end()) {
+                // Save the allocation offset
+                VkDeviceSize allocOffset = bestIt->offset;
+
+                if (bestIt->size > size) {
+                    // Adjust the free block
+                    bestIt->offset += size;
+                    bestIt->size -= size;
+                }
+                else {
+                    // Exact fit, mark as allocated
+                    bestIt->isFree = false;
+                }
+
+                return { pool.buffer, allocOffset };
             }
         }
         createNewPool(size, usage, memProps);

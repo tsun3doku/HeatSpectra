@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -24,6 +24,8 @@
     <ProjectGuid>{9bfe6f85-d71f-4073-8e49-92df29da8ec3}</ProjectGuid>
     <RootNamespace>HeatSpectra</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <Keyword>QtVS_v304</Keyword>
+    <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -53,21 +55,39 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(QtMsBuild)\qt_defaults.props" Condition="Exists('$(QtMsBuild)\qt_defaults.props')" />
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <QtInstall>6.9.3_msvc2022_64</QtInstall>
+    <QtModules>core;gui;widgets</QtModules>
+  </PropertyGroup>
+  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <QtInstall>6.9.3_msvc2022_64</QtInstall>
+    <QtModules>core;gui;widgets</QtModules>
+  </PropertyGroup>
+  <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') OR !Exists('$(QtMsBuild)\Qt.props')">
+    <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
+  </Target>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -82,6 +102,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -96,6 +117,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -110,11 +132,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>TETLIBRARY</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <OpenMPSupport>true</OpenMPSupport>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -131,9 +154,11 @@
       </Command>
     </PreLinkEvent>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(ProjectDir)shaders\*.spv" "$(OutDir)shaders\"
-xcopy /y /d "$(ProjectDir)models\*.*" "$(OutDir)models\"
-xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
+      <Command>xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Cored.dll" "$(OutDir)"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Guid.dll" "$(OutDir)"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Widgetsd.dll" "$(OutDir)"
+if not exist "$(OutDir)platforms\" mkdir "$(OutDir)platforms\"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindowsd.dll" "$(OutDir)platforms\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -144,13 +169,14 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;TETLIBRARY</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <OpenMPSupport>true</OpenMPSupport>
       <Optimization>MaxSpeed</Optimization>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -169,8 +195,11 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
       </Command>
     </PreLinkEvent>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Core.dll" "$(OutDir)"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Gui.dll" "$(OutDir)"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\bin\Qt6Widgets.dll" "$(OutDir)"
+if not exist "$(OutDir)platforms\" mkdir "$(OutDir)platforms\"
+xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)platforms\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -188,13 +217,27 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
     <ClCompile Include="iODT.cpp" />
     <ClCompile Include="libs\TetGen\predicates.cxx" />
     <ClCompile Include="libs\TetGen\tetgen.cxx" />
+    <ClCompile Include="App.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="VulkanWindow.cpp" />
+    <ClCompile Include="MainQt.cpp">
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">%(Filename).moc</QtMocFileName>
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename).moc</QtMocFileName>
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">%(Filename).moc</QtMocFileName>
+      <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
+      <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
+    </ClCompile>
     <ClCompile Include="MemoryAllocator.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="ResourceManager.cpp" />
     <ClCompile Include="SignPostMesh.cpp" />
     <ClCompile Include="VulkanDevice.cpp" />
     <ClCompile Include="file_utils.cpp" />
-    <ClCompile Include="Main.cpp" />
     <ClCompile Include="UniformBufferManager.cpp" />
     <ClCompile Include="VulkanImage.cpp" />
   </ItemGroup>
@@ -215,6 +258,7 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AABBTree.hpp" />
+    <ClInclude Include="App.h" />
     <ClInclude Include="CommandBufferManager.hpp" />
     <ClInclude Include="DeferredRenderer.hpp" />
     <ClInclude Include="GBuffer.hpp" />
@@ -226,6 +270,7 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
     <ClInclude Include="HeatSystem.hpp" />
     <ClInclude Include="iODT.hpp" />
     <ClInclude Include="libs\TetGen\tetgen.h" />
+    <QtMoc Include="MainQt.h" />
     <ClInclude Include="MemoryAllocator.hpp" />
     <ClInclude Include="Model.hpp" />
     <ClInclude Include="ResourceManager.hpp" />
@@ -236,8 +281,10 @@ xcopy /y /d "$(ProjectDir)textures\*.*" "$(OutDir)textures\"</Command>
     <ClInclude Include="Structs.hpp" />
     <ClInclude Include="UniformBufferManager.hpp" />
     <ClInclude Include="VulkanImage.hpp" />
+    <QtMoc Include="VulkanWindow.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(QtMsBuild)\qt.targets" Condition="Exists('$(QtMsBuild)\qt.targets')" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

@@ -16,7 +16,7 @@ public:
     void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
     void initializeSurfaceBuffer(Model& heatModel);
 
-    void controller(GLFWwindow* window, float deltaTime);
+    void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
 
     void createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight);
     void createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t maxFramesInFlight);

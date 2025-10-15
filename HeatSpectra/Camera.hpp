@@ -1,15 +1,15 @@
 #pragma once 
 
 #include <glm/glm.hpp>
-#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 
 class Camera {
 public:
     void update(float deltaTime);   // Update position based on velocity
-    void processKeyInput(GLFWwindow* window, float deltaTime);   // Process key input
-    void processMouseMovement(GLFWwindow* window);  // Process mouse movement
+    void processKeyInput(bool wPressed, bool sPressed, bool aPressed, bool dPressed,
+                        bool qPressed, bool ePressed, bool shiftPressed, float deltaTime);   // Process key input
+    void processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY);  // Process mouse movement
     void processMouseScroll(double xOffset, double yOffset);    //Process mouse scroll
     void setLookAt(const glm::vec3& target);
     glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight);

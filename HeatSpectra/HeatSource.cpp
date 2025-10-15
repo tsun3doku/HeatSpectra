@@ -1,6 +1,4 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
+#include <vulkan/vulkan.h>
 #include <tiny_obj_loader.h>
 
 #include "VulkanDevice.hpp"
@@ -126,17 +124,17 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     vkFreeMemory(vulkanDevice.getDevice(), stagingMemory, nullptr);
 }
 
-void HeatSource::controller(GLFWwindow* window, float deltaTime) {
+void HeatSource::controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime) {
     float moveSpeed = 0.1f * deltaTime;
     glm::vec3 currentPosition = heatModel->getModelPosition();
 
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+    if (upPressed)
         currentPosition += glm::vec3(0.0f, moveSpeed, 0.0f);
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+    if (downPressed)
         currentPosition -= glm::vec3(0.0f, moveSpeed, 0.0f);
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+    if (rightPressed)
         currentPosition += glm::vec3(moveSpeed, 0.0f, 0.0f);
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+    if (leftPressed)
         currentPosition -= glm::vec3(moveSpeed, 0.0f, 0.0f);
 
     heatModel->setModelPosition(currentPosition);
@@ -296,13 +294,27 @@ void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t c
 }
 
 void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
-    vkDestroyPipeline(vulkanDevice.getDevice(), heatSourcePipeline, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), heatSourcePipelineLayout, nullptr);
-
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), heatSourceDescriptorPool, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), heatSourceDescriptorLayout, nullptr);
+    if (heatSourcePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), heatSourcePipeline, nullptr);
+        heatSourcePipeline = VK_NULL_HANDLE;
+    }
+    if (heatSourcePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), heatSourcePipelineLayout, nullptr);
+        heatSourcePipelineLayout = VK_NULL_HANDLE;
+    }
+    if (heatSourceDescriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vulkanDevice.getDevice(), heatSourceDescriptorPool, nullptr);
+        heatSourceDescriptorPool = VK_NULL_HANDLE;
+    }
+    if (heatSourceDescriptorLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), heatSourceDescriptorLayout, nullptr);
+        heatSourceDescriptorLayout = VK_NULL_HANDLE;
+    }
 }
 
 void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
-    memoryAllocator.free(sourceBuffer, sourceBufferOffset_);
+    if (sourceBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(sourceBuffer, sourceBufferOffset_);
+        sourceBuffer = VK_NULL_HANDLE;
+    }
 }

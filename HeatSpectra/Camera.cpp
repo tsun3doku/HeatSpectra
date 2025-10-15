@@ -26,54 +26,50 @@ void Camera::setLookAt(const glm::vec3& center) {
     lookAt = center;
 }
 
-void Camera::processKeyInput(GLFWwindow* window, float deltaTime) {
+void Camera::processKeyInput(bool wPressed, bool sPressed, bool aPressed, bool dPressed,
+                            bool qPressed, bool ePressed, bool shiftPressed, float deltaTime) {
     float speed = movementSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+    
+    if (wPressed) {
         pitch += speed;  // Pitch up
     }
-    else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+    else if (sPressed) {
         pitch -= speed;   // Pitch down
     }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+    
+    if (aPressed) {
         yaw += speed; // Rotate right around the model (clockwise around y-axis)
     }
-    else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+    else if (dPressed) {
         yaw -= speed; // Rotate left around the model (counter-clockwise around y-axis)
     }
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+    
+    if (qPressed) {
         roll += speed;  // Roll left (counter-clockwise around forward axis)
     }
-    else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+    else if (ePressed) {
         roll -= speed;  // Roll right (clockwise around forward axis)
     }
+    
     // Reset up vector when Shift+Q or Shift+E is pressed
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-            // Reset up vector to default Y-up
-            up = glm::vec3(0.0f, 1.0f, 0.0f);
-        }
+    if (shiftPressed && (qPressed || ePressed)) {
+        up = glm::vec3(0.0f, 1.0f, 0.0f);
     }
 }
 
-void Camera::processMouseMovement(GLFWwindow* window) {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
-        static double lastX;
-        static double lastY;
-        
+void Camera::processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY) {
+    static double lastX = 0.0;
+    static double lastY = 0.0;
+    
+    if (middleButtonPressed) {
         if (!isMousePressed) {
-            double xpos, ypos;
-            glfwGetCursorPos(window, &xpos, &ypos);
-
-            lastX = xpos;  // Set initial mouse position
-            lastY = ypos;
+            lastX = mouseX;  // Set initial mouse position
+            lastY = mouseY;
             isMousePressed = true;  // Set true to track mouse movement
         }
 
-        double xpos, ypos;
-        glfwGetCursorPos(window, &xpos, &ypos);
-
-        double dx = xpos - lastX;  // Change in x
-        double dy = ypos - lastY;  // Change in y
+        double dx = mouseX - lastX;  // Change in x
+        double dy = mouseY - lastY;  // Change in y
 
         yaw += dx * sensitivity;
         pitch += dy * sensitivity;
@@ -82,8 +78,8 @@ void Camera::processMouseMovement(GLFWwindow* window) {
         if (pitch < -86.0f) pitch = -86.0f;
 
         // Update last positions
-        lastX = xpos;
-        lastY = ypos;
+        lastX = mouseX;
+        lastY = mouseY;
     }
     else {
         isMousePressed = false;  // Reset when mouse is released

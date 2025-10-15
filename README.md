@@ -25,7 +25,8 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 
 ## Controls
 - W A S D Q E camera controls
-- Spacebar to start simulation
-- Arrow keys for heat source control
-- H key for wireframe view
+- 'Spacebar' to start simulation
+-  Arrow keys for heat source control
+- 'H' for wireframe view
+- 'C' for remeshed overlay
 

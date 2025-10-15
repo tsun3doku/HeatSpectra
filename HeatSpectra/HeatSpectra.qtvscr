@@ -1,0 +1,477 @@
+<FlowDocument xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" FontFamily="Segoe UI" FontSize="12">
+  <FlowDocument.Tag><![CDATA[{
+  "timestamp": "2025-10-12 19:11:22",
+  "files": {
+    "C:\\Users\\tsundoku\\Documents\\Visual Studio 2022\\Projects\\HeatSpectra\\HeatSpectra\\HeatSpectra.vcxproj": {
+      "before": "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",
+      "after": "7Vptc9s2Eu6X+9KZ/gceJze2O2fRb82bJXVsyXE8kWzHUpy5Gc14KBKS2JAEDwAdqy///RavJCXKpOrEzTXpdFoZ2AWBxe4+Dxb4x0/ffdf8+S4KrVtEaIDjlr3b2LEtFHvYD+Jpy07ZZPu5/XP7h++blwT/gjxmddHETUM2dMkUMdqyj9Mg9G0LRonhrxljyUvHod4MRS5tRIFHMMUT1vBw5PjoFoU4QcSJ6JirOXs7O/s2jG5ZzTOGolOC08TquWMUtmz1wQ6OJ8E0JS6DCVIpDOJlvdZZ7IWpj1p2F43T6e/vg3h/T2uATmGotpBpOsVGPhX+T/MydNkEk6gtBmk65m8pAQ3SHmXqFZO7QiFyKaqYnpL6KyYorXf39OChtoMhPovl7ptabbutObmmYzxUOiw4ALgymxec9jTEYzfM3PS6o/zkWkZYe/dZY6fpLDUrr3qD5h8x8aXTcc2mo5uUhBruNA389m8vxhP0dPL8p23/2e5k+2Dn2f72c3TwYvvFnj/Ze+G7z5G3/4dxVaGjhrnCmJ27EaKJ66H2a+SyQQLRTdymU+xS8hAFPv5IZdTrWDBr2uFruldkYX1v2fXg5nZ/B9xjYX1vWZ+KlGJBZPkBD/qWvfFk07RvbbRaGxvWxZX1z5O7gDK6Wegd/Zc1mMxNG1t2+8lmfyCGU3brBgSWicl8a2RGbDrmp9xZHtvZ1qr0FCWYMEsN07KfbF53VA68dNlsa9Q3qa6TJA2VJRsJjERtyylzmeICC4lk6/cnm9rKYsG5hLZh6wxZUNGxWsxyw3mC2kdJEgaeSKAL6UR0q715R5H4Si8YE5cEiLYZSVHTWW5XCnqCQ4xDilj7dvdgPwt33aqEOzOXuB5DZACS7+IAEAbGLrRySeGsi7YvbMeCXxRssGS2Qqp9PMNNIAV8Msu9n+EQgQmmxI0uEhZEwa9iK9X2rOz+Sw1vIOTxjP738VZApscz29/FV8/WS9DFxLysbCBhCxDlxpekl+p8nkvdK0BoQQWwqBwEFNl9yyAvMuDcABa5wQHa7k9wRVwohZkHfmExhX6Ob+SzxecYX69BBpb6gkRvi7Oglm22+xyzVziN4URzjID/I4XxLbuTUoYjwSUOO2EHR0kQosJmVfOR1azlLZOuxTmLStx9RKk7RZb0TTf2YJqvg+nMtobojuWm/NLycBr6VoyZFWLAeWRlJOjf/Ldw9kML/ieOcJE7F8LiDAbKhHOicN4wLurIVeeZT4HlntwxFPMDo3HaNtBjEYBCbqXiAFgA8u2a0gB6ggoMZgiOmgVbrxcY2qTLYQ7khnDCC7xwkcLlGFgjBbGS2EeGgK49Dk8IKjJ7sGchcLSuy1zNqfRWACNanrRxVk5i9bSUV9fahocYVseSOBdvGG9dnuXaJils8Ndo2lwa/OaxrJBxPoXHiuz/VRtWW7FgWh6nfZfX6XTS4fWr7Az2J/hI0dKyKMdPye3OyxH/HB0xChiLP6SjLvbSCMWMjq4DmrqhNWCpH2Brb2dvbwTz4IBFR7kCReF3GIzp4ZNNVfcTB3EAotwHP+OZ8v9gkbxiBZWIIBZ1FLnrf5pd6sgx5Ec1AES9d0kM3LXH67tt8V8oBBQaJacB0UG315kh74M6vZo/jcAlQQnBHpAfTLK50/b7s/P9vcOb7snxu9PDm87F+eCid3L4r80V8lu8klA+kvkUp9ZQ4uXUqg/lCDWlxVYj3oeydwAuKecmGWD+JL66Xw4B5Q7NG7Ute0H8ITPjIB0P5hT2rA1zoHDqbzpZk5nGKYoRVMNlseZMroCXydT0V3brSZhvyopmZuM8dXug46wgCYvrX891XqWxxxcqHIyvAlxOLbq0y1jsLGYkAL7qaTFd2irpMErGM2VdwfxpBFa5l3TU82+OehK74xB1Lvrdo+ErHPIbJbVdZT3GrqrGha7QBBG4ijKFyJIOo7TS6+XureyWAzSdxwiKEnr3sIAwPrmuiw5Phr2z46ujq/98+ix55MuqvRsqHNYld15R1vvgv4LDMx0tVDf4UXzrsCgD6K5YAD+icbx3AooZEBSotyO4wJjBdSIlXokclFPmSTh3KE6Jh0Dg+l3vzdH5zaD7ZkuThBK1aTj5uL3fOGiMg7gBwfz0wAkkoygVjkpaKRuXtPL54PEvIXZ9RAC57rMUwNd93Rlm9Nx4mkKZYMDc2Hfh6ogy30uS3Wfg04tdJlqOXUiGV2kMxWQk0JjCbai41m06JX1GT6nIG4J5WwDecEYQLMgX3t3t9eACSQ6spYz2RYLi/uUgTfhNisoExTYjuhpKpauv7pdDfBFQC+iW7aGyRj4Ylj27xPXA47dvPc6GwaPyDgwDFnxo+QMFH1ruznwom2UXwR75kHR5sN6m4Qc33t5twBwO+dT2xa+84+blC5/Ld2iykyVZsAygp6ilndwC+c+mAqwK+JgPBSL9S29omQIfhWfudQZZlG9eYsrum8qdh5O55cC/vgXXfrlsRGc8kunoxwZNbm3eeZGKSpLusH/4frV2BJQz5Mo/5lVV672aDOp/KYH8uaBr2u0S8y2v8hH4X+GM9DCw09ztC2d/ivd9Q9ivG2EXMLCAlJ8EIQs3wX33Dp5vIL/pFJoNnL5ybzEZBL+iCyLk2kp6qd1orLxVlvi7stsMsBqhHxXBy04acgJlPWb2JUcNqVXSYZQ0cRVMKH8wV1esK/vNCBkQl8B1AXoAkqnzpdOFm4h9lYzhU6BvVowBsmSQM3vheHR0fDwkCDWA7Ou6bblkB05VxK0hJ6nXcTqBc3ffjeFQQaq14NyA4P7Qv+K8kdTROJVfqB76FAFDgoPKEB4O1RqYBH71qK/dcHLiTxFcr85qSHevagjx53PikFlTVhT5qmWDi+6wWoqngtEQMUgvowR2gr/0QrTh3d3d7xd5PYbYFMXVOn0Uwdu5o1BcM+Ma7sHrqmH1Gq6QPKTXdrtBMI05ca+3i9fiJNNFt4FXI2AmUJu4SVkQghGrgqvvQpGgUgreu/FC85qhJWd9FkEg5j8haXuWH7KX0/qgdY5jeDYgaxYtWx9GoBYX+40Jcac5v7hPFB6Fs0rR6Vjki3rjauF6I/NwrjXdKZesNeYMIvVGuhp/kZ7PnOWWkAopmUAKWkMD4omn3DpfCOFJB3/4U2+pRrrWcj/Ca1ewYITqDZ6J50ev9reOLvVlTmfgabYQQcotM0l1zi/GRqXWEuxUamjYqRYswk61PPe+SqkC7FRLA+xUC2WwU09Wwk6lrICdSqkS+ICnSfIViiAiSzu9CB6Vn5DgUSm2CB6VCgXwqJQugEeltGJblXI5kKkw2wBOHnAHXu0PpShTOZE8yuSEl6N+vfeVTL7B1x5x/yum7Lla4Q3QiqeVuff9+k1l7u2ZflVl3qipF3zLj87EW3P+vqD9Pw=="
+    }
+  }
+}]]></FlowDocument.Tag>
+  <Section Margin="0,24" TextAlignment="Center">
+    <Paragraph FontSize="24" FontWeight="Bold" Margin="12,0">
+      <LineBreak />
+      <Span Foreground="Gray">Qt Visual Studio Tools</Span>
+    </Paragraph>
+    <Paragraph FontSize="42" Margin="12,0" FontWeight="Bold">
+      <Span TextDecorations="Underline">Project Format Conversion</Span>
+    </Paragraph>
+    <Paragraph Margin="12,8" FontSize="18">
+      <Span>Report generated on 2025-10-12 19:11:22</Span>
+    </Paragraph>
+  </Section>
+  <Section>
+    <Paragraph FontSize="32" FontWeight="Bold" Margin="12,0">
+      <Span>Files</Span>
+    </Paragraph>
+    <Paragraph Margin="24,12,0,0">
+      <Span FontFamily="Consolas" FontSize="14" Background="WhiteSmoke"><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+      <LineBreak />
+      <Hyperlink NavigateUri="file://C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj?before">[Before]</Hyperlink>
+      <Hyperlink NavigateUri="file://C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj?after">[After]</Hyperlink>
+      <Hyperlink NavigateUri="file://C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj?diff&amp;before&amp;after">
+                        [Diff before/after]
+                    </Hyperlink>
+      <Hyperlink NavigateUri="file://C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj?diff&amp;before&amp;current">
+                        [Diff before/current]
+                    </Hyperlink>
+      <Hyperlink NavigateUri="file://C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj?diff&amp;after&amp;current">
+                        [Diff after/current]
+                    </Hyperlink>
+      <LineBreak />
+    </Paragraph>
+  </Section>
+  <Section>
+    <Paragraph FontSize="32" FontWeight="Bold" Margin="12,0">
+      <Span>Changes</Span>
+    </Paragraph>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Converting custom build steps to Qt/MSBuild items]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span><![CDATA[      ]]></Span><Span Background="LightCoral"><![CDATA[<AdditionalIncludeDirectories>$]]></Span><Span><![CDATA[(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>]]></Span>
+            </Paragraph>
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span><![CDATA[      ]]></Span><Span Background="LightGreen"><![CDATA[<AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$]]></Span><Span><![CDATA[(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span><![CDATA[      ]]></Span><Span Background="LightCoral"><![CDATA[<AdditionalIncludeDirectories>$]]></Span><Span><![CDATA[(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>]]></Span>
+            </Paragraph>
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span><![CDATA[      ]]></Span><Span Background="LightGreen"><![CDATA[<AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$]]></Span><Span><![CDATA[(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Enabling multi-processor compilation]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[      <MultiProcessorCompilation>true</MultiProcessorCompilation>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[      <MultiProcessorCompilation>true</MultiProcessorCompilation>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[      <MultiProcessorCompilation>true</MultiProcessorCompilation>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[      <MultiProcessorCompilation>true</MultiProcessorCompilation>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Project format version]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Keyword>QtVS_v304</Keyword>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Fallback for QTMSBUILD environment variable]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Default Qt properties]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <Import Project="$(QtMsBuild)\qt_defaults.props" Condition="Exists('$(QtMsBuild)\qt_defaults.props')" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Qt build settings]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <PropertyGroup Label="QtSettings" Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Warn if Qt/MSBuild is not found]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') OR !Exists('$(QtMsBuild)\Qt.props')">]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  </Target>]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Qt property sheet]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Import Project="$(QtMsBuild)\Qt.props" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Import Project="$(QtMsBuild)\Qt.props" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Import Project="$(QtMsBuild)\Qt.props" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[    <Import Project="$(QtMsBuild)\Qt.props" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+    <Paragraph FontSize="20" FontWeight="Bold" Margin="12">
+      <Span><![CDATA[🡺 Qt targets]]></Span>
+    </Paragraph>
+    <Table CellSpacing="0" BorderBrush="Gray" BorderThickness="0.5">
+      <Table.Columns>
+        <TableColumn />
+        <TableColumn />
+      </Table.Columns>
+      <TableRowGroup>
+        <TableRow Background="Orange">
+          <TableCell ColumnSpan="2" BorderThickness="0.5" BorderBrush="Gray">
+            <Paragraph Margin="10,5" FontWeight="Bold">
+              <Span><![CDATA[C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSpectra.vcxproj]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell ColumnSpan="2" Background="WhiteSmoke" BorderBrush="Gray" BorderThickness="0.5" />
+        </TableRow>
+        <TableRow>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0" />
+          </TableCell>
+          <TableCell BorderThickness="0, 0, 0.5, 0" BorderBrush="Gray">
+            <Paragraph FontFamily="Consolas" Margin="4, 0">
+              <Span Background="LightGreen"><![CDATA[  <Import Project="$(QtMsBuild)\qt.targets" Condition="Exists('$(QtMsBuild)\qt.targets')" />]]></Span>
+            </Paragraph>
+          </TableCell>
+        </TableRow>
+      </TableRowGroup>
+    </Table>
+  </Section>
+  <Section>
+    <Paragraph />
+  </Section>
+</FlowDocument>
+<!--MUkP4NJ2y9g3P+gQPm5P+l4+EIm9vrku3yLaYmLXWr4=-->

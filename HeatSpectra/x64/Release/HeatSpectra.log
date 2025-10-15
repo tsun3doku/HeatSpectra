@@ -1,30 +1,33 @@
-﻿  GBuffer.cpp
-  GLM_GTX_hash requires C++11 standard library support
-  GeodesicTracer.cpp
-  Grid.cpp
+﻿   Qt/MSBuild: 3.4.1.0
+  Reading Qt configuration (C:/Qt/6.9.3/msvc2022_64/bin/qmake)
+   Qt: 6.9.3
+  moc MainQt.h
+  moc VulkanWindow.h
+  App.cpp
+  HeatSource.cpp
   HeatSystem.cpp
-  GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(166,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(182,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(194,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(241,20): warning C4101: 'error_code': unreferenced local variable
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(674,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(711,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(865,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(971,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(990,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
-  Main.cpp
-  GLM_GTX_hash requires C++11 standard library support
+  MainQt.cpp
   ResourceManager.cpp
-  GLM_GTX_hash requires C++11 standard library support
-  SignPostMesh.cpp
-  GLM_GTX_hash requires C++11 standard library support
-  iODT.cpp
-  GLM_GTX_hash requires C++11 standard library support
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\iODT.cpp(449,23): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+  VulkanDevice.cpp
+  VulkanWindow.cpp
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(179,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(195,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(207,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(254,20): warning C4101: 'error_code': unreferenced local variable
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(687,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(724,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(878,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(984,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1003,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+  moc_MainQt.cpp
+  moc_VulkanWindow.cpp
   Generating code
-  2247 of 7107 functions (31.6%) were compiled, the rest were copied from previous compilation.
-    114 functions were new in current compilation
-    360 functions had inline decision re-evaluated but remain unchanged
+  47 of 7801 functions ( 0.6%) were compiled, the rest were copied from previous compilation.
+    1 functions were new in current compilation
+    90 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
+  0 File(s) copied
+  0 File(s) copied
+  0 File(s) copied
+  0 File(s) copied

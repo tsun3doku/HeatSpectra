@@ -1,6 +1,4 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
+#include <vulkan/vulkan.h>
 #include <omp.h>
 #include <unordered_map>
 #include <memory>
@@ -15,12 +13,6 @@
 #include "Model.hpp"
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
-
-
-//                                       [ the following code requires
-//                                         good commentary to fully
-//                                         understand the logic ]
-//
 
 HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
@@ -50,9 +42,10 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
 }
 
 HeatSystem::~HeatSystem() {
+    // Heatsystem relies on explicit cleanup, like most systems running inside vulkan
 }
 
-void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+void HeatSystem::update(VulkanDevice& vulkanDevice, bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -67,7 +60,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, GLFWwindow* window, Resource
         mappedTimeData->totalTime += deltaTime;
     }
 
-    heatSource->controller(window, deltaTime);
+    heatSource->controller(upPressed, downPressed, leftPressed, rightPressed, deltaTime);
 
     glm::mat4 heatSourceModelMatrix = glm::translate(glm::mat4(1.0f), resourceManager.getHeatModel().getModelPosition());
     resourceManager.getHeatModel().setModelMatrix(heatSourceModelMatrix);
@@ -84,29 +77,49 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
     std::vector<VkBuffer> oldWriteBuffers = tetraFrameBuffers.writeBuffers;
     std::vector<VkDeviceSize> oldWriteOffsets = tetraFrameBuffers.writeBufferOffsets_;
 
-    // Copy data from old buffers to new for each frame
-    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+    // Copy data from old buffers to new for each frame but only if buffers changed
+    bool hasChanged = false;
     for (uint32_t i = 0; i < maxFramesInFlight; i++) {
-        VkBufferCopy copyRegion{};
-        copyRegion.size = sizeof(float) * feaMesh.elements.size();
-
-        // Read buffer copy
-        copyRegion.srcOffset = oldReadOffsets[i];
-        copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
-        vkCmdCopyBuffer(copyCmd, oldReadBuffers[i],
-            tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
-
-        // Write buffer copy
-        copyRegion.srcOffset = oldWriteOffsets[i];
-        copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
-        vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i],
-            tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+        if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i] || 
+            oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+            hasChanged = true;
+            break;
+        }
     }
-    endSingleTimeCommands(vulkanDevice, copyCmd);
+    
+    if (hasChanged) {
+        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+        for (uint32_t i = 0; i < maxFramesInFlight; i++) {
+            VkBufferCopy copyRegion{};
+            copyRegion.size = sizeof(float) * feaMesh.elements.size();
 
-    for (size_t i = 0; i < maxFramesInFlight; i++) {
-        memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
-        memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
+            // Read buffer copy 
+            if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
+                copyRegion.srcOffset = oldReadOffsets[i];
+                copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
+                vkCmdCopyBuffer(copyCmd, oldReadBuffers[i],
+                    tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
+            }
+
+            // Write buffer copy 
+            if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+                copyRegion.srcOffset = oldWriteOffsets[i];
+                copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
+                vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i],
+                    tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+            }
+        }
+        endSingleTimeCommands(vulkanDevice, copyCmd);
+        
+        // Only free old buffers if they were actually replaced
+        for (size_t i = 0; i < maxFramesInFlight; i++) {
+            if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
+                memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
+            }
+            if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+                memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
+            }
+        }
     }
 
     createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
@@ -1173,33 +1186,75 @@ void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_
 }
 
 void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
-    vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
-    vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
+    if (tetraPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
+        tetraPipeline = VK_NULL_HANDLE;
+    }
+    if (surfacePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), surfacePipeline, nullptr);
+        surfacePipeline = VK_NULL_HANDLE;
+    }
 
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), surfacePipelineLayout, nullptr);
+    if (tetraPipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), tetraPipelineLayout, nullptr);
+        tetraPipelineLayout = VK_NULL_HANDLE;
+    }
+    if (surfacePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), surfacePipelineLayout, nullptr);
+        surfacePipelineLayout = VK_NULL_HANDLE;
+    }
 
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
-    vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
+    if (tetraDescriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vulkanDevice.getDevice(), tetraDescriptorPool, nullptr);
+        tetraDescriptorPool = VK_NULL_HANDLE;
+    }
+    if (surfaceDescriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vulkanDevice.getDevice(), surfaceDescriptorPool, nullptr);
+        surfaceDescriptorPool = VK_NULL_HANDLE;
+    }
 
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
-    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
+    if (tetraDescriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), tetraDescriptorSetLayout, nullptr);
+        tetraDescriptorSetLayout = VK_NULL_HANDLE;
+    }
+    if (surfaceDescriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), surfaceDescriptorSetLayout, nullptr);
+        surfaceDescriptorSetLayout = VK_NULL_HANDLE;
+    }
 
-    heatSource->cleanupResources(vulkanDevice);
+    if (heatSource) {
+        heatSource->cleanupResources(vulkanDevice);
+    }
 }
 
 void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
     for (size_t i = 0; i < tetraFrameBuffers.readBuffers.size(); i++) {
         if (tetraFrameBuffers.readBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.readBufferOffsets_[i]);
+            tetraFrameBuffers.readBuffers[i] = VK_NULL_HANDLE;
         }
         if (tetraFrameBuffers.writeBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(tetraFrameBuffers.writeBuffers[i], tetraFrameBuffers.writeBufferOffsets_[i]);
+            tetraFrameBuffers.writeBuffers[i] = VK_NULL_HANDLE;
         }
     }
-    memoryAllocator.free(tetraBuffer, tetraBufferOffset_);
-    memoryAllocator.free(timeBuffer, timeBufferOffset_);
-    memoryAllocator.free(centerBuffer, centerBufferOffset_);
-    memoryAllocator.free(neighborBuffer, neighborBufferOffset_);
-    heatSource->cleanup(vulkanDevice);
+    if (tetraBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(tetraBuffer, tetraBufferOffset_);
+        tetraBuffer = VK_NULL_HANDLE;
+    }
+    if (timeBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(timeBuffer, timeBufferOffset_);
+        timeBuffer = VK_NULL_HANDLE;
+    }
+    if (centerBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(centerBuffer, centerBufferOffset_);
+        centerBuffer = VK_NULL_HANDLE;
+    }
+    if (neighborBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(neighborBuffer, neighborBufferOffset_);
+        neighborBuffer = VK_NULL_HANDLE;
+    }
+    if (heatSource) {
+        heatSource->cleanup(vulkanDevice);
+    }
 }

@@ -6,7 +6,6 @@ class Model;
 class Grid;
 class Camera;
 class HeatSource;
-class HeatSystem;
 class UniformBufferManager;
 class MemoryAllocator;
 class VulkanDevice;
@@ -29,8 +28,8 @@ public:
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
 	void initialize();
-	void initializeRemesher();
 	void performRemeshing(int iterations);
+	void reloadModels(const std::string& modelPath);
 	void cleanup();
 
 	// Getters
@@ -54,9 +53,6 @@ public:
 	HeatSource& getHeatSource() {
 		return *heatSource;
 	}
-	HeatSystem& getHeatSystem() {
-		return *heatSystem;
-	}
 
 private:
 	VulkanDevice& vulkanDevice;
@@ -70,7 +66,6 @@ private:
 	std::unique_ptr<Model> commonSubdivision;
 	std::unique_ptr<Model> heatModel;
 	std::unique_ptr<HeatSource> heatSource;
-	std::unique_ptr<HeatSystem> heatSystem;
 
 	std::unique_ptr<iODT> remesher;
 	std::unique_ptr<SignpostMesh> signpostMesh;

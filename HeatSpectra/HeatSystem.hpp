@@ -1,17 +1,19 @@
 #pragma once
 #include "TetGen/tetgen.h"
+#include "Structs.hpp"
 
 class Camera;
 class HeatSource;
 class ResourceManager;
 class MemoryAllocator;
 class VulkanDevice;
+class UniformBufferManager;
 
 class HeatSystem {
 public:
     HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
     ~HeatSystem();
-    void update(VulkanDevice& vulkanDevice, GLFWwindow* window, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
+    void update(VulkanDevice& vulkanDevice, bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void processResetRequest();
     void requestReset();
@@ -105,19 +107,19 @@ private:
     VkDeviceSize timeBufferOffset_;
     TimeUniform* mappedTimeData = nullptr;
 
-    VkDescriptorPool tetraDescriptorPool;
-    VkDescriptorSetLayout tetraDescriptorSetLayout;
+    VkDescriptorPool tetraDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout tetraDescriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> tetraDescriptorSets;
 
-    VkPipelineLayout tetraPipelineLayout;
-    VkPipeline tetraPipeline;
+    VkPipelineLayout tetraPipelineLayout = VK_NULL_HANDLE;
+    VkPipeline tetraPipeline = VK_NULL_HANDLE;
 
-    VkDescriptorPool surfaceDescriptorPool;
-    VkDescriptorSetLayout surfaceDescriptorSetLayout;
+    VkDescriptorPool surfaceDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout surfaceDescriptorSetLayout = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> surfaceDescriptorSets;
 
-    VkPipelineLayout surfacePipelineLayout;
-    VkPipeline surfacePipeline;
+    VkPipelineLayout surfacePipelineLayout = VK_NULL_HANDLE;
+    VkPipeline surfacePipeline = VK_NULL_HANDLE;
 
     bool isActive = false;
     std::atomic<bool> needsReset{ 

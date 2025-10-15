@@ -83,7 +83,7 @@ bool iODT::optimalDelaunayTriangulation(int maxIterations) {
 
     // 4) Optimal positioning of inserted vertices
     std::cout << "\nRepositioning Phase" << std::endl;
-    repositionInsertedVertices(5, 1e-4, 0.018);
+    repositionInsertedVertices(15, 1e-4, 0.1);
     std::cout << " Done.\n";
 
     // 5) (OPTIONAL) Push the intrinsic result back to the model and GPU for debugging
@@ -274,7 +274,6 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
         // Convergence test
         if (maxMove < tol) {
             //std::cout << " [Reposition] Converged after " << (iter + 1) << " iterations\n";
-            std::cout << " Done.\n";
             break;
         }
     }

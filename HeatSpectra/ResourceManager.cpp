@@ -36,20 +36,12 @@ void ResourceManager::initialize() {
     visModel            ->init(MODEL_PATH);
     commonSubdivision   ->init(MODEL_PATH);
     heatModel           ->init(HEATSOURCE_PATH);
-
-    performRemeshing(3);
-}
-
-void ResourceManager::initializeRemesher() {
-    remesher = std::make_unique<iODT>(*visModel, *signpostMesh);
 }
 
 void ResourceManager::performRemeshing(int iterations) {
-    if (!remesher) {
-        initializeRemesher();
-    }
+    std::cout << "[ResourceManager] Initializing fresh remesher..." << std::endl;
+    remesher = std::make_unique<iODT>(*visModel, *signpostMesh);
 
-    // Print original model stats
     std::cout << "Original model: " << visModel->getVertexCount() << " vertices, " << visModel->getIndices().size() / 3 << " triangles" << std::endl;
 
     // Run ODT 
@@ -63,13 +55,41 @@ void ResourceManager::performRemeshing(int iterations) {
     std::cout << "\nCreating common subdivision..." << std::endl;
     remesher->createCommonSubdivision(*commonSubdivision);
 
-    // Save the intrinsic overlay as OBJ for analysis
     remesher->saveCommonSubdivisionOBJ("remeshedIntrinsic.obj", *commonSubdivision);
+
+    // Debug untraced intrinsic mesh
     //visModel->saveOBJ("remeshed.obj");
+}
+
+void ResourceManager::reloadModels(const std::string& modelPath) {
+    std::cout << "[ResourceManager] Reloading models from: " << modelPath << std::endl;
+    
+    // Clean up old buffers
+    simModel->cleanup();
+    visModel->cleanup();
+    commonSubdivision->cleanup();
+    
+    // Clear old geometry data
+    simModel->setVertices({});
+    simModel->setIndices({});
+    visModel->setVertices({});
+    visModel->setIndices({});
+    commonSubdivision->setVertices({});
+    commonSubdivision->setIndices({});
+    
+    // Reload models with new path
+    simModel->init(modelPath);
+    visModel->init(modelPath);
+    commonSubdivision->init(modelPath);
+      
+    // Reset remesher and signpost mesh
+    signpostMesh = std::make_unique<SignpostMesh>();
+    remesher.reset();
 }
 
 void ResourceManager::cleanup() {
     simModel->cleanup();
     visModel->cleanup();
     heatModel->cleanup();
+    commonSubdivision->cleanup();
 }
