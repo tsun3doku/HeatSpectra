@@ -31,24 +31,24 @@ void Camera::processKeyInput(bool wPressed, bool sPressed, bool aPressed, bool d
     float speed = movementSpeed * deltaTime;
     
     if (wPressed) {
-        pitch += speed;  // Pitch up
+        pitch += speed;     // Pitch up
     }
     else if (sPressed) {
-        pitch -= speed;   // Pitch down
+        pitch -= speed;     // Pitch down
     }
     
     if (aPressed) {
-        yaw += speed; // Rotate right around the model (clockwise around y-axis)
+        yaw += speed;       // Rotate right around the model (clockwise around y-axis)
     }
     else if (dPressed) {
-        yaw -= speed; // Rotate left around the model (counter-clockwise around y-axis)
+        yaw -= speed;       // Rotate left around the model (counter-clockwise around y-axis)
     }
     
     if (qPressed) {
-        roll += speed;  // Roll left (counter-clockwise around forward axis)
+        roll += speed;      // Roll left (counter-clockwise around forward axis)
     }
     else if (ePressed) {
-        roll -= speed;  // Roll right (clockwise around forward axis)
+        roll -= speed;      // Roll right (clockwise around forward axis)
     }
     
     // Reset up vector when Shift+Q or Shift+E is pressed
@@ -63,7 +63,7 @@ void Camera::processMouseMovement(bool middleButtonPressed, double mouseX, doubl
     
     if (middleButtonPressed) {
         if (!isMousePressed) {
-            lastX = mouseX;  // Set initial mouse position
+            lastX = mouseX;         // Set initial mouse position
             lastY = mouseY;
             isMousePressed = true;  // Set true to track mouse movement
         }
@@ -103,8 +103,8 @@ glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
 }
 
 glm::mat4 Camera::getRotationMatrix() const {
-    glm::mat4 rotationYaw = glm::rotate(glm::mat4(1.0f), glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));  // Rotate around Y-axis (yaw)
-    glm::mat4 rotationPitch = glm::rotate(glm::mat4(1.0f), glm::radians(pitch), glm::vec3(1.0f, 0.0f, 0.0f));  // Rotate around X-axis (pitch)
+    glm::mat4 rotationYaw = glm::rotate(glm::mat4(1.0f), glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));       // Rotate around Y-axis (yaw)
+    glm::mat4 rotationPitch = glm::rotate(glm::mat4(1.0f), glm::radians(pitch), glm::vec3(1.0f, 0.0f, 0.0f));   // Rotate around X-axis (pitch)
 
     glm::mat4 rotationMatrix = rotationYaw * rotationPitch;
     return rotationMatrix;

@@ -13,42 +13,42 @@ class HeatSystem {
 public:
     HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
     ~HeatSystem();
-    void update(VulkanDevice& vulkanDevice, bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
-    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
+    void recreateResources(uint32_t maxFramesInFlight);
     void processResetRequest();
     void requestReset();
     void setActive(bool active);
 
-    void generateTetrahedralMesh(ResourceManager& resourceManager);
-    void initializeSurfaceBuffer(ResourceManager& resourceManager);
-    void initializeTetra(VulkanDevice& vulkanDevice);
+    void generateTetrahedralMesh();
+    void initializeSurfaceBuffer();
+    void initializeTetra();
 
-    void createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createNeighborBuffer(VulkanDevice& vulkanDevice);
-    void createCenterBuffer(VulkanDevice& vulkanDevice);
-    void createTimeBuffer(VulkanDevice& vulkanDevice);
+    void createTetraBuffer(uint32_t maxFramesInFlight);
+    void createNeighborBuffer();
+    void createCenterBuffer();
+    void createTimeBuffer();
 
-    void createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createTetraPipeline(const VulkanDevice& vulkanDevice);
+    void createTetraDescriptorPool(uint32_t maxFramesInFlight);
+    void createTetraDescriptorSetLayout();
+    void createTetraDescriptorSets(uint32_t maxFramesInFlight);
+    void createTetraPipeline();
 
-    void createSurfaceDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createSurfaceDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight);
-    void createSurfacePipeline(const VulkanDevice& vulkanDevice);
+    void createSurfaceDescriptorPool(uint32_t maxFramesInFlight);
+    void createSurfaceDescriptorSetLayout();
+    void createSurfaceDescriptorSets(uint32_t maxFramesInFlight);
+    void createSurfacePipeline();
 
     void dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
-    void dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame);
-    void recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame);
+    void dispatchSurfaceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
     glm::vec3 calculateTetraCenter(const TetrahedralElement& tetra);
     float calculateTetraVolume(const TetrahedralElement& tetra);
 
-    void createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void createComputeCommandBuffers(uint32_t maxFramesInFlight);
 
-    void cleanupResources(VulkanDevice& vulkanDevice);
-    void cleanup(VulkanDevice& vulkanDevice);
+    void cleanupResources();
+    void cleanup();
 
     // Getters
     VkPipeline getHeatPipeline() const {

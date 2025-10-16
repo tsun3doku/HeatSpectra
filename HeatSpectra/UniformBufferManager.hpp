@@ -19,20 +19,20 @@ class VulkanDevice;
 
 class UniformBufferManager {
 public: 
-	UniformBufferManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
+	UniformBufferManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, uint32_t maxFramesInFlight);
 	~UniformBufferManager();
 
-	void updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, Camera& camera, UniformBufferObject& ubo);
+	void updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, UniformBufferObject& ubo);
 	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
 
-	void updateGridUniformBuffer(uint32_t currentImage, Camera& camera, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
-	void updateLightUniformBuffer(uint32_t currentImage, Camera& camera, LightUniformBufferObject& lightUbo);
-	void updateSSAOKernelBuffer(uint32_t currentImage, Camera& camera, SSAOKernelBufferObject& ssaoKernel);
+	void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
+	void updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo);
+	void updateSSAOKernelBuffer(uint32_t currentImage, SSAOKernelBufferObject& ssaoKernel);
 
-	void createUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
-	void createGridUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
-	void createLightUniformBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
-	void createSSAOKernelBuffers(MemoryAllocator& memoryAllocator, uint32_t maxFramesInFlight);
+	void createUniformBuffers(uint32_t maxFramesInFlight);
+	void createGridUniformBuffers(uint32_t maxFramesInFlight);
+	void createLightUniformBuffers(uint32_t maxFramesInFlight);
+	void createSSAOKernelBuffers(uint32_t maxFramesInFlight);
 	
 	void cleanup(uint32_t maxFramesInFlight);
 
@@ -86,7 +86,7 @@ public:
 private:	
 	VulkanDevice& vulkanDevice;
 	MemoryAllocator& memoryAllocator;
-	Camera* camera = nullptr;
+	Camera& camera;
 
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<void*> uniformBuffersMapped;

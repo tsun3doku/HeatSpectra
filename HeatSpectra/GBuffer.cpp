@@ -18,35 +18,35 @@
 
 GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager,
     uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe)
-    : vulkanDevice(vulkanDevice) {
+    : vulkanDevice(vulkanDevice), deferredRenderer(deferredRenderer) {
 
-    createFramebuffers(vulkanDevice, deferredRenderer, swapChainImageViews, swapchainExtent, maxFramesInFlight);
+    createFramebuffers(swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
-    createGeometryDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createGeometryDescriptorSetLayout(vulkanDevice);
-    createGeometryDescriptorSets(vulkanDevice, resourceManager, uniformBufferManager, maxFramesInFlight);
+    createGeometryDescriptorPool(maxFramesInFlight);
+    createGeometryDescriptorSetLayout();
+    createGeometryDescriptorSets(resourceManager, uniformBufferManager, maxFramesInFlight);
 
-    createLightingDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createLightingDescriptorSetLayout(vulkanDevice);
-    createLightingDescriptorSets(vulkanDevice, deferredRenderer, uniformBufferManager, maxFramesInFlight);
+    createLightingDescriptorPool(maxFramesInFlight);
+    createLightingDescriptorSetLayout();
+    createLightingDescriptorSets(uniformBufferManager, maxFramesInFlight);
 
-    createBlendDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createBlendDescriptorSetLayout(vulkanDevice);
-    createBlendDescriptorSets(vulkanDevice, deferredRenderer, maxFramesInFlight);
+    createBlendDescriptorPool(maxFramesInFlight);
+    createBlendDescriptorSetLayout();
+    createBlendDescriptorSets(maxFramesInFlight);
 
-    createGeometryPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
-    createLightingPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
-    createWireframePipeline(vulkanDevice, deferredRenderer, swapchainExtent);
-    createIntrinsicOverlayPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
-    createBlendPipeline(vulkanDevice, deferredRenderer, swapchainExtent);
+    createGeometryPipeline(swapchainExtent);
+    createLightingPipeline(swapchainExtent);
+    createWireframePipeline(swapchainExtent);
+    createIntrinsicOverlayPipeline(swapchainExtent);
+    createBlendPipeline(swapchainExtent);
 
-    createCommandBuffers(vulkanDevice, maxFramesInFlight);
+    createCommandBuffers(maxFramesInFlight);
 }
 
 GBuffer::~GBuffer() {
 }
 
-void GBuffer::createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::createCommandBuffers(uint32_t maxFramesInFlight) {
     gbufferCommandBuffers.resize(maxFramesInFlight);
 
     VkCommandBufferAllocateInfo allocInfo{};
@@ -60,12 +60,12 @@ void GBuffer::createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t ma
     }
 }
 
-void GBuffer::freeCommandBuffers(VulkanDevice& vulkanDevice) {
+void GBuffer::freeCommandBuffers() {
     vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
     gbufferCommandBuffers.clear();
 }
 
-void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
+void GBuffer::createFramebuffers(std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight) {
     size_t totalFramebuffers = maxFramesInFlight * swapChainImageViews.size();
     framebuffers.resize(totalFramebuffers);
 
@@ -107,7 +107,7 @@ void GBuffer::createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRende
     }
 }
 
-void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight) {
+void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // Update G-buffer descriptors (for input attachments)
         VkDescriptorImageInfo albedoImageInfo{};
@@ -176,7 +176,7 @@ void GBuffer::updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRen
     }
 }
 
-void GBuffer::createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::createGeometryDescriptorPool(uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize uboPoolSize{};
     uboPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboPoolSize.descriptorCount = static_cast<uint32_t>(maxFramesInFlight);
@@ -194,7 +194,7 @@ void GBuffer::createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uin
     }
 }
 
-void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+void GBuffer::createGeometryDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding uboBinding{};
     uboBinding.binding = 0; // UBO binding index
     uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -215,7 +215,7 @@ void GBuffer::createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created geometry descriptor set layout: " << geometryDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+void GBuffer::createGeometryDescriptorSets(ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, geometryDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -251,7 +251,7 @@ void GBuffer::createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, Res
     }
 }
 
-void GBuffer::createLightingDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::createLightingDescriptorPool(uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(maxFramesInFlight) * 3;  // Albedo, Normal, Position
@@ -269,7 +269,7 @@ void GBuffer::createLightingDescriptorPool(const VulkanDevice& vulkanDevice, uin
     }
 }
 
-void GBuffer::createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+void GBuffer::createLightingDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         // Albedo input attachment
         {0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
@@ -296,7 +296,7 @@ void GBuffer::createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice
     std::cout << "Created lighting descriptor set layout: " << lightingDescriptorSetLayout << std::endl;
 }
 
-void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+void GBuffer::createLightingDescriptorSets(UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, lightingDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -394,7 +394,7 @@ void GBuffer::createLightingDescriptorSets(const VulkanDevice& vulkanDevice, Def
     }
 }
 
-void GBuffer::createBlendDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::createBlendDescriptorPool(uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     poolSize.descriptorCount = maxFramesInFlight * 1;
@@ -410,7 +410,7 @@ void GBuffer::createBlendDescriptorPool(const VulkanDevice& vulkanDevice, uint32
     }
 }
 
-void GBuffer::createBlendDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+void GBuffer::createBlendDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
     binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
@@ -427,7 +427,7 @@ void GBuffer::createBlendDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
     }
 }
 
-void GBuffer::createBlendDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight) {
+void GBuffer::createBlendDescriptorSets(uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, blendDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -459,7 +459,7 @@ void GBuffer::createBlendDescriptorSets(const VulkanDevice& vulkanDevice, Deferr
     }
 }
 
-void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
+void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/gbuffer_vert.spv");
     auto fragShaderCode = readFile("shaders/gbuffer_frag.spv");
 
@@ -615,7 +615,7 @@ void GBuffer::createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredR
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
 }
 
-void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent) {
+void GBuffer::createLightingPipeline(VkExtent2D swapchainExtent) {
     auto vertShaderCode = readFile("shaders/lighting_vert.spv");
     auto fragShaderCode = readFile("shaders/lighting_frag.spv");
 
@@ -743,7 +743,7 @@ void GBuffer::createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredR
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
+void GBuffer::createWireframePipeline(VkExtent2D extent) {
     auto vertCode = readFile("shaders/wireframe_vert.spv");
     auto fragCode = readFile("shaders/wireframe_frag.spv");
 
@@ -907,7 +907,7 @@ void GBuffer::createWireframePipeline(const VulkanDevice& vulkanDevice, Deferred
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
 }
 
-void GBuffer::createIntrinsicOverlayPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
+void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/intrinsicOverlay_vert.spv"); 
     auto fragShaderCode = readFile("shaders/intrinsicOverlay_frag.spv");
 
@@ -1044,7 +1044,7 @@ void GBuffer::createIntrinsicOverlayPipeline(const VulkanDevice& vulkanDevice, D
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
 }
 
-void GBuffer::createBlendPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent) {
+void GBuffer::createBlendPipeline(VkExtent2D extent) {
     auto vertCode = readFile("shaders/blend_vert.spv");
     auto fragCode = readFile("shaders/blend_frag.spv");
 
@@ -1212,7 +1212,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
+void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
 
     // Start recording commands  
@@ -1379,7 +1379,7 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     }
 }
 
-void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::cleanupFramebuffers(uint32_t maxFramesInFlight) {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     for (uint32_t i = 0; i < framebuffers.size(); ++i) {
         if (framebuffers[i] != VK_NULL_HANDLE) {
@@ -1390,7 +1390,7 @@ void GBuffer::cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t max
     framebuffers.clear();
 }
 
-void GBuffer::cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void GBuffer::cleanup(uint32_t maxFramesInFlight) {
     // Note: Grid cleanup is handled by ResourceManager
 
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);

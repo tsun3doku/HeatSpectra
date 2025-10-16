@@ -2,12 +2,39 @@
   Reading Qt configuration (C:/Qt/6.9.3/msvc2022_64/bin/qmake)
    Qt: 6.9.3
   moc MainQt.h
+  App.cpp
+  Camera.cpp
+  DeferredRenderer.cpp
+  GBuffer.cpp
+  GeodesicTracer.cpp
+  Grid.cpp
+  HDR.cpp
+  HeatSource.cpp
+  HeatSystem.cpp
   MainQt.cpp
+  Model.cpp
+  ResourceManager.cpp
+  UniformBufferManager.cpp
+  iODT.cpp
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(74,19): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(75,21): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(114,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Camera.cpp(115,13): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(180,26): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(196,39): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(208,48): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\iODT.cpp(491,23): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(255,20): warning C4101: 'error_code': unreferenced local variable
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(688,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(725,28): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(879,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(985,27): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1004,26): warning C4267: 'initializing': conversion from 'size_t' to 'uint32_t', possible loss of data
   moc_MainQt.cpp
   Generating code
-  Previous IPDB and IOBJ mismatch, fall back to full compilation.
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\Model.hpp(149): warning C4172: returning address of local variable or temporary
-  All 7898 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  183 of 7902 functions ( 2.3%) were compiled, the rest were copied from previous compilation.
+    68 functions were new in current compilation
+    121 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
   0 File(s) copied

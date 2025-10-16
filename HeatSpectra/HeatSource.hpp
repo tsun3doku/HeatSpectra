@@ -11,35 +11,35 @@ public:
     HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
     ~HeatSource();
 
-    void recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void recreateResources(uint32_t maxFramesInFlight);
 
-    void createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel);
-    void initializeSurfaceBuffer(Model& heatModel);
+    void createSourceBuffer();
+    void initializeSurfaceBuffer();
 
     void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
 
-    void createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight);
-    void createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t maxFramesInFlight);
-    void createHeatSourcePipeline(VulkanDevice& device);
-    void createHeatSourceDescriptorSetLayout(VulkanDevice& device);
+    void createHeatSourceDescriptorPool(uint32_t maxFramesInFlight);
+    void createHeatSourceDescriptorSets(uint32_t maxFramesInFlight);
+    void createHeatSourcePipeline();
+    void createHeatSourceDescriptorSetLayout();
 
     void dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
-    void cleanupResources(VulkanDevice& vulkanDevice);
-    void cleanup(VulkanDevice& vulkanDevice);
+    void cleanupResources();
+    void cleanup();
 
     // Getters
     size_t getVertexCount() const {
-        return heatModel->getVertexCount();
+        return heatModel.getVertexCount();
     }
     VkBuffer getVertexBuffer() const { 
-        return heatModel->getVertexBuffer(); 
+        return heatModel.getVertexBuffer(); 
     }
     VkBuffer getIndexBuffer() const { 
-        return heatModel->getIndexBuffer(); 
+        return heatModel.getIndexBuffer(); 
     }
     size_t getIndexCount() const {
-        return heatModel->getIndices().size();
+        return heatModel.getIndices().size();
     }
 
     VkBuffer getSourceBuffer() const {
@@ -60,7 +60,7 @@ public:
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    Model* heatModel = nullptr;
+    Model& heatModel;
 
     HeatSourcePushConstant heatSourcePushConstant;
 

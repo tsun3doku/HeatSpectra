@@ -21,34 +21,34 @@ public:
         uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe);
     ~GBuffer();
 
-    void createFramebuffers(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
-    void updateDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight);
+    void createFramebuffers(std::vector<VkImageView> swapChainImageViews, VkExtent2D extent, uint32_t maxFramesInFlight);
+    void updateDescriptorSets(uint32_t maxFramesInFlight);
 
-    void createGeometryDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createGeometryDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createGeometryDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
+    void createGeometryDescriptorPool(uint32_t maxFramesInFlight);
+    void createGeometryDescriptorSetLayout();
+    void createGeometryDescriptorSets(ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
 
-    void createLightingDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createLightingDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createLightingDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
+    void createLightingDescriptorPool(uint32_t maxFramesInFlight);
+    void createLightingDescriptorSetLayout();
+    void createLightingDescriptorSets(UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
 
-    void createBlendDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void createBlendDescriptorSetLayout(const VulkanDevice& vulkanDevice);
-    void createBlendDescriptorSets(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, uint32_t maxFramesInFlight);
+    void createBlendDescriptorPool(uint32_t maxFramesInFlight);
+    void createBlendDescriptorSetLayout();
+    void createBlendDescriptorSets(uint32_t maxFramesInFlight);
 
-    void createGeometryPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
-    void createWireframePipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
-    void createLightingPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D swapchainExtent);
-    void createIntrinsicOverlayPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
-    void createBlendPipeline(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, VkExtent2D extent);
+    void createGeometryPipeline(VkExtent2D extent);
+    void createWireframePipeline(VkExtent2D extent);
+    void createLightingPipeline(VkExtent2D swapchainExtent);
+    void createIntrinsicOverlayPipeline(VkExtent2D extent);
+    void createBlendPipeline(VkExtent2D extent);
 
-    void createCommandBuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void freeCommandBuffers(VulkanDevice& vulkanDevice);
-    void recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews,
+    void createCommandBuffers(uint32_t maxFramesInFlight);
+    void freeCommandBuffers();
+    void recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews,
         uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision);
 
-    void cleanupFramebuffers(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
-    void cleanup(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
+    void cleanupFramebuffers(uint32_t maxFramesInFlight);
+    void cleanup(uint32_t maxFramesInFlight);
 
     // Getters 
     const std::vector<VkFramebuffer>& getFramebuffers() const {
@@ -69,6 +69,7 @@ public:
 
 private:
     VulkanDevice& vulkanDevice;
+    DeferredRenderer& deferredRenderer;
 
     uint32_t currentFrame = 0;
 

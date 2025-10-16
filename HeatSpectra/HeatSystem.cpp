@@ -19,33 +19,33 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
 
     heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
 
-    generateTetrahedralMesh(resourceManager);
-    createTetraBuffer(vulkanDevice, maxFramesInFlight);
-    createNeighborBuffer(vulkanDevice);
-    createCenterBuffer(vulkanDevice);
-    createTimeBuffer(vulkanDevice);
+    generateTetrahedralMesh();
+    createTetraBuffer(maxFramesInFlight);
+    createNeighborBuffer();
+    createCenterBuffer();
+    createTimeBuffer();
 
-    initializeSurfaceBuffer(resourceManager);
-    initializeTetra(vulkanDevice);
+    initializeSurfaceBuffer();
+    initializeTetra();
 
-    createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createTetraDescriptorSetLayout(vulkanDevice);
-    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
-    createTetraPipeline(vulkanDevice);
+    createTetraDescriptorPool(maxFramesInFlight);
+    createTetraDescriptorSetLayout();
+    createTetraDescriptorSets(maxFramesInFlight);
+    createTetraPipeline();
 
-    createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createSurfaceDescriptorSetLayout(vulkanDevice);
-    createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
-    createSurfacePipeline(vulkanDevice);
+    createSurfaceDescriptorPool(maxFramesInFlight);
+    createSurfaceDescriptorSetLayout();
+    createSurfaceDescriptorSets(maxFramesInFlight);
+    createSurfacePipeline();
 
-    createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
+    createComputeCommandBuffers(maxFramesInFlight);
 }
 
 HeatSystem::~HeatSystem() {
     // Heatsystem relies on explicit cleanup, like most systems running inside vulkan
 }
 
-void HeatSystem::update(VulkanDevice& vulkanDevice, bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+void HeatSystem::update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
     // Time calculation
     static auto lastTime = std::chrono::high_resolution_clock::now();
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -71,7 +71,7 @@ void HeatSystem::update(VulkanDevice& vulkanDevice, bool upPressed, bool downPre
     memcpy(mappedMemory, &ubo, sizeof(UniformBufferObject));
 }
 
-void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
     std::vector<VkBuffer> oldReadBuffers = tetraFrameBuffers.readBuffers;
     std::vector<VkDeviceSize> oldReadOffsets = tetraFrameBuffers.readBufferOffsets_;
     std::vector<VkBuffer> oldWriteBuffers = tetraFrameBuffers.writeBuffers;
@@ -122,23 +122,24 @@ void HeatSystem::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFrame
         }
     }
 
-    createSurfaceDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createSurfaceDescriptorSetLayout(vulkanDevice);
-    createTetraDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createTetraDescriptorSetLayout(vulkanDevice);
-    createTetraPipeline(vulkanDevice);
-    createSurfacePipeline(vulkanDevice);
-    heatSource->recreateResources(vulkanDevice, maxFramesInFlight);
+    createTetraDescriptorPool(maxFramesInFlight);
+    createTetraDescriptorSetLayout();
+    createTetraPipeline();
 
-    createComputeCommandBuffers(vulkanDevice, maxFramesInFlight);
-    createTetraDescriptorSets(vulkanDevice, maxFramesInFlight);
-    createSurfaceDescriptorSets(vulkanDevice, resourceManager, maxFramesInFlight);
+    createSurfaceDescriptorPool(maxFramesInFlight);
+    createSurfaceDescriptorSetLayout();
+    createSurfacePipeline();
+    heatSource->recreateResources(maxFramesInFlight);
+
+    createComputeCommandBuffers(maxFramesInFlight);
+    createTetraDescriptorSets(maxFramesInFlight);
+    createSurfaceDescriptorSets(maxFramesInFlight);
 }
 
 void HeatSystem::processResetRequest() {
     if (needsReset.exchange(false, std::memory_order_acq_rel)) {
         vkDeviceWaitIdle(vulkanDevice.getDevice());
-        initializeTetra(vulkanDevice);
+        initializeTetra();
     }
 }
 
@@ -150,7 +151,7 @@ void HeatSystem::requestReset() {
     needsReset.store(true, std::memory_order_release);
 }
 
-void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
+void HeatSystem::generateTetrahedralMesh() {
     const auto& vertices = resourceManager.getSimModel().getVertices();
     const auto& indices = resourceManager.getSimModel().getIndices();
 
@@ -413,7 +414,7 @@ void HeatSystem::generateTetrahedralMesh(ResourceManager& resourceManager) {
     std::cout << "Elements: " << feaMesh.elements.size() << std::endl;
 }
 
-void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
+void HeatSystem::initializeSurfaceBuffer() {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * resourceManager.getVisModel().getVertexCount();
 
     // Create staging buffer
@@ -448,7 +449,7 @@ void HeatSystem::initializeSurfaceBuffer(ResourceManager& resourceManager) {
     memoryAllocator.free(stagingBuffer, stagingOffset);
 }
 
-void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createTetraBuffer(uint32_t maxFramesInFlight) {
     if (feaMesh.elements.empty()) {
         throw std::runtime_error("No tetrahedral elements to create buffer");
     }
@@ -507,7 +508,7 @@ void HeatSystem::createTetraBuffer(VulkanDevice& vulkanDevice, uint32_t maxFrame
     }
 }
 
-void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
+void HeatSystem::createNeighborBuffer() {
     std::vector<int32_t> neighborData;
 
     for (const auto& neighbors : feaMesh.neighbors) {
@@ -539,7 +540,7 @@ void HeatSystem::createNeighborBuffer(VulkanDevice& vulkanDevice) {
     memcpy(data, neighborData.data(), bufferSize);
 }
 
-void HeatSystem::createCenterBuffer(VulkanDevice& vulkanDevice) {
+void HeatSystem::createCenterBuffer() {
     VkDeviceSize bufferSize = sizeof(glm::vec4) * feaMesh.tetraCenters.size();
 
     auto [centerBufferHandle, centerBufferOffset] = memoryAllocator.allocate(
@@ -556,7 +557,7 @@ void HeatSystem::createCenterBuffer(VulkanDevice& vulkanDevice) {
     memcpy(data, feaMesh.tetraCenters.data(), bufferSize);
 }
 
-void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
+void HeatSystem::createTimeBuffer() {
     VkDeviceSize bufferSize = sizeof(TimeUniform);
 
     // Create time buffer
@@ -575,7 +576,7 @@ void HeatSystem::createTimeBuffer(VulkanDevice& vulkanDevice) {
         );
 }
 
-void HeatSystem::initializeTetra(VulkanDevice& vulkanDevice) {
+void HeatSystem::initializeTetra() {
    
     // First set temperatures for each tetrahedron
     for (size_t i = 0; i < feaMesh.elements.size(); i++) {
@@ -636,7 +637,7 @@ float HeatSystem::calculateTetraVolume(const TetrahedralElement& tetra) {
     return glm::abs(glm::dot(edge1, glm::cross(edge2, edge3))) / 6.0f;
 }
 
-void HeatSystem::createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createTetraDescriptorPool(uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
     // Storage buffers
@@ -659,7 +660,7 @@ void HeatSystem::createTetraDescriptorPool(const VulkanDevice& vulkanDevice, uin
     }
 }
 
-void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+void HeatSystem::createTetraDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         // Static tetra binding
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -699,7 +700,7 @@ void HeatSystem::createTetraDescriptorSetLayout(const VulkanDevice& vulkanDevice
     }
 }
 
-void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createTetraDescriptorSets(uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, tetraDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -797,7 +798,7 @@ void HeatSystem::createTetraDescriptorSets(const VulkanDevice& vulkanDevice, uin
     }
 }
 
-void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
+void HeatSystem::createTetraPipeline() {
     auto computeShaderCode = readFile("shaders/heat_tetra_comp.spv");
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
@@ -835,7 +836,7 @@ void HeatSystem::createTetraPipeline(const VulkanDevice& vulkanDevice) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
 }
 
-void HeatSystem::createSurfaceDescriptorPool(const VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createSurfaceDescriptorPool(uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 1> poolSizes{};
 
     // Storage buffers
@@ -855,7 +856,7 @@ void HeatSystem::createSurfaceDescriptorPool(const VulkanDevice& vulkanDevice, u
     }
 }
 
-void HeatSystem::createSurfaceDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
+void HeatSystem::createSurfaceDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         // Tetra data 
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -891,7 +892,7 @@ void HeatSystem::createSurfaceDescriptorSetLayout(const VulkanDevice& vulkanDevi
     }
 }
 
-void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, ResourceManager& resourceManager, uint32_t maxFramesInFlight) {
+void HeatSystem::createSurfaceDescriptorSets(uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, surfaceDescriptorSetLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -947,7 +948,7 @@ void HeatSystem::createSurfaceDescriptorSets(const VulkanDevice& vulkanDevice, R
     }
 }
 
-void HeatSystem::createSurfacePipeline(const VulkanDevice& vulkanDevice) {
+void HeatSystem::createSurfacePipeline() {
     auto computeShaderCode = readFile("shaders/heat_surface_comp.spv");
     VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
@@ -999,7 +1000,7 @@ void HeatSystem::dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t cu
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
 
-void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame) {
+void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     uint32_t vertexCount = resourceManager.getVisModel().getVertexCount();
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
@@ -1009,7 +1010,7 @@ void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, ResourceM
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }
 
-void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceManager& resourceManager, uint32_t currentFrame) {
+void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     // Check if reset is needed before beginning command buffer
     processResetRequest();
     VkCommandBufferBeginInfo beginInfo{};
@@ -1095,7 +1096,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceMa
     );
 
     // --- Surface Compute Pass ---
-    dispatchSurfaceCompute(commandBuffer, resourceManager, currentFrame);
+    dispatchSurfaceCompute(commandBuffer, currentFrame);
 
     // Pre-copy barrier: Ensure previous vertex reads complete before transfer
     VkBufferMemoryBarrier preCopyBarrier{};
@@ -1166,7 +1167,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, ResourceMa
     }
 }
 
-void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
+void HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
     // Free existing command buffers
     if (!computeCommandBuffers.empty()) {
         vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(),
@@ -1185,7 +1186,7 @@ void HeatSystem::createComputeCommandBuffers(VulkanDevice& vulkanDevice, uint32_
     }
 }
 
-void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
+void HeatSystem::cleanupResources() {
     if (tetraPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vulkanDevice.getDevice(), tetraPipeline, nullptr);
         tetraPipeline = VK_NULL_HANDLE;
@@ -1223,11 +1224,11 @@ void HeatSystem::cleanupResources(VulkanDevice& vulkanDevice) {
     }
 
     if (heatSource) {
-        heatSource->cleanupResources(vulkanDevice);
+        heatSource->cleanupResources();
     }
 }
 
-void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
+void HeatSystem::cleanup() {
     for (size_t i = 0; i < tetraFrameBuffers.readBuffers.size(); i++) {
         if (tetraFrameBuffers.readBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.readBufferOffsets_[i]);
@@ -1255,6 +1256,6 @@ void HeatSystem::cleanup(VulkanDevice& vulkanDevice) {
         neighborBuffer = VK_NULL_HANDLE;
     }
     if (heatSource) {
-        heatSource->cleanup(vulkanDevice);
+        heatSource->cleanup();
     }
 }

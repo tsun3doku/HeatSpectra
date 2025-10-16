@@ -735,7 +735,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         result.pathPoints.push_back(edgeExit);
 
         // Transport direction using vector rotation
-        dir2D = rotateVectorAcrossEdge(mesh,
+        dir2D = rotateVectorAcrossEdge(
             currFace, step.halfEdgeIdx,
             nextFace, oppositeHE,
             dir2D);
@@ -748,7 +748,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             tri2D.vertices[1] * bary.y +
             tri2D.vertices[2] * bary.z;
 
-        glm::dvec2 next2D = chartLocal2D(mesh, currFace, nextFace, exit2D);
+        glm::dvec2 next2D = chartLocal2D(currFace, nextFace, exit2D);
 
         //std::cout << "[traceFromFace] reprojected point: (" << exit2D.x << "," << exit2D.y << ") -> (" << next2D.x << "," << next2D.y << ")" << std::endl;
 
@@ -1065,7 +1065,7 @@ glm::dvec3 GeodesicTracer::evaluateSurfacePoint(const SurfacePoint& point) const
     return glm::dvec3(0.0);
 }
 
-glm::dvec2 GeodesicTracer::chartLocal2D(const SignpostMesh& mesh, uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const {
+glm::dvec2 GeodesicTracer::chartLocal2D(uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const {
     // ***ONLY MAPS ADJACENT FACES***
     const double EPS = 1e-12;
     auto oldTri = mesh.layoutTriangle(oldFaceIdx);
@@ -1139,7 +1139,7 @@ glm::dvec2 GeodesicTracer::chartLocal2D(const SignpostMesh& mesh, uint32_t oldFa
     return chart;
 }
 
-glm::dvec2 GeodesicTracer::rotateVectorAcrossEdge(const SignpostMesh& mesh, uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const
+glm::dvec2 GeodesicTracer::rotateVectorAcrossEdge(uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const
 {
     const auto& hvf = mesh.getHalfedgeVectorsInFace();
 
@@ -1251,7 +1251,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromEdge(uint32_t start
             traceHe = oppHe;
             targetFace = face2;
             tEdge = 1.0 - startSplit;
-            dirInTargetFace = rotateVectorAcrossEdge(mesh, face1, canonicalHe, face2, oppHe, cartesianDir);
+            dirInTargetFace = rotateVectorAcrossEdge(face1, canonicalHe, face2, oppHe, cartesianDir);
         }
     } else {  
         // Direction is in face2's chart, now check if it points into face2 or face1
@@ -1269,7 +1269,7 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromEdge(uint32_t start
             traceHe = canonicalHe;
             targetFace = face1;
             tEdge = startSplit;
-            dirInTargetFace = rotateVectorAcrossEdge(mesh, face2, oppHe, face1, canonicalHe, cartesianDir);
+            dirInTargetFace = rotateVectorAcrossEdge(face2, oppHe, face1, canonicalHe, cartesianDir);
         }
     }
     

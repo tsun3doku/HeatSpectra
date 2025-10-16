@@ -199,8 +199,8 @@ void App::loadModel(const std::string& modelPath) {
     if (heatSystem) {
         // Recreate heat system for new model geometry
         std::cout << "[App] Recreating heat system for new model..." << std::endl;
-        heatSystem->cleanupResources(vulkanDevice);
-        heatSystem->cleanup(vulkanDevice);
+        heatSystem->cleanupResources();
+        heatSystem->cleanup();
         heatSystem.reset();
 
         heatSystem = std::make_unique<HeatSystem>(
@@ -259,6 +259,7 @@ void App::initRenderResources() {
         uniformBufferManager = std::make_unique<UniformBufferManager>(
             vulkanDevice,
             *memoryAllocator,
+            camera,
             MAXFRAMESINFLIGHT
         );
 
@@ -389,10 +390,10 @@ void App::renderLoop() {
 void App::cleanupSwapChain() {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-    gbuffer->cleanupFramebuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+    gbuffer->cleanupFramebuffers(MAXFRAMESINFLIGHT);
     deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);
 
-    gbuffer->freeCommandBuffers(vulkanDevice);
+    gbuffer->freeCommandBuffers();
 
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
@@ -441,17 +442,17 @@ void App::recreateSwapChain() {
         }
 
         cleanupSwapChain();
-        heatSystem->cleanupResources(vulkanDevice);
-        gbuffer->createCommandBuffers(vulkanDevice, MAXFRAMESINFLIGHT);
+        heatSystem->cleanupResources();
+        gbuffer->createCommandBuffers(MAXFRAMESINFLIGHT);
 
         createSwapChain();
         createImageViews();
 
-        heatSystem->recreateResources(vulkanDevice, MAXFRAMESINFLIGHT);
+        heatSystem->recreateResources(MAXFRAMESINFLIGHT);
 
         deferredRenderer->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
-        gbuffer->updateDescriptorSets(vulkanDevice, *deferredRenderer, MAXFRAMESINFLIGHT);
-        gbuffer->createFramebuffers(vulkanDevice, *deferredRenderer, swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+        gbuffer->updateDescriptorSets(MAXFRAMESINFLIGHT);
+        gbuffer->createFramebuffers(swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
 
         createSyncObjects();
 
@@ -460,10 +461,10 @@ void App::recreateSwapChain() {
 
 void App::cleanupRenderResources() {
         deferredRenderer->cleanup(vulkanDevice);
-        gbuffer->cleanup(vulkanDevice, MAXFRAMESINFLIGHT);
+        gbuffer->cleanup(MAXFRAMESINFLIGHT);
         uniformBufferManager->cleanup(MAXFRAMESINFLIGHT);      
-        heatSystem->cleanupResources(vulkanDevice);
-        heatSystem->cleanup(vulkanDevice);    
+        heatSystem->cleanupResources();
+        heatSystem->cleanup();    
 }
 
 void App::cleanupTextures() {
@@ -725,11 +726,11 @@ void App::drawFrame() {
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 
         UniformBufferObject ubo{};
-        uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, camera, ubo);
+        uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, ubo);
         GridUniformBufferObject gridUbo{};
-        uniformBufferManager->updateGridUniformBuffer(currentFrame, camera, ubo, gridUbo);
+        uniformBufferManager->updateGridUniformBuffer(currentFrame, ubo, gridUbo);
         LightUniformBufferObject lightUbo{};
-        uniformBufferManager->updateLightUniformBuffer(currentFrame, camera, lightUbo);
+        uniformBufferManager->updateLightUniformBuffer(currentFrame, lightUbo);
 
         VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
         vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
@@ -744,14 +745,13 @@ void App::drawFrame() {
         bool leftPressed = window->isKeyPressed(Qt::Key_Left);
         bool rightPressed = window->isKeyPressed(Qt::Key_Right);
         
-        heatSystem->update(vulkanDevice, upPressed, downPressed, leftPressed, rightPressed, 
-                          *resourceManager, *uniformBufferManager, ubo, WIDTH, HEIGHT);
+        heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo, WIDTH, HEIGHT);
         if (heatSystem->getIsActive()) {
             // Wait for previous compute to finish
             vkWaitForFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
             vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
 
-            heatSystem->recordComputeCommands(computeCommandBuffer, *resourceManager, currentFrame);
+            heatSystem->recordComputeCommands(computeCommandBuffer, currentFrame);
 
             VkSubmitInfo computeSubmitInfo{};
             computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -776,7 +776,7 @@ void App::drawFrame() {
         }
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(vulkanDevice, *deferredRenderer, *resourceManager, *heatSystem, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
+        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

@@ -82,8 +82,8 @@ public:
     FaceStepResult traceInFace(const SurfacePoint& startP, const glm::dvec2& dir2D, double length) const;
 
     glm::dvec3 evaluateSurfacePoint(const SurfacePoint& point) const;
-    glm::dvec2 chartLocal2D(const SignpostMesh& mesh, uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const;
-    glm::dvec2 rotateVectorAcrossEdge(const SignpostMesh& mesh, uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const;
+    glm::dvec2 chartLocal2D(uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const;
+    glm::dvec2 rotateVectorAcrossEdge(uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const;
     bool solveRayEdge(const glm::dvec2& rayDir, const glm::dvec2& edgeVec, const glm::dvec2& b, double& out_t, double& out_u) const;
 
 private:

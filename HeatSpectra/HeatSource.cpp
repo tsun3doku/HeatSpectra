@@ -9,27 +9,27 @@
 #include "HeatSource.hpp"
 
 HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), heatModel(&heatModel) {
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), heatModel(heatModel) {
 
-    createSourceBuffer(vulkanDevice, heatModel);
-    initializeSurfaceBuffer(heatModel);
-    createHeatSourceDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createHeatSourceDescriptorSetLayout(vulkanDevice);
-    createHeatSourceDescriptorSets(vulkanDevice, maxFramesInFlight);
-    createHeatSourcePipeline(vulkanDevice);
+    createSourceBuffer();
+    initializeSurfaceBuffer();
+    createHeatSourceDescriptorPool(maxFramesInFlight);
+    createHeatSourceDescriptorSetLayout();
+    createHeatSourceDescriptorSets(maxFramesInFlight);
+    createHeatSourcePipeline();
 }
 
 HeatSource::~HeatSource() {
 }
 
-void HeatSource::recreateResources(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight) {
-    createHeatSourceDescriptorPool(vulkanDevice, maxFramesInFlight);
-    createHeatSourceDescriptorSetLayout(vulkanDevice);
-    createHeatSourcePipeline(vulkanDevice);
-    createHeatSourceDescriptorSets(vulkanDevice, maxFramesInFlight);
+void HeatSource::recreateResources(uint32_t maxFramesInFlight) {
+    createHeatSourceDescriptorPool(maxFramesInFlight);
+    createHeatSourceDescriptorSetLayout();
+    createHeatSourcePipeline();
+    createHeatSourceDescriptorSets(maxFramesInFlight);
 }
 
-void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel) {
+void HeatSource::createSourceBuffer() {
     VkDeviceSize bufferSize = sizeof(HeatSourceVertex) * heatModel.getVertexCount();
 
     // Allocate staging buffer
@@ -73,7 +73,7 @@ void HeatSource::createSourceBuffer(VulkanDevice& vulkanDevice, Model& heatModel
     memoryAllocator.free(stagingBufferHandle, stagingBufferOffset);
 }
 
-void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
+void HeatSource::initializeSurfaceBuffer() {
     VkDeviceSize bufferSize = sizeof(SurfaceVertex) * heatModel.getVertexCount();
 
     // Create staging buffer
@@ -95,26 +95,27 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
     }
 
     // Copy data to staging buffer
-    void* mapped = nullptr;
-    vkMapMemory(vulkanDevice.getDevice(), stagingMemory, 0, bufferSize, 0, &mapped);
-    memcpy(mapped, surfaceVertices.data(), static_cast<size_t>(bufferSize));
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), stagingMemory, 0, bufferSize, 0, &data);
+    memcpy(data, surfaceVertices.data(), (size_t)bufferSize);
     vkUnmapMemory(vulkanDevice.getDevice(), stagingMemory);
 
+    // Copy from staging to actual buffer
     VkCommandBuffer cmd = beginSingleTimeCommands(vulkanDevice);
 
     // Copy to surface buffer with offset
     VkBufferCopy copyRegionSurface{
-        0,                                    // Source offset
+        0,                                     // Source offset
         heatModel.getSurfaceBufferOffset(),   // Destination offset
-        bufferSize                            // Size
+        bufferSize                             // Size
     };
     vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceBuffer(), 1, &copyRegionSurface);
 
     // Copy to surface vertex buffer with offset
     VkBufferCopy copyRegionVertex{
-        0,                                        // Source offset
+        0,                                         // Source offset
         heatModel.getSurfaceVertexBufferOffset(), // Destination offset
-        bufferSize                                // Size
+        bufferSize                                 // Size
     };
     vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceVertexBuffer(), 1, &copyRegionVertex);
 
@@ -126,7 +127,7 @@ void HeatSource::initializeSurfaceBuffer(Model& heatModel) {
 
 void HeatSource::controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime) {
     float moveSpeed = 0.1f * deltaTime;
-    glm::vec3 currentPosition = heatModel->getModelPosition();
+    glm::vec3 currentPosition = heatModel.getModelPosition();
 
     if (upPressed)
         currentPosition += glm::vec3(0.0f, moveSpeed, 0.0f);
@@ -137,10 +138,10 @@ void HeatSource::controller(bool upPressed, bool downPressed, bool leftPressed, 
     if (leftPressed)
         currentPosition -= glm::vec3(moveSpeed, 0.0f, 0.0f);
 
-    heatModel->setModelPosition(currentPosition);
+    heatModel.setModelPosition(currentPosition);
 }
 
-void HeatSource::createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t maxFramesInFlight) {
+void HeatSource::createHeatSourceDescriptorPool(uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 1> poolSizes{};
 
     // Storage buffers
@@ -153,12 +154,12 @@ void HeatSource::createHeatSourceDescriptorPool(VulkanDevice& device, uint32_t m
     poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = maxFramesInFlight;
 
-    if (vkCreateDescriptorPool(device.getDevice(), &poolInfo, nullptr, &heatSourceDescriptorPool) != VK_SUCCESS) {
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &heatSourceDescriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat source descriptor pool!");
     }
 }
 
-void HeatSource::createHeatSourceDescriptorSetLayout(VulkanDevice& device) {
+void HeatSource::createHeatSourceDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         // Source binding
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -171,12 +172,12 @@ void HeatSource::createHeatSourceDescriptorSetLayout(VulkanDevice& device) {
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &layoutInfo, nullptr, &heatSourceDescriptorLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &heatSourceDescriptorLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat source descriptor set layout!");
     }
 }
 
-void HeatSource::createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t maxFramesInFlight) {
+void HeatSource::createHeatSourceDescriptorSets(uint32_t maxFramesInFlight) {
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, heatSourceDescriptorLayout);
 
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -186,7 +187,7 @@ void HeatSource::createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t m
     allocInfo.pSetLayouts = layouts.data();
 
     heatSourceDescriptorSets.resize(maxFramesInFlight);
-    if (vkAllocateDescriptorSets(device.getDevice(), &allocInfo, heatSourceDescriptorSets.data()) != VK_SUCCESS) {
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, heatSourceDescriptorSets.data()) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate heat source descriptor sets!");
     }
 
@@ -198,8 +199,8 @@ void HeatSource::createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t m
         sourceBufferInfo.range = VK_WHOLE_SIZE;
 
         VkDescriptorBufferInfo surfaceBufferInfo{};
-        surfaceBufferInfo.buffer = heatModel->getSurfaceBuffer(); // Write
-        surfaceBufferInfo.offset = heatModel->getSurfaceBufferOffset();
+        surfaceBufferInfo.buffer = heatModel.getSurfaceBuffer(); // Write
+        surfaceBufferInfo.offset = heatModel.getSurfaceBufferOffset();
         surfaceBufferInfo.range = VK_WHOLE_SIZE;
 
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -222,15 +223,15 @@ void HeatSource::createHeatSourceDescriptorSets(VulkanDevice& device, uint32_t m
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pBufferInfo = &surfaceBufferInfo;
 
-        vkUpdateDescriptorSets(device.getDevice(),
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(),
             static_cast<uint32_t>(descriptorWrites.size()),
             descriptorWrites.data(), 0, nullptr);
     }
 }
 
-void HeatSource::createHeatSourcePipeline(VulkanDevice& device) {
+void HeatSource::createHeatSourcePipeline() {
     auto computeShaderCode = readFile("shaders/heat_source_comp.spv");
-    VkShaderModule computeShaderModule = createShaderModule(device, computeShaderCode);
+    VkShaderModule computeShaderModule = createShaderModule(vulkanDevice, computeShaderCode);
 
     VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
     computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -250,7 +251,7 @@ void HeatSource::createHeatSourcePipeline(VulkanDevice& device) {
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges = &pushConstantRange;
 
-    if (vkCreatePipelineLayout(device.getDevice(), &layoutInfo, nullptr, &heatSourcePipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &heatSourcePipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat source pipeline layout!");
     }
 
@@ -259,11 +260,11 @@ void HeatSource::createHeatSourcePipeline(VulkanDevice& device) {
     pipelineInfo.stage = computeShaderStageInfo;
     pipelineInfo.layout = heatSourcePipelineLayout;
 
-    if (vkCreateComputePipelines(device.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &heatSourcePipeline) != VK_SUCCESS) {
+    if (vkCreateComputePipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &heatSourcePipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create heat source compute pipeline!");
     }
 
-    vkDestroyShaderModule(device.getDevice(), computeShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
 }
 
 void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
@@ -289,11 +290,11 @@ void HeatSource::dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t c
     );
 
     // Dispatch 1 workgroup per 256 vertices
-    uint32_t workgroupCount = (static_cast<uint32_t>(heatModel->getVertexCount()) + 255) / 256;
+    uint32_t workgroupCount = (static_cast<uint32_t>(heatModel.getVertexCount()) + 255) / 256;
     vkCmdDispatch(commandBuffer, workgroupCount, 1, 1);
 }
 
-void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
+void HeatSource::cleanupResources() {
     if (heatSourcePipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vulkanDevice.getDevice(), heatSourcePipeline, nullptr);
         heatSourcePipeline = VK_NULL_HANDLE;
@@ -312,7 +313,7 @@ void HeatSource::cleanupResources(VulkanDevice& vulkanDevice) {
     }
 }
 
-void HeatSource::cleanup(VulkanDevice& vulkanDevice) {
+void HeatSource::cleanup() {
     if (sourceBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(sourceBuffer, sourceBufferOffset_);
         sourceBuffer = VK_NULL_HANDLE;
