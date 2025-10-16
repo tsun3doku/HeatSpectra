@@ -151,24 +151,18 @@ void App::resetHeatSystem() {
     }
 }
 
-void App::performRemeshing(int iterations) {
+void App::performRemeshing(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize) {
     if (!resourceManager) {
         return;
     }
+    
+    // Pause rendering and wait for GPU to finish
+    isOperating.store(true, std::memory_order_release);
         
-    // Flag render thread to pause
-    isOperating.store(true, std::memory_order_release);    
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    
-    // Wait for all frames to finish
-    for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
-        vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
-    }
-    
-    // Wait for GPU calls to finish before modifying buffers
+    // Wait for all GPU operations to complete before modifying buffers
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     
-    resourceManager->performRemeshing(iterations);
+    resourceManager->performRemeshing(iterations, minAngleDegrees, maxEdgeLength, stepSize);
     
     // Resume rendering
     isOperating.store(false, std::memory_order_release);   

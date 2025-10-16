@@ -28,7 +28,7 @@ public:
 	ResourceManager& operator=(ResourceManager&&) noexcept;
 
 	void initialize();
-	void performRemeshing(int iterations);
+	void performRemeshing(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize);
 	void reloadModels(const std::string& modelPath);
 	void cleanup();
 

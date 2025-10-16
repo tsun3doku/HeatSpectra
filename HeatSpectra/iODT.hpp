@@ -37,11 +37,11 @@ public:
     };
 
     // High level ODT functions
-    bool optimalDelaunayTriangulation(int iterations);
-    void repositionInsertedVertices(int iterations, double tol, double maxEdgeLength);
+    bool optimalDelaunayTriangulation(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize);
+    void repositionInsertedVertices(int iterations, double tol, double maxEdgeLength, double stepSize);
 
     // Refinement operations
-    bool delaunayRefinement();
+    bool delaunayRefinement(int maxIters, float minAngleDegrees);
     std::vector<RefinementCandidate> findRefinementCandidates( float minAngleThreshold, float maxAreaThreshold);
     bool insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex);
     bool splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiagFront, uint32_t& outDiagBack, uint32_t HESplit, double t = 0.5);

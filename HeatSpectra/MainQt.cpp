@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QSlider>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QMenuBar>
 #include <QMenu>
@@ -105,6 +106,57 @@ void MainWindow::createDockWidget() {
     
     layout->addLayout(iterationLayout);
     
+    // Min angle control
+    QHBoxLayout* minAngleLayout = new QHBoxLayout();
+    QLabel* minAngleLabel = new QLabel("Min Angle (°):");
+    minAngleLayout->addWidget(minAngleLabel);
+    
+    minAngleSpinBox = new QDoubleSpinBox();
+    minAngleSpinBox->setMinimum(0.0);
+    minAngleSpinBox->setMaximum(60.0);
+    minAngleSpinBox->setValue(35.0);
+    minAngleSpinBox->setSingleStep(1.0);
+    minAngleSpinBox->setDecimals(1);
+    minAngleSpinBox->setToolTip("Minimum angle threshold for triangle quality (degrees)");
+    minAngleLayout->addWidget(minAngleSpinBox);
+    minAngleLayout->addStretch();
+    
+    layout->addLayout(minAngleLayout);
+    
+    // Max edge length control
+    QHBoxLayout* maxEdgeLengthLayout = new QHBoxLayout();
+    QLabel* maxEdgeLengthLabel = new QLabel("Max Edge Length:");
+    maxEdgeLengthLayout->addWidget(maxEdgeLengthLabel);
+    
+    maxEdgeLengthSpinBox = new QDoubleSpinBox();
+    maxEdgeLengthSpinBox->setMinimum(0.01);
+    maxEdgeLengthSpinBox->setMaximum(10.0);
+    maxEdgeLengthSpinBox->setValue(0.1);
+    maxEdgeLengthSpinBox->setSingleStep(0.01);
+    maxEdgeLengthSpinBox->setDecimals(3);
+    maxEdgeLengthSpinBox->setToolTip("Maximum edge length for mesh refinement");
+    maxEdgeLengthLayout->addWidget(maxEdgeLengthSpinBox);
+    maxEdgeLengthLayout->addStretch();
+    
+    layout->addLayout(maxEdgeLengthLayout);
+    
+    // Step size control
+    QHBoxLayout* stepSizeLayout = new QHBoxLayout();
+    QLabel* stepSizeLabel = new QLabel("Step Size:");
+    stepSizeLayout->addWidget(stepSizeLabel);
+    
+    stepSizeSpinBox = new QDoubleSpinBox();
+    stepSizeSpinBox->setMinimum(0.01);
+    stepSizeSpinBox->setMaximum(1.0);
+    stepSizeSpinBox->setValue(0.25);
+    stepSizeSpinBox->setSingleStep(0.05);
+    stepSizeSpinBox->setDecimals(2);
+    stepSizeSpinBox->setToolTip("Step size for vertex repositioning (0-1). Lower values prevent intersections.");
+    stepSizeLayout->addWidget(stepSizeSpinBox);
+    stepSizeLayout->addStretch();
+    
+    layout->addLayout(stepSizeLayout);
+    
     layout->addSpacing(10);
     
     // View options
@@ -147,7 +199,10 @@ void MainWindow::createDockWidget() {
 void MainWindow::onRemeshClicked() {
     if (app) {
         int iterations = remeshIterationsSpinBox->value();
-        app->performRemeshing(iterations);
+        double minAngleDegrees = minAngleSpinBox->value();
+        double maxEdgeLength = maxEdgeLengthSpinBox->value();
+        double stepSize = stepSizeSpinBox->value();
+        app->performRemeshing(iterations, minAngleDegrees, maxEdgeLength, stepSize);
     }
 }
 

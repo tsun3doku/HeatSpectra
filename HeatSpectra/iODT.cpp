@@ -59,7 +59,7 @@ iODT::iODT(Model& model, SignpostMesh& mesh) : model(model), mesh(mesh), tracer(
     }
 }
 
-bool iODT::optimalDelaunayTriangulation(int maxIterations) {
+bool iODT::optimalDelaunayTriangulation(int maxIterations, double minAngleDegrees, double maxEdgeLength, double stepSize) {
     auto& conn = mesh.getConnectivity();
 
     // Clear tracking 
@@ -77,13 +77,13 @@ bool iODT::optimalDelaunayTriangulation(int maxIterations) {
 
     // 2) Delaunay refinement to improve triangle quality
     std::cout << "\nDelaunay Refinement Phase " << std::endl;
-    if (!delaunayRefinement()) {
+    if (!delaunayRefinement(maxIterations, minAngleDegrees)) {
         //std::cerr << "Warning: Delaunay refinement failed" << std::endl;
     }
 
     // 4) Optimal positioning of inserted vertices
-    std::cout << "\nRepositioning Phase" << std::endl;
-    repositionInsertedVertices(15, 1e-4, 0.1);
+    std::cout << "\nRepositioning Phase (max edge length " << std::endl;
+    repositionInsertedVertices(maxIterations, 1e-4, maxEdgeLength, stepSize);
     std::cout << " Done.\n";
 
     // 5) (OPTIONAL) Push the intrinsic result back to the model and GPU for debugging
@@ -93,7 +93,7 @@ bool iODT::optimalDelaunayTriangulation(int maxIterations) {
     return true;
 }
 
-void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLength)
+void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLength, double stepSize)
 {
     auto& conn = mesh.getConnectivity();
     auto& verts = conn.getVertices();
@@ -107,7 +107,6 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
     }
 
     const double EPS_LEN = 1e-12;        // Small length offset
-    const double STEP_SIZE = 0.25;       // Intrinsic step size (0-1), higher = faster convergence *LOWER THIS TO PREVENT INTERSECTIONS*
     const double START_EPS = 1e-8;       // Small barycentric offset 
 
     for (int iter = 0; iter < maxIters; ++iter) {
@@ -182,7 +181,7 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
                         localEdges.push_back(edgeIdx);
                     }
                 }
-                conn.makeDelaunay(5, &localEdges);
+                conn.makeDelaunay(maxIters, &localEdges);
             }
         }
 
@@ -210,7 +209,7 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
                 continue;
 
             // Damped average length
-            double stepLen = avgLen * STEP_SIZE;
+            double stepLen = avgLen * stepSize;
 
             // Record movement for convergence tracking
             double moveLen = stepLen;
@@ -221,7 +220,7 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
                 maxMove = moveLen;
 
             // Trace from vertex along displacement vector on intrinsic mesh
-            glm::dvec2 displacement2D = avgVec * STEP_SIZE;
+            glm::dvec2 displacement2D = avgVec * stepSize;
             double stepLength = glm::length(displacement2D);
 
             if (stepLength < 1e-12) {
@@ -240,7 +239,7 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
             }
 
             // New position in ring coords is the displacement from origin
-            glm::dvec2 newPos2D = avgVec * STEP_SIZE;
+            glm::dvec2 newPos2D = avgVec * stepSize;
 
             //std::cout << "[Reposition] Ring has " << ring.neighborVertexIndices.size() << " neighbors\n";
             //std::cout << "[Reposition] New position in ring: (" << newPos2D.x << ", " << newPos2D.y << ")\n";
@@ -310,10 +309,12 @@ void iODT::repositionInsertedVertices(int maxIters, double tol, double maxEdgeLe
     //std::cout << "[Reposition] Repositioning complete\n";
 }
 
-bool iODT::delaunayRefinement() {
-    const float MIN_ANGLE = 35.0f * glm::pi<float>() / 180.0f;      // Keep min angle under 40
-    const float MAX_AREA = 100.0f;                                  // Outdated, better to rely on edge length control in repositionInsertedVertices
-    const float MIN_AREA = 1e-4f;                                   // For degenerate models
+bool iODT::delaunayRefinement(int maxIters, float minAngleDegrees) {
+    // Convert degrees to radians
+    
+    const float MAX_AREA = 100.0f;  // Outdated, better to rely on edge length control in repositionInsertedVertices
+    const float MIN_AREA = 1e-4f;   // For degenerate models
+    const float MIN_ANGLE = minAngleDegrees * glm::pi<float>() / 180.0f;
 
     auto& conn = mesh.getConnectivity();
 
@@ -372,9 +373,17 @@ bool iODT::delaunayRefinement() {
             if (areaNow < MIN_AREA)
                 continue;
 
-            bool angleBadNow = (MIN_ANGLE > 0.f) ? (minAngNow < MIN_ANGLE) : false;
-            bool areaBadNow = (MAX_AREA > 0.f) ? (areaNow > MAX_AREA) : false;
-            if (!(angleBadNow || areaBadNow)) {
+            bool angleTooSmall = false;
+            if (MIN_ANGLE > 0.f) {
+                angleTooSmall = (minAngNow < MIN_ANGLE);
+            }
+            
+            bool areaTooLarge = false;
+            if (MAX_AREA > 0.f) {
+                areaTooLarge = (areaNow > MAX_AREA);
+            }
+            
+            if (!(angleTooSmall || areaTooLarge)) {
                 // Not a candidate
                 continue;
             }
@@ -415,7 +424,7 @@ bool iODT::delaunayRefinement() {
                         localEdges.push_back(edgeIdx);
                     }
                 }
-                conn.makeDelaunay(5, &localEdges);
+                conn.makeDelaunay(maxIters, &localEdges);
             }
 
             // skip neighbors of newly created verts for the rest of this iteration
@@ -472,15 +481,22 @@ std::vector<iODT::RefinementCandidate>iODT::findRefinementCandidates(float minAn
             continue;
         }
 
-        bool angleBad = (minAngleThreshold > 0.f) ? (minAng < minAngleThreshold) : false;
-        bool areaBad = (maxAreaThreshold > 0.f) ? (area > maxAreaThreshold) : false;
+        bool angleTooSmall = false;
+        if (minAngleThreshold > 0.f) {
+            angleTooSmall = (minAng < minAngleThreshold);
+        }
+        
+        bool areaTooLarge = false;
+        if (maxAreaThreshold > 0.f) {
+            areaTooLarge = (area > maxAreaThreshold);
+        }
 
-        if (!(angleBad || areaBad)) {
+        if (!(angleTooSmall || areaTooLarge)) {
             /*
             std::cout << "[RefinementCandidates] skip face " << f
                 << " minAng=" << minAng << " thresh=" << minAngleThreshold
                 << " area=" << area << " maxArea=" << maxAreaThreshold
-                << " angleBad=" << angleBad << " areaBad=" << areaBad << "\n";
+                << " angleTooSmall=" << angleTooSmall << " areaTooLarge=" << areaTooLarge << "\n";
             */
             ++skippedNotBad;
             continue;

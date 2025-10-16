@@ -37,14 +37,13 @@ void ResourceManager::initialize() {
     heatModel           ->init(HEATSOURCE_PATH);
 }
 
-void ResourceManager::performRemeshing(int iterations) {
-    std::cout << "[ResourceManager] Initializing fresh remesher..." << std::endl;
+void ResourceManager::performRemeshing(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize) {
     remesher = std::make_unique<iODT>(*visModel, *signpostMesh);
 
     std::cout << "Original model: " << visModel->getVertexCount() << " vertices, " << visModel->getIndices().size() / 3 << " triangles" << std::endl;
 
-    // Run ODT 
-    bool success = remesher->optimalDelaunayTriangulation(iterations);
+    // Run ODT with user-specified parameters
+    bool success = remesher->optimalDelaunayTriangulation(iterations, minAngleDegrees, maxEdgeLength, stepSize);
     if (!success) {
         std::cerr << "[ResourceManager] Remeshing failed.\n";
         return;
@@ -54,7 +53,7 @@ void ResourceManager::performRemeshing(int iterations) {
     std::cout << "\nCreating common subdivision..." << std::endl;
     remesher->createCommonSubdivision(*commonSubdivision);
 
-    remesher->saveCommonSubdivisionOBJ("remeshedIntrinsic.obj", *commonSubdivision);
+    //remesher->saveCommonSubdivisionOBJ("remeshedIntrinsic.obj", *commonSubdivision);
 
     // Debug untraced intrinsic mesh
     //visModel->saveOBJ("remeshed.obj");

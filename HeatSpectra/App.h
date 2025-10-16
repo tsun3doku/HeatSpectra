@@ -33,7 +33,7 @@ public:
     void resetHeatSystem();
     
     // Mesh operations
-    void performRemeshing(int iterations=1);
+    void performRemeshing(int iterations=1, double minAngleDegrees=35.0, double maxEdgeLength=0.1, double stepSize=0.25);
     void loadModel(const std::string& modelPath);
     
     bool wireframeEnabled;

@@ -7,6 +7,7 @@ class App;
 class QCheckBox;
 class QPushButton;
 class QSpinBox;
+class QDoubleSpinBox;
 class QAction;
 
 class MainWindow : public QMainWindow {
@@ -43,6 +44,9 @@ private:
     QCheckBox* intrinsicCheck;
     QPushButton* remeshBtn;
     QSpinBox* remeshIterationsSpinBox;
+    QDoubleSpinBox* minAngleSpinBox;
+    QDoubleSpinBox* maxEdgeLengthSpinBox;
+    QDoubleSpinBox* stepSizeSpinBox;
     QPushButton* toggleHeatBtn;
     QPushButton* pauseHeatBtn;
     QPushButton* resetHeatBtn;
