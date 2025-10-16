@@ -70,6 +70,14 @@ public:
 
     bool getIsActive() const { 
         return isActive; 
+    }
+    
+    bool getIsPaused() const {
+        return isPaused;
+    }
+    
+    void setIsPaused(bool paused) {
+        isPaused = paused;
     }   
 
 private:
@@ -122,6 +130,7 @@ private:
     VkPipeline surfacePipeline = VK_NULL_HANDLE;
 
     bool isActive = false;
+    bool isPaused = false;
     std::atomic<bool> needsReset{ 
         false 
     };

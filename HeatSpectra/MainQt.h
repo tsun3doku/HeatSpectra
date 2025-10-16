@@ -24,6 +24,7 @@ private slots:
     void onWireframeToggled(bool checked);
     void onIntrinsicToggled(bool checked);
     void onToggleHeatClicked();
+    void onPauseHeatClicked();
     void onResetHeatClicked();
     void onOpenModel();
     void onExit();
@@ -43,6 +44,7 @@ private:
     QPushButton* remeshBtn;
     QSpinBox* remeshIterationsSpinBox;
     QPushButton* toggleHeatBtn;
+    QPushButton* pauseHeatBtn;
     QPushButton* resetHeatBtn;
     
     QAction* wireframeAction;

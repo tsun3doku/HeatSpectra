@@ -129,6 +129,10 @@ void MainWindow::createDockWidget() {
     connect(toggleHeatBtn, &QPushButton::clicked, this, &MainWindow::onToggleHeatClicked);
     layout->addWidget(toggleHeatBtn);
     
+    pauseHeatBtn = new QPushButton("Pause (P)");
+    connect(pauseHeatBtn, &QPushButton::clicked, this, &MainWindow::onPauseHeatClicked);
+    layout->addWidget(pauseHeatBtn);
+    
     resetHeatBtn = new QPushButton("Reset (Ctrl+R)");
     connect(resetHeatBtn, &QPushButton::clicked, this, &MainWindow::onResetHeatClicked);
     layout->addWidget(resetHeatBtn);
@@ -186,9 +190,19 @@ void MainWindow::onToggleHeatClicked() {
     }
 }
 
+void MainWindow::onPauseHeatClicked() {
+    if (app) {
+        app->pauseHeatSystem();
+        // Update button text since simulation is paused
+        toggleHeatBtn->setText("Start Simulation (Space)");
+    }
+}
+
 void MainWindow::onResetHeatClicked() {
     if (app) {
         app->resetHeatSystem();
+        // Update button text since simulation is reset
+        toggleHeatBtn->setText("Start Simulation (Space)");
     }
 }
 

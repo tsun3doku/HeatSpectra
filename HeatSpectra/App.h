@@ -29,6 +29,7 @@ public:
     // Heat system control methods
     bool isHeatSystemActive() const;
     void toggleHeatSystem();
+    void pauseHeatSystem();
     void resetHeatSystem();
     
     // Mesh operations

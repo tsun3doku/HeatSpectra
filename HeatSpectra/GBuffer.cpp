@@ -1291,8 +1291,8 @@ void GBuffer::recordCommandBuffer(const VulkanDevice& vulkanDevice, DeferredRend
     resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     
-    // Push constant: use surface buffer only when heat sim is active
-    int32_t useHeatColors = heatSystem.getIsActive() ? 1 : 0;
+    // Push constant: use surface buffer when heat sim is active or paused
+    int32_t useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
     vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
     
     // Push vismodel furthest away from camera 

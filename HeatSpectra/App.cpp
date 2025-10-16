@@ -112,6 +112,10 @@ void App::handleKeyInput(Qt::Key key, bool pressed) {
     else if (key == Qt::Key_Space) {
         toggleHeatSystem();
     }
+    // P = Pause simulation
+    else if (key == Qt::Key_P) {
+        pauseHeatSystem();
+    }
     // R = Reset simulation
     else if (key == Qt::Key_R) {
         resetHeatSystem();
@@ -129,12 +133,21 @@ void App::toggleHeatSystem() {
     if (heatSystem) {
         bool newState = !heatSystem->getIsActive();
         heatSystem->setActive(newState);
+        heatSystem->setIsPaused(false); // Clear pause when toggling
+    }
+}
+
+void App::pauseHeatSystem() {
+    if (heatSystem) {
+        heatSystem->setActive(false);
+        heatSystem->setIsPaused(true); // Set paused to keep heat colors visible
     }
 }
 
 void App::resetHeatSystem() {
     if (heatSystem) {
         heatSystem->requestReset();
+        heatSystem->setIsPaused(false); // Clear pause on reset
     }
 }
 
