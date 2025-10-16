@@ -63,15 +63,17 @@ void MainWindow::createMenuBar() {
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
     
-    QAction* wireframeAction = new QAction("&Wireframe", this);
+    wireframeAction = new QAction("&Wireframe", this);
     wireframeAction->setCheckable(true);
     wireframeAction->setShortcut(Qt::Key_H);
+    connect(wireframeAction, &QAction::triggered, this, &MainWindow::onWireframeToggled);
     viewMenu->addAction(wireframeAction);
     
-    QAction* intrinsicAction = new QAction("&Remesh Overlay", this);
-    intrinsicAction->setCheckable(true);
-    intrinsicAction->setShortcut(Qt::Key_C);
-    viewMenu->addAction(intrinsicAction);
+    remeshOverlayAction = new QAction("&Remesh Overlay", this);
+    remeshOverlayAction->setCheckable(true);
+    remeshOverlayAction->setShortcut(Qt::Key_C);
+    connect(remeshOverlayAction, &QAction::triggered, this, &MainWindow::onIntrinsicToggled);
+    viewMenu->addAction(remeshOverlayAction);
 }
 
 void MainWindow::createDockWidget() {
@@ -149,11 +151,25 @@ void MainWindow::onWireframeToggled(bool checked) {
     if (app) {
         app->wireframeEnabled = checked;
     }
+    // Sync menu action and checkbox
+    if (wireframeAction && wireframeAction->isChecked() != checked) {
+        wireframeAction->setChecked(checked);
+    }
+    if (wireframeCheck && wireframeCheck->isChecked() != checked) {
+        wireframeCheck->setChecked(checked);
+    }
 }
 
 void MainWindow::onIntrinsicToggled(bool checked) {
     if (app) {
         app->commonSubdivisionEnabled = checked;
+    }
+    // Sync menu action and checkbox
+    if (remeshOverlayAction && remeshOverlayAction->isChecked() != checked) {
+        remeshOverlayAction->setChecked(checked);
+    }
+    if (intrinsicCheck && intrinsicCheck->isChecked() != checked) {
+        intrinsicCheck->setChecked(checked);
     }
 }
 

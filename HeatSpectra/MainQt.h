@@ -7,6 +7,7 @@ class App;
 class QCheckBox;
 class QPushButton;
 class QSpinBox;
+class QAction;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -43,4 +44,7 @@ private:
     QSpinBox* remeshIterationsSpinBox;
     QPushButton* toggleHeatBtn;
     QPushButton* resetHeatBtn;
+    
+    QAction* wireframeAction;
+    QAction* remeshOverlayAction;
 };
