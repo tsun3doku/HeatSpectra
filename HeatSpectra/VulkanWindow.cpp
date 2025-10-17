@@ -59,6 +59,11 @@ void VulkanWindow::setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* 
     keyUserPtr = userPtr;
 }
 
+void VulkanWindow::setMouseClickCallback(void (*callback)(void*, int, float, float), void* userPtr) {
+    mouseClickCb = callback;
+    mouseClickUserPtr = userPtr;
+}
+
 void VulkanWindow::resizeEvent(QResizeEvent* event) {
     QWindow::resizeEvent(event);
 }
@@ -96,6 +101,13 @@ void VulkanWindow::keyReleaseEvent(QKeyEvent* event) {
 void VulkanWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
         middleButtonPressed = true;
+    }
+    
+    // Trigger mouse click callback for left clicks (model selection)
+    if (event->button() == Qt::LeftButton && mouseClickCb && mouseClickUserPtr) {
+        float mouseX = event->position().x();
+        float mouseY = event->position().y();
+        mouseClickCb(mouseClickUserPtr, static_cast<int>(event->button()), mouseX, mouseY);
     }
     
     QWindow::mousePressEvent(event);

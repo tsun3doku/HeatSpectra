@@ -21,6 +21,7 @@
 #include "UniformBufferManager.hpp"
 #include "ResourceManager.hpp"
 #include "HeatSystem.hpp"
+#include "ModelSelection.hpp"
 #include "DeferredRenderer.hpp"
 #include "GBuffer.hpp"
 #include "VulkanImage.hpp"
@@ -84,6 +85,11 @@ static void keyCallback(void* userPtr, Qt::Key key, bool pressed) {
     app->handleKeyInput(key, pressed);
 }
 
+static void mouseClickCallback(void* userPtr, int button, float mouseX, float mouseY) {
+    auto* app = static_cast<App*>(userPtr);
+    app->handleMouseClick(button, mouseX, mouseY);
+}
+
 App::App() : wireframeEnabled(false), commonSubdivisionEnabled(false), 
              currentFrame(0), frameRate(240), mouseX(0.0), mouseY(0.0),
              isShuttingDown(false), isCameraUpdated(false), 
@@ -100,26 +106,39 @@ void App::handleKeyInput(Qt::Key key, bool pressed) {
     if (!pressed) 
         return;
     
-    // H = Toggle wireframe
     if (key == Qt::Key_H) {
         wireframeEnabled = !wireframeEnabled;
     }
-    // C = Toggle common subdivision
     else if (key == Qt::Key_C) {
         commonSubdivisionEnabled = !commonSubdivisionEnabled;
     }
-    // Space = Toggle heat simulation
     else if (key == Qt::Key_Space) {
         toggleHeatSystem();
     }
-    // P = Pause simulation
     else if (key == Qt::Key_P) {
         pauseHeatSystem();
     }
-    // R = Reset simulation
     else if (key == Qt::Key_R) {
         resetHeatSystem();
     }
+}
+
+void App::handleMouseClick(int button, float mouseX, float mouseY) {
+    if (!modelSelection || !resourceManager) return;
+    
+    // Only handle left clicks
+    if (button != static_cast<int>(Qt::LeftButton)) return;
+    
+    // Deferred GPU picking: Queue request (thread-safe)
+    int x = static_cast<int>(mouseX);
+    int y = static_cast<int>(mouseY);
+    
+    // Clamp to screen bounds (use actual render target size)
+    x = std::max(0, std::min(x, static_cast<int>(swapChainExtent.width) - 1));
+    y = std::max(0, std::min(y, static_cast<int>(swapChainExtent.height) - 1));
+    
+    // Queue the picking request - will be processed on render thread
+    modelSelection->queuePickRequest(x, y);
 }
 
 bool App::isHeatSystemActive() const {
@@ -132,22 +151,45 @@ bool App::isHeatSystemActive() const {
 void App::toggleHeatSystem() {
     if (heatSystem) {
         bool newState = !heatSystem->getIsActive();
+             
+        // Pause rendering until tet mesh is ready
+        if (newState && !heatSystem->getIsTetMeshReady()) {
+            vkDeviceWaitIdle(vulkanDevice.getDevice());
+            isOperating.store(true, std::memory_order_release);
+        }
+        
         heatSystem->setActive(newState);
-        heatSystem->setIsPaused(false); // Clear pause when toggling
+        heatSystem->setIsPaused(false);
+        
+        // Reset simulation if sim is turned off
+        if (!newState) {
+            heatSystem->requestReset();
+        }
+        
+        // Resume rendering
+        if (newState && isOperating.load(std::memory_order_acquire)) {
+            isOperating.store(false, std::memory_order_release);
+        }
     }
 }
 
 void App::pauseHeatSystem() {
-    if (heatSystem) {
+    if (heatSystem && heatSystem->getIsActive()) {
         heatSystem->setActive(false);
-        heatSystem->setIsPaused(true); // Set paused to keep heat colors visible
+        heatSystem->setIsPaused(true); 
     }
 }
 
 void App::resetHeatSystem() {
     if (heatSystem) {
+        bool wasPaused = heatSystem->getIsPaused();
+        
         heatSystem->requestReset();
-        heatSystem->setIsPaused(false); // Clear pause on reset
+        heatSystem->setIsPaused(false);
+        
+        if (wasPaused) {
+            heatSystem->setActive(true);
+        }
     }
 }
 
@@ -157,11 +199,9 @@ void App::performRemeshing(int iterations, double minAngleDegrees, double maxEdg
     }
     
     // Pause rendering and wait for GPU to finish
-    isOperating.store(true, std::memory_order_release);
-        
-    // Wait for all GPU operations to complete before modifying buffers
     vkDeviceWaitIdle(vulkanDevice.getDevice());
-    
+    isOperating.store(true, std::memory_order_release);
+          
     resourceManager->performRemeshing(iterations, minAngleDegrees, maxEdgeLength, stepSize);
     
     // Resume rendering
@@ -176,6 +216,7 @@ void App::loadModel(const std::string& modelPath) {
     std::cout << "[App] Loading new model: " << modelPath << std::endl;
     
     // Flag render thread to pause
+    vkDeviceWaitIdle(vulkanDevice.getDevice());
     isOperating.store(true, std::memory_order_release);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
@@ -192,7 +233,6 @@ void App::loadModel(const std::string& modelPath) {
     
     if (heatSystem) {
         // Recreate heat system for new model geometry
-        std::cout << "[App] Recreating heat system for new model..." << std::endl;
         heatSystem->cleanupResources();
         heatSystem->cleanup();
         heatSystem.reset();
@@ -207,7 +247,7 @@ void App::loadModel(const std::string& modelPath) {
     }
     
     // Update camera to look at new model center
-    center = resourceManager->getSimModel().getBoundingBoxCenter();
+    center = resourceManager->getVisModel().getBoundingBoxCenter();
     camera.setLookAt(center);
     isCameraUpdated.store(true, std::memory_order_release);
     
@@ -267,8 +307,11 @@ void App::initRenderResources() {
             MAXFRAMESINFLIGHT);
 
         resourceManager->initialize();
+        
+        // Create ModelSelection for GPU-based picking (creates its own thread-safe command pool)
+        modelSelection = std::make_unique<ModelSelection>(vulkanDevice, *deferredRenderer);
 
-        // Create HeatSystem
+        // Create heat system
         heatSystem = std::make_unique<HeatSystem>(
             vulkanDevice,
             *memoryAllocator,
@@ -291,7 +334,7 @@ void App::initRenderResources() {
             wireframeEnabled
         );
 
-        center = resourceManager->getSimModel().getBoundingBoxCenter();
+        center = resourceManager->getVisModel().getBoundingBoxCenter();
         camera.setLookAt(center);
     }
 
@@ -300,6 +343,8 @@ void App::setupCallbacks() {
     window->setScrollCallback(scrollCallback, this);
     // Set up key callback for controls
     window->setKeyCallback(keyCallback, this);
+    // Set up mouse click callback for model selection
+    window->setMouseClickCallback(mouseClickCallback, this);
 }
 
 void App::initVulkan() {
@@ -454,6 +499,7 @@ void App::recreateSwapChain() {
     }
 
 void App::cleanupRenderResources() {
+        modelSelection->cleanup();
         deferredRenderer->cleanup(vulkanDevice);
         gbuffer->cleanup(MAXFRAMESINFLIGHT);
         uniformBufferManager->cleanup(MAXFRAMESINFLIGHT);      
@@ -699,8 +745,13 @@ void App::drawFrame() {
             return;
         }
         
-        // Wait for previous frame's fence
+        // Wait for previous frame's fence (ensures GPU finished with this frame slot)
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        // Process pick results from previous frame (now safe - GPU work complete)
+        if (modelSelection) {
+            modelSelection->processPickingRequests(currentFrame);
+        }
 
         // Get next image
         uint32_t imageIndex;
@@ -740,7 +791,7 @@ void App::drawFrame() {
         bool rightPressed = window->isKeyPressed(Qt::Key_Right);
         
         heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo, WIDTH, HEIGHT);
-        if (heatSystem->getIsActive()) {
+        if (heatSystem->getIsActive() && heatSystem->getIsTetMeshReady()) {
             // Wait for previous compute to finish
             vkWaitForFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
             vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
@@ -760,7 +811,7 @@ void App::drawFrame() {
         std::vector<VkSemaphore> waitSemaphores;
         std::vector<VkPipelineStageFlags> waitStages;
 
-        if (heatSystem->getIsActive()) {
+        if (heatSystem->getIsActive() && heatSystem->getIsTetMeshReady()) {
             waitSemaphores = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
             waitStages = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         }
@@ -770,7 +821,7 @@ void App::drawFrame() {
         }
 
         // Graphics pass
-        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, swapChainImageViews, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
+        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

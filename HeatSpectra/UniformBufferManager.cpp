@@ -168,7 +168,7 @@ void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, Light
     glm::vec3 cameraForward = camera.getForwardDirection();
     lightUbo.lightPos_Key = glm::vec3(0.0f, 2.0f, 0.0f);
     lightUbo.lightPos_Rim = cameraForward - cameraPosition;
-    lightUbo.lightAmbient = glm::vec3(0.01f, 0.01f, 0.01f);
+    lightUbo.lightAmbient = glm::vec3(0.005f, 0.005f, 0.005f);
     memcpy(lightBuffersMapped[currentImage], &lightUbo, sizeof(lightUbo));
 }
 

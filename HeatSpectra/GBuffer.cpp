@@ -4,6 +4,7 @@
 
 #include "Structs.hpp"
 #include "File_utils.h"
+#include "ModelSelection.hpp"
 #include "Model.hpp"
 #include "Grid.hpp"
 #include "HeatSource.hpp"
@@ -34,9 +35,15 @@ GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer,
     createBlendDescriptorSetLayout();
     createBlendDescriptorSets(maxFramesInFlight);
 
+    createDepthSampler();
+    createOutlineDescriptorPool(maxFramesInFlight);
+    createOutlineDescriptorSetLayout();
+    createOutlineDescriptorSets(maxFramesInFlight);
+
     createGeometryPipeline(swapchainExtent);
     createLightingPipeline(swapchainExtent);
     createWireframePipeline(swapchainExtent);
+    createOutlinePipeline(swapchainExtent);
     createIntrinsicOverlayPipeline(swapchainExtent);
     createBlendPipeline(swapchainExtent);
 
@@ -173,6 +180,41 @@ void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
         blendWrite.pImageInfo = &gridResolveImageInfo;
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), 1, &blendWrite, 0, nullptr);
+    }
+    
+    // Update outline descriptor sets for screen-space outline
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        std::array<VkDescriptorImageInfo, 2> imageInfos{};
+        
+        // Binding 0: Depth texture
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
+        imageInfos[0].sampler = depthSampler;
+        
+        // Binding 1: Stencil texture
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        imageInfos[1].imageView = deferredRenderer.getStencilResolveSamplerViews()[i];
+        imageInfos[1].sampler = depthSampler;  // Use same sampler
+
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = outlineDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &imageInfos[0];
+        
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = outlineDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfos[1];
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 }
 
@@ -459,6 +501,116 @@ void GBuffer::createBlendDescriptorSets(uint32_t maxFramesInFlight) {
     }
 }
 
+void GBuffer::createOutlineDescriptorPool(uint32_t maxFramesInFlight) {
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSize.descriptorCount = maxFramesInFlight * 2;  // 2 samplers per set (depth + stencil)
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = maxFramesInFlight;
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &outlineDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create outline descriptor pool");
+    }
+}
+
+void GBuffer::createOutlineDescriptorSetLayout() {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    
+    // Binding 0: Depth texture
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 1: Stencil texture
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &outlineDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create outline descriptor set layout");
+    }
+}
+
+void GBuffer::createOutlineDescriptorSets(uint32_t maxFramesInFlight) {
+    std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, outlineDescriptorSetLayout);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = outlineDescriptorPool;
+    allocInfo.descriptorSetCount = maxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+
+    outlineDescriptorSets.resize(maxFramesInFlight);
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, outlineDescriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate outline descriptor sets");
+    }
+
+    // Initial descriptor writes for both depth and stencil
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        std::array<VkDescriptorImageInfo, 2> imageInfos{};
+        
+        // Binding 0: Depth texture
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
+        imageInfos[0].sampler = depthSampler;
+        
+        // Binding 1: Stencil texture
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        imageInfos[1].imageView = deferredRenderer.getStencilResolveSamplerViews()[i];
+        imageInfos[1].sampler = depthSampler;
+
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = outlineDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &imageInfos[0];
+        
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = outlineDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfos[1];
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void GBuffer::createDepthSampler() {
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_NEAREST; 
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+    if (vkCreateSampler(vulkanDevice.getDevice(), &samplerInfo, nullptr, &depthSampler) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create depth sampler");
+    }
+}
+
 void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/gbuffer_vert.spv");
     auto fragShaderCode = readFile("shaders/gbuffer_frag.spv");
@@ -566,7 +718,8 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     std::vector<VkDynamicState> dynamicStates = {
          VK_DYNAMIC_STATE_VIEWPORT,
          VK_DYNAMIC_STATE_SCISSOR,
-         VK_DYNAMIC_STATE_DEPTH_BIAS
+         VK_DYNAMIC_STATE_DEPTH_BIAS,
+         VK_DYNAMIC_STATE_STENCIL_REFERENCE
     };
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -907,6 +1060,155 @@ void GBuffer::createWireframePipeline(VkExtent2D extent) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
 }
 
+void GBuffer::createOutlinePipeline(VkExtent2D extent) {
+    auto vertCode = readFile("shaders/outline_vert.spv");
+    auto fragCode = readFile("shaders/outline_frag.spv");
+
+    VkShaderModule vertModule = createShaderModule(vulkanDevice, vertCode);
+    VkShaderModule fragModule = createShaderModule(vulkanDevice, fragCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    // Fullscreen triangle created in vertex shader
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;  
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE; 
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; 
+    multisampling.minSampleShading = 1.0f;
+    multisampling.pSampleMask = nullptr;
+    multisampling.alphaToCoverageEnable = VK_FALSE;
+    multisampling.alphaToOneEnable = VK_FALSE;
+
+    // Use stencil test to mask outline
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_TRUE;  // Enable stencil masking
+    
+    VkStencilOpState stencilOp{};
+    stencilOp.failOp = VK_STENCIL_OP_KEEP;
+    stencilOp.passOp = VK_STENCIL_OP_KEEP;
+    stencilOp.depthFailOp = VK_STENCIL_OP_KEEP;
+    stencilOp.compareOp = VK_COMPARE_OP_EQUAL;  // Only draw where stencil equals reference
+    stencilOp.compareMask = 0xFF;
+    stencilOp.writeMask = 0x00; 
+    stencilOp.reference = 1; 
+    
+    depthStencil.front = stencilOp;
+    depthStencil.back = stencilOp;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+        VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT |
+        VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 1;  // Lighting subpass has 1 color attachment
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Push constant for outline thickness and color
+    VkPushConstantRange outlinePushConstantRange{};
+    outlinePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    outlinePushConstantRange.offset = 0;
+    outlinePushConstantRange.size = sizeof(OutlinePushConstant);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &outlineDescriptorSetLayout;  // Use outline descriptor set
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &outlinePushConstantRange;
+
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &outlinePipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create outline pipeline layout");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = outlinePipelineLayout;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
+    pipelineInfo.subpass = 1;  // Lighting subpass 
+
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outlinePipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create outline pipeline");
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), vertModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
+}
+
 void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/intrinsicOverlay_vert.spv"); 
     auto fragShaderCode = readFile("shaders/intrinsicOverlay_frag.spv");
@@ -961,9 +1263,9 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL; 
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_NONE;  // Disable culling - render both sides
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;  
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizer.depthBiasEnable = VK_TRUE;  // Enable for dynamic depth bias control
+    rasterizer.depthBiasEnable = VK_TRUE;  
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1002,7 +1304,8 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     std::vector<VkDynamicState> dynamicStates = {
          VK_DYNAMIC_STATE_VIEWPORT,
          VK_DYNAMIC_STATE_SCISSOR,
-         VK_DYNAMIC_STATE_DEPTH_BIAS
+         VK_DYNAMIC_STATE_DEPTH_BIAS,
+         VK_DYNAMIC_STATE_STENCIL_REFERENCE
     };
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -1212,21 +1515,25 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
     std::cout << "    Size: " << memRequirements.size / (1024.0f * 1024.0f) << "MB\n";
 }
 
-void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
-    VkCommandBuffer commandBuffer = gbufferCommandBuffers[imageIndex];
+void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
+    ModelSelection& modelSelection, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
+    VkCommandBuffer commandBuffer = gbufferCommandBuffers[currentFrame];
 
     // Start recording commands  
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(gbufferCommandBuffers[imageIndex], &beginInfo) != VK_SUCCESS) {
+    if (vkBeginCommandBuffer(gbufferCommandBuffers[currentFrame], &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin recording gbuffer command buffer");
     }
+
+    // Current frame * number of swapchain images + swapchain image index
+    size_t framebufferIndex = currentFrame * swapChainImageViews.size() + imageIndex;
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = deferredRenderer.getRenderPass();
-    renderPassInfo.framebuffer = framebuffers[imageIndex];
+    renderPassInfo.framebuffer = framebuffers[framebufferIndex];
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = extent;
 
@@ -1276,24 +1583,18 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
 
     // Draw visModel 
     VkBuffer visIndexBuffer = resourceManager.getVisModel().getIndexBuffer();
-    /*
-    std::cout << "[RECORD] frame " << currentFrame
-        << " vkCmdBindVertexBuffers: VB=" << resourceManager.getVisModel().getVertexBuffer()
-        << ", offset=" << resourceManager.getVisModel().getVertexBufferOffset() << "\n";
-    std::cout << "[RECORD] frame " << currentFrame
-        << " vkCmdBindIndexBuffer:  IB=" << visIndexBuffer
-        << ", offset=" << resourceManager.getVisModel().getIndexBufferOffset() << "\n";
-    */
-    // Draw input model first (pushed furthest from camera)
     VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer() };
     VkDeviceSize vertexOffsets[] = {
     resourceManager.getVisModel().getVertexBufferOffset(),
     resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     
-    // Push constant: use surface buffer when heat sim is active or paused
+    // Use surface buffer when heat sim is active or paused
     int32_t useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
     vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+    
+    // Set stencil reference for visModel (ID = 1)
+    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
     
     // Push vismodel furthest away from camera 
     vkCmdSetDepthBias(commandBuffer, 2.0f, 0.0f, 2.0f);
@@ -1323,7 +1624,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getCommonSubdivision().getIndices().size()), 1, 0, 0, 0);
         
-        // Reset depth bias after common subdivision
+        // Reset depth bias
         vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
     }
     
@@ -1337,15 +1638,17 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
     }
 
-    // Draw heat source model (uses surface buffer when heat sim is active)
+    // Draw heat source model
     VkBuffer heatBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(), resourceManager.getHeatModel().getSurfaceVertexBuffer() };
     VkDeviceSize heatOffsets[] = {
     resourceManager.getHeatModel().getVertexBufferOffset(),
     resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
     };
-    // Heat model also uses surface colors when heat sim is active
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
     vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+    
+    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 2);
+    
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatBuffers, heatOffsets);
     vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
@@ -1357,6 +1660,29 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightingPipelineLayout, 0, 1, &lightingDescriptorSets[currentFrame], 0, nullptr);
     // Draw fullscreen triangle
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    // Draw screen space outline 
+    if (modelSelection.getSelected()) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, outlinePipeline);
+        
+        // Set stencil reference to the selected model's ID
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, modelSelection.getSelectedModelID());
+        
+        OutlinePushConstant outlinePC;
+        outlinePC.outlineThickness = modelSelection.getOutlineThickness();
+        outlinePC.outlineColor = modelSelection.getOutlineColor();
+        
+        vkCmdPushConstants(commandBuffer, outlinePipelineLayout, 
+                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                          0, sizeof(OutlinePushConstant), &outlinePC);
+        
+        // Bind descriptor set with depth texture
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                               outlinePipelineLayout, 0, 1, &outlineDescriptorSets[currentFrame], 0, nullptr);
+        
+        // Draw fullscreen triangle
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
 
     // Transition to grid subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
@@ -1396,20 +1722,26 @@ void GBuffer::cleanup(uint32_t maxFramesInFlight) {
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), wireframePipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), outlinePipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), intrinsicOverlayPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), blendPipeline, nullptr);
 
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), lightingPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), wireframePipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), outlinePipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), intrinsicOverlayPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), blendPipelineLayout, nullptr);
 
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), lightingDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), geometryDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), blendDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), outlineDescriptorSetLayout, nullptr);
 
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), blendDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), outlineDescriptorPool, nullptr);
+    
+    vkDestroySampler(vulkanDevice.getDevice(), depthSampler, nullptr);
 }

@@ -36,16 +36,23 @@ public:
     void createBlendDescriptorSetLayout();
     void createBlendDescriptorSets(uint32_t maxFramesInFlight);
 
+    void createOutlineDescriptorPool(uint32_t maxFramesInFlight);
+    void createOutlineDescriptorSetLayout();
+    void createOutlineDescriptorSets(uint32_t maxFramesInFlight);
+    void createDepthSampler();
+
     void createGeometryPipeline(VkExtent2D extent);
     void createWireframePipeline(VkExtent2D extent);
     void createLightingPipeline(VkExtent2D swapchainExtent);
     void createIntrinsicOverlayPipeline(VkExtent2D extent);
     void createBlendPipeline(VkExtent2D extent);
+    void createOutlinePipeline(VkExtent2D extent);
 
     void createCommandBuffers(uint32_t maxFramesInFlight);
     void freeCommandBuffers();
-    void recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, std::vector<VkImageView> swapChainImageViews,
-        uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision);
+    void recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
+        class ModelSelection& modelSelection, std::vector<VkImageView> swapChainImageViews,
+        uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision);
 
     void cleanupFramebuffers(uint32_t maxFramesInFlight);
     void cleanup(uint32_t maxFramesInFlight);
@@ -92,6 +99,11 @@ private:
     VkDescriptorSetLayout blendDescriptorSetLayout;
     std::vector<VkDescriptorSet> blendDescriptorSets;
 
+    VkDescriptorPool outlineDescriptorPool;
+    VkDescriptorSetLayout outlineDescriptorSetLayout;
+    std::vector<VkDescriptorSet> outlineDescriptorSets;
+    VkSampler depthSampler;
+
     VkPipelineLayout geometryPipelineLayout;
     VkPipeline geometryPipeline;
 
@@ -107,4 +119,6 @@ private:
     VkPipeline blendPipeline;
     VkPipelineLayout blendPipelineLayout;
 
+    VkPipeline outlinePipeline = VK_NULL_HANDLE;
+    VkPipelineLayout outlinePipelineLayout = VK_NULL_HANDLE;
 };

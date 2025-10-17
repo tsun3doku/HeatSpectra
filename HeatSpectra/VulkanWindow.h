@@ -39,6 +39,7 @@ public:
     // Callbacks for your App class
     void setScrollCallback(void (*callback)(void*, double, double), void* userPtr);
     void setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* userPtr);
+    void setMouseClickCallback(void (*callback)(void*, int, float, float), void* userPtr);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -63,4 +64,7 @@ private:
     
     void (*keyCb)(void*, Qt::Key, bool) = nullptr;
     void* keyUserPtr = nullptr;
+    
+    void (*mouseClickCb)(void*, int, float, float) = nullptr;
+    void* mouseClickUserPtr = nullptr;
 };

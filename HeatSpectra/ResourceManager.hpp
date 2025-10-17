@@ -37,9 +37,6 @@ public:
 		return *grid;
 	}
 
-	Model& getSimModel() {
-		return *simModel;
-	}
 	Model& getVisModel() {
 		return *visModel;
 	}
@@ -61,7 +58,6 @@ private:
 	Camera& camera;
 
 	std::unique_ptr<Grid> grid;
-	std::unique_ptr<Model> simModel;
 	std::unique_ptr<Model> visModel;
 	std::unique_ptr<Model> commonSubdivision;
 	std::unique_ptr<Model> heatModel;

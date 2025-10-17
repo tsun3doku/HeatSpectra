@@ -236,7 +236,6 @@ void MainWindow::onToggleHeatClicked() {
     if (app) {
         app->toggleHeatSystem();
         
-        // Update button text based on new state
         if (app->isHeatSystemActive()) {
             toggleHeatBtn->setText("Stop Simulation (Space)");
         } else {
@@ -248,7 +247,6 @@ void MainWindow::onToggleHeatClicked() {
 void MainWindow::onPauseHeatClicked() {
     if (app) {
         app->pauseHeatSystem();
-        // Update button text since simulation is paused
         toggleHeatBtn->setText("Start Simulation (Space)");
     }
 }
@@ -256,8 +254,12 @@ void MainWindow::onPauseHeatClicked() {
 void MainWindow::onResetHeatClicked() {
     if (app) {
         app->resetHeatSystem();
-        // Update button text since simulation is reset
-        toggleHeatBtn->setText("Start Simulation (Space)");
+        
+        if (app->isHeatSystemActive()) {
+            toggleHeatBtn->setText("Stop Simulation (Space)");
+        } else {
+            toggleHeatBtn->setText("Start Simulation (Space)");
+        }
     }
 }
 
@@ -267,6 +269,9 @@ void MainWindow::onOpenModel() {
         try {
             std::string modelPath = filename.toStdString();
             app->loadModel(modelPath);
+            
+            toggleHeatBtn->setText("Start Simulation (Space)");
+            
             QMessageBox::information(this, "Success", QString("Model loaded: %1").arg(filename));
         }
         catch (const std::exception& e) {
@@ -319,7 +324,7 @@ int main(int argc, char** argv) {
     // Run Qt event loop
     int result = qapp.exec();
     
-    // Wait for app thread to finish (closeEvent already set shouldClose)
+    // Wait for app thread to finish
     if (appThread.joinable()) {
         appThread.join();
     }

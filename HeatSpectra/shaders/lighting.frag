@@ -14,7 +14,7 @@ layout(set = 0, binding = 5) uniform LightUniformBufferObject {
     vec3 lightAmbient;
 } lightUbo;
 
-// Input attachments for G-buffer data
+// Input attachments for Gbuffer data
 layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput inputAlbedo;
 layout(input_attachment_index = 1, set = 0, binding = 1) uniform subpassInput inputNormal;
 layout(input_attachment_index = 2, set = 0, binding = 2) uniform subpassInput inputPosition;
@@ -25,7 +25,7 @@ layout(location = 0) in vec2 inUV;
 layout(location = 0) out vec4 fragColor;
 
 const float lightIntensity_Rim = 0.0f;
-const float lightIntensity_Key = 5.0f;
+const float lightIntensity_Key = 15.0f;
 
 float computeDiffuse(vec3 normal, vec3 lightDir) {
     return max(dot(normal, lightDir), 0.0);
@@ -47,7 +47,7 @@ vec3 hsl2rgb(vec3 c) {
 }
 
 void main() {
-    // Read G-buffer data
+    // Read Gbuffer data
     vec3 albedo = subpassLoad(inputAlbedo).rgb;  
     vec3 normal = normalize(subpassLoad(inputNormal).rgb); 
     vec3 position = subpassLoad(inputPosition).rgb;

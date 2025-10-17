@@ -16,6 +16,7 @@ class UniformBufferManager;
 class DeferredRenderer;
 class GBuffer;
 class HeatSystem;
+class ModelSelection;
 
 class App {
 public:
@@ -25,6 +26,7 @@ public:
     void run(VulkanWindow* qtWindow);  
     void handleScrollInput(double xOffset, double yOffset);
     void handleKeyInput(Qt::Key key, bool pressed);
+    void handleMouseClick(int button, float mouseX, float mouseY);
     
     // Heat system control methods
     bool isHeatSystemActive() const;
@@ -69,6 +71,7 @@ private:
     uint32_t frameRate;
     
     std::unique_ptr<HeatSystem> heatSystem;
+    std::unique_ptr<ModelSelection> modelSelection;
     Camera camera;
     glm::vec3 center;
     

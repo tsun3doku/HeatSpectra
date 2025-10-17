@@ -101,6 +101,11 @@ struct HeatSourcePushConstant {
     alignas(16) glm::mat4 model; // 16 byte aligned
 };
 
+struct OutlinePushConstant {
+    float outlineThickness;
+    alignas(16) glm::vec3 outlineColor;
+};  // 28 bytes
+
 struct HeatSourceVertex {
     glm::vec4 position; // 16 byte aligned
     float temperature;

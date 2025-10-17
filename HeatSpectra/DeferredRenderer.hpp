@@ -65,8 +65,17 @@ public:
     const std::vector<VkImageView>& getDepthResolveViews() const {
         return depthResolveViews;
     }
+    const std::vector<VkImageView>& getDepthResolveSamplerViews() const {
+        return depthResolveSamplerViews;  
+    }
+    const std::vector<VkImageView>& getStencilResolveSamplerViews() const {
+        return stencilResolveSamplerViews; 
+    }
     const std::vector<VkImageView>& getGridResolveViews() const {
         return gridResolveViews;
+    }
+    const std::vector<VkImage>& getDepthResolveImages() const {
+        return depthResolveImages;
     }
 
 private:
@@ -79,6 +88,8 @@ private:
     VkImageCreateInfo albedoImageInfo, normalImageInfo, positionImageInfo, depthImageInfo, gridImageInfo;
 
     std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews;
+    std::vector<VkImageView> depthResolveSamplerViews; 
+    std::vector<VkImageView> stencilResolveSamplerViews; 
     std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages;
     std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories;
 };  

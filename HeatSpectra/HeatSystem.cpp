@@ -15,27 +15,22 @@
 #include "HeatSystem.hpp"
 
 HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager), maxFramesInFlight(maxFramesInFlight) {
 
     heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
 
-    generateTetrahedralMesh();
-    createTetraBuffer(maxFramesInFlight);
-    createNeighborBuffer();
-    createCenterBuffer();
-    createTimeBuffer();
-
+    // Don't generate tet mesh on startup - will be done when heat sim is activated
+    // But initialize surface buffer so model stays visible
     initializeSurfaceBuffer();
-    initializeTetra();
+    
+    createTimeBuffer();
 
     createTetraDescriptorPool(maxFramesInFlight);
     createTetraDescriptorSetLayout();
-    createTetraDescriptorSets(maxFramesInFlight);
     createTetraPipeline();
 
     createSurfaceDescriptorPool(maxFramesInFlight);
     createSurfaceDescriptorSetLayout();
-    createSurfaceDescriptorSets(maxFramesInFlight);
     createSurfacePipeline();
 
     createComputeCommandBuffers(maxFramesInFlight);
@@ -72,56 +67,59 @@ void HeatSystem::update(bool upPressed, bool downPressed, bool leftPressed, bool
 }
 
 void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
-    std::vector<VkBuffer> oldReadBuffers = tetraFrameBuffers.readBuffers;
-    std::vector<VkDeviceSize> oldReadOffsets = tetraFrameBuffers.readBufferOffsets_;
-    std::vector<VkBuffer> oldWriteBuffers = tetraFrameBuffers.writeBuffers;
-    std::vector<VkDeviceSize> oldWriteOffsets = tetraFrameBuffers.writeBufferOffsets_;
+    if (isTetMeshReady) {
+        std::vector<VkBuffer> oldReadBuffers = tetraFrameBuffers.readBuffers;
+        std::vector<VkDeviceSize> oldReadOffsets = tetraFrameBuffers.readBufferOffsets_;
+        std::vector<VkBuffer> oldWriteBuffers = tetraFrameBuffers.writeBuffers;
+        std::vector<VkDeviceSize> oldWriteOffsets = tetraFrameBuffers.writeBufferOffsets_;
 
-    // Copy data from old buffers to new for each frame but only if buffers changed
-    bool hasChanged = false;
-    for (uint32_t i = 0; i < maxFramesInFlight; i++) {
-        if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i] || 
-            oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
-            hasChanged = true;
-            break;
-        }
-    }
-    
-    if (hasChanged) {
-        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+        // Copy data from old buffers to new for each frame but only if buffers changed
+        bool hasChanged = false;
         for (uint32_t i = 0; i < maxFramesInFlight; i++) {
-            VkBufferCopy copyRegion{};
-            copyRegion.size = sizeof(float) * feaMesh.elements.size();
-
-            // Read buffer copy 
-            if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
-                copyRegion.srcOffset = oldReadOffsets[i];
-                copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
-                vkCmdCopyBuffer(copyCmd, oldReadBuffers[i],
-                    tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
-            }
-
-            // Write buffer copy 
-            if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
-                copyRegion.srcOffset = oldWriteOffsets[i];
-                copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
-                vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i],
-                    tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+            if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i] || 
+                oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+                hasChanged = true;
+                break;
             }
         }
-        endSingleTimeCommands(vulkanDevice, copyCmd);
         
-        // Only free old buffers if they were actually replaced
-        for (size_t i = 0; i < maxFramesInFlight; i++) {
-            if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
-                memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
+        if (hasChanged) {
+            VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+            for (uint32_t i = 0; i < maxFramesInFlight; i++) {
+                VkBufferCopy copyRegion{};
+                copyRegion.size = sizeof(float) * feaMesh.elements.size();
+
+                // Read buffer copy 
+                if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
+                    copyRegion.srcOffset = oldReadOffsets[i];
+                    copyRegion.dstOffset = tetraFrameBuffers.readBufferOffsets_[i];
+                    vkCmdCopyBuffer(copyCmd, oldReadBuffers[i],
+                        tetraFrameBuffers.readBuffers[i], 1, &copyRegion);
+                }
+
+                // Write buffer copy 
+                if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+                    copyRegion.srcOffset = oldWriteOffsets[i];
+                    copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
+                    vkCmdCopyBuffer(copyCmd, oldWriteBuffers[i],
+                        tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
+                }
             }
-            if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
-                memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
+            endSingleTimeCommands(vulkanDevice, copyCmd);
+            
+            // Only free old buffers if they were actually replaced
+            for (size_t i = 0; i < maxFramesInFlight; i++) {
+                if (oldReadBuffers[i] != tetraFrameBuffers.readBuffers[i]) {
+                    memoryAllocator.free(oldReadBuffers[i], oldReadOffsets[i]);
+                }
+                if (oldWriteBuffers[i] != tetraFrameBuffers.writeBuffers[i]) {
+                    memoryAllocator.free(oldWriteBuffers[i], oldWriteOffsets[i]);
+                }
             }
         }
     }
 
+    // Always recreate pools, layouts, and pipelines (needed even if tet mesh not ready)
     createTetraDescriptorPool(maxFramesInFlight);
     createTetraDescriptorSetLayout();
     createTetraPipeline();
@@ -132,8 +130,12 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
     heatSource->recreateResources(maxFramesInFlight);
 
     createComputeCommandBuffers(maxFramesInFlight);
-    createTetraDescriptorSets(maxFramesInFlight);
-    createSurfaceDescriptorSets(maxFramesInFlight);
+    
+    // Only create descriptor sets if tet mesh is ready (requires buffers to exist)
+    if (isTetMeshReady) {
+        createTetraDescriptorSets(maxFramesInFlight);
+        createSurfaceDescriptorSets(maxFramesInFlight);
+    }
 }
 
 void HeatSystem::processResetRequest() {
@@ -144,6 +146,20 @@ void HeatSystem::processResetRequest() {
 }
 
 void HeatSystem::setActive(bool active) {
+    if (active && !isTetMeshReady) {      
+        generateTetrahedralMesh();
+        createTetraBuffer(maxFramesInFlight);
+        createNeighborBuffer();
+        createCenterBuffer();
+        initializeSurfaceBuffer();
+        initializeTetra();
+        
+        createTetraDescriptorSets(maxFramesInFlight);
+        createSurfaceDescriptorSets(maxFramesInFlight);
+        
+        isTetMeshReady = true;
+    }
+    
     isActive = active;
 }
 
@@ -152,8 +168,8 @@ void HeatSystem::requestReset() {
 }
 
 void HeatSystem::generateTetrahedralMesh() {
-    const auto& vertices = resourceManager.getSimModel().getVertices();
-    const auto& indices = resourceManager.getSimModel().getIndices();
+    const auto& vertices = resourceManager.getVisModel().getVertices();
+    const auto& indices = resourceManager.getVisModel().getIndices();
 
     if (vertices.empty()) {
         throw std::runtime_error("Vertices vector is empty!");
@@ -198,12 +214,12 @@ void HeatSystem::generateTetrahedralMesh() {
     std::memcpy(in.pointlist, points.data(), points.size() * sizeof(REAL));
 
     in.numberofregions = 1;
-    in.regionlist = new REAL[5];  // x,y,z,attribute,volume
-    in.regionlist[0] = 0.0;  // x
-    in.regionlist[1] = 0.0;  // y 
-    in.regionlist[2] = 0.0;  // z
-    in.regionlist[3] = 1.0;  // region attribute
-    in.regionlist[4] = 0.001;  // volume constraint
+    in.regionlist = new REAL[5];    // x,y,z,attribute,volume
+    in.regionlist[0] = 0.0;         // x
+    in.regionlist[1] = 0.0;         // y 
+    in.regionlist[2] = 0.0;         // z
+    in.regionlist[3] = 1.0;         // region attribute
+    in.regionlist[4] = 0.001;       // volume constraint
 
     in.numberoffacets = remappedIndices.size() / 3;
     in.facetlist = new tetgenio::facet[in.numberoffacets];
@@ -721,7 +737,7 @@ void HeatSystem::createTetraDescriptorSets(uint32_t maxFramesInFlight) {
     }
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        // For reading, use the previous frame's write buffer (with wrap-around)
+        // For reading, use the previous frame's write buffer 
         uint32_t prevFrame = (i > 0) ? (i - 1) : (maxFramesInFlight - 1);
 
         std::array<VkDescriptorBufferInfo, 7> bufferInfos = {
@@ -1074,29 +1090,31 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     );
 
     // --- Tetra Compute Pass ---
-    dispatchTetraCompute(commandBuffer, currentFrame);
+    if (isTetMeshReady) {
+        dispatchTetraCompute(commandBuffer, currentFrame);
 
-    // Barrier between tetra compute and surface compute
-    VkBufferMemoryBarrier tetraToSurfaceBarrier{};
-    tetraToSurfaceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    tetraToSurfaceBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    tetraToSurfaceBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    tetraToSurfaceBarrier.buffer = tetraFrameBuffers.writeBuffers[currentFrame];
-    tetraToSurfaceBarrier.offset = tetraFrameBuffers.writeBufferOffsets_[currentFrame];
-    tetraToSurfaceBarrier.size = VK_WHOLE_SIZE;
+        // Barrier between tetra compute and surface compute
+        VkBufferMemoryBarrier tetraToSurfaceBarrier{};
+        tetraToSurfaceBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        tetraToSurfaceBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        tetraToSurfaceBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        tetraToSurfaceBarrier.buffer = tetraFrameBuffers.writeBuffers[currentFrame];
+        tetraToSurfaceBarrier.offset = tetraFrameBuffers.writeBufferOffsets_[currentFrame];
+        tetraToSurfaceBarrier.size = VK_WHOLE_SIZE;
 
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        1, &tetraToSurfaceBarrier,
-        0, nullptr
-    );
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr,
+            1, &tetraToSurfaceBarrier,
+            0, nullptr
+        );
 
-    // --- Surface Compute Pass ---
-    dispatchSurfaceCompute(commandBuffer, currentFrame);
+        // --- Surface Compute Pass ---
+        dispatchSurfaceCompute(commandBuffer, currentFrame);
+    }
 
     // Pre-copy barrier: Ensure previous vertex reads complete before transfer
     VkBufferMemoryBarrier preCopyBarrier{};

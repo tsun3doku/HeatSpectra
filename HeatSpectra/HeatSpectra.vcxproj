@@ -221,6 +221,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="ModelSelection.cpp" />
     <ClCompile Include="VulkanWindow.cpp" />
     <ClCompile Include="MainQt.cpp">
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">input</DynamicSource>
@@ -253,6 +254,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\heat_tetra.comp" />
     <None Include="shaders\lighting.frag" />
     <None Include="shaders\lighting.vert" />
+    <None Include="shaders\outline.frag" />
+    <None Include="shaders\outline.vert" />
     <None Include="shaders\wireframe.frag" />
     <None Include="shaders\wireframe.vert" />
   </ItemGroup>
@@ -273,6 +276,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <QtMoc Include="MainQt.h" />
     <ClInclude Include="MemoryAllocator.hpp" />
     <ClInclude Include="Model.hpp" />
+    <ClInclude Include="ModelSelection.hpp" />
     <ClInclude Include="ResourceManager.hpp" />
     <ClInclude Include="SignPostMesh.hpp" />
     <ClInclude Include="VulkanDevice.hpp" />

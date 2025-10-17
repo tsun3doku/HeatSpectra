@@ -78,6 +78,10 @@ public:
     
     void setIsPaused(bool paused) {
         isPaused = paused;
+    }
+    
+    bool getIsTetMeshReady() const {
+        return isTetMeshReady;
     }   
 
 private:
@@ -87,6 +91,8 @@ private:
     UniformBufferManager& uniformBufferManager;
     std::unique_ptr<HeatSource> heatSource;
     Camera* camera = nullptr;
+    
+    uint32_t maxFramesInFlight;
 
     FEAMesh feaMesh;
     std::vector<int> remappedIndices;
@@ -134,4 +140,5 @@ private:
     std::atomic<bool> needsReset{ 
         false 
     };
+    bool isTetMeshReady = false;
 };

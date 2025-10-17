@@ -19,7 +19,6 @@ ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& me
     VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager), camera(camera) {
 
-    simModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
     visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
     commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
     heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
@@ -31,7 +30,6 @@ ResourceManager::~ResourceManager() {
 }
 
 void ResourceManager::initialize() {
-    simModel            ->init(MODEL_PATH);
     visModel            ->init(MODEL_PATH);
     commonSubdivision   ->init(MODEL_PATH);
     heatModel           ->init(HEATSOURCE_PATH);
@@ -63,20 +61,16 @@ void ResourceManager::reloadModels(const std::string& modelPath) {
     std::cout << "[ResourceManager] Reloading models from: " << modelPath << std::endl;
     
     // Clean up old buffers
-    simModel->cleanup();
     visModel->cleanup();
     commonSubdivision->cleanup();
     
     // Clear old geometry data
-    simModel->setVertices({});
-    simModel->setIndices({});
     visModel->setVertices({});
     visModel->setIndices({});
     commonSubdivision->setVertices({});
     commonSubdivision->setIndices({});
     
     // Reload models with new path
-    simModel->init(modelPath);
     visModel->init(modelPath);
     commonSubdivision->init(modelPath);
       
@@ -86,7 +80,6 @@ void ResourceManager::reloadModels(const std::string& modelPath) {
 }
 
 void ResourceManager::cleanup() {
-    simModel->cleanup();
     visModel->cleanup();
     heatModel->cleanup();
     commonSubdivision->cleanup();
