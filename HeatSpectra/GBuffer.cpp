@@ -191,10 +191,10 @@ void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Binding 1: Stencil texture
+        // Binding 1: MSAA Stencil texture (for smooth edges)
         imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        imageInfos[1].imageView = deferredRenderer.getStencilResolveSamplerViews()[i];
-        imageInfos[1].sampler = depthSampler;  // Use same sampler
+        imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
+        imageInfos[1].sampler = depthSampler;
 
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
         
@@ -565,9 +565,9 @@ void GBuffer::createOutlineDescriptorSets(uint32_t maxFramesInFlight) {
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Binding 1: Stencil texture
+        // Binding 1: MSAA Stencil texture (for smooth edges)
         imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        imageInfos[1].imageView = deferredRenderer.getStencilResolveSamplerViews()[i];
+        imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
 
         std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
@@ -1118,25 +1118,13 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     multisampling.alphaToCoverageEnable = VK_FALSE;
     multisampling.alphaToOneEnable = VK_FALSE;
 
-    // Use stencil test to mask outline
+    // No depth/stencil test - shader handles edge detection using MSAA samples
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_FALSE;
     depthStencil.depthWriteEnable = VK_FALSE;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_TRUE;  // Enable stencil masking
-    
-    VkStencilOpState stencilOp{};
-    stencilOp.failOp = VK_STENCIL_OP_KEEP;
-    stencilOp.passOp = VK_STENCIL_OP_KEEP;
-    stencilOp.depthFailOp = VK_STENCIL_OP_KEEP;
-    stencilOp.compareOp = VK_COMPARE_OP_EQUAL;  // Only draw where stencil equals reference
-    stencilOp.compareMask = 0xFF;
-    stencilOp.writeMask = 0x00; 
-    stencilOp.reference = 1; 
-    
-    depthStencil.front = stencilOp;
-    depthStencil.back = stencilOp;
+    depthStencil.stencilTestEnable = VK_FALSE;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
     colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
@@ -1597,7 +1585,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
     
     // Push vismodel furthest away from camera 
-    vkCmdSetDepthBias(commandBuffer, 2.0f, 0.0f, 2.0f);
+    vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
     
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
     vkCmdBindIndexBuffer(commandBuffer, visIndexBuffer, resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
@@ -1617,7 +1605,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipeline);
         
         // Push commonsub model away from camera 
-        vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 0.5f);
+        vkCmdSetDepthBias(commandBuffer, 0.25f, 0.0f, 0.25f);
         
         vkCmdBindVertexBuffers(commandBuffer, 0, 2, intrinsicBuffers, intrinsicOffsets);
         vkCmdBindIndexBuffer(commandBuffer, resourceManager.getCommonSubdivision().getIndexBuffer(), resourceManager.getCommonSubdivision().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
@@ -1665,11 +1653,9 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     if (modelSelection.getSelected()) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, outlinePipeline);
         
-        // Set stencil reference to the selected model's ID
-        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, modelSelection.getSelectedModelID());
-        
         OutlinePushConstant outlinePC;
         outlinePC.outlineThickness = modelSelection.getOutlineThickness();
+        outlinePC.selectedModelID = modelSelection.getSelectedModelID();
         outlinePC.outlineColor = modelSelection.getOutlineColor();
         
         vkCmdPushConstants(commandBuffer, outlinePipelineLayout, 

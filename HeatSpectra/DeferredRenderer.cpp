@@ -163,20 +163,23 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     geometrySubpass.pResolveAttachments = resolveRefs;
     geometrySubpass.pDepthStencilAttachment = &depthRef;
 
-    // Lighting Subpass (reads resolve attachments as input)
-    VkAttachmentReference2 inputRefs[4] = {};
-    for (int i = 0; i < 4; i++) {
+    // Lighting Subpass 
+    VkAttachmentReference2 inputRefs[5] = {};
+    for (int i = 0; i < 5; i++) {
         inputRefs[i].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
         inputRefs[i].pNext = nullptr;
         inputRefs[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         inputRefs[i].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     }
-    inputRefs[0].attachment = 4;
-    inputRefs[1].attachment = 5;
-    inputRefs[2].attachment = 6;
-    inputRefs[3].attachment = 7;  // Depth resolve attachment
+    inputRefs[0].attachment = 4;  // Albedo resolve
+    inputRefs[1].attachment = 5;  // Normal resolve
+    inputRefs[2].attachment = 6;  // Position resolve
+    inputRefs[3].attachment = 7;  // Depth resolve
     inputRefs[3].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     inputRefs[3].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    inputRefs[4].attachment = 3;  // MSAA depth for smooth stencil sampling
+    inputRefs[4].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    inputRefs[4].aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
 
     VkAttachmentReference2 lightingColorRef = {};
     lightingColorRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
@@ -195,7 +198,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     VkSubpassDescription2 lightingSubpass = {};
     lightingSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
     lightingSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    lightingSubpass.inputAttachmentCount = 4;  
+    lightingSubpass.inputAttachmentCount = 5;  // MSAA stencil
     lightingSubpass.pInputAttachments = inputRefs;
     lightingSubpass.colorAttachmentCount = 1;
     lightingSubpass.pColorAttachments = &lightingColorRef;
@@ -344,7 +347,8 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
     depthMemories.resize(maxFramesInFlight);
     depthResolveViews.resize(maxFramesInFlight);
     depthResolveSamplerViews.resize(maxFramesInFlight); 
-    stencilResolveSamplerViews.resize(maxFramesInFlight); 
+    stencilResolveSamplerViews.resize(maxFramesInFlight);
+    stencilMSAASamplerViews.resize(maxFramesInFlight); 
     depthResolveImages.resize(maxFramesInFlight);
     depthResolveMemories.resize(maxFramesInFlight);
 
@@ -411,16 +415,19 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_SAMPLE_COUNT_1_BIT);
         positionResolveViews[i] = createImageView(vulkanDevice, positionResolveImages[i], positionFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        // Depth image creation (multisampled)
+        // Depth image creation (multisampled) - needs SAMPLED_BIT for texture sampling
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
         depthImageInfo = createImageCreateInfo(extent.width, extent.height, depthFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_4_BIT);
         createImage(vulkanDevice, extent.width, extent.height, depthFormat,
-            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImages[i], depthMemories[i],
             VK_SAMPLE_COUNT_4_BIT);
         depthViews[i] = createImageView(vulkanDevice, depthImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+        
+        // MSAA stencil-only view for smooth outline edge detection
+        stencilMSAASamplerViews[i] = createImageView(vulkanDevice, depthImages[i], depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT);
 
         // Depth resolve image (with TRANSFER_SRC for GPU picking)
         createImage(vulkanDevice, extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL,
@@ -429,7 +436,6 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_SAMPLE_COUNT_1_BIT);
         depthResolveViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
         
-        // Render pass handles initial UNDEFINED -> READ_ONLY_OPTIMAL transition automatically
         depthResolveSamplerViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
         stencilResolveSamplerViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT);
 
@@ -468,6 +474,7 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImageView(vulkanDevice.getDevice(), depthResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), depthResolveSamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), stencilResolveSamplerViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), stencilMSAASamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), gridResolveViews[i], nullptr);
 
         }

@@ -71,6 +71,9 @@ public:
     const std::vector<VkImageView>& getStencilResolveSamplerViews() const {
         return stencilResolveSamplerViews; 
     }
+    const std::vector<VkImageView>& getStencilMSAASamplerViews() const {
+        return stencilMSAASamplerViews; 
+    }
     const std::vector<VkImageView>& getGridResolveViews() const {
         return gridResolveViews;
     }
@@ -89,7 +92,8 @@ private:
 
     std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews;
     std::vector<VkImageView> depthResolveSamplerViews; 
-    std::vector<VkImageView> stencilResolveSamplerViews; 
+    std::vector<VkImageView> stencilResolveSamplerViews;
+    std::vector<VkImageView> stencilMSAASamplerViews; 
     std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages;
     std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories;
 };  
