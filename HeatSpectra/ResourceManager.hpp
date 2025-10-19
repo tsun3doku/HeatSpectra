@@ -13,10 +13,13 @@ class VulkanDevice;
 const std::string MODEL_PATH	= "models/teapot.obj";
 const std::string TEXTURE_PATH	= "textures/texture.jpg";
 
+class CommandPool;
+
 class ResourceManager {
 public:
 	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, 
-		VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight);
+		VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, 
+		CommandPool* asyncCommandPool = nullptr, CommandPool* renderCommandPool = nullptr);
 	~ResourceManager();
 
 	// Delete copy operations

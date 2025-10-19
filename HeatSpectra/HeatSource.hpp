@@ -3,12 +3,13 @@
 class VulkanDevice;
 class MemoryAllocator;
 class Model;
+class CommandPool;
 
 const std::string HEATSOURCE_PATH = "models/heatsource_torus.obj";
 
 class HeatSource {
 public:
-    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight);
+    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
     ~HeatSource();
 
     void recreateResources(uint32_t maxFramesInFlight);
@@ -61,6 +62,8 @@ private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Model& heatModel;
+    CommandPool& renderCommandPool;  
+    uint32_t maxFramesInFlight;      
 
     HeatSourcePushConstant heatSourcePushConstant;
 

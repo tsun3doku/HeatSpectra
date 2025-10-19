@@ -16,12 +16,13 @@
 #include "ResourceManager.hpp"
 
 ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, 
-    VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight)
+    VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager), camera(camera) {
 
-    visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
-    commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
-    heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera);
+    // Pass both pools: asyncCommandPool (UI thread) for real-time updates, renderCommandPool (render thread) for init
+    visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
+    commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
+    heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
     grid                = std::make_unique<Grid>(vulkanDevice, uniformBufferManager, maxFramesInFlight, renderPass);
     signpostMesh        = std::make_unique<SignpostMesh>();
 }

@@ -7,9 +7,10 @@
 #include <stdexcept>
 #include <iostream>
 
-void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, 
-    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT) {
-    VkImageCreateInfo imageInfo{};
+void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples) {
+
+    VkImageCreateInfo imageInfo = createImageCreateInfo(width, height, format, tiling, usage, samples);
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent.width = width;
@@ -43,9 +44,9 @@ void createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t heig
     vkBindImageMemory(vulkanDevice.getDevice(), image, imageMemory, 0);
 }
 
-void transitionImageLayout(VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+void transitionImageLayout(CommandPool& commandPool, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
     // Start single time command buffer
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(vulkanDevice);
+    VkCommandBuffer commandBuffer = commandPool.beginCommands();
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -94,7 +95,7 @@ void transitionImageLayout(VulkanDevice& vulkanDevice, VkImage image, VkFormat f
     );
 
     // End and submit the command buffer
-    endSingleTimeCommands(vulkanDevice, commandBuffer);
+    commandPool.endCommands(commandBuffer);
 }
 
 VkImageView createImageView(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
@@ -150,9 +151,9 @@ VkShaderModule createShaderModule(const VulkanDevice& vulkanDevice, const std::v
     return shaderModule;
 }
 
-void createTextureImage(VulkanDevice& vulkanDevice, const std::string& texturePath, VkImage textureImage, VkDeviceMemory textureImageMemory) {
+void createTextureImage(VulkanDevice& vulkanDevice, CommandPool& commandPool, VkImage& textureImage, VkDeviceMemory& textureImageMemory, const char* imagePath) {
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(imagePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
@@ -178,9 +179,9 @@ void createTextureImage(VulkanDevice& vulkanDevice, const std::string& texturePa
     createImage(vulkanDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, VK_SAMPLE_COUNT_1_BIT);
 
-    transitionImageLayout(vulkanDevice, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(vulkanDevice, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight)); 
-    transitionImageLayout(vulkanDevice, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transitionImageLayout(commandPool, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    commandPool.copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight)); 
+    transitionImageLayout(commandPool, textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), stagingBufferMemory, nullptr);

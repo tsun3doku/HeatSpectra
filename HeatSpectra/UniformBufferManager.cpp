@@ -125,16 +125,10 @@ void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
 }
 
 void UniformBufferManager::updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, UniformBufferObject& ubo) {
-    // Get current time
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-    // Create rotation matrix with time based angle
+    // No rotation - use identity matrix
     ubo.model = glm::mat4(1.0f);
-    ubo.model = glm::rotate(ubo.model, time * glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    // Camera matrices remain the same
+    // Camera matrices
     ubo.view = camera.getViewMatrix();
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
     ubo.proj[1][1] *= -1;

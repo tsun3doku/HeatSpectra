@@ -20,7 +20,7 @@
 
 void Model::init(const std::string modelPath) {
     loadModel(modelPath);
-    recalculateNormals();  // Calculate proper normals based on geometry
+    recalculateNormals(); 
   
     createVertexBuffer();
     createIndexBuffer();
@@ -28,8 +28,10 @@ void Model::init(const std::string modelPath) {
     createSurfaceBuffer();
 }
 
-Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), camera(camera) {
+Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, 
+             CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), camera(camera), 
+      asyncCommandPool(asyncCommandPool), renderCommandPool(renderCommandPool) {
 }
 
 Model::~Model() {
@@ -177,7 +179,11 @@ void Model::createVertexBuffer() {
     );
 
     // Copy from the staging buffer to the vertex buffer
-    copyBuffer(vulkanDevice, stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
+    if (renderCommandPool) {
+        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
+    } else {
+        throw std::runtime_error("Model: renderCommandPool is required but was null");
+    }
 
     // Free the staging buffer 
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -212,7 +218,11 @@ void Model::createIndexBuffer() {
     );
 
     // Copy data with offsets
-    copyBuffer(vulkanDevice, stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
+    if (renderCommandPool) {
+        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
+    } else {
+        throw std::runtime_error("Model: renderCommandPool is required but was null");
+    }
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -428,9 +438,20 @@ void Model::recalculateNormals() {
 void Model::updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices) {
     vertices = newVertices;
     indices = newIndices;
-
+    
     updateVertexBuffer();
     updateIndexBuffer();
+}
+
+void Model::translate(const glm::vec3& translation) {
+    // Translate all vertices on cpu
+    for (auto& vertex : vertices) {
+        vertex.pos += translation;
+    }
+    
+    // Mark that GPU needs update
+    needsGPUUpdate = true;
+
 }
 
 void Model::updateVertexBuffer() {
@@ -448,7 +469,11 @@ void Model::updateVertexBuffer() {
     memcpy(stagingData, vertices.data(), static_cast<size_t>(bufferSize));
 
     // Copy from staging buffer to vertex buffer
-    copyBuffer(vulkanDevice, stagingBuffer, stagingOffset, vertexBuffer, vertexBufferOffset_, bufferSize);
+    if (renderCommandPool) {
+        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, vertexBuffer, vertexBufferOffset_, bufferSize);
+    } else {
+        throw std::runtime_error("Model: renderCommandPool is required but was null");
+    }
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -469,7 +494,11 @@ void Model::updateIndexBuffer() {
     memcpy(stagingData, indices.data(), static_cast<size_t>(bufferSize));
 
     // Copy from staging buffer to index buffer
-    copyBuffer(vulkanDevice, stagingBuffer, stagingOffset, indexBuffer, indexBufferOffset_, bufferSize);
+    if (renderCommandPool) {
+        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, indexBuffer, indexBufferOffset_, bufferSize);
+    } else {
+        throw std::runtime_error("Model: renderCommandPool is required but was null");
+    }
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);

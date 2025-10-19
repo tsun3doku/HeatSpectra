@@ -53,15 +53,12 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     }
 
     createLogicalDevice(surface);
-    createCommandPool();
+    // Command pools are now created in App as uiCommandPool and renderCommandPool
 }
 
 void VulkanDevice::cleanup() {
-
-    vkDestroyCommandPool(device, commandPool, nullptr);
-
-    std::cout << "Cleaning up logical device..." << std::endl;
-
+    // Command pools are now owned and destroyed by App (uiCommandPool, renderCommandPool)
+    
     if (device != VK_NULL_HANDLE) {
         vkDestroyDevice(device, nullptr);
         std::cout << "Destroyed logical device." << std::endl;
@@ -282,7 +279,7 @@ bool VulkanDevice::checkDeviceExtensionSupport(VkPhysicalDevice device) {
     return requiredExtensions.empty();
 }
 
-QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) const {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
@@ -293,8 +290,9 @@ QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSu
 
     int i = 0;
     for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)) {
+        if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)) {
             indices.graphicsAndComputeFamily = i;
+            indices.graphicsFamily = i;  // Alias for compatibility
         }
 
         VkBool32 presentSupport = false;
@@ -314,20 +312,4 @@ QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSu
     return indices;
 }
 
-void VulkanDevice::createCommandPool() {
-    // Find the appropriate queue families for graphics and presentation
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
-
-    // Create the command pool to allocate command buffers
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;  // Optional flag to reset command buffers
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
-
-    // Create the command pool on the Vulkan device
-    if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create graphics command pool");
-    }
-
-    std::cout << "Command pool created successfully." << std::endl;
-}
+// Command pool creation removed - now handled by CommandPool class in App

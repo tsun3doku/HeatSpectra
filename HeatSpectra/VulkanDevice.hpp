@@ -15,6 +15,7 @@ struct SwapChainSupportDetails {
 };
 
 struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;  // Same as graphicsAndComputeFamily
     std::optional<uint32_t> graphicsAndComputeFamily;
     std::optional<uint32_t> presentFamily;
 
@@ -55,9 +56,6 @@ public:
     VkSurfaceKHR getSurface() const {
         return surface;
     }
-    VkCommandPool getCommandPool() const {
-        return commandPool;
-    }
     VkPhysicalDeviceProperties getPhysicalDeviceProperties() const {
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
@@ -67,8 +65,12 @@ public:
     VkResolveModeFlagBits getDepthResolveMode() const { 
         return depthResolveMode; 
     }
+    
+    QueueFamilyIndices getQueueFamilyIndices() const {
+        return findQueueFamilies(physicalDevice, surface);
+    }
   
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) const;
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
     VkBuffer createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceMemory& bufferMemory);
@@ -81,7 +83,6 @@ private:
     VkQueue presentQueue = VK_NULL_HANDLE;
     VkQueue computeQueue = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkCommandPool commandPool = VK_NULL_HANDLE;
 
     std::vector<const char*> deviceExtensions;
     std::vector<const char*> validationLayers;
@@ -94,6 +95,5 @@ private:
     bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     void createLogicalDevice(VkSurfaceKHR surface);
-    void createCommandPool();
 };
 

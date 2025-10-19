@@ -15,11 +15,12 @@
 #include "DeferredRenderer.hpp"
 #include "MemoryAllocator.hpp"
 #include "VulkanDevice.hpp"
+#include "Gizmo.hpp"
 #include "GBuffer.hpp"
 
 GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager,
-    uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, bool drawWireframe)
-    : vulkanDevice(vulkanDevice), deferredRenderer(deferredRenderer) {
+    uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, CommandPool& cmdPool, bool drawWireframe)
+    : vulkanDevice(vulkanDevice), deferredRenderer(deferredRenderer), renderCommandPool(cmdPool) {
 
     createFramebuffers(swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
@@ -58,7 +59,7 @@ void GBuffer::createCommandBuffers(uint32_t maxFramesInFlight) {
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = vulkanDevice.getCommandPool();
+    allocInfo.commandPool = renderCommandPool.getHandle();  // Use render command pool
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = static_cast<uint32_t>(gbufferCommandBuffers.size());
 
@@ -68,7 +69,8 @@ void GBuffer::createCommandBuffers(uint32_t maxFramesInFlight) {
 }
 
 void GBuffer::freeCommandBuffers() {
-    vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(), static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
+    vkFreeCommandBuffers(vulkanDevice.getDevice(), renderCommandPool.getHandle(), 
+                         static_cast<uint32_t>(gbufferCommandBuffers.size()), gbufferCommandBuffers.data());
     gbufferCommandBuffers.clear();
 }
 
@@ -1537,7 +1539,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
 }
 
 void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
-    ModelSelection& modelSelection, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
+    ModelSelection& modelSelection, Gizmo& gizmo, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[currentFrame];
 
     // Start recording commands  
@@ -1682,6 +1684,24 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     
     // Reset depth bias
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+
+    // Draw gizmo if a model is selected
+    if (modelSelection.getSelected()) {
+        uint32_t selectedID = modelSelection.getSelectedModelID();
+        glm::vec3 gizmoPosition;
+        
+        if (selectedID == 1) {
+            gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
+        } else if (selectedID == 2) {
+            gizmoPosition = resourceManager.getHeatModel().getBoundingBoxCenter();
+        } else {
+            // Fallback to visModel if unknown ID
+            gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
+        }
+                 
+        float gizmoScale = 0.5f;
+        gizmo.render(commandBuffer, currentFrame, gizmoPosition, extent, gizmoScale);
+    }
 
     // Transition to lighting subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);

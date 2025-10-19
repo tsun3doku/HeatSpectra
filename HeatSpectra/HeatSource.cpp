@@ -8,8 +8,8 @@
 #include "Model.hpp"
 #include "HeatSource.hpp"
 
-HeatSource::HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), heatModel(heatModel) {
+HeatSource::HeatSource(VulkanDevice& device, MemoryAllocator& allocator, Model& model, uint32_t maxFramesInFlight, CommandPool& cmdPool)
+    : vulkanDevice(device), memoryAllocator(allocator), heatModel(model), renderCommandPool(cmdPool), maxFramesInFlight(maxFramesInFlight) {
 
     createSourceBuffer();
     initializeSurfaceBuffer();
@@ -60,14 +60,14 @@ void HeatSource::createSourceBuffer() {
     sourceBuffer = sourceBufferHandle;
     sourceBufferOffset_ = sourceBufferOffset;
 
-    // Copy buffer with offsets
-    VkCommandBuffer cmd = beginSingleTimeCommands(vulkanDevice);
+    // Copy buffer with offsets using render command pool
+    VkCommandBuffer cmd = renderCommandPool.beginCommands();
     VkBufferCopy region{};
     region.srcOffset = stagingBufferOffset;
     region.dstOffset = sourceBufferOffset_;
     region.size = bufferSize;
     vkCmdCopyBuffer(cmd, stagingBufferHandle, sourceBuffer, 1, &region);
-    endSingleTimeCommands(vulkanDevice, cmd);
+    renderCommandPool.endCommands(cmd);
 
     // Free staging buffer
     memoryAllocator.free(stagingBufferHandle, stagingBufferOffset);
@@ -100,8 +100,8 @@ void HeatSource::initializeSurfaceBuffer() {
     memcpy(data, surfaceVertices.data(), (size_t)bufferSize);
     vkUnmapMemory(vulkanDevice.getDevice(), stagingMemory);
 
-    // Copy from staging to actual buffer
-    VkCommandBuffer cmd = beginSingleTimeCommands(vulkanDevice);
+    // Copy from staging to actual buffer using render command pool
+    VkCommandBuffer cmd = renderCommandPool.beginCommands();
 
     // Copy to surface buffer with offset
     VkBufferCopy copyRegionSurface{
@@ -119,7 +119,7 @@ void HeatSource::initializeSurfaceBuffer() {
     };
     vkCmdCopyBuffer(cmd, stagingBuffer, heatModel.getSurfaceVertexBuffer(), 1, &copyRegionVertex);
 
-    endSingleTimeCommands(vulkanDevice, cmd);
+    renderCommandPool.endCommands(cmd);
 
     vkDestroyBuffer(vulkanDevice.getDevice(), stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice.getDevice(), stagingMemory, nullptr);

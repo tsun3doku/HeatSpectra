@@ -111,9 +111,12 @@ namespace std {
     };
 }
 
+class CommandPool;
+
 class Model {
 public:
-    Model(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera);
+    Model(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera, 
+          CommandPool* asyncCommandPool = nullptr, CommandPool* renderCommandPool = nullptr);
     ~Model();
     void init(const std::string modelPath);
 
@@ -131,6 +134,16 @@ public:
     void updateVertexBuffer();
     void updateIndexBuffer();
     void saveOBJ(const std::string& path) const;
+    
+    void translate(const glm::vec3& translation);
+    
+    bool needsVertexBufferUpdate() const { return needsGPUUpdate.load(); }
+    
+    void applyPendingGPUUpdate() {
+        if (needsGPUUpdate.exchange(false)) {
+            updateVertexBuffer();
+        }
+    }
 
     void recreateBuffers();
     void cleanup();
@@ -212,6 +225,10 @@ private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Camera& camera;
+    CommandPool* asyncCommandPool;   // Optional pool for async updates (UI thread)
+    CommandPool* renderCommandPool;  // Optional pool for init operations (render thread)
+    
+    std::atomic<bool> needsGPUUpdate{false};  // Flag for deferred GPU updates
 
     std::unique_ptr<AABBTree> aabbTree;
 

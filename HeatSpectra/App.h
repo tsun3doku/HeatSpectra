@@ -9,6 +9,7 @@
 #include "VulkanWindow.h"
 #include "VulkanDevice.hpp"
 #include "Camera.hpp"
+#include "CommandBufferManager.hpp"
 
 class MemoryAllocator;
 class ResourceManager;
@@ -17,6 +18,7 @@ class DeferredRenderer;
 class GBuffer;
 class HeatSystem;
 class ModelSelection;
+class Gizmo;
 
 class App {
 public:
@@ -27,6 +29,8 @@ public:
     void handleScrollInput(double xOffset, double yOffset);
     void handleKeyInput(Qt::Key key, bool pressed);
     void handleMouseClick(int button, float mouseX, float mouseY);
+    void handleMouseMove(float mouseX, float mouseY);
+    void handleMouseRelease(int button, float mouseX, float mouseY);
     
     // Heat system control methods
     bool isHeatSystemActive() const;
@@ -50,6 +54,10 @@ private:
     
     VulkanDevice vulkanDevice;
     std::unique_ptr<MemoryAllocator> memoryAllocator;
+    
+    std::unique_ptr<CommandPool> uiCommandPool;      
+    std::unique_ptr<CommandPool> renderCommandPool;  
+    
     std::unique_ptr<ResourceManager> resourceManager;
     std::unique_ptr<UniformBufferManager> uniformBufferManager;
     
@@ -72,10 +80,16 @@ private:
     
     std::unique_ptr<HeatSystem> heatSystem;
     std::unique_ptr<ModelSelection> modelSelection;
+    std::unique_ptr<Gizmo> gizmo;
     Camera camera;
     glm::vec3 center;
     
     double mouseX, mouseY;
+    
+    // Gizmo interaction state
+    bool isDraggingGizmo;
+    glm::vec3 modelStartPosition;
+    glm::vec3 accumulatedTranslation;
     bool isShuttingDown;
     
     std::atomic<bool> isCameraUpdated;

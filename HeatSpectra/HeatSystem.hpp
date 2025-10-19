@@ -8,10 +8,12 @@ class ResourceManager;
 class MemoryAllocator;
 class VulkanDevice;
 class UniformBufferManager;
+class CommandPool;
 
 class HeatSystem {
 public:
-    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
+    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
+        UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
     ~HeatSystem();
     void update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(uint32_t maxFramesInFlight);
@@ -89,6 +91,7 @@ private:
     MemoryAllocator& memoryAllocator;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
+    CommandPool& renderCommandPool; 
     std::unique_ptr<HeatSource> heatSource;
     Camera* camera = nullptr;
     

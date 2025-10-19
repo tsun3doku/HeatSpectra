@@ -209,6 +209,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="DeferredRenderer.cpp" />
     <ClCompile Include="GBuffer.cpp" />
     <ClCompile Include="GeodesicTracer.cpp" />
+    <ClCompile Include="Gizmo.cpp" />
     <ClCompile Include="Grid.cpp" />
     <ClCompile Include="HalfEdgeMesh.cpp" />
     <ClCompile Include="HDR.cpp" />
@@ -247,6 +248,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\blend.vert" />
     <None Include="shaders\gbuffer.frag" />
     <None Include="shaders\gbuffer.vert" />
+    <None Include="shaders\gizmo.frag" />
+    <None Include="shaders\gizmo.vert" />
     <None Include="shaders\grid.frag" />
     <None Include="shaders\grid.vert" />
     <None Include="shaders\heat_source.comp" />
@@ -266,6 +269,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="DeferredRenderer.hpp" />
     <ClInclude Include="GBuffer.hpp" />
     <ClInclude Include="GeodesicTracer.hpp" />
+    <ClInclude Include="Gizmo.hpp" />
     <ClInclude Include="Grid.hpp" />
     <ClInclude Include="HalfEdgeMesh.hpp" />
     <ClInclude Include="HDR.hpp" />

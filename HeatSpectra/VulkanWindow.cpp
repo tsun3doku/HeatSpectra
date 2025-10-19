@@ -64,6 +64,16 @@ void VulkanWindow::setMouseClickCallback(void (*callback)(void*, int, float, flo
     mouseClickUserPtr = userPtr;
 }
 
+void VulkanWindow::setMouseMoveCallback(void (*callback)(void*, float, float), void* userPtr) {
+    mouseMoveCb = callback;
+    mouseMoveUserPtr = userPtr;
+}
+
+void VulkanWindow::setMouseReleaseCallback(void (*callback)(void*, int, float, float), void* userPtr) {
+    mouseReleaseCb = callback;
+    mouseReleaseUserPtr = userPtr;
+}
+
 void VulkanWindow::resizeEvent(QResizeEvent* event) {
     QWindow::resizeEvent(event);
 }
@@ -103,7 +113,7 @@ void VulkanWindow::mousePressEvent(QMouseEvent* event) {
         middleButtonPressed = true;
     }
     
-    // Trigger mouse click callback for left clicks (model selection)
+    // Trigger mouse click callback for left clicks
     if (event->button() == Qt::LeftButton && mouseClickCb && mouseClickUserPtr) {
         float mouseX = event->position().x();
         float mouseY = event->position().y();
@@ -118,11 +128,26 @@ void VulkanWindow::mouseReleaseEvent(QMouseEvent* event) {
         middleButtonPressed = false;
     }
     
+    // Trigger mouse release callback
+    if (mouseReleaseCb && mouseReleaseUserPtr) {
+        float mouseX = event->position().x();
+        float mouseY = event->position().y();
+        mouseReleaseCb(mouseReleaseUserPtr, static_cast<int>(event->button()), mouseX, mouseY);
+    }
+    
     QWindow::mouseReleaseEvent(event);
 }
 
 void VulkanWindow::mouseMoveEvent(QMouseEvent* event) {
     mousePos = event->position();
+    
+    // Trigger mouse move callback
+    if (mouseMoveCb && mouseMoveUserPtr) {
+        float mouseX = event->position().x();
+        float mouseY = event->position().y();
+        mouseMoveCb(mouseMoveUserPtr, mouseX, mouseY);
+    }
+    
     QWindow::mouseMoveEvent(event);
 }
 

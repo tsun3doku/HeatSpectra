@@ -99,6 +99,9 @@
     <ClCompile Include="ModelSelection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Gizmo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.vert">
@@ -144,6 +147,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\outline.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\gizmo.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\gizmo.vert">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -218,6 +227,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ModelSelection.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Gizmo.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -8,11 +8,11 @@
 #include <glm/glm.hpp>
 #include <string>
 
-const std::string HDR_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/rainforest.hdr"; //change
+const std::string HDR_PATH = "C:/Users/tsundoku/Documents/Visual Studio 2022/Projects/HeatSpectra/HeatSpectra/textures/rainforest.hdr"; 
 
 class HDR {
 public:
-	HDR() = default;
+    HDR(VulkanDevice* vulkanDevice, CommandPool* renderCommandPool);
 	void init(VulkanDevice& vulkanDevice);
 	void createHDRTextureImage(const std::string& filePath);
 	void prefilterEnvMap(float roughness);
@@ -33,6 +33,7 @@ public:
 
 private:
 	VulkanDevice* vulkanDevice;
+	CommandPool* renderCommandPool;  // For image operations
 	Camera* camera;
 
 	VkImage envMapImage = VK_NULL_HANDLE;

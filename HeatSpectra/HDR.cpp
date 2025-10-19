@@ -6,8 +6,9 @@
 #include <stdexcept>
 #include <iomanip>
 
-void HDR::init(VulkanDevice& vulkanDevice) {
-    this->vulkanDevice = &vulkanDevice;
+HDR::HDR(VulkanDevice* device, CommandPool* cmdPool) 
+    : vulkanDevice(device), renderCommandPool(cmdPool) {
+    this->vulkanDevice = vulkanDevice;
     createHDRTextureImage(HDR_PATH);
     createCubemapImage();
     createHDRRenderPass();
@@ -77,15 +78,15 @@ void HDR::createHDRTextureImage(const std::string& filePath) {
     createImage(*vulkanDevice, createInfo, envMapImage, envMapImageMemory);
 
     // Transition image to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL before copying the data
-    transitionImageLayout(*vulkanDevice, envMapImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED,
+    transitionImageLayout(*renderCommandPool, envMapImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy the data from the staging buffer to the HDR texture image
-    copyBufferToImage(*vulkanDevice, stagingBuffer, envMapImage, static_cast<uint32_t>(texWidth),
+    renderCommandPool->copyBufferToImage(stagingBuffer, envMapImage, static_cast<uint32_t>(texWidth),
         static_cast<uint32_t>(texHeight));
 
     // Transition image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL after copying
-    transitionImageLayout(*vulkanDevice, envMapImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    transitionImageLayout(*renderCommandPool, envMapImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Clean up the staging buffer
@@ -173,7 +174,7 @@ void HDR::uploadHDRTextureData(float* data, VkDeviceMemory stagingBufferMemory, 
     memcpy(stagingData, data, static_cast<size_t>(imageSize));
     vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
 
-    copyBufferToImage(*vulkanDevice, stagingBuffer, envMapImage, texWidth, texHeight);
+    renderCommandPool->copyBufferToImage(stagingBuffer, envMapImage, texWidth, texHeight);
 }
 
 void HDR::createCubemapImage() {

@@ -40,6 +40,8 @@ public:
     void setScrollCallback(void (*callback)(void*, double, double), void* userPtr);
     void setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* userPtr);
     void setMouseClickCallback(void (*callback)(void*, int, float, float), void* userPtr);
+    void setMouseMoveCallback(void (*callback)(void*, float, float), void* userPtr);
+    void setMouseReleaseCallback(void (*callback)(void*, int, float, float), void* userPtr);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -67,4 +69,10 @@ private:
     
     void (*mouseClickCb)(void*, int, float, float) = nullptr;
     void* mouseClickUserPtr = nullptr;
+    
+    void (*mouseMoveCb)(void*, float, float) = nullptr;
+    void* mouseMoveUserPtr = nullptr;
+    
+    void (*mouseReleaseCb)(void*, int, float, float) = nullptr;
+    void* mouseReleaseUserPtr = nullptr;
 };

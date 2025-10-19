@@ -14,10 +14,12 @@
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
 
-HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager), maxFramesInFlight(maxFramesInFlight) {
+HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
+    UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& cmdPool)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager),
+      uniformBufferManager(uniformBufferManager), renderCommandPool(cmdPool), maxFramesInFlight(maxFramesInFlight) {
 
-    heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight);
+    heatSource = std::make_unique<HeatSource>(vulkanDevice, memoryAllocator, resourceManager.getHeatModel(), maxFramesInFlight, renderCommandPool);
 
     // Don't generate tet mesh on startup - will be done when heat sim is activated
     // But initialize surface buffer so model stays visible
@@ -84,7 +86,8 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
         }
         
         if (hasChanged) {
-            VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+            // Use render command pool for buffer copying
+            VkCommandBuffer copyCmd = renderCommandPool.beginCommands();
             for (uint32_t i = 0; i < maxFramesInFlight; i++) {
                 VkBufferCopy copyRegion{};
                 copyRegion.size = sizeof(float) * feaMesh.elements.size();
@@ -105,7 +108,7 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
                         tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
                 }
             }
-            endSingleTimeCommands(vulkanDevice, copyCmd);
+            renderCommandPool.endCommands(copyCmd);
             
             // Only free old buffers if they were actually replaced
             for (size_t i = 0; i < maxFramesInFlight; i++) {
@@ -452,15 +455,15 @@ void HeatSystem::initializeSurfaceBuffer() {
     void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
     memcpy(stagingData, surfaceVertices.data(), bufferSize);
 
-    // Copy to destination buffers
-    VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+    // Copy to destination buffers using render command pool
+    VkCommandBuffer copyCmd = renderCommandPool.beginCommands();
     VkBufferCopy copyRegion = { stagingOffset, resourceManager.getVisModel().getSurfaceBufferOffset(), bufferSize };
     vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceBuffer(), 1, &copyRegion);
 
     // Copy to surface vertex buffer
     VkBufferCopy vertexCopyRegion = {stagingOffset, resourceManager.getVisModel().getSurfaceVertexBufferOffset(), bufferSize};
     vkCmdCopyBuffer(copyCmd, stagingBuffer, resourceManager.getVisModel().getSurfaceVertexBuffer(), 1, &vertexCopyRegion);
-    endSingleTimeCommands(vulkanDevice, copyCmd);
+    renderCommandPool.endCommands(copyCmd);
 
     memoryAllocator.free(stagingBuffer, stagingOffset);
 }
@@ -615,14 +618,14 @@ void HeatSystem::initializeTetra() {
             readData[j] = feaMesh.elements[j].temperature;
         }
 
-        // Copy read -> write buffer for this frame
-        VkCommandBuffer copyCmd = beginSingleTimeCommands(vulkanDevice);
+        // Copy read -> write buffer for this frame using render command pool
+        VkCommandBuffer copyCmd = renderCommandPool.beginCommands();
         VkBufferCopy copyRegion{};
         copyRegion.size = sizeof(float) * feaMesh.elements.size();
         copyRegion.srcOffset = tetraFrameBuffers.readBufferOffsets_[i];
         copyRegion.dstOffset = tetraFrameBuffers.writeBufferOffsets_[i];
         vkCmdCopyBuffer(copyCmd, tetraFrameBuffers.readBuffers[i], tetraFrameBuffers.writeBuffers[i], 1, &copyRegion);
-        endSingleTimeCommands(vulkanDevice, copyCmd);
+        renderCommandPool.endCommands(copyCmd);
     }
 }
 
@@ -1188,14 +1191,14 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 void HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
     // Free existing command buffers
     if (!computeCommandBuffers.empty()) {
-        vkFreeCommandBuffers(vulkanDevice.getDevice(), vulkanDevice.getCommandPool(),
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), renderCommandPool.getHandle(),
             static_cast<uint32_t>(computeCommandBuffers.size()), computeCommandBuffers.data());
     }
 
     computeCommandBuffers.resize(maxFramesInFlight);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = vulkanDevice.getCommandPool();
+    allocInfo.commandPool = renderCommandPool.getHandle();  // Use render command pool
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = static_cast<uint32_t>(computeCommandBuffers.size());
 
