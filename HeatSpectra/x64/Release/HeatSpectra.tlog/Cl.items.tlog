@@ -13,6 +13,7 @@ C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\predicates.cxx;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\predicates.obj
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\libs\TetGen\tetgen.cxx;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\tetgen.obj
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\App.cpp;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\App.obj
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\ModelSelection.cpp;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\ModelSelection.obj
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\VulkanWindow.cpp;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\VulkanWindow.obj
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\MainQt.cpp;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\MainQt.obj
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\MemoryAllocator.cpp;C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\x64\Release\MemoryAllocator.obj

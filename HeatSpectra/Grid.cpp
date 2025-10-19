@@ -152,7 +152,7 @@ void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass ren
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_TRUE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;  // 8x MSAA grid
     multisampling.minSampleShading = 1.0f;
 
     VkPipelineDepthStencilStateCreateInfo depthStencilState{};

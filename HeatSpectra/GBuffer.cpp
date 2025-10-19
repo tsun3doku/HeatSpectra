@@ -83,18 +83,20 @@ void GBuffer::createFramebuffers(std::vector<VkImageView> swapChainImageViews, V
     for (size_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
         for (size_t swapchainIndex = 0; swapchainIndex < swapChainImageViews.size(); swapchainIndex++) {
 
-            std::array<VkImageView, 11> attachments = {
-            deferredRenderer.getAlbedoViews()[frameIndex],         // Albedo 
-            deferredRenderer.getNormalViews()[frameIndex],         // Normal 
-            deferredRenderer.getPositionViews()[frameIndex],       // Position 
-            deferredRenderer.getDepthViews()[frameIndex],          // Depth 
-            deferredRenderer.getAlbedoResolveViews()[frameIndex],  // Albedo Resolve
-            deferredRenderer.getNormalResolveViews()[frameIndex],  // Normal Resolve
-            deferredRenderer.getPositionResolveViews()[frameIndex],// Position Resolve
-            deferredRenderer.getDepthResolveViews()[frameIndex],   // Depth Resolve
-            swapChainImageViews[swapchainIndex],                   // Swapchain
-            deferredRenderer.getGridViews()[frameIndex],           // Grid 
-            deferredRenderer.getGridResolveViews()[frameIndex]     // Grid Resolve
+            std::array<VkImageView, 13> attachments = {
+            deferredRenderer.getAlbedoViews()[frameIndex],         // 0: Albedo MSAA
+            deferredRenderer.getNormalViews()[frameIndex],         // 1: Normal MSAA
+            deferredRenderer.getPositionViews()[frameIndex],       // 2: Position MSAA
+            deferredRenderer.getDepthViews()[frameIndex],          // 3: Depth MSAA
+            deferredRenderer.getAlbedoResolveViews()[frameIndex],  // 4: Albedo Resolve
+            deferredRenderer.getNormalResolveViews()[frameIndex],  // 5: Normal Resolve
+            deferredRenderer.getPositionResolveViews()[frameIndex],// 6: Position Resolve
+            deferredRenderer.getDepthResolveViews()[frameIndex],   // 7: Depth Resolve
+            deferredRenderer.getLightingViews()[frameIndex],       // 8: Lighting MSAA
+            deferredRenderer.getGridViews()[frameIndex],           // 9: Grid MSAA
+            deferredRenderer.getGridResolveViews()[frameIndex],    // 10: Grid Resolve
+            deferredRenderer.getLightingResolveViews()[frameIndex],// 11: Lighting Resolve
+            swapChainImageViews[swapchainIndex]                    // 12: Swapchain
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -106,7 +108,7 @@ void GBuffer::createFramebuffers(std::vector<VkImageView> swapChainImageViews, V
             framebufferInfo.height = extent.height;
             framebufferInfo.layers = 1;
 
-            size_t framebufferIndex = frameIndex * swapChainImageViews.size() + swapchainIndex;  // Calculate the framebuffer index
+            size_t framebufferIndex = frameIndex * swapChainImageViews.size() + swapchainIndex; 
             if (vkCreateFramebuffer(vulkanDevice.getDevice(), &framebufferInfo, nullptr, &framebuffers[framebufferIndex]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create G-buffer framebuffer");
             }
@@ -167,19 +169,33 @@ void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
     }
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        VkDescriptorImageInfo gridResolveImageInfo{};
-        gridResolveImageInfo.imageView = deferredRenderer.getGridResolveViews()[i];
-        gridResolveImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkDescriptorImageInfo imageInfos[2] = {};
+        // Grid input
+        imageInfos[0].imageView = deferredRenderer.getGridResolveViews()[i];
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        // Lighting input
+        imageInfos[1].imageView = deferredRenderer.getLightingResolveViews()[i];
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet blendWrite{};
-        blendWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        blendWrite.dstSet = blendDescriptorSets[i];
-        blendWrite.dstBinding = 0;
-        blendWrite.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        blendWrite.descriptorCount = 1;
-        blendWrite.pImageInfo = &gridResolveImageInfo;
+        VkWriteDescriptorSet descriptorWrites[2] = {};
+        // Grid binding
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = blendDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &imageInfos[0];
+        // Lighting binding
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = blendDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfos[1];
 
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 1, &blendWrite, 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 2, descriptorWrites, 0, nullptr);
     }
     
     // Update outline descriptor sets for screen-space outline
@@ -439,7 +455,7 @@ void GBuffer::createLightingDescriptorSets(UniformBufferManager& uniformBufferMa
 void GBuffer::createBlendDescriptorPool(uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-    poolSize.descriptorCount = maxFramesInFlight * 1;
+    poolSize.descriptorCount = maxFramesInFlight * 2;  // Grid + Lighting inputs
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -453,16 +469,22 @@ void GBuffer::createBlendDescriptorPool(uint32_t maxFramesInFlight) {
 }
 
 void GBuffer::createBlendDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding binding{};
-    binding.binding = 0;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-    binding.descriptorCount = 1;
-    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutBinding bindings[2] = {};
+    // Grid input
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    // Lighting input
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &binding;
+    layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &blendDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create blend descriptor set layout");
@@ -484,27 +506,40 @@ void GBuffer::createBlendDescriptorSets(uint32_t maxFramesInFlight) {
     }
 
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = deferredRenderer.getGridResolveViews()[i];
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkDescriptorImageInfo imageInfos[2] = {};
+        // Grid input
+        imageInfos[0].imageView = deferredRenderer.getGridResolveViews()[i];
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        // Lighting input
+        imageInfos[1].imageView = deferredRenderer.getLightingResolveViews()[i];
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = blendDescriptorSets[i];
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
+        VkWriteDescriptorSet descriptorWrites[2] = {};
+        // Grid binding
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = blendDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pImageInfo = &imageInfos[0];
+        // Lighting binding
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = blendDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo = &imageInfos[1];
 
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 1, &descriptorWrite, 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 2, descriptorWrites, 0, nullptr);
     }
 }
 
 void GBuffer::createOutlineDescriptorPool(uint32_t maxFramesInFlight) {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = maxFramesInFlight * 2;  // 2 samplers per set (depth + stencil)
+    poolSize.descriptorCount = maxFramesInFlight * 2;  // (depth + stencil)
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -520,13 +555,13 @@ void GBuffer::createOutlineDescriptorPool(uint32_t maxFramesInFlight) {
 void GBuffer::createOutlineDescriptorSetLayout() {
     std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
     
-    // Binding 0: Depth texture
+    // Depth texture
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     
-    // Binding 1: Stencil texture
+    // Stencil texture
     bindings[1].binding = 1;
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[1].descriptorCount = 1;
@@ -556,16 +591,15 @@ void GBuffer::createOutlineDescriptorSets(uint32_t maxFramesInFlight) {
         throw std::runtime_error("Failed to allocate outline descriptor sets");
     }
 
-    // Initial descriptor writes for both depth and stencil
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorImageInfo, 2> imageInfos{};
         
-        // Binding 0: Depth texture
+        // Depth texture
         imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Binding 1: MSAA Stencil texture (for smooth edges)
+        // Stencil texture 
         imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
         imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
@@ -668,7 +702,7 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; //debug
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; 
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_TRUE;
 
@@ -676,7 +710,7 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_TRUE;
     multisampling.minSampleShading = 1.0f;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT; // Match renderpass
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -727,7 +761,7 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Create pipeline layout with push constant for heat mode
+    // Create pipeline layout with push constant for heatsystem
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
@@ -819,7 +853,7 @@ void GBuffer::createLightingPipeline(VkExtent2D swapchainExtent) {
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;  // 8x MSAA lighting output
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -956,7 +990,7 @@ void GBuffer::createWireframePipeline(VkExtent2D extent) {
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT; // Match renderpass
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT; // 8x MSAA
     multisampling.minSampleShading = 1.0f;
     multisampling.pSampleMask = nullptr;
     multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -1112,13 +1146,12 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT; 
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;  
     multisampling.minSampleShading = 1.0f;
     multisampling.pSampleMask = nullptr;
-    multisampling.alphaToCoverageEnable = VK_FALSE;
+    multisampling.alphaToCoverageEnable = VK_TRUE;  // Convert alpha to sample coverage mask
     multisampling.alphaToOneEnable = VK_FALSE;
 
-    // No depth/stencil test - shader handles edge detection using MSAA samples
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_FALSE;
@@ -1131,7 +1164,7 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
         VK_COLOR_COMPONENT_G_BIT |
         VK_COLOR_COMPONENT_B_BIT |
         VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.blendEnable = VK_TRUE;  
     colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
@@ -1165,7 +1198,7 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &outlineDescriptorSetLayout;  // Use outline descriptor set
+    pipelineLayoutInfo.pSetLayouts = &outlineDescriptorSetLayout; 
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &outlinePushConstantRange;
 
@@ -1258,7 +1291,7 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT; 
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;  // 8x MSAA 
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1534,18 +1567,20 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     VkSubpassEndInfo nextSubpassEndInfo{};
     nextSubpassEndInfo.sType = VK_STRUCTURE_TYPE_SUBPASS_END_INFO;
 
-    std::array<VkClearValue, 11> clearValues{};
-    clearValues[0].color = { {clearColorValues[0], clearColorValues[1], clearColorValues[2], 1.0f } };  // Albedo 
-    clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Normal 
-    clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position 
-    clearValues[3].depthStencil = { 1.0f, 0 };              // Depth 
+    std::array<VkClearValue, 13> clearValues{};
+    clearValues[0].color = { {clearColorValues[0], clearColorValues[1], clearColorValues[2], 1.0f } };  // Albedo MSAA
+    clearValues[1].color = { { 0.0f, 0.0f, 1.0f, 0.0f } };  // Normal MSAA
+    clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position MSAA
+    clearValues[3].depthStencil = { 1.0f, 0 };              // Depth MSAA
     clearValues[4].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Albedo Resolve
     clearValues[5].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Normal Resolve
     clearValues[6].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Position Resolve
     clearValues[7].depthStencil = { 1.0f, 0 };              // Depth Resolve
-    clearValues[8].color = { { 0.0f, 0.0f, 0.0f, 1.0f } };  // Swapchain
-    clearValues[9].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Grid
+    clearValues[8].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Lighting MSAA 
+    clearValues[9].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };  // Grid MSAA 
     clearValues[10].color = { { 0.0f, 0.0f, 0.0f, 0.0f } }; // Grid Resolve
+    clearValues[11].color = { { 0.0f, 0.0f, 0.0f, 0.0f } }; // Lighting Resolve
+    clearValues[12].color = { { 0.0f, 0.0f, 0.0f, 1.0f } }; // Swapchain
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
@@ -1581,7 +1616,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     int32_t useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
     vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
     
-    // Set stencil reference for visModel (ID = 1)
+    // Set stencil reference for visModel 
     vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
     
     // Push vismodel furthest away from camera 
@@ -1605,7 +1640,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipeline);
         
         // Push commonsub model away from camera 
-        vkCmdSetDepthBias(commandBuffer, 0.25f, 0.0f, 0.25f);
+        vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
         
         vkCmdBindVertexBuffers(commandBuffer, 0, 2, intrinsicBuffers, intrinsicOffsets);
         vkCmdBindIndexBuffer(commandBuffer, resourceManager.getCommonSubdivision().getIndexBuffer(), resourceManager.getCommonSubdivision().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
@@ -1637,10 +1672,16 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     
     vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 2);
     
+    // Heat source model has same bias as vismodel
+    vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
+    
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatBuffers, heatOffsets);
     vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getHeatModel().getIndices().size()), 1, 0, 0, 0);
+    
+    // Reset depth bias
+    vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
     // Transition to lighting subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
@@ -1703,8 +1744,6 @@ void GBuffer::cleanupFramebuffers(uint32_t maxFramesInFlight) {
 }
 
 void GBuffer::cleanup(uint32_t maxFramesInFlight) {
-    // Note: Grid cleanup is handled by ResourceManager
-
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), wireframePipeline, nullptr);

@@ -68,14 +68,17 @@ public:
     const std::vector<VkImageView>& getDepthResolveSamplerViews() const {
         return depthResolveSamplerViews;  
     }
-    const std::vector<VkImageView>& getStencilResolveSamplerViews() const {
-        return stencilResolveSamplerViews; 
-    }
     const std::vector<VkImageView>& getStencilMSAASamplerViews() const {
         return stencilMSAASamplerViews; 
     }
     const std::vector<VkImageView>& getGridResolveViews() const {
         return gridResolveViews;
+    }
+    const std::vector<VkImageView>& getLightingViews() const {
+        return lightingViews;
+    }
+    const std::vector<VkImageView>& getLightingResolveViews() const {
+        return lightingResolveViews;
     }
     const std::vector<VkImage>& getDepthResolveImages() const {
         return depthResolveImages;
@@ -85,15 +88,14 @@ private:
     VulkanDevice& vulkanDevice;
     VkRenderPass renderPass;
 
-    std::vector<VkImage> albedoImages, normalImages, positionImages, depthImages, gridImages;
-    std::vector<VkDeviceMemory> albedoMemories, normalMemories, positionMemories, depthMemories, gridMemories;
-    std::vector<VkImageView> albedoViews, normalViews, positionViews, depthViews, gridViews;
+    std::vector<VkImage> albedoImages, normalImages, positionImages, depthImages, gridImages, lightingImages;
+    std::vector<VkDeviceMemory> albedoMemories, normalMemories, positionMemories, depthMemories, gridMemories, lightingMemories;
+    std::vector<VkImageView> albedoViews, normalViews, positionViews, depthViews, gridViews, lightingViews;
     VkImageCreateInfo albedoImageInfo, normalImageInfo, positionImageInfo, depthImageInfo, gridImageInfo;
 
-    std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews;
+    std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews, lightingResolveViews;
     std::vector<VkImageView> depthResolveSamplerViews; 
-    std::vector<VkImageView> stencilResolveSamplerViews;
     std::vector<VkImageView> stencilMSAASamplerViews; 
-    std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages;
-    std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories;
+    std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages, lightingResolveImages;
+    std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories, lightingResolveMemories;
 };  

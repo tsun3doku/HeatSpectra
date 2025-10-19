@@ -54,13 +54,13 @@ void main() {
         if (isEdge) break;
     }
     
-    // Check if current pixel has mixed samples 
+    // Check if current pixel has mixed samples (on edge itself)
     if (!isEdge && selectedSamples < sampleCount) {
         isEdge = true;
     }
     
     if (isEdge) {
-        // Coverage = how many samples are selected / total samples
+        // Use coverage as alpha for alpha-to-coverage MSAA
         float coverage = float(selectedSamples) / float(sampleCount);
         outColor = vec4(pc.outlineColor, coverage);
     } else {

@@ -16,11 +16,11 @@ DeferredRenderer::~DeferredRenderer() {
 }
 
 void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat) {
-    VkAttachmentDescription2 attachments[11] = {};
+    VkAttachmentDescription2 attachments[13] = {};
     // Albedo attachment
     attachments[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
-    attachments[0].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachments[0].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -30,7 +30,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Normal attachment
     attachments[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[1].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-    attachments[1].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachments[1].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -40,7 +40,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Position attachment
     attachments[2].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[2].format = VK_FORMAT_R16G16B16A16_SFLOAT;
-    attachments[2].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachments[2].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -50,7 +50,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Depth attachment
     attachments[3].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[3].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
-    attachments[3].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachments[3].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -76,23 +76,22 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Depth resolve
     attachments[7] = attachments[4];
     attachments[7].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
-    // Let the render pass handle transition from UNDEFINED at first use
     attachments[7].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[7].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    // Lighting presenting attachment
+    // Lighting attachment
     attachments[8].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[8].format = swapchainImageFormat;
-    attachments[8].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[8].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[8].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[8].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[8].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[8].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[8].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[8].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[8].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     // Grid MSAA color attachment 
     attachments[9].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[9].format = swapchainImageFormat;
-    attachments[9].samples = VK_SAMPLE_COUNT_4_BIT;
+    attachments[9].samples = VK_SAMPLE_COUNT_8_BIT;
     attachments[9].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[9].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[9].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -106,6 +105,23 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[10].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[10].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[10].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    // Lighting resolve attachment
+    attachments[11] = attachments[8];
+    attachments[11].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[11].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[11].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[11].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[11].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    // Swapchain presentation attachment
+    attachments[12].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
+    attachments[12].format = swapchainImageFormat;
+    attachments[12].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[12].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[12].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[12].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[12].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[12].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[12].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     // Resolve attachments for color (indices 4, 5, 6)
     VkAttachmentReference2 resolveRefs[3] = {};
@@ -177,23 +193,23 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     inputRefs[3].attachment = 7;  // Depth resolve
     inputRefs[3].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     inputRefs[3].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    inputRefs[4].attachment = 3;  // MSAA depth for smooth stencil sampling
+    inputRefs[4].attachment = 3;  // Depth attachment
     inputRefs[4].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     inputRefs[4].aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
 
     VkAttachmentReference2 lightingColorRef = {};
     lightingColorRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
     lightingColorRef.pNext = nullptr;
-    lightingColorRef.attachment = 8;
+    lightingColorRef.attachment = 8;    // Lighting attachment
     lightingColorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     lightingColorRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-    VkAttachmentReference2 lightingDepthRef = {};
-    lightingDepthRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    lightingDepthRef.pNext = nullptr;
-    lightingDepthRef.attachment = 7;  // Depth resolve for stencil test
-    lightingDepthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    lightingDepthRef.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    VkAttachmentReference2 lightingResolveRef = {};
+    lightingResolveRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    lightingResolveRef.pNext = nullptr;
+    lightingResolveRef.attachment = 11;  // Lighting resolve
+    lightingResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    lightingResolveRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkSubpassDescription2 lightingSubpass = {};
     lightingSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
@@ -202,7 +218,8 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     lightingSubpass.pInputAttachments = inputRefs;
     lightingSubpass.colorAttachmentCount = 1;
     lightingSubpass.pColorAttachments = &lightingColorRef;
-    lightingSubpass.pDepthStencilAttachment = &lightingDepthRef; 
+    lightingSubpass.pResolveAttachments = &lightingResolveRef;  // Resolve MSAA lighting
+    lightingSubpass.pDepthStencilAttachment = nullptr;          // No depth test for fullscreen lighting 
 
     // Grid Subpass
     VkAttachmentReference2 gridColorRef = {};
@@ -232,23 +249,29 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     gridSubpass.pDepthStencilAttachment = &gridDepthRef;
     gridSubpass.pResolveAttachments = &gridResolveRef;
 
-    VkAttachmentReference2 blendInputRef{};
-    blendInputRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    blendInputRef.attachment = 10;
-    blendInputRef.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    blendInputRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    VkAttachmentReference2 blendInputRefs[2] = {};
+    // Read grid resolve
+    blendInputRefs[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    blendInputRefs[0].attachment = 10;
+    blendInputRefs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    blendInputRefs[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    // Read lighting resolve
+    blendInputRefs[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    blendInputRefs[1].attachment = 11;
+    blendInputRefs[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    blendInputRefs[1].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkAttachmentReference2 blendOutputRef{};
     blendOutputRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    blendOutputRef.attachment = 8; // Swapchain attachment index
+    blendOutputRef.attachment = 12; // Swapchain presentation
     blendOutputRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     blendOutputRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkSubpassDescription2 blendSubpass{};
     blendSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
     blendSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    blendSubpass.inputAttachmentCount = 1;
-    blendSubpass.pInputAttachments = &blendInputRef;
+    blendSubpass.inputAttachmentCount = 2;  // Grid + Lighting
+    blendSubpass.pInputAttachments = blendInputRefs;
     blendSubpass.colorAttachmentCount = 1;
     blendSubpass.pColorAttachments = &blendOutputRef;
 
@@ -304,7 +327,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     // Create Render Pass 
     VkRenderPassCreateInfo2 renderPassInfo2 = {};
     renderPassInfo2.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
-    renderPassInfo2.attachmentCount = 11;
+    renderPassInfo2.attachmentCount = 13;  // Updated for lighting MSAA + resolve + swapchain
     renderPassInfo2.pAttachments = attachments;
     renderPassInfo2.subpassCount = static_cast<uint32_t>(subpasses.size());
     renderPassInfo2.pSubpasses = subpasses.data();
@@ -347,7 +370,6 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
     depthMemories.resize(maxFramesInFlight);
     depthResolveViews.resize(maxFramesInFlight);
     depthResolveSamplerViews.resize(maxFramesInFlight); 
-    stencilResolveSamplerViews.resize(maxFramesInFlight);
     stencilMSAASamplerViews.resize(maxFramesInFlight); 
     depthResolveImages.resize(maxFramesInFlight);
     depthResolveMemories.resize(maxFramesInFlight);
@@ -360,16 +382,24 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
     gridResolveImages.resize(maxFramesInFlight);
     gridResolveMemories.resize(maxFramesInFlight);
 
+    // Lighting resources
+    lightingViews.resize(maxFramesInFlight);
+    lightingImages.resize(maxFramesInFlight);
+    lightingMemories.resize(maxFramesInFlight);
+    lightingResolveViews.resize(maxFramesInFlight);
+    lightingResolveImages.resize(maxFramesInFlight);
+    lightingResolveMemories.resize(maxFramesInFlight);
+
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         // Albedo image creation (multisampled)
         VkFormat albedoFormat = VK_FORMAT_R8G8B8A8_UNORM;
         albedoImageInfo = createImageCreateInfo(extent.width, extent.height, albedoFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         createImage(vulkanDevice, extent.width, extent.height, albedoFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, albedoImages[i], albedoMemories[i],
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         albedoViews[i] = createImageView(vulkanDevice, albedoImages[i], albedoFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // Albedo resolve image
@@ -383,11 +413,11 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
         VkFormat normalFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         normalImageInfo = createImageCreateInfo(extent.width, extent.height, normalFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         createImage(vulkanDevice, extent.width, extent.height, normalFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, normalImages[i], normalMemories[i],
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         normalViews[i] = createImageView(vulkanDevice, normalImages[i], normalFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // Normal resolve image
@@ -401,11 +431,11 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
         VkFormat positionFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         positionImageInfo = createImageCreateInfo(extent.width, extent.height, positionFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         createImage(vulkanDevice, extent.width, extent.height, positionFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, positionImages[i], positionMemories[i],
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         positionViews[i] = createImageView(vulkanDevice, positionImages[i], positionFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // Position resolve image
@@ -415,21 +445,20 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_SAMPLE_COUNT_1_BIT);
         positionResolveViews[i] = createImageView(vulkanDevice, positionResolveImages[i], positionFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
-        // Depth image creation (multisampled) - needs SAMPLED_BIT for texture sampling
+        // Depth image creation (multisampled)
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
         depthImageInfo = createImageCreateInfo(extent.width, extent.height, depthFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         createImage(vulkanDevice, extent.width, extent.height, depthFormat,
             VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImages[i], depthMemories[i],
-            VK_SAMPLE_COUNT_4_BIT);
-        depthViews[i] = createImageView(vulkanDevice, depthImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-        
-        // MSAA stencil-only view for smooth outline edge detection
+            VK_SAMPLE_COUNT_8_BIT);
+        depthViews[i] = createImageView(vulkanDevice, depthImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);   
+
         stencilMSAASamplerViews[i] = createImageView(vulkanDevice, depthImages[i], depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT);
 
-        // Depth resolve image (with TRANSFER_SRC for GPU picking)
+        // Depth resolve image 
         createImage(vulkanDevice, extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthResolveImages[i], depthResolveMemories[i],
@@ -437,14 +466,13 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
         depthResolveViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
         
         depthResolveSamplerViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
-        stencilResolveSamplerViews[i] = createImageView(vulkanDevice, depthResolveImages[i], depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT);
 
         // Grid image creation (multisampled)
         createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
             VK_IMAGE_TILING_OPTIMAL,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridImages[i], gridMemories[i],
-            VK_SAMPLE_COUNT_4_BIT);
+            VK_SAMPLE_COUNT_8_BIT);
         gridViews[i] = createImageView(vulkanDevice, gridImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // Grid Resolve Image
@@ -454,6 +482,22 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, gridResolveImages[i], gridResolveMemories[i],
             VK_SAMPLE_COUNT_1_BIT);
         gridResolveViews[i] = createImageView(vulkanDevice, gridResolveImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // Lighting image creation (multisampled) 
+        createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightingImages[i], lightingMemories[i],
+            VK_SAMPLE_COUNT_8_BIT);
+        lightingViews[i] = createImageView(vulkanDevice, lightingImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // Lighting Resolve Image
+        createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightingResolveImages[i], lightingResolveMemories[i],
+            VK_SAMPLE_COUNT_1_BIT);
+        lightingResolveViews[i] = createImageView(vulkanDevice, lightingResolveImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -473,9 +517,10 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImageView(vulkanDevice.getDevice(), positionResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), depthResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), depthResolveSamplerViews[i], nullptr);
-            vkDestroyImageView(vulkanDevice.getDevice(), stencilResolveSamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), stencilMSAASamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), gridResolveViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), lightingViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), lightingResolveViews[i], nullptr);
 
         }
     }
@@ -493,6 +538,8 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImage(vulkanDevice.getDevice(), positionResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), depthResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), gridResolveImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), lightingImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), lightingResolveImages[i], nullptr);
 
         }
     }
@@ -510,6 +557,8 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkFreeMemory(vulkanDevice.getDevice(), positionResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), depthResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), gridResolveMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), lightingMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), lightingResolveMemories[i], nullptr);
 
         }
     }

@@ -26,12 +26,19 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec2 fragTexCoord;      
                  
 void main() {
-    // Use surface buffer when heat sim active, otherwise use base vertex data
-    vec3 position = (pc.useHeatColors == 1) ? inSurfacePos.xyz : inPos;
-    vec3 color = (pc.useHeatColors == 1) ? inSurfaceColor.xyz : ubo.color;
+    vec3 position;
+    vec3 color;
+    
+    if (pc.useHeatColors == 1) {
+        position = inSurfacePos.xyz;
+        color = inSurfaceColor.xyz;
+    } else {
+        position = inPos;
+        color = ubo.color;
+    }
     
     vec3 worldPos = vec3(ubo.model * vec4(position, 1.0));
-    // Transform normal to world space (assuming uniform scaling, otherwise use inverse transpose)
+    // Transform normal to world space
     vec3 worldNormal = normalize(mat3(ubo.model) * inNormal);
     
     fragColor = color;          
