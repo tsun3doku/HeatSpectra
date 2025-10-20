@@ -33,10 +33,8 @@ public:
     void createStagingBuffer();
     void cleanup();
     
-    // Selection state
     bool getSelected() const; 
-    
-    // Selection methods 
+     
     void setSelectedModelID(uint32_t id);
     void addSelectedModelID(uint32_t id);
     void removeSelectedModelID(uint32_t id);
@@ -50,7 +48,6 @@ public:
     glm::vec3 getCachedGizmoPosition(bool& valid) const;
     float getCachedGizmoScale() const;
     
-    // Appearance
     void setOutlineColor(const glm::vec3& color);
     glm::vec3 getOutlineColor() const;
     void setOutlineThickness(float thickness);

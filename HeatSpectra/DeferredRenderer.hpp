@@ -16,7 +16,6 @@ public:
     void cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFramesInFlight);
     void cleanup(VulkanDevice& vulkanDevice);
 
-    // Getters
     const VkRenderPass& getRenderPass() const {
         return renderPass; 
     }

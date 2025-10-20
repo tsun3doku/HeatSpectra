@@ -155,7 +155,8 @@ public:
     std::array<glm::vec3, 8> calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
     
     glm::vec3 getTranslationOffset() const { 
-        return translationOffset; 
+        // Extract translation from model matrix (last column)
+        return glm::vec3(modelMatrix[3]); 
     }
 
     const std::vector<Vertex>& getVertices() const {
@@ -222,9 +223,6 @@ public:
     void setVertices(const std::vector<Vertex>& newVertices) { 
         vertices = newVertices; 
     }
-    void setTranslationOffset(const glm::vec3& origin) {
-        translationOffset = origin;
-    }
 
 private:
     VulkanDevice& vulkanDevice;
@@ -233,7 +231,6 @@ private:
     CommandPool& commandPool;
     
     std::atomic<bool> needsGPUUpdate{false};  
-    glm::vec3 translationOffset{0.0f};  
     std::unique_ptr<AABBTree> aabbTree;
 
 	std::vector<Vertex> vertices;

@@ -116,8 +116,8 @@ glm::vec3 Model::getBoundingBoxMax() {
 }
 
 void Model::loadModel(const std::string& modelPath) {
-    // Reset translation offset
-    translationOffset = glm::vec3(0.0f);
+    // Reset transform when loading new model
+    modelMatrix = glm::mat4(1.0f);
 
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
@@ -160,7 +160,10 @@ void Model::loadModel(const std::string& modelPath) {
         }
     }
 
-    modelPosition = getBoundingBoxCenter();
+    // Initialize modelPosition to origin to match identity modelMatrix
+    // (getBoundingBoxCenter is only for AABB calculations, not transform)
+    modelPosition = glm::vec3(0.0f);
+    // Buffers are created by init() or recreateBuffers(), not here
 }
 
 void Model::buildAABBTree() {
@@ -218,7 +221,6 @@ void Model::createIndexBuffer() {
     void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
     memcpy(stagingData, indices.data(), static_cast<size_t>(bufferSize));
 
-    // Allocate device-local index buffer using MemoryAllocator
     auto [indexBufferHandle, indexBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -449,19 +451,10 @@ void Model::updateGeometry(const std::vector<Vertex>& newVertices, const std::ve
 }
 
 void Model::translate(const glm::vec3& translation) {
-    // Translate all vertices on cpu
-    for (auto& vertex : vertices) {
-        vertex.pos += translation;
-    }
+    modelMatrix = glm::translate(modelMatrix, translation);
     
     // Update model position
     modelPosition += translation;
-    
-    // Track accumulated translation
-    translationOffset += translation;
-    
-    // Mark that GPU needs update
-    needsGPUUpdate = true;
 }
 
 void Model::updateVertexBuffer() {

@@ -142,7 +142,7 @@ void App::handleMouseButton(int button, float mouseX, float mouseY, bool shiftPr
     
     // Check if gizmo was hit
     if (modelSelection->getSelected()) {
-        // Get cached gizmo position (calculated on render thread)
+        // Get cached gizmo position 
         bool valid = false;
         glm::vec3 gizmoPosition = modelSelection->getCachedGizmoPosition(valid);
         if (!valid) return;
@@ -181,7 +181,7 @@ void App::applyGizmoTranslation() {
     if (!isDraggingGizmo || !modelSelection || !resourceManager)
         return;
     
-    glm::vec3 currentTranslation = accumulatedTranslation;  // Read from UI thread
+    glm::vec3 currentTranslation = accumulatedTranslation; 
     glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
     
     if (glm::length(deltaTranslation) < 1e-6) 
@@ -914,19 +914,7 @@ void App::drawFrame() {
         // Apply gizmo translation on render thread (if dragging)
         applyGizmoTranslation();
         
-        if (resourceManager) {
-            if (resourceManager->getVisModel().needsVertexBufferUpdate()) {
-                resourceManager->getVisModel().applyPendingGPUUpdate();
-                // Also update surface buffer for heat system
-                resourceManager->getVisModel().updateSurfaceBuffer();
-            }
-            // CommonSub doesn't need updates - follows via shader
-            if (resourceManager->getHeatModel().needsVertexBufferUpdate()) {
-                resourceManager->getHeatModel().applyPendingGPUUpdate();
-                // Also update surface buffer for heat system
-                resourceManager->getHeatModel().updateSurfaceBuffer();
-            }
-        }
+        // No vertex buffer updates needed - transforms happen via modelMatrix in shaders!
         
         UniformBufferObject ubo{};
         uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, ubo);

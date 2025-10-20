@@ -127,18 +127,21 @@ void HeatSource::initializeSurfaceBuffer() {
 
 void HeatSource::controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime) {
     float moveSpeed = 0.1f * deltaTime;
-    glm::vec3 currentPosition = heatModel.getModelPosition();
+    glm::vec3 movement(0.0f);
 
     if (upPressed)
-        currentPosition += glm::vec3(0.0f, moveSpeed, 0.0f);
+        movement.y += moveSpeed;
     if (downPressed)
-        currentPosition -= glm::vec3(0.0f, moveSpeed, 0.0f);
+        movement.y -= moveSpeed;
     if (rightPressed)
-        currentPosition += glm::vec3(moveSpeed, 0.0f, 0.0f);
+        movement.x += moveSpeed;
     if (leftPressed)
-        currentPosition -= glm::vec3(moveSpeed, 0.0f, 0.0f);
+        movement.x -= moveSpeed;
 
-    heatModel.setModelPosition(currentPosition);
+    // Apply translation using model matrix (no bounding box offset)
+    if (glm::length(movement) > 0.0f) {
+        heatModel.translate(movement);
+    }
 }
 
 void HeatSource::createHeatSourceDescriptorPool(uint32_t maxFramesInFlight) {

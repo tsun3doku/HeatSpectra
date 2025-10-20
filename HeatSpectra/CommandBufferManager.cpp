@@ -2,17 +2,15 @@
 #include <stdexcept>
 #include <iostream>
 
-// Static queue submission mutex (shared across all CommandPools)
 std::mutex CommandPool::queueSubmitMutex;
 
-// CommandPool implementation
 CommandPool::CommandPool(VulkanDevice& device, const char* name) 
     : vulkanDevice(device), debugName(name) {
     
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsFamily.value();
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;  // Allow resetting individual command buffers
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; 
     
     if (vkCreateCommandPool(device.getDevice(), &poolInfo, nullptr, &pool) != VK_SUCCESS) {
         throw std::runtime_error(std::string("Failed to create command pool: ") + debugName);
@@ -29,7 +27,7 @@ CommandPool::~CommandPool() {
 }
 
 VkCommandBuffer CommandPool::beginCommands() {
-    std::lock_guard<std::mutex> lock(poolMutex);  // Thread-safe
+    std::lock_guard<std::mutex> lock(poolMutex);  
     
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -59,14 +57,13 @@ void CommandPool::endCommands(VkCommandBuffer commandBuffer) {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
     
-    // CRITICAL: VkQueue is NOT thread-safe! Protect queue submission with global mutex
+    // Protect queue submission with global mutex
     {
         std::lock_guard<std::mutex> queueLock(queueSubmitMutex);
         vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(vulkanDevice.getGraphicsQueue());
     }
     
-    // Free command buffer (pool operations are protected by per-pool mutex)
     std::lock_guard<std::mutex> poolLock(poolMutex);
     vkFreeCommandBuffers(vulkanDevice.getDevice(), pool, 1, &commandBuffer);
 }
@@ -141,5 +138,3 @@ void CommandPool::transitionImageLayout(VkImage image, VkFormat format,
     
     endCommands(commandBuffer);
 }
-
-// All legacy functions removed - use CommandPool class methods instead

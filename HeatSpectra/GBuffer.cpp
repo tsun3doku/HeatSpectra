@@ -767,7 +767,7 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(int32_t);
+    pushConstantRange.size = sizeof(GeometryPushConstant);
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1059,7 +1059,7 @@ void GBuffer::createWireframePipeline(VkExtent2D extent) {
     VkPushConstantRange wireframePushConstantRange{};
     wireframePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     wireframePushConstantRange.offset = 0;
-    wireframePushConstantRange.size = sizeof(int32_t);
+    wireframePushConstantRange.size = sizeof(GeometryPushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1621,9 +1621,11 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     resourceManager.getVisModel().getSurfaceVertexBufferOffset()
     };
     
-    // Use surface buffer when heat sim is active or paused
-    int32_t useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
-    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+    // Push constants for visModel
+    GeometryPushConstant visPushConstant{};
+    visPushConstant.modelMatrix = resourceManager.getVisModel().getModelMatrix();
+    visPushConstant.useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
+    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &visPushConstant);
     
     // Set stencil reference for visModel 
     vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
@@ -1666,7 +1668,8 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Draw wireframe on top
     if (drawWireframe) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline);
-        vkCmdPushConstants(commandBuffer, wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+        // Use same push constants as solid geometry (already has visModel matrix)
+        vkCmdPushConstants(commandBuffer, wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &visPushConstant);
         vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
         vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
@@ -1680,7 +1683,12 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
     };
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
-    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(int32_t), &useHeatColors);
+    
+    // Push constants for heat model
+    GeometryPushConstant heatPushConstant{};
+    heatPushConstant.modelMatrix = resourceManager.getHeatModel().getModelMatrix();
+    heatPushConstant.useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
+    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &heatPushConstant);
     
     vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 2);
     

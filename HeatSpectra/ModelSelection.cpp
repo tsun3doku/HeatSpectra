@@ -83,12 +83,18 @@ glm::vec3 ModelSelection::calculateAndCacheGizmoPosition(ResourceManager& resour
     
     for (uint32_t id : selectedModelIDs) {
         if (id == 1) {
-            gizmoPosition += resourceManager.getVisModel().getBoundingBoxCenter();
+            // Transform bounding box center to world space
+            glm::vec3 localCenter = resourceManager.getVisModel().getBoundingBoxCenter();
+            glm::vec3 worldCenter = glm::vec3(resourceManager.getVisModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
+            gizmoPosition += worldCenter;
             glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
             maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
             count++;
         } else if (id == 2) {
-            gizmoPosition += resourceManager.getHeatModel().getBoundingBoxCenter();
+            // Transform bounding box center to world space
+            glm::vec3 localCenter = resourceManager.getHeatModel().getBoundingBoxCenter();
+            glm::vec3 worldCenter = glm::vec3(resourceManager.getHeatModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
+            gizmoPosition += worldCenter;
             glm::vec3 bboxSize = resourceManager.getHeatModel().getBoundingBoxMax() - resourceManager.getHeatModel().getBoundingBoxMin();
             maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
             count++;
@@ -99,7 +105,8 @@ glm::vec3 ModelSelection::calculateAndCacheGizmoPosition(ResourceManager& resour
         gizmoPosition /= static_cast<float>(count);
     } else {
         // Fallback if no valid IDs
-        gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
+        glm::vec3 localCenter = resourceManager.getVisModel().getBoundingBoxCenter();
+        gizmoPosition = glm::vec3(resourceManager.getVisModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
         glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
         maxBBoxSize = std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z));
     }

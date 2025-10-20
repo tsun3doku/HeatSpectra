@@ -55,7 +55,7 @@ public:
     
     // Setters
     void setHeatSourcePushConstant(glm::mat4 modelMatrix) {
-        heatSourcePushConstant.model = modelMatrix;
+        heatSourcePushConstant.heatSourceModelMatrix = modelMatrix;
     }
    
 private:

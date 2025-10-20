@@ -8,6 +8,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(push_constant) uniform PushConstants {
+    mat4 modelMatrix;
     int useHeatColors;
 } pc;
 
@@ -37,9 +38,9 @@ void main() {
         color = ubo.color;
     }
     
-    vec3 worldPos = vec3(ubo.model * vec4(position, 1.0));
+    vec3 worldPos = vec3(pc.modelMatrix * vec4(position, 1.0));
     // Transform normal to world space
-    vec3 worldNormal = normalize(mat3(ubo.model) * inNormal);
+    vec3 worldNormal = normalize(mat3(pc.modelMatrix) * inNormal);
     
     fragColor = color;          
     fragNormal = worldNormal;        
@@ -47,5 +48,5 @@ void main() {
     fragPos = worldPos;          
 
     // Final clip-space position
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(position, 1.0);
+    gl_Position = ubo.proj * ubo.view * pc.modelMatrix * vec4(position, 1.0);
 }

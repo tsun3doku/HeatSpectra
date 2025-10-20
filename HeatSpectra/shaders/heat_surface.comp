@@ -26,7 +26,7 @@ layout(binding = 2) buffer CenterBuffer {
 } centerBuffer;
 
 layout(push_constant) uniform PushConstantBlock {
-    vec3 modelOffset;  // Translation offset for vismodel
+    mat4 visModelMatrix; 
 } pushConstants;
 
 vec3 temperatureToColor(float t) {
@@ -43,7 +43,8 @@ void main() {
     uint vertexID = gl_GlobalInvocationID.x;
     if (vertexID >= surfaceBuffer.vertices.length()) return;
 
-    vec3 vertPos = surfaceBuffer.vertices[vertexID].position.xyz;
+    // Transform surface vertex to world space
+    vec3 vertPos = (pushConstants.visModelMatrix * vec4(surfaceBuffer.vertices[vertexID].position.xyz, 1.0)).xyz;
     
     // Track N closest centers
     const int N = 4;
@@ -56,9 +57,9 @@ void main() {
         closestTemps[i] = 0.0;
     }
 
-    // Find N closest centers
+    // Find N closest centers in world space
     for(uint t = 0; t < centerBuffer.centers.length(); t++) {
-        vec3 tetraCenter = centerBuffer.centers[t].xyz + pushConstants.modelOffset;  // Apply translation
+        vec3 tetraCenter = (pushConstants.visModelMatrix * vec4(centerBuffer.centers[t].xyz, 1.0)).xyz;  // World space
         float dist = distance(vertPos, tetraCenter);
         
         // Insert into sorted arrays
