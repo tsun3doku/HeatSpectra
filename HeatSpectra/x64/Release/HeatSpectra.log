@@ -4,5 +4,14 @@
   App.cpp
   DeferredRenderer.cpp
   GBuffer.cpp
-  MainQt.cpp
-C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\GBuffer.cpp(1690,9): error C2027: use of undefined type 'Gizmo'
+  Gizmo.cpp
+  Generating code
+  12 of 8148 functions ( 0.1%) were compiled, the rest were copied from previous compilation.
+    5 functions were new in current compilation
+    87 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
+  0 File(s) copied
+  0 File(s) copied
+  0 File(s) copied
+  0 File(s) copied

@@ -56,7 +56,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[3].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    attachments[3].finalLayout = VK_IMAGE_LAYOUT_GENERAL;  
     // Albedo resolve
     attachments[4].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[4].format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -77,7 +77,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[7] = attachments[4];
     attachments[7].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
     attachments[7].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[7].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    attachments[7].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
     // Lighting attachment
     attachments[8].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[8].format = swapchainImageFormat;
@@ -139,8 +139,8 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     VkAttachmentReference2 depthResolveReference = {};
     depthResolveReference.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
     depthResolveReference.pNext = nullptr;
-    depthResolveReference.attachment = 7; // Resolve attachment index
-    depthResolveReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depthResolveReference.attachment = 7; // Resolve attachment
+    depthResolveReference.layout = VK_IMAGE_LAYOUT_GENERAL; 
     depthResolveReference.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
     VkSubpassDescriptionDepthStencilResolveKHR depthResolve = {};
@@ -169,10 +169,10 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     depthRef.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
-    // Geometry Subpass with depth resolve chain
+    // Geometry Subpass 
     VkSubpassDescription2 geometrySubpass = {};
     geometrySubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
-    geometrySubpass.pNext = &depthResolve;
+    geometrySubpass.pNext = nullptr;  
     geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     geometrySubpass.colorAttachmentCount = 3;
     geometrySubpass.pColorAttachments = geometryColorRefs;
@@ -237,12 +237,13 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     VkAttachmentReference2 gridDepthRef = {};
     gridDepthRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
     gridDepthRef.pNext = nullptr;
-    gridDepthRef.attachment = 3; // Depth attachment index
-    gridDepthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    gridDepthRef.attachment = 3; // Depth attachment 
+    gridDepthRef.layout = VK_IMAGE_LAYOUT_GENERAL;
     gridDepthRef.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
     VkSubpassDescription2 gridSubpass = {};
     gridSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    gridSubpass.pNext = &depthResolve; 
     gridSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     gridSubpass.colorAttachmentCount = 1;
     gridSubpass.pColorAttachments = &gridColorRef;
@@ -309,9 +310,9 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     dependencies[3].srcSubpass = 0; // Geometry subpass
     dependencies[3].dstSubpass = 2; // Grid subpass
     dependencies[3].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[3].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[3].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     dependencies[3].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[3].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    dependencies[3].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;  
     dependencies[3].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     dependencies[4].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;

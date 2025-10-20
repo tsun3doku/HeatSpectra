@@ -56,7 +56,6 @@ void ModelSelection::removeSelectedModelID(uint32_t id) {
 
 void ModelSelection::clearSelection() {
     selectedModelIDs.clear();
-    cachedGizmoValid.store(false, std::memory_order_release);
 }
 
 bool ModelSelection::isModelSelected(uint32_t id) const {
@@ -71,72 +70,6 @@ uint32_t ModelSelection::getSelectedModelID() const {
     return selectedModelIDs.empty() ? 0 : selectedModelIDs.front();
 }
 
-glm::vec3 ModelSelection::calculateAndCacheGizmoPosition(ResourceManager& resourceManager) {
-    if (selectedModelIDs.empty()) {
-        cachedGizmoValid.store(false, std::memory_order_release);
-        return glm::vec3(0.0f);
-    }
-    
-    glm::vec3 gizmoPosition(0.0f);
-    float maxBBoxSize = 0.0f;
-    int count = 0;
-    
-    for (uint32_t id : selectedModelIDs) {
-        if (id == 1) {
-            // Transform bounding box center to world space
-            glm::vec3 localCenter = resourceManager.getVisModel().getBoundingBoxCenter();
-            glm::vec3 worldCenter = glm::vec3(resourceManager.getVisModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
-            gizmoPosition += worldCenter;
-            glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
-            maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
-            count++;
-        } else if (id == 2) {
-            // Transform bounding box center to world space
-            glm::vec3 localCenter = resourceManager.getHeatModel().getBoundingBoxCenter();
-            glm::vec3 worldCenter = glm::vec3(resourceManager.getHeatModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
-            gizmoPosition += worldCenter;
-            glm::vec3 bboxSize = resourceManager.getHeatModel().getBoundingBoxMax() - resourceManager.getHeatModel().getBoundingBoxMin();
-            maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
-            count++;
-        }
-    }
-    
-    if (count > 0) {
-        gizmoPosition /= static_cast<float>(count);
-    } else {
-        // Fallback if no valid IDs
-        glm::vec3 localCenter = resourceManager.getVisModel().getBoundingBoxCenter();
-        gizmoPosition = glm::vec3(resourceManager.getVisModel().getModelMatrix() * glm::vec4(localCenter, 1.0f));
-        glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
-        maxBBoxSize = std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z));
-    }
-    
-    // Calculate gizmo scale based on bounding box 
-    cachedGizmoScale = maxBBoxSize * 0.15f;
-    
-    // Safety bounds
-    if (cachedGizmoScale < 0.1f) 
-        cachedGizmoScale = 0.5f;  
-    if (cachedGizmoScale > 100.0f) 
-        cachedGizmoScale = 10.0f;  
-    
-    // Cache for UI thread
-    cachedGizmoPos = gizmoPosition;
-    cachedGizmoValid.store(true, std::memory_order_release);
-    
-    return gizmoPosition;
-}
-
-glm::vec3 ModelSelection::getCachedGizmoPosition(bool& valid) const {
-    valid = cachedGizmoValid.load(std::memory_order_acquire);
-    return cachedGizmoPos;
-}
-
-float ModelSelection::getCachedGizmoScale() const {
-    return cachedGizmoScale;
-}
-
-// Appearance
 void ModelSelection::setOutlineColor(const glm::vec3& color) {
     outlineColor = color;
 }
@@ -153,9 +86,16 @@ float ModelSelection::getOutlineThickness() const {
     return outlineThickness;
 }
 
-void ModelSelection::queuePickRequest(int x, int y, bool shiftPressed) {
+void ModelSelection::queuePickRequest(int x, int y, bool shiftPressed, float mouseX, float mouseY) {
+    PickingRequest request;
+    request.x = x;
+    request.y = y;
+    request.shiftPressed = shiftPressed;
+    request.mouseX = mouseX;
+    request.mouseY = mouseY;
+    
     std::lock_guard<std::mutex> lock(pickingQueueMutex);
-    pickingRequestQueue.push({x, y, shiftPressed});
+    pickingRequestQueue.push(request);
 }
 
 void ModelSelection::processPickingRequests(uint32_t currentFrame) {
@@ -175,26 +115,33 @@ void ModelSelection::processPickingRequests(uint32_t currentFrame) {
         }
         
         // Read from the frame
-        uint8_t pickedID = pickModelAtPosition(request.x, request.y, currentFrame);
+        PickedResult result = pickAtPosition(request.x, request.y, currentFrame);
+        lastPickedResult = result;  
+        lastPickRequest = request; 
         
-        // Handle selection based on picked ID and shift state 
-        if (pickedID > 0) {
+        // Debug output
+        std::cout << "Picked at (" << request.x << ", " << request.y << "): ";
+        if (result.isNone()) std::cout << "Nothing" << std::endl;
+        else if (result.isModel()) std::cout << "Model ID " << result.modelID << std::endl;
+        else if (result.isGizmo()) std::cout << "Gizmo Axis " << static_cast<int>(result.gizmoAxis) << std::endl;
+        
+        // Handle selection based on picked result and shift state 
+        if (result.isModel()) {
             if (request.shiftPressed) {
-                // Shift click
-                if (isModelSelected(pickedID)) {
-                    removeSelectedModelID(pickedID);
+                // Shift click on model
+                if (isModelSelected(result.modelID)) {
+                    removeSelectedModelID(result.modelID);
                 } else {
-                    addSelectedModelID(pickedID);
+                    addSelectedModelID(result.modelID);
                 }
             } else {
-                // Regular click
-                setSelectedModelID(pickedID);
+                // Regular click on model
+                setSelectedModelID(result.modelID);
             }
-        } else if (!request.shiftPressed) {
-            // Clicked nothing without shift
+        } else if (!request.shiftPressed && !result.isGizmo()) {
+            // Clicked nothing without shift 
             clearSelection();
         }
-        // Clicked nothing with shift
     }
 }
 
@@ -230,7 +177,7 @@ void ModelSelection::createStagingBuffer() {
     vkMapMemory(vulkanDevice.getDevice(), stagingBufferMemory, 0, bufferSize, 0, &stagingBufferMapped);
 }
 
-uint8_t ModelSelection::pickModelAtPosition(int x, int y, uint32_t currentFrame) {
+PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame) {
     // Create a single time command buffer for the copy
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -253,7 +200,7 @@ uint8_t ModelSelection::pickModelAtPosition(int x, int y, uint32_t currentFrame)
     // Transition image to TRANSFER_SRC_OPTIMAL 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL; 
     barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -286,15 +233,15 @@ uint8_t ModelSelection::pickModelAtPosition(int x, int y, uint32_t currentFrame)
     vkCmdCopyImageToBuffer(commandBuffer, stencilImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         stagingBuffer, 1, &region);
     
-    // Transition back to read only for next frame 
+    // Transition back to GENERAL for next frame 
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL; 
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     vkCmdPipelineBarrier(commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 
         0, 0, nullptr, 0, nullptr, 1, &barrier);
     
     vkEndCommandBuffer(commandBuffer);
@@ -315,10 +262,30 @@ uint8_t ModelSelection::pickModelAtPosition(int x, int y, uint32_t currentFrame)
     vkDestroyFence(vulkanDevice.getDevice(), copyFence, nullptr);
     vkFreeCommandBuffers(vulkanDevice.getDevice(), pickingCommandPool, 1, &commandBuffer);
     
-    // Read stencil value
+    // Read stencil value and decode
     uint8_t stencilValue = *static_cast<uint8_t*>(stagingBufferMapped);
+     
+    PickedResult result;
+     
+    // 3 = gizmo X axis
+    // 4 = gizmo Y axis
+    // 5 = gizmo Z axis
     
-    return stencilValue;
+    if (stencilValue == 1 || stencilValue == 2) {
+        result.type = PickedType::Model;
+        result.modelID = stencilValue;
+    } else if (stencilValue >= 3 && stencilValue <= 5) {
+        result.type = PickedType::Gizmo;
+        result.gizmoAxis = static_cast<PickedGizmoAxis>(stencilValue - 2); 
+    } else {
+        result.type = PickedType::None;
+    }
+    
+    return result;
+}
+
+PickedResult ModelSelection::pickImmediately(int x, int y, uint32_t currentFrame) {
+    return pickAtPosition(x, y, currentFrame);
 }
 
 void ModelSelection::cleanup() {

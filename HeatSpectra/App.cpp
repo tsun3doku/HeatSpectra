@@ -140,32 +140,6 @@ void App::handleMouseButton(int button, float mouseX, float mouseY, bool shiftPr
     if (button != static_cast<int>(Qt::LeftButton)) 
         return;
     
-    // Check if gizmo was hit
-    if (modelSelection->getSelected()) {
-        // Get cached gizmo position 
-        bool valid = false;
-        glm::vec3 gizmoPosition = modelSelection->getCachedGizmoPosition(valid);
-        if (!valid) return;
-        
-        // Cast ray from mouse to world
-        glm::vec3 rayOrigin = camera.getPosition();
-        glm::vec3 rayDir = camera.screenToWorldRay(mouseX, mouseY, swapChainExtent.width, swapChainExtent.height);
-        
-        GizmoAxis hitAxis;
-        float hitDistance;
-        float gizmoScale = modelSelection->getCachedGizmoScale();
-        
-        if (gizmo->rayIntersect(rayOrigin, rayDir, gizmoPosition, gizmoScale, hitAxis, hitDistance)) {
-            // Cache initial gizmo position
-            isDraggingGizmo = true;
-            cachedGizmoPosition = gizmoPosition;
-            gizmo->startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
-            modelStartPosition = cachedGizmoPosition;
-            accumulatedTranslation = glm::vec3(0.0f);
-            return; 
-        }
-    }
-    
     int x = static_cast<int>(mouseX);
     int y = static_cast<int>(mouseY);
     
@@ -173,14 +147,42 @@ void App::handleMouseButton(int button, float mouseX, float mouseY, bool shiftPr
     x = std::max(0, std::min(x, static_cast<int>(swapChainExtent.width) - 1));
     y = std::max(0, std::min(y, static_cast<int>(swapChainExtent.height) - 1));
     
-    modelSelection->queuePickRequest(x, y, shiftPressed);
+    // Queue pick request for both model and gizmo selection (processed on render thread)
+    modelSelection->queuePickRequest(x, y, shiftPressed, mouseX, mouseY);
 }
 
-void App::applyGizmoTranslation() {
-    // Called in render thread 
+void App::applyGizmoTranslation() {   
+    // Check if gizmo was picked and initiate drag
+    if (!isDraggingGizmo && modelSelection && gizmo) {
+        PickedResult lastPick = modelSelection->getLastPickedResult();
+        if (lastPick.isGizmo() && modelSelection->getSelected()) {
+            // Convert PickedGizmoAxis to GizmoAxis
+            GizmoAxis hitAxis = GizmoAxis::None;
+            if (lastPick.gizmoAxis == PickedGizmoAxis::X) hitAxis = GizmoAxis::X;
+            else if (lastPick.gizmoAxis == PickedGizmoAxis::Y) hitAxis = GizmoAxis::Y;
+            else if (lastPick.gizmoAxis == PickedGizmoAxis::Z) hitAxis = GizmoAxis::Z;
+            
+            if (hitAxis != GizmoAxis::None) {
+                // Start drag using original click position
+                PickingRequest pickReq = modelSelection->getLastPickRequest();
+                glm::vec3 gizmoPosition = gizmo->calculateGizmoPosition(*resourceManager, *modelSelection);
+                glm::vec3 rayOrigin = camera.getPosition();
+                glm::vec3 rayDir = camera.screenToWorldRay(pickReq.mouseX, pickReq.mouseY, swapChainExtent.width, swapChainExtent.height);
+                
+                isDraggingGizmo = true;
+                cachedGizmoPosition = gizmoPosition;
+                gizmo->startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
+                modelStartPosition = cachedGizmoPosition;
+                accumulatedTranslation = glm::vec3(0.0f);
+                
+                modelSelection->clearLastPickedResult();
+            }
+        }
+    }
+    
     if (!isDraggingGizmo || !modelSelection || !resourceManager)
         return;
-    
+
     glm::vec3 currentTranslation = accumulatedTranslation; 
     glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
     
@@ -201,31 +203,9 @@ void App::applyGizmoTranslation() {
 }
 
 void App::handleMouseMove(float mouseX, float mouseY) {
-    if (!gizmo || !resourceManager) return;
-    
-    // Update hover state for gizmo
-    if (modelSelection->getSelected()) {
-        // Get cached gizmo position (calculated on render thread)
-        bool valid = false;
-        glm::vec3 gizmoPosition = modelSelection->getCachedGizmoPosition(valid);
-        if (!valid) return;
+    if (!gizmo || !resourceManager || !modelSelection) 
+        return;
         
-        // Cast ray from mouse
-        glm::vec3 rayOrigin = camera.getPosition();
-        glm::vec3 rayDir = camera.screenToWorldRay(mouseX, mouseY, swapChainExtent.width, swapChainExtent.height);
-        
-        // Check hover
-        GizmoAxis hitAxis;
-        float hitDistance;
-        float gizmoScale = modelSelection->getCachedGizmoScale();
-        
-        if (gizmo->rayIntersect(rayOrigin, rayDir, gizmoPosition, gizmoScale, hitAxis, hitDistance)) {
-            gizmo->setHoveredAxis(hitAxis);
-        } else {
-            gizmo->setHoveredAxis(GizmoAxis::None);
-        }
-    }
-    
     // Handle gizmo dragging 
     if (isDraggingGizmo && gizmo) {
         // Cast ray from current mouse position

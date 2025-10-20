@@ -20,6 +20,10 @@ public:
         return position;  
     }
 
+    float getFov() const {
+        return currentFov;
+    }
+
     glm::vec3 getForwardDirection() const {
         // Calculate the forward direction based on pitch and yaw
         glm::vec3 forward;

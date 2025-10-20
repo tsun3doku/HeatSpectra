@@ -37,14 +37,10 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= sourceBuffer.srcVertices.length() || idx >= surfaceBuffer.outVertices.length()) 
         return;
-
-    vec4 transformedPosition = pushConstants.modelMatrix * sourceBuffer.srcVertices[idx].position;
-
+   
     float temperatureScale = 10.0;
     float temp = sourceBuffer.srcVertices[idx].temperature;
     float normalized = clamp(temp / temperatureScale, 0.0, 1.0);
 
-    // Write result to surfaceBuffer
-    surfaceBuffer.outVertices[idx].position = transformedPosition;
     surfaceBuffer.outVertices[idx].color = vec4(temperatureToColor(normalized),1.0);
 }

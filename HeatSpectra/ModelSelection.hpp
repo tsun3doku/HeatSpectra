@@ -13,10 +13,43 @@ class Model;
 class VulkanDevice;
 class DeferredRenderer;
 
+enum class PickedType {
+    None = 0,
+    Model = 1,
+    Gizmo = 2
+};
+
+enum class PickedGizmoAxis {
+    None = 0,
+    X = 1,
+    Y = 2,
+    Z = 3
+};
+
+struct PickedResult {
+    PickedType type;
+    uint32_t modelID;          
+    PickedGizmoAxis gizmoAxis; 
+    
+    PickedResult() : type(PickedType::None), modelID(0), gizmoAxis(PickedGizmoAxis::None) {}
+    
+    bool isNone() const { 
+        return type == PickedType::None; 
+    }
+    bool isModel() const { 
+        return type == PickedType::Model; 
+    }
+    bool isGizmo() const { 
+        return type == PickedType::Gizmo; 
+    }
+};
+
 struct PickingRequest {
     int x;
     int y;
     bool shiftPressed;
+    float mouseX;  
+    float mouseY;
 };
 
 class ModelSelection {
@@ -24,10 +57,12 @@ public:
     ModelSelection(VulkanDevice& device, DeferredRenderer& renderer);
     ~ModelSelection();
     
-    void queuePickRequest(int x, int y, bool shiftPressed);
+    void queuePickRequest(int x, int y, bool shiftPressed, float mouseX, float mouseY);
     void processPickingRequests(uint32_t currentFrame);
     
-    uint8_t pickModelAtPosition(int x, int y, uint32_t currentFrame);
+    PickedResult pickAtPosition(int x, int y, uint32_t currentFrame);
+    
+    PickedResult pickImmediately(int x, int y, uint32_t currentFrame);
     
     void createPickingCommandPool();
     void createStagingBuffer();
@@ -44,10 +79,15 @@ public:
     const std::vector<uint32_t>& getSelectedModelIDsRenderThread() const;
     uint32_t getSelectedModelID() const;
     
-    glm::vec3 calculateAndCacheGizmoPosition(class ResourceManager& resourceManager);
-    glm::vec3 getCachedGizmoPosition(bool& valid) const;
-    float getCachedGizmoScale() const;
-    
+    PickedResult getLastPickedResult() const { 
+        return lastPickedResult; 
+    }
+    PickingRequest getLastPickRequest() const { 
+        return lastPickRequest; 
+    }
+
+    void clearLastPickedResult() { lastPickedResult = PickedResult(); }
+        
     void setOutlineColor(const glm::vec3& color);
     glm::vec3 getOutlineColor() const;
     void setOutlineThickness(float thickness);
@@ -66,10 +106,9 @@ private:
     std::mutex pickingQueueMutex;
     
     std::vector<uint32_t> selectedModelIDs; 
+    PickedResult lastPickedResult;  
+    PickingRequest lastPickRequest;
     
-    std::atomic<bool> cachedGizmoValid{false};
-    glm::vec3 cachedGizmoPos{0.0f};
-    float cachedGizmoScale{0.5f};
     float outlineThickness = 1.0f;
     glm::vec3 outlineColor = glm::vec3(pow(0.964705f, 2.2), pow(0.647058f, 2.2), pow(0.235294f, 2.2));
 };

@@ -48,7 +48,8 @@ layout(binding = 6) buffer HeatSourceBuffer {
 } heatSourceBuffer;
 
 layout(push_constant) uniform PushConstantBlock {
-    mat4 heatSourceModelMatrix;
+    mat4 heatSourceModelMatrix;     // Heat source transform
+    mat4 visModelMatrix;            // VisModel transform
 } pushConstants;
 
 
@@ -59,7 +60,8 @@ void main() {
     // Read tetrahedron data
     TetraElement tetra = tetraBuffer.elements[tetraID];
     float temperature = temperatureReadBuffer.temperatures[tetraID];
-    vec3 center = centerBuffer.centers[tetraID].xyz;
+    // Transform tet center to world space to compare with heat source
+    vec3 center = (pushConstants.visModelMatrix * vec4(centerBuffer.centers[tetraID].xyz, 1.0)).xyz;
     
     // ---------- Heat Source Contribution ----------
     const float HEAT_RADIUS = 0.006;
@@ -96,8 +98,9 @@ void main() {
         float avgVolume = (tetra.volume + neighborTetra.volume) * 0.5;
         float sharedArea = pow(avgVolume, 2.0/3.0) * 0.5;
         
-        // Distance between centers
-        float centerDistance = distance(center, centerBuffer.centers[neighborIdx].xyz);
+        // Distance between centers (both in world space)
+        vec3 neighborCenter = (pushConstants.visModelMatrix * vec4(centerBuffer.centers[neighborIdx].xyz, 1.0)).xyz;
+        float centerDistance = distance(center, neighborCenter);
         if (centerDistance < 0.001) 
         centerDistance = 0.001;
         
@@ -129,7 +132,7 @@ void main() {
     // Update temperature using explicit time integration
     temperature += temperatureChangeRate * timeBuffer.deltaTime;
 
-    // Ambient cooling (reduce the cooling rate)
+    // Ambient cooling 
     temperature *= (1.0 - tetra.coolingRate * 0.1 * timeBuffer.deltaTime);
 
     // Ensure temperature stays positive

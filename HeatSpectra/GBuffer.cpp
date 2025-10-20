@@ -200,17 +200,17 @@ void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), 2, descriptorWrites, 0, nullptr);
     }
     
-    // Update outline descriptor sets for screen-space outline
+    // Update outline descriptor sets
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorImageInfo, 2> imageInfos{};
         
-        // Binding 0: Depth texture
-        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        // Depth texture (general layout for grid subpass)
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Binding 1: MSAA Stencil texture (for smooth edges)
-        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        // Stencil texture (general layout for grid subpass)
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
 
@@ -596,13 +596,13 @@ void GBuffer::createOutlineDescriptorSets(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorImageInfo, 2> imageInfos{};
         
-        // Depth texture
-        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        // Depth texture (general layout for combined sampler)
+        imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Stencil texture 
-        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        // Stencil texture (general layout for combined sampler)
+        imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
 
@@ -1222,7 +1222,7 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = outlinePipelineLayout;
     pipelineInfo.renderPass = deferredRenderer.getRenderPass();
-    pipelineInfo.subpass = 1;  // Lighting subpass 
+    pipelineInfo.subpass = 2;  // Grid subpass - unified with gizmo selection 
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outlinePipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create outline pipeline");
@@ -1703,14 +1703,6 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Reset depth bias
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-    // Draw gizmo if a model is selected
-    if (modelSelection.getSelected()) {
-        // Calculate and cache gizmo position and scale
-        glm::vec3 gizmoPosition = modelSelection.calculateAndCacheGizmoPosition(resourceManager);
-        float gizmoScale = modelSelection.getCachedGizmoScale();
-        gizmo.render(commandBuffer, currentFrame, gizmoPosition, extent, gizmoScale);
-    }
-
     // Transition to lighting subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightingPipeline);
@@ -1718,7 +1710,10 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Draw fullscreen triangle
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-    // Draw screen space outline for all selected models
+    // Transition to grid subpass
+    vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
+    
+    // Draw screen space outline 
     if (modelSelection.getSelected()) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, outlinePipeline);
         
@@ -1726,7 +1721,7 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                outlinePipelineLayout, 0, 1, &outlineDescriptorSets[currentFrame], 0, nullptr);
         
-        // Draw outline for each selected model (render thread only)
+        // Draw outline for each selected model
         const auto& selectedIDs = modelSelection.getSelectedModelIDsRenderThread();
         for (uint32_t id : selectedIDs) {
             OutlinePushConstant outlinePC;
@@ -1742,13 +1737,31 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
             vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         }
     }
-
-    // Transition to grid subpass
-    vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
+    
+    // Draw grid
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipeline());
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipelineLayout(), 0, 1, &resourceManager.getGrid().getGridDescriptorSets()[currentFrame], 0, nullptr);
-    // Draw grid
     vkCmdDraw(commandBuffer, resourceManager.getGrid().vertexCount, 1, 0, 0);
+    
+    // Draw gizmo last 
+    if (modelSelection.getSelected()) {
+        VkClearAttachment clearAttachment{};
+        clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;  
+        clearAttachment.clearValue.depthStencil = {1.0f, 0};  
+        
+        VkClearRect clearRect{};
+        clearRect.rect.offset = {0, 0};
+        clearRect.rect.extent = extent;
+        clearRect.baseArrayLayer = 0;
+        clearRect.layerCount = 1;
+        
+        vkCmdClearAttachments(commandBuffer, 1, &clearAttachment, 1, &clearRect);
+        
+        // Calculate gizmo position and scale directly from Gizmo class
+        glm::vec3 gizmoPosition = gizmo.calculateGizmoPosition(resourceManager, modelSelection);
+        float gizmoScale = gizmo.calculateGizmoScale(resourceManager, modelSelection);
+        gizmo.render(commandBuffer, currentFrame, gizmoPosition, extent, gizmoScale);
+    }
 
     // Transition to blend subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);

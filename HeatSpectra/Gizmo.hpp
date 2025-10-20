@@ -71,22 +71,26 @@ public:
     Gizmo(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, Camera& camera, VkRenderPass renderPass, VkExtent2D extent, CommandPool& renderCommandPool);
     ~Gizmo();
     
-    void cleanup();
+    void createGeometry();
+    void createConeGeometry();
+    void createPipeline(VkRenderPass renderPass, VkExtent2D extent);
+
+    float applyFovScaling(float baseScale) const;
+
     void render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, float scale = 1.0f);   
-    bool rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, float gizmoScale, GizmoAxis& hitAxis, float& hitDistance);
+    void renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered);
+    
+    glm::vec3 calculateGizmoPosition(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
+    float calculateGizmoScale(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
+    
+    float getArrowSize(float baseScale) const;      
+    float getArrowDistance(float baseScale) const;  
    
     void setMode(GizmoMode mode) { 
         currentMode = mode; 
     }
     GizmoMode getMode() const { 
         return currentMode; 
-    }
-    
-    void setHoveredAxis(GizmoAxis axis) { 
-        hoveredAxis = axis; 
-    }
-    GizmoAxis getHoveredAxis() const { 
-        return hoveredAxis; 
     }
     
     void setActiveAxis(GizmoAxis axis) { 
@@ -104,6 +108,7 @@ public:
     void endDrag();
     
     glm::vec3 calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
+    void cleanup();
 
 private:
     VulkanDevice& vulkanDevice;
@@ -127,20 +132,10 @@ private:
     uint32_t coneIndexCount;
     
     GizmoMode currentMode;
-    GizmoAxis hoveredAxis;
     GizmoAxis activeAxis;
     
     glm::vec3 dragStartPos;
     glm::vec3 dragStartRayOrigin;
     glm::vec3 dragStartRayDir;
-    glm::vec3 dragStartIntersection;  
-    
-    void createPipeline(VkRenderPass renderPass, VkExtent2D extent);
-    void createGeometry();
-    void createArrowGeometry();
-    void createConeGeometry();
-    
-    void renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered);  
-    bool rayCylinderIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& cylinderStart, const glm::vec3& cylinderEnd, float radius, float& distance);   
-    bool rayConeIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& coneBase, const glm::vec3& coneAxis, float height, float radius, float& distance);
+    glm::vec3 dragStartIntersection;     
 };

@@ -2,7 +2,7 @@
 
 // Sample depth and stencil textures
 layout(set = 0, binding = 0) uniform sampler2D depthTexture;
-layout(set = 0, binding = 1) uniform usampler2DMS stencilTexture;  // MSAA stencil with SAMPLED_BIT
+layout(set = 0, binding = 1) uniform usampler2DMS stencilTexture; 
 
 layout(push_constant) uniform PushConstants {
     float outlineThickness;
@@ -54,13 +54,13 @@ void main() {
         if (isEdge) break;
     }
     
-    // Check if current pixel has mixed samples (on edge itself)
+    // Check if current pixel has mixed samples
     if (!isEdge && selectedSamples < sampleCount) {
         isEdge = true;
     }
     
     if (isEdge) {
-        // Use coverage as alpha for alpha-to-coverage MSAA
+        // Use coverage as alpha
         float coverage = float(selectedSamples) / float(sampleCount);
         outColor = vec4(pc.outlineColor, coverage);
     } else {
