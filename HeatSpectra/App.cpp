@@ -86,11 +86,6 @@ static void keyCallback(void* userPtr, Qt::Key key, bool pressed) {
     app->handleKeyInput(key, pressed);
 }
 
-static void mouseClickCallback(void* userPtr, int button, float mouseX, float mouseY) {
-    auto* app = static_cast<App*>(userPtr);
-    app->handleMouseClick(button, mouseX, mouseY);
-}
-
 static void mouseMoveCallback(void* userPtr, float mouseX, float mouseY) {
     auto* app = static_cast<App*>(userPtr);
     app->handleMouseMove(mouseX, mouseY);
@@ -134,25 +129,23 @@ void App::handleKeyInput(Qt::Key key, bool pressed) {
     }
 }
 
-void App::handleMouseClick(int button, float mouseX, float mouseY) {
-    if (!modelSelection || !resourceManager || !gizmo) return;
+void App::handleKeyInput(Qt::Key key, bool pressed, bool shiftPressed) {
+    handleKeyInput(key, pressed);
+}
+
+void App::handleMouseButton(int button, float mouseX, float mouseY, bool shiftPressed) {
+    if (!resourceManager || !modelSelection || !gizmo) 
+        return;
     
-    // Only handle left clicks
-    if (button != static_cast<int>(Qt::LeftButton)) return;
+    if (button != static_cast<int>(Qt::LeftButton)) 
+        return;
     
     // Check if gizmo was hit
     if (modelSelection->getSelected()) {
-        // Get gizmo position
-        uint32_t selectedID = modelSelection->getSelectedModelID();
-        glm::vec3 gizmoPosition;
-        
-        if (selectedID == 1) {
-            gizmoPosition = resourceManager->getVisModel().getBoundingBoxCenter();
-        } else if (selectedID == 2) {
-            gizmoPosition = resourceManager->getHeatModel().getBoundingBoxCenter();
-        } else {
-            gizmoPosition = resourceManager->getVisModel().getBoundingBoxCenter();
-        }
+        // Get cached gizmo position (calculated on render thread)
+        bool valid = false;
+        glm::vec3 gizmoPosition = modelSelection->getCachedGizmoPosition(valid);
+        if (!valid) return;
         
         // Cast ray from mouse to world
         glm::vec3 rayOrigin = camera.getPosition();
@@ -160,15 +153,15 @@ void App::handleMouseClick(int button, float mouseX, float mouseY) {
         
         GizmoAxis hitAxis;
         float hitDistance;
-        float gizmoScale = 0.5f;
+        float gizmoScale = modelSelection->getCachedGizmoScale();
         
         if (gizmo->rayIntersect(rayOrigin, rayDir, gizmoPosition, gizmoScale, hitAxis, hitDistance)) {
-            // Start dragging the gizmo
+            // Cache initial gizmo position
             isDraggingGizmo = true;
-            gizmo->startDrag(hitAxis, rayOrigin, rayDir, gizmoPosition);
-            modelStartPosition = gizmoPosition;
+            cachedGizmoPosition = gizmoPosition;
+            gizmo->startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
+            modelStartPosition = cachedGizmoPosition;
             accumulatedTranslation = glm::vec3(0.0f);
-            std::cout << "Started dragging gizmo axis: " << static_cast<int>(hitAxis) << std::endl;
             return; 
         }
     }
@@ -180,26 +173,42 @@ void App::handleMouseClick(int button, float mouseX, float mouseY) {
     x = std::max(0, std::min(x, static_cast<int>(swapChainExtent.width) - 1));
     y = std::max(0, std::min(y, static_cast<int>(swapChainExtent.height) - 1));
     
-    // Queue the picking request and process on the render thread
-    modelSelection->queuePickRequest(x, y);
+    modelSelection->queuePickRequest(x, y, shiftPressed);
+}
+
+void App::applyGizmoTranslation() {
+    // Called in render thread 
+    if (!isDraggingGizmo || !modelSelection || !resourceManager)
+        return;
+    
+    glm::vec3 currentTranslation = accumulatedTranslation;  // Read from UI thread
+    glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
+    
+    if (glm::length(deltaTranslation) < 1e-6) 
+        return;
+    
+    // Apply incremental translation to all selected models
+    const auto& selectedIDs = modelSelection->getSelectedModelIDsRenderThread();
+    for (uint32_t id : selectedIDs) {
+        if (id == 1) {
+            resourceManager->getVisModel().translate(deltaTranslation);
+        } else if (id == 2) {
+            resourceManager->getHeatModel().translate(deltaTranslation);
+        }
+    }
+    
+    lastAppliedTranslation = currentTranslation;
 }
 
 void App::handleMouseMove(float mouseX, float mouseY) {
     if (!gizmo || !resourceManager) return;
     
     // Update hover state for gizmo
-    if (modelSelection && modelSelection->getSelected() && !isDraggingGizmo) {
-        // Get gizmo position
-        uint32_t selectedID = modelSelection->getSelectedModelID();
-        glm::vec3 gizmoPosition;
-        
-        if (selectedID == 1) {
-            gizmoPosition = resourceManager->getVisModel().getBoundingBoxCenter();
-        } else if (selectedID == 2) {
-            gizmoPosition = resourceManager->getHeatModel().getBoundingBoxCenter();
-        } else {
-            gizmoPosition = resourceManager->getVisModel().getBoundingBoxCenter();
-        }
+    if (modelSelection->getSelected()) {
+        // Get cached gizmo position (calculated on render thread)
+        bool valid = false;
+        glm::vec3 gizmoPosition = modelSelection->getCachedGizmoPosition(valid);
+        if (!valid) return;
         
         // Cast ray from mouse
         glm::vec3 rayOrigin = camera.getPosition();
@@ -208,7 +217,7 @@ void App::handleMouseMove(float mouseX, float mouseY) {
         // Check hover
         GizmoAxis hitAxis;
         float hitDistance;
-        float gizmoScale = 0.5f;
+        float gizmoScale = modelSelection->getCachedGizmoScale();
         
         if (gizmo->rayIntersect(rayOrigin, rayDir, gizmoPosition, gizmoScale, hitAxis, hitDistance)) {
             gizmo->setHoveredAxis(hitAxis);
@@ -217,27 +226,14 @@ void App::handleMouseMove(float mouseX, float mouseY) {
         }
     }
     
-    // Handle gizmo dragging
-    if (isDraggingGizmo && modelSelection && modelSelection->getSelected() && resourceManager) {
-        // Cast ray from mouse
+    // Handle gizmo dragging 
+    if (isDraggingGizmo && gizmo) {
+        // Cast ray from current mouse position
         glm::vec3 rayOrigin = camera.getPosition();
         glm::vec3 rayDir = camera.screenToWorldRay(mouseX, mouseY, swapChainExtent.width, swapChainExtent.height);
         
-        // Calculate translation delta from drag start position
-        glm::vec3 newTranslation = gizmo->calculateTranslationDelta(rayOrigin, rayDir, modelStartPosition, gizmo->getActiveAxis());
-        
-        // Calculate incremental translation 
-        glm::vec3 deltaTranslation = newTranslation - accumulatedTranslation;
-        
-        if (glm::length(deltaTranslation) > 0.0001f) {
-            uint32_t selectedID = modelSelection->getSelectedModelID();
-            if (selectedID == 1) {
-                resourceManager->getVisModel().translate(deltaTranslation);
-                resourceManager->getCommonSubdivision().translate(deltaTranslation);
-            } else if (selectedID == 2) {
-                resourceManager->getHeatModel().translate(deltaTranslation);
-            }
-        }
+        // Use cached gizmo position
+        glm::vec3 newTranslation = gizmo->calculateTranslationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
         
         // Store accumulated translation
         accumulatedTranslation = newTranslation;
@@ -251,6 +247,7 @@ void App::handleMouseRelease(int button, float mouseX, float mouseY) {
         isDraggingGizmo = false;
         gizmo->endDrag();
         accumulatedTranslation = glm::vec3(0.0f);
+        lastAppliedTranslation = glm::vec3(0.0f);
     }
 }
 
@@ -892,7 +889,7 @@ void App::drawFrame() {
         // Wait for previous frame's fence
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        // Process pick results from previous frame
+        // Process pick results from previous frame (handles selection internally)
         if (modelSelection) {
             modelSelection->processPickingRequests(currentFrame);
         }
@@ -914,15 +911,20 @@ void App::drawFrame() {
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 
+        // Apply gizmo translation on render thread (if dragging)
+        applyGizmoTranslation();
+        
         if (resourceManager) {
             if (resourceManager->getVisModel().needsVertexBufferUpdate()) {
                 resourceManager->getVisModel().applyPendingGPUUpdate();
+                // Also update surface buffer for heat system
+                resourceManager->getVisModel().updateSurfaceBuffer();
             }
-            if (resourceManager->getCommonSubdivision().needsVertexBufferUpdate()) {
-                resourceManager->getCommonSubdivision().applyPendingGPUUpdate();
-            }
+            // CommonSub doesn't need updates - follows via shader
             if (resourceManager->getHeatModel().needsVertexBufferUpdate()) {
                 resourceManager->getHeatModel().applyPendingGPUUpdate();
+                // Also update surface buffer for heat system
+                resourceManager->getHeatModel().updateSurfaceBuffer();
             }
         }
         

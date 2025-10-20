@@ -1336,11 +1336,18 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
+    // Push constant for translation offset
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(glm::vec3);
+
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &geometryDescriptorSetLayout; // Reuse geometry descriptor set layout
-    layoutInfo.pushConstantRangeCount = 0;
+    layoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &intrinsicOverlayPipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create overlay line pipeline layout");
@@ -1632,24 +1639,27 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Reset depth bias
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-    // Draw commonsub model on top with depth bias 
+    // Draw commonsub model with visModel's translation offset
     if (drawCommonSubdivision) {
-        VkBuffer intrinsicBuffers[] = { resourceManager.getCommonSubdivision().getVertexBuffer(), resourceManager.getCommonSubdivision().getSurfaceVertexBuffer() };
-        VkDeviceSize intrinsicOffsets[] = {
-        resourceManager.getCommonSubdivision().getVertexBufferOffset(),
-        resourceManager.getCommonSubdivision().getSurfaceVertexBufferOffset()
-        };
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipeline);
         
-        // Push commonsub model away from camera 
+        // Pass visModel's translation offset so commonSub follows it
+        glm::vec3 offset = resourceManager.getVisModel().getTranslationOffset();
+        vkCmdPushConstants(commandBuffer, intrinsicOverlayPipelineLayout, 
+            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec3), &offset);
+        
         vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
         
+        VkBuffer intrinsicBuffers[] = { resourceManager.getCommonSubdivision().getVertexBuffer(), resourceManager.getCommonSubdivision().getSurfaceVertexBuffer() };
+        VkDeviceSize intrinsicOffsets[] = {
+            resourceManager.getCommonSubdivision().getVertexBufferOffset(),
+            resourceManager.getCommonSubdivision().getSurfaceVertexBufferOffset()
+        };
         vkCmdBindVertexBuffers(commandBuffer, 0, 2, intrinsicBuffers, intrinsicOffsets);
         vkCmdBindIndexBuffer(commandBuffer, resourceManager.getCommonSubdivision().getIndexBuffer(), resourceManager.getCommonSubdivision().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getCommonSubdivision().getIndices().size()), 1, 0, 0, 0);
         
-        // Reset depth bias
         vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
     }
     
@@ -1687,19 +1697,9 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
 
     // Draw gizmo if a model is selected
     if (modelSelection.getSelected()) {
-        uint32_t selectedID = modelSelection.getSelectedModelID();
-        glm::vec3 gizmoPosition;
-        
-        if (selectedID == 1) {
-            gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
-        } else if (selectedID == 2) {
-            gizmoPosition = resourceManager.getHeatModel().getBoundingBoxCenter();
-        } else {
-            // Fallback to visModel if unknown ID
-            gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
-        }
-                 
-        float gizmoScale = 0.5f;
+        // Calculate and cache gizmo position and scale
+        glm::vec3 gizmoPosition = modelSelection.calculateAndCacheGizmoPosition(resourceManager);
+        float gizmoScale = modelSelection.getCachedGizmoScale();
         gizmo.render(commandBuffer, currentFrame, gizmoPosition, extent, gizmoScale);
     }
 
@@ -1710,25 +1710,29 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Draw fullscreen triangle
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-    // Draw screen space outline 
+    // Draw screen space outline for all selected models
     if (modelSelection.getSelected()) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, outlinePipeline);
-        
-        OutlinePushConstant outlinePC;
-        outlinePC.outlineThickness = modelSelection.getOutlineThickness();
-        outlinePC.selectedModelID = modelSelection.getSelectedModelID();
-        outlinePC.outlineColor = modelSelection.getOutlineColor();
-        
-        vkCmdPushConstants(commandBuffer, outlinePipelineLayout, 
-                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                          0, sizeof(OutlinePushConstant), &outlinePC);
         
         // Bind descriptor set with depth texture
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
                                outlinePipelineLayout, 0, 1, &outlineDescriptorSets[currentFrame], 0, nullptr);
         
-        // Draw fullscreen triangle
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        // Draw outline for each selected model (render thread only)
+        const auto& selectedIDs = modelSelection.getSelectedModelIDsRenderThread();
+        for (uint32_t id : selectedIDs) {
+            OutlinePushConstant outlinePC;
+            outlinePC.outlineThickness = modelSelection.getOutlineThickness();
+            outlinePC.selectedModelID = id;
+            outlinePC.outlineColor = modelSelection.getOutlineColor();
+            
+            vkCmdPushConstants(commandBuffer, outlinePipelineLayout, 
+                              VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                              0, sizeof(OutlinePushConstant), &outlinePC);
+            
+            // Draw fullscreen triangle for this model's outline
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        }
     }
 
     // Transition to grid subpass

@@ -49,6 +49,7 @@ layout(binding = 6) buffer HeatSourceBuffer {
 
 layout(push_constant) uniform PushConstantBlock {
     mat4 heatSourceModelMatrix;
+    vec3 visModelOffset;  // Translation offset for vismodel (tet mesh follows this)
 } pushConstants;
 
 
@@ -59,7 +60,7 @@ void main() {
     // Read tetrahedron data
     TetraElement tetra = tetraBuffer.elements[tetraID];
     float temperature = temperatureReadBuffer.temperatures[tetraID];
-    vec3 center = centerBuffer.centers[tetraID].xyz;
+    vec3 center = centerBuffer.centers[tetraID].xyz + pushConstants.visModelOffset;  // Apply translation
     
     // ---------- Heat Source Contribution ----------
     const float HEAT_RADIUS = 0.006;
@@ -96,8 +97,8 @@ void main() {
         float avgVolume = (tetra.volume + neighborTetra.volume) * 0.5;
         float sharedArea = pow(avgVolume, 2.0/3.0) * 0.5;
         
-        // Distance between centers
-        float centerDistance = distance(center, centerBuffer.centers[neighborIdx].xyz);
+        // Distance between centers (both translated, so offset cancels out in distance calc)
+        float centerDistance = distance(center, centerBuffer.centers[neighborIdx].xyz + pushConstants.visModelOffset);
         if (centerDistance < 0.001) 
         centerDistance = 0.001;
         

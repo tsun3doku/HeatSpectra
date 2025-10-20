@@ -10,7 +10,6 @@
 
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
 #include <string>
 #include <vector>
 #include <array>
@@ -115,8 +114,7 @@ class CommandPool;
 
 class Model {
 public:
-    Model(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera, 
-          CommandPool* asyncCommandPool = nullptr, CommandPool* renderCommandPool = nullptr);
+    Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool);
     ~Model();
     void init(const std::string modelPath);
 
@@ -133,11 +131,14 @@ public:
     void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
     void updateVertexBuffer();
     void updateIndexBuffer();
+    void updateSurfaceBuffer();
     void saveOBJ(const std::string& path) const;
     
     void translate(const glm::vec3& translation);
     
-    bool needsVertexBufferUpdate() const { return needsGPUUpdate.load(); }
+    bool needsVertexBufferUpdate() const { 
+        return needsGPUUpdate.load(); 
+    }
     
     void applyPendingGPUUpdate() {
         if (needsGPUUpdate.exchange(false)) {
@@ -149,12 +150,14 @@ public:
     void cleanup();
 
     glm::vec3 getBoundingBoxCenter();
+    glm::vec3 getBoundingBoxMin();
+    glm::vec3 getBoundingBoxMax();
     std::array<glm::vec3, 8> calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
-   
-    HitResult rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir);
-    void markEdge(uint32_t triIndex, int edgeNum);
+    
+    glm::vec3 getTranslationOffset() const { 
+        return translationOffset; 
+    }
 
-    // Getters
     const std::vector<Vertex>& getVertices() const {
         return vertices;
     }
@@ -207,7 +210,6 @@ public:
         return aabbTree;
     }
 
-    // Setters
     void setModelPosition(const glm::vec3& position) { 
         modelPosition = position; 
     }
@@ -220,16 +222,18 @@ public:
     void setVertices(const std::vector<Vertex>& newVertices) { 
         vertices = newVertices; 
     }
+    void setTranslationOffset(const glm::vec3& origin) {
+        translationOffset = origin;
+    }
 
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Camera& camera;
-    CommandPool* asyncCommandPool;   // Optional pool for async updates (UI thread)
-    CommandPool* renderCommandPool;  // Optional pool for init operations (render thread)
+    CommandPool& commandPool;
     
-    std::atomic<bool> needsGPUUpdate{false};  // Flag for deferred GPU updates
-
+    std::atomic<bool> needsGPUUpdate{false};  
+    glm::vec3 translationOffset{0.0f};  
     std::unique_ptr<AABBTree> aabbTree;
 
 	std::vector<Vertex> vertices;
@@ -248,9 +252,7 @@ private:
     VkBuffer surfaceVertexBuffer;
     VkDeviceSize surfaceVertexBufferOffset_;
 
-    glm::vec3 modelPosition{};
+    glm::vec3 modelPosition = glm::vec3(0.0f);
     glm::mat4 modelMatrix = glm::mat4(1.0f);
-
     std::vector<glm::vec3> faceNormals;
-    std::unordered_set<Edge, EdgeHash> featuredEdges;
 }; 

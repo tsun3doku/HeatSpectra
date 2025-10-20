@@ -122,7 +122,6 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
         }
     }
 
-    // Always recreate pools, layouts, and pipelines (needed even if tet mesh not ready)
     createTetraDescriptorPool(maxFramesInFlight);
     createTetraDescriptorSetLayout();
     createTetraPipeline();
@@ -134,7 +133,6 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight) {
 
     createComputeCommandBuffers(maxFramesInFlight);
     
-    // Only create descriptor sets if tet mesh is ready (requires buffers to exist)
     if (isTetMeshReady) {
         createTetraDescriptorSets(maxFramesInFlight);
         createSurfaceDescriptorSets(maxFramesInFlight);
@@ -149,7 +147,8 @@ void HeatSystem::processResetRequest() {
 }
 
 void HeatSystem::setActive(bool active) {
-    if (active && !isTetMeshReady) {      
+    if (active && !isTetMeshReady) { 
+        resourceManager.getVisModel().setTranslationOffset(glm::vec3(0.0f));
         generateTetrahedralMesh();
         createTetraBuffer(maxFramesInFlight);
         createNeighborBuffer();
@@ -977,10 +976,18 @@ void HeatSystem::createSurfacePipeline() {
     shaderStageInfo.module = computeShaderModule;
     shaderStageInfo.pName = "main";
 
+    // Add push constant for model offset
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(glm::vec3);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &surfaceDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr,
         &surfacePipelineLayout) != VK_SUCCESS) {
@@ -1005,7 +1012,9 @@ void HeatSystem::dispatchTetraCompute(VkCommandBuffer commandBuffer, uint32_t cu
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (elementCount + workGroupSize - 1) / workGroupSize;
 
-    const auto& pushConstant = heatSource->getHeatSourcePushConstant();
+    // Build push constant with both heat source matrix and vismodel offset
+    HeatSourcePushConstant pushConstant = heatSource->getHeatSourcePushConstant();
+    pushConstant.visModelOffset = resourceManager.getVisModel().getTranslationOffset();
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, tetraPipeline);
     vkCmdPushConstants(
@@ -1024,7 +1033,17 @@ void HeatSystem::dispatchSurfaceCompute(VkCommandBuffer commandBuffer, uint32_t 
     uint32_t workGroupSize = 256;
     uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
 
+    // Pass vismodel translation offset to surface shader
+    glm::vec3 modelOffset = resourceManager.getVisModel().getTranslationOffset();
+    
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipeline);
+    vkCmdPushConstants(
+        commandBuffer,
+        surfacePipelineLayout,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        0,
+        sizeof(glm::vec3),
+        &modelOffset);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipelineLayout, 0, 1, &surfaceDescriptorSets[currentFrame], 0, nullptr);
     vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
 }

@@ -7,7 +7,6 @@
 
 #include <array>
 #include <unordered_map>
-#include <unordered_set>
 #include <glm/gtx/norm.hpp>
 #include <algorithm>
 
@@ -17,6 +16,7 @@
 #include "Camera.hpp"
 #include "AABBTree.hpp"
 #include "Model.hpp"
+#include "Structs.hpp"
 
 void Model::init(const std::string modelPath) {
     loadModel(modelPath);
@@ -28,10 +28,8 @@ void Model::init(const std::string modelPath) {
     createSurfaceBuffer();
 }
 
-Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, 
-             CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
-    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), camera(camera), 
-      asyncCommandPool(asyncCommandPool), renderCommandPool(renderCommandPool) {
+Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), camera(camera), commandPool(commandPool) {
 }
 
 Model::~Model() {
@@ -105,7 +103,22 @@ glm::vec3 Model::getBoundingBoxCenter() {
         points[4] + points[5] + points[6] + points[7]) * 0.125f; // Calculate the average
 }
 
+glm::vec3 Model::getBoundingBoxMin() {
+    glm::vec3 minBound, maxBound;
+    calculateBoundingBox(vertices, minBound, maxBound);
+    return minBound;
+}
+
+glm::vec3 Model::getBoundingBoxMax() {
+    glm::vec3 minBound, maxBound;
+    calculateBoundingBox(vertices, minBound, maxBound);
+    return maxBound;
+}
+
 void Model::loadModel(const std::string& modelPath) {
+    // Reset translation offset
+    translationOffset = glm::vec3(0.0f);
+
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -115,7 +128,7 @@ void Model::loadModel(const std::string& modelPath) {
         throw std::runtime_error(warn + err);
     }
 
-    // Create vertices directly from OBJ vertex list (preserving order)
+    // Create vertices directly from OBJ vertex list
     size_t vertexCount = attrib.vertices.size() / 3;
     vertices.resize(vertexCount);
 
@@ -126,7 +139,7 @@ void Model::loadModel(const std::string& modelPath) {
             attrib.vertices[3 * i + 2]
         };
         vertices[i].color = { 1.0f, 1.0f, 1.0f };
-        // Set default normal (will be recalculated later)
+        // Set default normal 
         vertices[i].normal = { 0.0f, 0.0f, 1.0f };
         vertices[i].texCoord = { 0.0f, 0.0f }; // Default UV
     }
@@ -179,11 +192,7 @@ void Model::createVertexBuffer() {
     );
 
     // Copy from the staging buffer to the vertex buffer
-    if (renderCommandPool) {
-        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
-    } else {
-        throw std::runtime_error("Model: renderCommandPool is required but was null");
-    }
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
 
     // Free the staging buffer 
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -218,11 +227,7 @@ void Model::createIndexBuffer() {
     );
 
     // Copy data with offsets
-    if (renderCommandPool) {
-        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
-    } else {
-        throw std::runtime_error("Model: renderCommandPool is required but was null");
-    }
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -277,7 +282,7 @@ void Model::equalizeFaceAreas() {
             vertices[indices[i + 2]].pos) / 3.0f;
     }
 
-    // Adjust vertices toward centroids (mild relaxation)
+    // Adjust vertices toward centroids
     const float relaxation = 0.15f; // [0 = no change, 0.5 = full]
     std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
     std::vector<int> vertexCounts(vertices.size(), 0);
@@ -449,9 +454,14 @@ void Model::translate(const glm::vec3& translation) {
         vertex.pos += translation;
     }
     
+    // Update model position
+    modelPosition += translation;
+    
+    // Track accumulated translation
+    translationOffset += translation;
+    
     // Mark that GPU needs update
     needsGPUUpdate = true;
-
 }
 
 void Model::updateVertexBuffer() {
@@ -469,11 +479,38 @@ void Model::updateVertexBuffer() {
     memcpy(stagingData, vertices.data(), static_cast<size_t>(bufferSize));
 
     // Copy from staging buffer to vertex buffer
-    if (renderCommandPool) {
-        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, vertexBuffer, vertexBufferOffset_, bufferSize);
-    } else {
-        throw std::runtime_error("Model: renderCommandPool is required but was null");
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, vertexBuffer, vertexBufferOffset_, bufferSize);
+
+    // Free staging buffer
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+}
+
+void Model::updateSurfaceBuffer() {
+    // Create surface vertex data from current vertex positions
+    std::vector<SurfaceVertex> surfaceVertices(vertices.size());
+    for (size_t i = 0; i < vertices.size(); i++) {
+        surfaceVertices[i].position = glm::vec4(vertices[i].pos, 1.0f);
+        surfaceVertices[i].color = glm::vec4(vertices[i].color, 1.0f);
     }
+    
+    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * surfaceVertices.size();
+
+    // Create a staging buffer
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    // Copy data to staging buffer
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, surfaceVertices.data(), static_cast<size_t>(bufferSize));
+
+    // Copy from staging buffer to surface buffer
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, surfaceBuffer, surfaceBufferOffset_, bufferSize);
+    
+    // Also update surface vertex buffer
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, surfaceVertexBuffer, surfaceVertexBufferOffset_, bufferSize);
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -494,11 +531,7 @@ void Model::updateIndexBuffer() {
     memcpy(stagingData, indices.data(), static_cast<size_t>(bufferSize));
 
     // Copy from staging buffer to index buffer
-    if (renderCommandPool) {
-        renderCommandPool->copyBuffer(stagingBuffer, stagingOffset, indexBuffer, indexBufferOffset_, bufferSize);
-    } else {
-        throw std::runtime_error("Model: renderCommandPool is required but was null");
-    }
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, indexBuffer, indexBufferOffset_, bufferSize);
 
     // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
@@ -515,59 +548,6 @@ void Model::saveOBJ(const std::string& path) const {
         << indices[i] + 1 << " "
         << indices[i + 1] + 1 << " "
         << indices[i + 2] + 1 << "\n";
-}
-
-HitResult Model::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir) {
-    const float EPSILON = 0.0000001f;
-    HitResult result{ false, std::numeric_limits<float>::max(), 0, {0, 0, 0} };
-
-    for (size_t i = 0; i < indices.size(); i += 3) {
-        glm::vec3 v0 = vertices[indices[i]].pos;
-        glm::vec3 v1 = vertices[indices[i + 1]].pos;
-        glm::vec3 v2 = vertices[indices[i + 2]].pos;
-
-        glm::vec3 edge1 = v1 - v0;
-        glm::vec3 edge2 = v2 - v0;
-        glm::vec3 h = glm::cross(rayDir, edge2);
-        float a = glm::dot(edge1, h);
-
-        if (a > -EPSILON && a < EPSILON)
-            continue;
-
-        float f = 1.0f / a;
-        glm::vec3 s = rayOrigin - v0;
-        float u = f * glm::dot(s, h);
-
-        if (u < 0.0f || u > 1.0f)
-            continue;
-
-        glm::vec3 q = glm::cross(s, edge1);
-        float v = f * glm::dot(rayDir, q);
-
-        if (v < 0.0f || u + v > 1.0f)
-            continue;
-
-        float t = f * glm::dot(edge2, q);
-
-        if (t > EPSILON && t < result.distance) {
-            result.hit = true;
-            result.distance = t;
-            result.vertexIndices[0] = indices[i];
-            result.vertexIndices[1] = indices[i + 1];
-            result.vertexIndices[2] = indices[i + 2];
-        }
-    }
-
-    return result;
-}
-
-void Model::markEdge(uint32_t triIndex, int edgeNum) {
-    uint32_t v0 = indices[triIndex + edgeNum];
-    uint32_t v1 = indices[triIndex + (edgeNum + 1) % 3];
-    featuredEdges.insert(Edge(std::min(v0, v1), std::max(v0, v1)));
-
-    vertices[v0].color = glm::vec3(1, 0, 0);
-    vertices[v1].color = glm::vec3(1, 0, 0);
 }
 
 void Model::cleanup() {

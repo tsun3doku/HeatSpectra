@@ -19,10 +19,9 @@ ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& me
     VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager), camera(camera) {
 
-    // Pass both pools: asyncCommandPool (UI thread) for real-time updates, renderCommandPool (render thread) for init
-    visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
-    commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
-    heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, asyncCommandPool, renderCommandPool);
+    visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
+    commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
+    heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
     grid                = std::make_unique<Grid>(vulkanDevice, uniformBufferManager, maxFramesInFlight, renderPass);
     signpostMesh        = std::make_unique<SignpostMesh>();
 }

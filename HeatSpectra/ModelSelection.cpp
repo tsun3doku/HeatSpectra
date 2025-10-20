@@ -1,6 +1,8 @@
 #include "ModelSelection.hpp"
 #include "VulkanDevice.hpp"
 #include "DeferredRenderer.hpp"
+#include "ResourceManager.hpp"
+#include "Model.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -30,9 +32,123 @@ void ModelSelection::createPickingCommandPool() {
 ModelSelection::~ModelSelection() {
 }
 
-void ModelSelection::queuePickRequest(int x, int y) {
+bool ModelSelection::getSelected() const {
+    return !selectedModelIDs.empty();
+}
+
+void ModelSelection::setSelectedModelID(uint32_t id) {
+    selectedModelIDs.clear();
+    selectedModelIDs.push_back(id);
+}
+
+void ModelSelection::addSelectedModelID(uint32_t id) {
+    if (std::find(selectedModelIDs.begin(), selectedModelIDs.end(), id) == selectedModelIDs.end()) {
+        selectedModelIDs.push_back(id);
+    }
+}
+
+void ModelSelection::removeSelectedModelID(uint32_t id) {
+    auto it = std::find(selectedModelIDs.begin(), selectedModelIDs.end(), id);
+    if (it != selectedModelIDs.end()) {
+        selectedModelIDs.erase(it);
+    }
+}
+
+void ModelSelection::clearSelection() {
+    selectedModelIDs.clear();
+    cachedGizmoValid.store(false, std::memory_order_release);
+}
+
+bool ModelSelection::isModelSelected(uint32_t id) const {
+    return std::find(selectedModelIDs.begin(), selectedModelIDs.end(), id) != selectedModelIDs.end();
+}
+
+const std::vector<uint32_t>& ModelSelection::getSelectedModelIDsRenderThread() const {
+    return selectedModelIDs;
+}
+
+uint32_t ModelSelection::getSelectedModelID() const {
+    return selectedModelIDs.empty() ? 0 : selectedModelIDs.front();
+}
+
+glm::vec3 ModelSelection::calculateAndCacheGizmoPosition(ResourceManager& resourceManager) {
+    if (selectedModelIDs.empty()) {
+        cachedGizmoValid.store(false, std::memory_order_release);
+        return glm::vec3(0.0f);
+    }
+    
+    glm::vec3 gizmoPosition(0.0f);
+    float maxBBoxSize = 0.0f;
+    int count = 0;
+    
+    for (uint32_t id : selectedModelIDs) {
+        if (id == 1) {
+            gizmoPosition += resourceManager.getVisModel().getBoundingBoxCenter();
+            glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
+            maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
+            count++;
+        } else if (id == 2) {
+            gizmoPosition += resourceManager.getHeatModel().getBoundingBoxCenter();
+            glm::vec3 bboxSize = resourceManager.getHeatModel().getBoundingBoxMax() - resourceManager.getHeatModel().getBoundingBoxMin();
+            maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
+            count++;
+        }
+    }
+    
+    if (count > 0) {
+        gizmoPosition /= static_cast<float>(count);
+    } else {
+        // Fallback if no valid IDs
+        gizmoPosition = resourceManager.getVisModel().getBoundingBoxCenter();
+        glm::vec3 bboxSize = resourceManager.getVisModel().getBoundingBoxMax() - resourceManager.getVisModel().getBoundingBoxMin();
+        maxBBoxSize = std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z));
+    }
+    
+    // Calculate gizmo scale based on bounding box 
+    cachedGizmoScale = maxBBoxSize * 0.15f;
+    
+    // Safety bounds
+    if (cachedGizmoScale < 0.1f) 
+        cachedGizmoScale = 0.5f;  
+    if (cachedGizmoScale > 100.0f) 
+        cachedGizmoScale = 10.0f;  
+    
+    // Cache for UI thread
+    cachedGizmoPos = gizmoPosition;
+    cachedGizmoValid.store(true, std::memory_order_release);
+    
+    return gizmoPosition;
+}
+
+glm::vec3 ModelSelection::getCachedGizmoPosition(bool& valid) const {
+    valid = cachedGizmoValid.load(std::memory_order_acquire);
+    return cachedGizmoPos;
+}
+
+float ModelSelection::getCachedGizmoScale() const {
+    return cachedGizmoScale;
+}
+
+// Appearance
+void ModelSelection::setOutlineColor(const glm::vec3& color) {
+    outlineColor = color;
+}
+
+glm::vec3 ModelSelection::getOutlineColor() const {
+    return outlineColor;
+}
+
+void ModelSelection::setOutlineThickness(float thickness) {
+    outlineThickness = thickness;
+}
+
+float ModelSelection::getOutlineThickness() const {
+    return outlineThickness;
+}
+
+void ModelSelection::queuePickRequest(int x, int y, bool shiftPressed) {
     std::lock_guard<std::mutex> lock(pickingQueueMutex);
-    pickingRequestQueue.push({x, y});
+    pickingRequestQueue.push({x, y, shiftPressed});
 }
 
 void ModelSelection::processPickingRequests(uint32_t currentFrame) {
@@ -52,25 +168,26 @@ void ModelSelection::processPickingRequests(uint32_t currentFrame) {
         }
         
         // Read from the frame
-        uint8_t stencilID = pickModelAtPosition(request.x, request.y, currentFrame);
+        uint8_t pickedID = pickModelAtPosition(request.x, request.y, currentFrame);
         
-        // Update selection state
-        if (stencilID > 0) {
-            setSelected(true);
-            setSelectedModelID(stencilID);
-            
-            if (stencilID == 1) {
-                std::cout << "[Selection] VisModel selected (deferred GPU picking)" << std::endl;
-            } else if (stencilID == 2) {
-                std::cout << "[Selection] HeatModel selected (deferred GPU picking)" << std::endl;
+        // Handle selection based on picked ID and shift state 
+        if (pickedID > 0) {
+            if (request.shiftPressed) {
+                // Shift click
+                if (isModelSelected(pickedID)) {
+                    removeSelectedModelID(pickedID);
+                } else {
+                    addSelectedModelID(pickedID);
+                }
             } else {
-                std::cout << "[Selection] Model " << static_cast<int>(stencilID) << " selected (deferred GPU picking)" << std::endl;
+                // Regular click
+                setSelectedModelID(pickedID);
             }
-        } else {
-            setSelected(false);
-            setSelectedModelID(0);
-            std::cout << "[Selection] Model deselected (deferred GPU picking)" << std::endl;
+        } else if (!request.shiftPressed) {
+            // Clicked nothing without shift
+            clearSelection();
         }
+        // Clicked nothing with shift
     }
 }
 
@@ -193,9 +310,6 @@ uint8_t ModelSelection::pickModelAtPosition(int x, int y, uint32_t currentFrame)
     
     // Read stencil value
     uint8_t stencilValue = *static_cast<uint8_t*>(stagingBufferMapped);
-    
-    std::cout << "[GPU Picking] Frame=" << currentFrame << " Position=(" << x << ", " << y 
-              << ") StencilID=" << static_cast<int>(stencilValue) << std::endl;
     
     return stencilValue;
 }

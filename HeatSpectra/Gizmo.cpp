@@ -40,9 +40,9 @@ static void createBuffer(VulkanDevice& device, VkDeviceSize size, VkBufferUsageF
     vkBindBufferMemory(device.getDevice(), buffer, memory, 0);
 }
 
-Gizmo::Gizmo(VulkanDevice& device, MemoryAllocator& allocator, Camera& cam,
+Gizmo::Gizmo(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera,
              VkRenderPass renderPass, VkExtent2D extent, CommandPool& cmdPool)
-    : vulkanDevice(device), memoryAllocator(allocator), camera(cam), renderCommandPool(cmdPool),
+    : vulkanDevice(device), memoryAllocator(allocator), camera(camera), renderCommandPool(cmdPool),
       pipeline(VK_NULL_HANDLE), pipelineLayout(VK_NULL_HANDLE),
       arrowVertexBuffer(VK_NULL_HANDLE), arrowVertexBufferMemory(VK_NULL_HANDLE),
       arrowIndexBuffer(VK_NULL_HANDLE), arrowIndexBufferMemory(VK_NULL_HANDLE),
@@ -57,16 +57,26 @@ Gizmo::Gizmo(VulkanDevice& device, MemoryAllocator& allocator, Camera& cam,
 Gizmo::~Gizmo() {}
 
 void Gizmo::cleanup() {
-    if (arrowVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vulkanDevice.getDevice(), arrowVertexBuffer, nullptr);
-    if (arrowVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(vulkanDevice.getDevice(), arrowVertexBufferMemory, nullptr);
-    if (arrowIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vulkanDevice.getDevice(), arrowIndexBuffer, nullptr);
-    if (arrowIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(vulkanDevice.getDevice(), arrowIndexBufferMemory, nullptr);
-    if (coneVertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vulkanDevice.getDevice(), coneVertexBuffer, nullptr);
-    if (coneVertexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(vulkanDevice.getDevice(), coneVertexBufferMemory, nullptr);
-    if (coneIndexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(vulkanDevice.getDevice(), coneIndexBuffer, nullptr);
-    if (coneIndexBufferMemory != VK_NULL_HANDLE) vkFreeMemory(vulkanDevice.getDevice(), coneIndexBufferMemory, nullptr);
-    if (pipeline != VK_NULL_HANDLE) vkDestroyPipeline(vulkanDevice.getDevice(), pipeline, nullptr);
-    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(vulkanDevice.getDevice(), pipelineLayout, nullptr);
+    if (arrowVertexBuffer != VK_NULL_HANDLE) 
+        vkDestroyBuffer(vulkanDevice.getDevice(), arrowVertexBuffer, nullptr);
+    if (arrowVertexBufferMemory != VK_NULL_HANDLE) 
+        vkFreeMemory(vulkanDevice.getDevice(), arrowVertexBufferMemory, nullptr);
+    if (arrowIndexBuffer != VK_NULL_HANDLE) 
+        vkDestroyBuffer(vulkanDevice.getDevice(), arrowIndexBuffer, nullptr);
+    if (arrowIndexBufferMemory != VK_NULL_HANDLE) 
+        vkFreeMemory(vulkanDevice.getDevice(), arrowIndexBufferMemory, nullptr);
+    if (coneVertexBuffer != VK_NULL_HANDLE) 
+        vkDestroyBuffer(vulkanDevice.getDevice(), coneVertexBuffer, nullptr);
+    if (coneVertexBufferMemory != VK_NULL_HANDLE) 
+        vkFreeMemory(vulkanDevice.getDevice(), coneVertexBufferMemory, nullptr);
+    if (coneIndexBuffer != VK_NULL_HANDLE) 
+        vkDestroyBuffer(vulkanDevice.getDevice(), coneIndexBuffer, nullptr);
+    if (coneIndexBufferMemory != VK_NULL_HANDLE) 
+        vkFreeMemory(vulkanDevice.getDevice(), coneIndexBufferMemory, nullptr);
+    if (pipeline != VK_NULL_HANDLE) 
+        vkDestroyPipeline(vulkanDevice.getDevice(), pipeline, nullptr);
+    if (pipelineLayout != VK_NULL_HANDLE) 
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), pipelineLayout, nullptr);
 }
 
 void Gizmo::createGeometry() {
@@ -123,7 +133,6 @@ void Gizmo::createArrowGeometry() {
     createBuffer(vulkanDevice, iSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, arrowIndexBuffer, arrowIndexBufferMemory);
     
-    // Use render command pool for initialization
     VkCommandBuffer cmd = renderCommandPool.beginCommands();
     VkBufferCopy copyRegion{};
     copyRegion.size = vSize;
@@ -188,7 +197,6 @@ void Gizmo::createConeGeometry() {
     createBuffer(vulkanDevice, iSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, coneIndexBuffer, coneIndexBufferMemory);
     
-    // Use render command pool for initialization
     VkCommandBuffer cmd = renderCommandPool.beginCommands();
     VkBufferCopy copyRegion{};
     copyRegion.size = vSize;
@@ -262,18 +270,24 @@ void Gizmo::createPipeline(VkRenderPass renderPass, VkExtent2D extent) {
     depthStencil.depthWriteEnable = VK_TRUE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     
-    VkPipelineColorBlendAttachmentState colorAttachment{};
-    colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
-                                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorAttachment.blendEnable = VK_TRUE;
-    colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    // Geometry subpass
+    VkPipelineColorBlendAttachmentState colorAttachments[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        colorAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
+                                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorAttachments[i].blendEnable = VK_TRUE;
+        colorAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
+        colorAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
+    }
     
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorAttachment;
+    colorBlending.attachmentCount = 3;
+    colorBlending.pAttachments = colorAttachments;
     
     VkPushConstantRange pushRange{};
     pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -326,7 +340,6 @@ void Gizmo::createPipeline(VkRenderPass renderPass, VkExtent2D extent) {
 void Gizmo::render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, float scale) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     
-    // Set viewport and scissor dynamically to handle window resize
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -346,8 +359,7 @@ void Gizmo::render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const g
     renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0, 0, 1), scale, hoveredAxis == GizmoAxis::Z);
 }
 
-void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position,
-                       VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered) {
+void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered) {
     float aspectRatio = (float)extent.width / (float)extent.height;
     glm::mat4 view = camera.getViewMatrix();
     glm::mat4 proj = camera.getProjectionMatrix(aspectRatio);
@@ -357,7 +369,7 @@ void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, con
     // Rotate to align with the desired direction
     glm::mat4 rotation = glm::mat4(1.0f);
     if (direction.x > 0.5f) {
-        // X-axis: rotate -90° around Z to point right (negated for left-handed)
+        // X-axis: rotate -90° around Z to point right
         rotation = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 0, 1));
     } else if (direction.x < -0.5f) {
         // -X-axis: rotate 90° around Z
@@ -369,7 +381,7 @@ void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, con
         // -Y-axis: rotate 180°
         rotation = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(1, 0, 0));
     } else if (direction.z > 0.5f) {
-        // Z-axis: rotate 90° around X to point forward (negated for left-handed)
+        // Z-axis: rotate 90° around X to point forward 
         rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
     } else if (direction.z < -0.5f) {
         // -Z-axis: rotate 90° around X
@@ -405,8 +417,7 @@ void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, con
     vkCmdDrawIndexed(commandBuffer, coneIndexCount, 1, 0, 0, 0);
 }
 
-bool Gizmo::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition,
-                         float gizmoScale, GizmoAxis& hitAxis, float& hitDistance) {
+bool Gizmo::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, float gizmoScale, GizmoAxis& hitAxis, float& hitDistance) {
     hitAxis = GizmoAxis::None;
     hitDistance = FLT_MAX;
     
@@ -429,9 +440,9 @@ bool Gizmo::rayIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, co
     return hitAxis != GizmoAxis::None;
 }
 
-glm::vec3 Gizmo::calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
-                                            const glm::vec3& gizmoPosition, GizmoAxis axis) {
-    if (axis == GizmoAxis::None) return glm::vec3(0);
+glm::vec3 Gizmo::calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis) {
+    if (axis == GizmoAxis::None) 
+        return glm::vec3(0);
     
     // Get axis direction
     glm::vec3 axisDir;
@@ -440,26 +451,27 @@ glm::vec3 Gizmo::calculateTranslationDelta(const glm::vec3& rayOrigin, const glm
     else if (axis == GizmoAxis::Z) axisDir = glm::vec3(0, 0, 1);
     else return glm::vec3(0);
     
-    // Find closest point on axis line to the CURRENT mouse ray
+    // Find closest point on axis line to the current mouse ray
     glm::vec3 w0 = dragStartPos - rayOrigin;
-    float a = glm::dot(axisDir, axisDir);  // Always 1 for unit vector
+    float a = glm::dot(axisDir, axisDir);  
     float b = glm::dot(axisDir, rayDir);
     float c = glm::dot(rayDir, rayDir);
     float d = glm::dot(axisDir, w0);
     float e = glm::dot(rayDir, w0);
     
     float denom = a * c - b * b;
-    if (fabs(denom) < 0.0001f) return glm::vec3(0);  // Parallel, no translation
+    if (fabs(denom) < 0.0001f) 
+        return glm::vec3(0);  // Parallel, no translation
     
     float sc = (b * e - c * d) / denom;
     
     // Current intersection point on axis
     glm::vec3 currentIntersection = dragStartPos + axisDir * sc;
     
-    // Calculate translation: difference between current and initial intersection
+    // Difference between current and initial intersection
     glm::vec3 translation = currentIntersection - dragStartIntersection;
     
-    // Project onto axis to ensure it's constrained
+    // Project onto axis to keep it constrained
     float distance = glm::dot(translation, axisDir);
     return axisDir * distance;
 }
@@ -479,7 +491,7 @@ void Gizmo::startDrag(GizmoAxis axis, const glm::vec3& rayOrigin, const glm::vec
     
     // Find closest point on axis line to the initial ray
     glm::vec3 w0 = gizmoPosition - rayOrigin;
-    float a = glm::dot(axisDir, axisDir);  // Always 1 for unit vector
+    float a = glm::dot(axisDir, axisDir); 
     float b = glm::dot(axisDir, rayDir);
     float c = glm::dot(rayDir, rayDir);
     float d = glm::dot(axisDir, w0);
@@ -495,8 +507,7 @@ void Gizmo::endDrag() {
     activeAxis = GizmoAxis::None;
 }
 
-bool Gizmo::rayCylinderIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
-                                  const glm::vec3& p1, const glm::vec3& p2, float radius, float& distance) {
+bool Gizmo::rayCylinderIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& p1, const glm::vec3& p2, float radius, float& distance) {
     glm::vec3 d = p2 - p1;
     glm::vec3 m = rayOrigin - p1;
     glm::vec3 n = rayDir;
@@ -530,9 +541,6 @@ bool Gizmo::rayCylinderIntersect(const glm::vec3& rayOrigin, const glm::vec3& ra
     return true;
 }
 
-bool Gizmo::rayConeIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
-                              const glm::vec3& coneBase, const glm::vec3& coneAxis,
-                              float height, float radius, float& distance) {
-    // Simplified cone intersection
+bool Gizmo::rayConeIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& coneBase, const glm::vec3& coneAxis, float height, float radius, float& distance) {
     return false;
 }

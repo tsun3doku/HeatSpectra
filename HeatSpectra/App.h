@@ -28,9 +28,14 @@ public:
     void run(VulkanWindow* qtWindow);  
     void handleScrollInput(double xOffset, double yOffset);
     void handleKeyInput(Qt::Key key, bool pressed);
-    void handleMouseClick(int button, float mouseX, float mouseY);
+    void handleKeyInput(Qt::Key key, bool pressed, bool shiftPressed);
+    static void mouseClickCallback(void* userPtr, int button, float mouseX, float mouseY, bool shiftPressed) {
+        static_cast<App*>(userPtr)->handleMouseButton(button, mouseX, mouseY, shiftPressed);
+    }
     void handleMouseMove(float mouseX, float mouseY);
     void handleMouseRelease(int button, float mouseX, float mouseY);
+    void handleMouseButton(int button, float mouseX, float mouseY, bool shiftPressed);
+    void applyGizmoTranslation();
     
     // Heat system control methods
     bool isHeatSystemActive() const;
@@ -87,9 +92,11 @@ private:
     double mouseX, mouseY;
     
     // Gizmo interaction state
-    bool isDraggingGizmo;
-    glm::vec3 modelStartPosition;
-    glm::vec3 accumulatedTranslation;
+    bool isDraggingGizmo = false;
+    glm::vec3 modelStartPosition{0.0f};
+    glm::vec3 accumulatedTranslation{0.0f};  // UI thread writes total translation
+    glm::vec3 lastAppliedTranslation{0.0f};  // Render thread tracks what's been applied
+    glm::vec3 cachedGizmoPosition{0.0f};  // Cached during drag to prevent stuttering
     bool isShuttingDown;
     
     std::atomic<bool> isCameraUpdated;

@@ -39,7 +39,7 @@ public:
     // Callbacks for your App class
     void setScrollCallback(void (*callback)(void*, double, double), void* userPtr);
     void setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* userPtr);
-    void setMouseClickCallback(void (*callback)(void*, int, float, float), void* userPtr);
+    void setMouseClickCallback(void (*callback)(void*, int, float, float, bool), void* userPtr);
     void setMouseMoveCallback(void (*callback)(void*, float, float), void* userPtr);
     void setMouseReleaseCallback(void (*callback)(void*, int, float, float), void* userPtr);
 
@@ -67,7 +67,7 @@ private:
     void (*keyCb)(void*, Qt::Key, bool) = nullptr;
     void* keyUserPtr = nullptr;
     
-    void (*mouseClickCb)(void*, int, float, float) = nullptr;
+    void (*mouseClickCb)(void*, int, float, float, bool) = nullptr;
     void* mouseClickUserPtr = nullptr;
     
     void (*mouseMoveCb)(void*, float, float) = nullptr;

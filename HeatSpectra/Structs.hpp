@@ -99,6 +99,7 @@ struct TetraFrameBuffers {
 
 struct HeatSourcePushConstant {
     alignas(16) glm::mat4 model; // 16 byte aligned
+    alignas(16) glm::vec3 visModelOffset; // Translation offset for vismodel/tet mesh
 };
 
 struct OutlinePushConstant {

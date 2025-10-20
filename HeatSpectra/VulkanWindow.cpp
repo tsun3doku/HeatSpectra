@@ -59,7 +59,7 @@ void VulkanWindow::setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* 
     keyUserPtr = userPtr;
 }
 
-void VulkanWindow::setMouseClickCallback(void (*callback)(void*, int, float, float), void* userPtr) {
+void VulkanWindow::setMouseClickCallback(void (*callback)(void*, int, float, float, bool), void* userPtr) {
     mouseClickCb = callback;
     mouseClickUserPtr = userPtr;
 }
@@ -117,7 +117,8 @@ void VulkanWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton && mouseClickCb && mouseClickUserPtr) {
         float mouseX = event->position().x();
         float mouseY = event->position().y();
-        mouseClickCb(mouseClickUserPtr, static_cast<int>(event->button()), mouseX, mouseY);
+        bool shiftPressed = event->modifiers() & Qt::ShiftModifier;
+        mouseClickCb(mouseClickUserPtr, static_cast<int>(event->button()), mouseX, mouseY, shiftPressed);
     }
     
     QWindow::mousePressEvent(event);

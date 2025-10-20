@@ -25,6 +25,10 @@ layout(binding = 2) buffer CenterBuffer {
     vec4 centers[];
 } centerBuffer;
 
+layout(push_constant) uniform PushConstantBlock {
+    vec3 modelOffset;  // Translation offset for vismodel
+} pushConstants;
+
 vec3 temperatureToColor(float t) {
     // t should be normalized between 0 and 1
     if (t <= 0.0) return vec3(0, 0, 0);                                                          // Black for coldest
@@ -54,7 +58,7 @@ void main() {
 
     // Find N closest centers
     for(uint t = 0; t < centerBuffer.centers.length(); t++) {
-        vec3 tetraCenter = centerBuffer.centers[t].xyz;
+        vec3 tetraCenter = centerBuffer.centers[t].xyz + pushConstants.modelOffset;  // Apply translation
         float dist = distance(vertPos, tetraCenter);
         
         // Insert into sorted arrays

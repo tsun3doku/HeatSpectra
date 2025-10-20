@@ -68,8 +68,8 @@ std::pair<VkBuffer, VkDeviceSize> MemoryAllocator::allocate(VkDeviceSize size, V
         size = (size + alignment - 1) & ~(alignment - 1);
     }
     
-    // Add padding to prevent buffer aliasing
-    const VkDeviceSize SAFETY_PADDING = 1024;
+    // Add padding to prevent buffer aliasing (TEMPORARY SOLUTION)
+    const VkDeviceSize SAFETY_PADDING = 2048;
     size += SAFETY_PADDING;
 
     auto key = std::make_pair(usage, memProps);
