@@ -96,6 +96,8 @@ private:
     glm::vec3 modelStartPosition{0.0f};
     glm::vec3 accumulatedTranslation{0.0f};  // UI thread writes total translation
     glm::vec3 lastAppliedTranslation{0.0f};  // Render thread tracks what's been applied
+    float accumulatedRotation = 0.0f;  // UI thread writes total rotation angle (degrees)
+    float lastAppliedRotation = 0.0f;  // Render thread tracks applied rotation
     glm::vec3 cachedGizmoPosition{0.0f};  // Cached during drag to prevent stuttering
     bool isShuttingDown;
     

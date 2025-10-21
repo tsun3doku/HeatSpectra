@@ -47,12 +47,12 @@ Gizmo::Gizmo(VulkanDevice& device, MemoryAllocator& allocator, Camera& camera,
              VkRenderPass renderPass, VkExtent2D extent, CommandPool& cmdPool)
     : vulkanDevice(device), memoryAllocator(allocator), camera(camera), renderCommandPool(cmdPool),
       pipeline(VK_NULL_HANDLE), pipelineLayout(VK_NULL_HANDLE),
-      arrowVertexBuffer(VK_NULL_HANDLE), arrowVertexBufferMemory(VK_NULL_HANDLE),
-      arrowIndexBuffer(VK_NULL_HANDLE), arrowIndexBufferMemory(VK_NULL_HANDLE),
       coneVertexBuffer(VK_NULL_HANDLE), coneVertexBufferMemory(VK_NULL_HANDLE),
       coneIndexBuffer(VK_NULL_HANDLE), coneIndexBufferMemory(VK_NULL_HANDLE),
+      ringVertexBuffer(VK_NULL_HANDLE), ringVertexBufferMemory(VK_NULL_HANDLE),
+      ringIndexBuffer(VK_NULL_HANDLE), ringIndexBufferMemory(VK_NULL_HANDLE),
       currentMode(GizmoMode::Translate), activeAxis(GizmoAxis::None),
-      arrowIndexCount(0), coneIndexCount(0) {
+      coneIndexCount(0), ringIndexCount(0) {
     createGeometry();
     createPipeline(renderPass, extent);
 }
@@ -61,6 +61,7 @@ Gizmo::~Gizmo() {}
 
 void Gizmo::createGeometry() {
     createConeGeometry();
+    createRingGeometry();
 }
 
 void Gizmo::createConeGeometry() {
@@ -128,6 +129,76 @@ void Gizmo::createConeGeometry() {
     vkCmdCopyBuffer(cmd, vStaging, coneVertexBuffer, 1, &copyRegion);
     copyRegion.size = iSize;
     vkCmdCopyBuffer(cmd, iStaging, coneIndexBuffer, 1, &copyRegion);
+    renderCommandPool.endCommands(cmd);
+    
+    vkDestroyBuffer(vulkanDevice.getDevice(), vStaging, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), vStagingMem, nullptr);
+    vkDestroyBuffer(vulkanDevice.getDevice(), iStaging, nullptr);
+    vkFreeMemory(vulkanDevice.getDevice(), iStagingMem, nullptr);
+}
+
+void Gizmo::createRingGeometry() {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::string warn, err;
+    
+    if (!tinyobj::LoadObj(&attrib, &shapes, nullptr, &warn, &err, "models/gizmo_ring.obj")) {
+        throw std::runtime_error("Failed to load gizmo_ring.obj: " + warn + err);
+    }
+    
+    std::vector<GizmoVertex> vertices;
+    std::vector<uint32_t> indices;
+    
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            GizmoVertex vertex{};
+            vertex.position = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+            vertex.color = glm::vec3(1.0f);
+            
+            vertices.push_back(vertex);
+            indices.push_back(static_cast<uint32_t>(indices.size()));
+        }
+    }
+    
+    ringIndexCount = static_cast<uint32_t>(indices.size());
+    
+    VkDeviceSize vSize = sizeof(vertices[0]) * vertices.size();
+    VkDeviceSize iSize = sizeof(indices[0]) * indices.size();
+    
+    VkBuffer vStaging, iStaging;
+    VkDeviceMemory vStagingMem, iStagingMem;
+    
+    createBuffer(vulkanDevice, vSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 vStaging, vStagingMem);
+    createBuffer(vulkanDevice, iSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 iStaging, iStagingMem);
+    
+    void* data;
+    vkMapMemory(vulkanDevice.getDevice(), vStagingMem, 0, vSize, 0, &data);
+    memcpy(data, vertices.data(), vSize);
+    vkUnmapMemory(vulkanDevice.getDevice(), vStagingMem);
+    
+    vkMapMemory(vulkanDevice.getDevice(), iStagingMem, 0, iSize, 0, &data);
+    memcpy(data, indices.data(), iSize);
+    vkUnmapMemory(vulkanDevice.getDevice(), iStagingMem);
+    
+    createBuffer(vulkanDevice, vSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, ringVertexBuffer, ringVertexBufferMemory);
+    createBuffer(vulkanDevice, iSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, ringIndexBuffer, ringIndexBufferMemory);
+    
+    VkCommandBuffer cmd = renderCommandPool.beginCommands();
+    VkBufferCopy copyRegion{};
+    copyRegion.size = vSize;
+    vkCmdCopyBuffer(cmd, vStaging, ringVertexBuffer, 1, &copyRegion);
+    copyRegion.size = iSize;
+    vkCmdCopyBuffer(cmd, iStaging, ringIndexBuffer, 1, &copyRegion);
     renderCommandPool.endCommands(cmd);
     
     vkDestroyBuffer(vulkanDevice.getDevice(), vStaging, nullptr);
@@ -286,7 +357,7 @@ float Gizmo::applyFovScaling(float baseScale) const {
 }
 
 float Gizmo::getArrowSize(float baseScale) const {
-    const float ARROW_SIZE_MULTIPLIER = 0.25f;
+    const float ARROW_SIZE_MULTIPLIER = 0.2f;
     // Apply FOV scaling to arrow size
     float fovScaled = applyFovScaling(baseScale);
     return fovScaled * ARROW_SIZE_MULTIPLIER;
@@ -318,17 +389,40 @@ void Gizmo::render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const g
     scissor.extent = extent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     
-    // Set stencil reference 3 for X axis
-    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 3);
-    renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, false);
+    // If dragging, only render the active axis in the current mode
+    bool isDragging = (activeAxis != GizmoAxis::None);
     
-    // Set stencil reference 4 for Y axis
-    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 4);
-    renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, false);
+    // Show if not dragging or if translating on this axis
+    if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::X)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 3);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, false);
+    }
     
-    // Set stencil reference 5 for Z axis
-    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 5);
-    renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, false);
+    if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::Y)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 4);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, false);
+    }
+    
+    if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::Z)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 5);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, false);
+    }
+    
+    // Show if not dragging or if rotating on this axis
+    if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::X)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 6);
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, false);
+    }
+    
+    if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::Y)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 7);
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, false);
+    }
+    
+    if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::Z)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 8);
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, false);
+    }
 }
 
 void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered) {
@@ -380,6 +474,50 @@ void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, con
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, coneBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, coneIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(commandBuffer, coneIndexCount, 1, 0, 0, 0);
+}
+
+void Gizmo::renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, bool hovered) {
+    float aspectRatio = (float)extent.width / (float)extent.height;
+    glm::mat4 view = camera.getViewMatrix();
+    glm::mat4 proj = camera.getProjectionMatrix(aspectRatio);
+    proj[1][1] *= -1;
+    
+    // Apply FOV scaling to ring size
+    float fovScaled = applyFovScaling(scale);
+    float ringScale = fovScaled * 0.75f; 
+    
+    // Ring model lies in XY plane
+    glm::mat4 rotation = glm::mat4(1.0f);
+    if (axis.x > 0.5f) {
+        // X-axis ring: rotate 90 deg around Z to get YZ plane
+        rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 0, 1));
+    } else if (axis.y > 0.5f) {
+        // Y-axis ring: stay in XY plane
+        rotation = glm::mat4(1.0f);
+    } else if (axis.z > 0.5f) {
+        // Z-axis ring: rotate 90 deg around X to get XZ plane
+        rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+    }
+    
+    glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(ringScale));
+    glm::mat4 translateMatrix = glm::translate(glm::mat4(1.0f), position);
+    glm::mat4 model = translateMatrix * rotation * scaleMatrix;
+    
+    GizmoPushConstants pc;
+    pc.model = model;
+    pc.view = view;
+    pc.proj = proj;
+    pc.color = color;
+    pc.hovered = hovered ? 1.0f : 0.0f;
+    
+    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(GizmoPushConstants), &pc);
+    
+    VkDeviceSize offsets[] = {0};
+    VkBuffer ringBuffers[] = {ringVertexBuffer};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, ringBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, ringIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(commandBuffer, ringIndexCount, 1, 0, 0, 0);
 }
 
 glm::vec3 Gizmo::calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis) {
@@ -449,6 +587,50 @@ void Gizmo::endDrag() {
     activeAxis = GizmoAxis::None;
 }
 
+float Gizmo::calculateRotationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis) {
+    if (axis == GizmoAxis::None) 
+        return 0.0f;
+    
+    // Get rotation axis
+    glm::vec3 axisDir;
+    if (axis == GizmoAxis::X) axisDir = glm::vec3(1, 0, 0);
+    else if (axis == GizmoAxis::Y) axisDir = glm::vec3(0, 1, 0);
+    else if (axis == GizmoAxis::Z) axisDir = glm::vec3(0, 0, 1);
+    else return 0.0f;
+    
+    // Project rays onto plane perpendicular to rotation axis
+    glm::vec3 toGizmo = gizmoPosition - rayOrigin;
+    float distAlongAxis = glm::dot(toGizmo, axisDir);
+    glm::vec3 planeOrigin = rayOrigin + axisDir * distAlongAxis;
+    
+    // Find where current ray intersects the rotation plane
+    float t = glm::dot(gizmoPosition - rayOrigin, axisDir) / glm::dot(rayDir, axisDir);
+    if (fabs(glm::dot(rayDir, axisDir)) < 0.0001f) 
+        return 0.0f;
+    
+    glm::vec3 currentPoint = rayOrigin + rayDir * t;
+    
+    // Find where start ray intersected the plane
+    float t0 = glm::dot(gizmoPosition - dragStartRayOrigin, axisDir) / glm::dot(dragStartRayDir, axisDir);
+    glm::vec3 startPoint = dragStartRayOrigin + dragStartRayDir * t0;
+    
+    // Calculate vectors from gizmo center to intersection points
+    glm::vec3 startVec = glm::normalize(startPoint - gizmoPosition);
+    glm::vec3 currentVec = glm::normalize(currentPoint - gizmoPosition);
+    
+    // Calculate angle between vectors
+    float cosAngle = glm::clamp(glm::dot(startVec, currentVec), -1.0f, 1.0f);
+    float angle = acos(cosAngle);
+    
+    // Determine sign using cross product
+    glm::vec3 cross = glm::cross(startVec, currentVec);
+    if (glm::dot(cross, axisDir) < 0.0f) {
+        angle = -angle;
+    }
+    
+    return glm::degrees(angle);
+}
+
 glm::vec3 Gizmo::calculateGizmoPosition(ResourceManager& resourceManager, const ModelSelection& modelSelection) {
     const auto& selectedModelIDs = modelSelection.getSelectedModelIDsRenderThread();
     
@@ -507,7 +689,7 @@ float Gizmo::calculateGizmoScale(ResourceManager& resourceManager, const ModelSe
         maxBBoxSize = std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z));
     }
     
-    const float BASE_SCALE_MULTIPLIER = 0.25f;  // gizmo is % of model size
+    const float BASE_SCALE_MULTIPLIER = 0.5f;  // gizmo is % of model size
     float gizmoScale = maxBBoxSize * BASE_SCALE_MULTIPLIER;
     
     // Clamp to prevent extreme sizes
@@ -519,14 +701,6 @@ float Gizmo::calculateGizmoScale(ResourceManager& resourceManager, const ModelSe
 }
 
 void Gizmo::cleanup() {
-    if (arrowVertexBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(vulkanDevice.getDevice(), arrowVertexBuffer, nullptr);
-    if (arrowVertexBufferMemory != VK_NULL_HANDLE)
-        vkFreeMemory(vulkanDevice.getDevice(), arrowVertexBufferMemory, nullptr);
-    if (arrowIndexBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(vulkanDevice.getDevice(), arrowIndexBuffer, nullptr);
-    if (arrowIndexBufferMemory != VK_NULL_HANDLE)
-        vkFreeMemory(vulkanDevice.getDevice(), arrowIndexBufferMemory, nullptr);
     if (coneVertexBuffer != VK_NULL_HANDLE)
         vkDestroyBuffer(vulkanDevice.getDevice(), coneVertexBuffer, nullptr);
     if (coneVertexBufferMemory != VK_NULL_HANDLE)
@@ -535,6 +709,14 @@ void Gizmo::cleanup() {
         vkDestroyBuffer(vulkanDevice.getDevice(), coneIndexBuffer, nullptr);
     if (coneIndexBufferMemory != VK_NULL_HANDLE)
         vkFreeMemory(vulkanDevice.getDevice(), coneIndexBufferMemory, nullptr);
+    if (ringVertexBuffer != VK_NULL_HANDLE)
+        vkDestroyBuffer(vulkanDevice.getDevice(), ringVertexBuffer, nullptr);
+    if (ringVertexBufferMemory != VK_NULL_HANDLE)
+        vkFreeMemory(vulkanDevice.getDevice(), ringVertexBufferMemory, nullptr);
+    if (ringIndexBuffer != VK_NULL_HANDLE)
+        vkDestroyBuffer(vulkanDevice.getDevice(), ringIndexBuffer, nullptr);
+    if (ringIndexBufferMemory != VK_NULL_HANDLE)
+        vkFreeMemory(vulkanDevice.getDevice(), ringIndexBufferMemory, nullptr);
     if (pipeline != VK_NULL_HANDLE)
         vkDestroyPipeline(vulkanDevice.getDevice(), pipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE)

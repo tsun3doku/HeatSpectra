@@ -255,6 +255,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\heat_source.comp" />
     <None Include="shaders\heat_surface.comp" />
     <None Include="shaders\heat_tetra.comp" />
+    <None Include="shaders\intrinsicOverlay.frag" />
+    <None Include="shaders\intrinsicOverlay.vert" />
     <None Include="shaders\lighting.frag" />
     <None Include="shaders\lighting.vert" />
     <None Include="shaders\outline.frag" />

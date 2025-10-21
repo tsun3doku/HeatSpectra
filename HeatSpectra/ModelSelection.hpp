@@ -29,9 +29,10 @@ enum class PickedGizmoAxis {
 struct PickedResult {
     PickedType type;
     uint32_t modelID;          
-    PickedGizmoAxis gizmoAxis; 
+    PickedGizmoAxis gizmoAxis;
+    uint8_t stencilValue;  // Raw stencil value to distinguish translation (3-5) vs rotation (6-8)
     
-    PickedResult() : type(PickedType::None), modelID(0), gizmoAxis(PickedGizmoAxis::None) {}
+    PickedResult() : type(PickedType::None), modelID(0), gizmoAxis(PickedGizmoAxis::None), stencilValue(0) {}
     
     bool isNone() const { 
         return type == PickedType::None; 

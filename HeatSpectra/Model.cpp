@@ -450,11 +450,24 @@ void Model::updateGeometry(const std::vector<Vertex>& newVertices, const std::ve
     updateIndexBuffer();
 }
 
-void Model::translate(const glm::vec3& translation) {
-    modelMatrix = glm::translate(modelMatrix, translation);
+void Model::translate(const glm::vec3& translation) {    
+    modelMatrix[3][0] += translation.x;
+    modelMatrix[3][1] += translation.y;
+    modelMatrix[3][2] += translation.z;
     
     // Update model position
     modelPosition += translation;
+}
+
+void Model::rotate(float angleRadians, const glm::vec3& axis, const glm::vec3& pivot) {    
+    glm::mat4 translateToPivot = glm::translate(glm::mat4(1.0f), -pivot);
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), angleRadians, axis);
+    glm::mat4 translateBack = glm::translate(glm::mat4(1.0f), pivot);
+    
+    modelMatrix = translateBack * rotation * translateToPivot * modelMatrix;
+    
+    // Update model position 
+    modelPosition = glm::vec3(modelMatrix[3]);
 }
 
 void Model::updateVertexBuffer() {

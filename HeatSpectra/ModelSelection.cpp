@@ -267,16 +267,19 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
      
     PickedResult result;
      
-    // 3 = gizmo X axis
-    // 4 = gizmo Y axis
-    // 5 = gizmo Z axis
+    // 1-2 = models
+    // 3-5 = translation arrows (X, Y, Z)
+    // 6-8 = rotation rings (X, Y, Z)
+    
+    result.stencilValue = stencilValue;
     
     if (stencilValue == 1 || stencilValue == 2) {
         result.type = PickedType::Model;
         result.modelID = stencilValue;
-    } else if (stencilValue >= 3 && stencilValue <= 5) {
+    } else if (stencilValue >= 3 && stencilValue <= 8) {
         result.type = PickedType::Gizmo;
-        result.gizmoAxis = static_cast<PickedGizmoAxis>(stencilValue - 2); 
+        // Map both translation (3-5) and rotation (6-8) to X/Y/Z
+        result.gizmoAxis = static_cast<PickedGizmoAxis>(((stencilValue - 3) % 3) + 1);
     } else {
         result.type = PickedType::None;
     }

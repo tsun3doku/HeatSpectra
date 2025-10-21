@@ -135,6 +135,7 @@ public:
     void saveOBJ(const std::string& path) const;
     
     void translate(const glm::vec3& translation);
+    void rotate(float angleRadians, const glm::vec3& axis, const glm::vec3& pivot);
     
     bool needsVertexBufferUpdate() const { 
         return needsGPUUpdate.load(); 

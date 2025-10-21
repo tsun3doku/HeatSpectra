@@ -73,12 +73,14 @@ public:
     
     void createGeometry();
     void createConeGeometry();
+    void createRingGeometry();
     void createPipeline(VkRenderPass renderPass, VkExtent2D extent);
 
     float applyFovScaling(float baseScale) const;
 
     void render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, float scale = 1.0f);   
     void renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered);
+    void renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, bool hovered);
     
     glm::vec3 calculateGizmoPosition(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
     float calculateGizmoScale(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
@@ -108,6 +110,7 @@ public:
     void endDrag();
     
     glm::vec3 calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
+    float calculateRotationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
     void cleanup();
 
 private:
@@ -119,17 +122,17 @@ private:
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     
-    VkBuffer arrowVertexBuffer;
-    VkDeviceMemory arrowVertexBufferMemory;
-    VkBuffer arrowIndexBuffer;
-    VkDeviceMemory arrowIndexBufferMemory;
-    uint32_t arrowIndexCount;
-    
     VkBuffer coneVertexBuffer;
     VkDeviceMemory coneVertexBufferMemory;
     VkBuffer coneIndexBuffer;
     VkDeviceMemory coneIndexBufferMemory;
     uint32_t coneIndexCount;
+    
+    VkBuffer ringVertexBuffer;
+    VkDeviceMemory ringVertexBufferMemory;
+    VkBuffer ringIndexBuffer;
+    VkDeviceMemory ringIndexBufferMemory;
+    uint32_t ringIndexCount;
     
     GizmoMode currentMode;
     GizmoAxis activeAxis;

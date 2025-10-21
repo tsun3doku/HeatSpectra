@@ -163,6 +163,13 @@ void App::applyGizmoTranslation() {
             else if (lastPick.gizmoAxis == PickedGizmoAxis::Z) hitAxis = GizmoAxis::Z;
             
             if (hitAxis != GizmoAxis::None) {
+                // Auto-detect mode based on stencil value: 3-5 = translate, 6-8 = rotate
+                if (lastPick.stencilValue >= 3 && lastPick.stencilValue <= 5) {
+                    gizmo->setMode(GizmoMode::Translate);
+                } else if (lastPick.stencilValue >= 6 && lastPick.stencilValue <= 8) {
+                    gizmo->setMode(GizmoMode::Rotate);
+                }
+                
                 // Start drag using original click position
                 PickingRequest pickReq = modelSelection->getLastPickRequest();
                 glm::vec3 gizmoPosition = gizmo->calculateGizmoPosition(*resourceManager, *modelSelection);
@@ -174,6 +181,7 @@ void App::applyGizmoTranslation() {
                 gizmo->startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
                 modelStartPosition = cachedGizmoPosition;
                 accumulatedTranslation = glm::vec3(0.0f);
+                accumulatedRotation = 0.0f;
                 
                 modelSelection->clearLastPickedResult();
             }
@@ -183,23 +191,52 @@ void App::applyGizmoTranslation() {
     if (!isDraggingGizmo || !modelSelection || !resourceManager)
         return;
 
-    glm::vec3 currentTranslation = accumulatedTranslation; 
-    glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
-    
-    if (glm::length(deltaTranslation) < 1e-6) 
-        return;
-    
-    // Apply incremental translation to all selected models
     const auto& selectedIDs = modelSelection->getSelectedModelIDsRenderThread();
-    for (uint32_t id : selectedIDs) {
-        if (id == 1) {
-            resourceManager->getVisModel().translate(deltaTranslation);
-        } else if (id == 2) {
-            resourceManager->getHeatModel().translate(deltaTranslation);
-        }
-    }
     
-    lastAppliedTranslation = currentTranslation;
+    if (gizmo->getMode() == GizmoMode::Translate) {
+        glm::vec3 currentTranslation = accumulatedTranslation; 
+        glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
+        
+        if (glm::length(deltaTranslation) < 1e-6) 
+            return;
+        
+        // Apply incremental translation to all selected models
+        for (uint32_t id : selectedIDs) {
+            if (id == 1) {
+                resourceManager->getVisModel().translate(deltaTranslation);
+            } else if (id == 2) {
+                resourceManager->getHeatModel().translate(deltaTranslation);
+            }
+        }
+        
+        lastAppliedTranslation = currentTranslation;
+    }
+    else if (gizmo->getMode() == GizmoMode::Rotate) {
+        float currentRotation = accumulatedRotation;
+        float deltaRotation = currentRotation - lastAppliedRotation;
+        
+        if (fabs(deltaRotation) < 0.01f) 
+            return;
+        
+        // Get rotation axis
+        glm::vec3 rotationAxis;
+        GizmoAxis activeAxis = gizmo->getActiveAxis();
+        if (activeAxis == GizmoAxis::X) rotationAxis = glm::vec3(1, 0, 0);
+        else if (activeAxis == GizmoAxis::Y) rotationAxis = glm::vec3(0, 1, 0);
+        else if (activeAxis == GizmoAxis::Z) rotationAxis = glm::vec3(0, 0, 1);
+        else return;
+        
+        // Apply incremental rotation to all selected models around gizmo center
+        for (uint32_t id : selectedIDs) {
+            if (id == 1) {
+                resourceManager->getVisModel().rotate(glm::radians(deltaRotation), rotationAxis, cachedGizmoPosition);
+            } else if (id == 2) {
+                resourceManager->getHeatModel().rotate(glm::radians(deltaRotation), rotationAxis, cachedGizmoPosition);
+            }
+        }
+        
+        lastAppliedRotation = currentRotation;
+    }
 }
 
 void App::handleMouseMove(float mouseX, float mouseY) {
@@ -212,11 +249,15 @@ void App::handleMouseMove(float mouseX, float mouseY) {
         glm::vec3 rayOrigin = camera.getPosition();
         glm::vec3 rayDir = camera.screenToWorldRay(mouseX, mouseY, swapChainExtent.width, swapChainExtent.height);
         
-        // Use cached gizmo position
-        glm::vec3 newTranslation = gizmo->calculateTranslationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
-        
-        // Store accumulated translation
-        accumulatedTranslation = newTranslation;
+        // Auto-detect based on active mode
+        if (gizmo->getMode() == GizmoMode::Translate) {
+            glm::vec3 newTranslation = gizmo->calculateTranslationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
+            accumulatedTranslation = newTranslation;
+        } 
+        else if (gizmo->getMode() == GizmoMode::Rotate) {
+            float angle = gizmo->calculateRotationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
+            accumulatedRotation = angle;
+        }
     }
 }
 
@@ -228,6 +269,8 @@ void App::handleMouseRelease(int button, float mouseX, float mouseY) {
         gizmo->endDrag();
         accumulatedTranslation = glm::vec3(0.0f);
         lastAppliedTranslation = glm::vec3(0.0f);
+        accumulatedRotation = 0.0f;
+        lastAppliedRotation = 0.0f;
     }
 }
 

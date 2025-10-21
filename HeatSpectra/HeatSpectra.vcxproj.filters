@@ -155,6 +155,12 @@
     <None Include="shaders\gizmo.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\intrinsicOverlay.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsicOverlay.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_utils.h">

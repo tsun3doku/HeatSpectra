@@ -1336,11 +1336,11 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Push constant for translation offset
+    // Push constant for model matrix
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::vec3);
+    pushConstantRange.size = sizeof(glm::mat4);
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1641,14 +1641,14 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Reset depth bias
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-    // Draw commonsub model with visModel's translation offset
+    // Draw commonsub model with visModel's full transformation
     if (drawCommonSubdivision) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipeline);
         
-        // Pass visModel's translation offset so commonSub follows it
-        glm::vec3 offset = resourceManager.getVisModel().getTranslationOffset();
+        // Pass visModel's full model matrix so commonSub follows translation AND rotation
+        glm::mat4 modelMatrix = resourceManager.getVisModel().getModelMatrix();
         vkCmdPushConstants(commandBuffer, intrinsicOverlayPipelineLayout, 
-            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec3), &offset);
+            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
         
         vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
         
