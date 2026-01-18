@@ -22,8 +22,17 @@ public:
 
 private slots:
     void onRemeshClicked();
-    void onWireframeToggled(bool checked);
+    void onWireframeModeChanged(int index);
     void onIntrinsicToggled(bool checked);
+    void onHeatOverlayToggled(bool checked);
+    void onIntrinsicNormalsToggled(bool checked);
+    void onIntrinsicVertexNormalsToggled(bool checked);
+    void onHashGridToggled(bool checked);
+    void onSurfelsToggled(bool checked);
+    void onVoronoiToggled(bool checked);
+    void onPointsToggled(bool checked);
+    void onNormalLengthChanged(double value);
+    void onPanSensitivityChanged(double value);
     void onToggleHeatClicked();
     void onPauseHeatClicked();
     void onResetHeatClicked();
@@ -40,17 +49,25 @@ private:
     VulkanWindow* vulkanWindow;
     App* app;
     
-    QCheckBox* wireframeCheck;
+    class QComboBox* wireframeModeCombo;
     QCheckBox* intrinsicCheck;
+    QCheckBox* heatOverlayCheck;
+    QCheckBox* intrinsicNormalsCheck;
+    QCheckBox* intrinsicVertexNormalsCheck;
+    QCheckBox* hashGridCheck;
+    QCheckBox* surfelsCheck;
+    QCheckBox* voronoiCheck;
+    QCheckBox* pointsCheck;
+    QDoubleSpinBox* normalLengthSpinBox;
     QPushButton* remeshBtn;
     QSpinBox* remeshIterationsSpinBox;
     QDoubleSpinBox* minAngleSpinBox;
     QDoubleSpinBox* maxEdgeLengthSpinBox;
     QDoubleSpinBox* stepSizeSpinBox;
+    QDoubleSpinBox* panSensitivitySpinBox;
     QPushButton* toggleHeatBtn;
     QPushButton* pauseHeatBtn;
     QPushButton* resetHeatBtn;
     
-    QAction* wireframeAction;
     QAction* remeshOverlayAction;
 };

@@ -14,7 +14,6 @@
 #include "MemoryAllocator.hpp"
 #include "CommandBufferManager.hpp"
 #include "Camera.hpp"
-#include "AABBTree.hpp"
 #include "Model.hpp"
 #include "Structs.hpp"
 
@@ -24,8 +23,6 @@ void Model::init(const std::string modelPath) {
   
     createVertexBuffer();
     createIndexBuffer();
-
-    createSurfaceBuffer();
 }
 
 Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool)
@@ -45,19 +42,10 @@ void Model::recreateBuffers() {
     VkBuffer   oldIB = indexBuffer;
     VkDeviceSize oldOffset = indexBufferOffset_;
 
-    std::cout << "*** recreateBuffers() before cleanup ***\n"
-        << "    old verts:  " << oldVertCount << ", old indices: " << oldIndexCount << "\n"
-        << "    old VB handle: " << oldVB << ", old IB handle: " << oldIB << "\n";
-
     cleanup();
-
-    // remeshing should have updated `vertices` and `indices` already...
-    std::cout << "*** recreateBuffers() creating new buffers ***\n"
-        << "    new verts:  " << vertices.size() << ", new indices: " << indices.size() << "\n";
 
     createVertexBuffer();
     createIndexBuffer();
-    createSurfaceBuffer();
 
     std::cout << "*** recreateBuffers() after creation ***\n"
         << "    new VB handle: " << vertexBuffer
@@ -166,11 +154,6 @@ void Model::loadModel(const std::string& modelPath) {
     // Buffers are created by init() or recreateBuffers(), not here
 }
 
-void Model::buildAABBTree() {
-    aabbTree = std::make_unique<AABBTree>(*this);
-    aabbTree->build();
-}
-
 void Model::createVertexBuffer() {
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -239,28 +222,6 @@ void Model::createIndexBuffer() {
     indexBufferOffset_ = indexBufferOffset;
 }
 
-void Model::createSurfaceBuffer() {
-    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * vertices.size();
-
-    // Allocate surfaceBuffer
-    auto [surfaceBufferHandle, surfaceBufferOffset] = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    surfaceBuffer = surfaceBufferHandle;
-    surfaceBufferOffset_ = surfaceBufferOffset;
-
-    // Allocate surfaceVertexBuffer 
-    auto [surfaceVertexBufferHandle, surfaceVertexBufferOffset] = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    surfaceVertexBuffer = surfaceVertexBufferHandle;
-    surfaceVertexBufferOffset_ = surfaceVertexBufferOffset;
-}
-
 glm::vec3 Model::getFaceNormal(uint32_t faceIndex) const {
     // Calculate face normal from the triangle vertices
     uint32_t i0 = indices[faceIndex * 3];
@@ -305,45 +266,6 @@ void Model::equalizeFaceAreas() {
                 relaxation);
         }
     }
-}
-
-void Model::weldVertices(float epsilon) {
-    std::vector<Vertex> newVertices;
-    std::unordered_map<glm::vec3, uint32_t, Vec3Hash> posMap;
-    std::vector<uint32_t> oldToNew(vertices.size()); 
-
-    auto quantize = [epsilon](float val) {
-        return std::round(val / epsilon) * epsilon;
-        };
-
-    // Create new vertices and build index map
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        const auto& v = vertices[i];
-        glm::vec3 qpos = {
-            quantize(v.pos.x),
-            quantize(v.pos.y),
-            quantize(v.pos.z)
-        };
-
-        if (auto it = posMap.find(qpos); it != posMap.end()) {
-            oldToNew[i] = it->second;
-        }
-        else {
-            uint32_t newIndex = static_cast<uint32_t>(newVertices.size());
-            posMap[qpos] = newIndex;
-            oldToNew[i] = newIndex;
-            newVertices.push_back(v);
-        }
-    }
-
-    std::vector<uint32_t> newIndices;
-    newIndices.reserve(indices.size());
-    for (auto oldIndex : indices) {
-        newIndices.push_back(oldToNew[oldIndex]);
-    }
-
-    vertices = std::move(newVertices);
-    indices = std::move(newIndices);
 }
 
 void Model::recalculateNormals() {
@@ -491,37 +413,6 @@ void Model::updateVertexBuffer() {
     memoryAllocator.free(stagingBuffer, stagingOffset);
 }
 
-void Model::updateSurfaceBuffer() {
-    // Create surface vertex data from current vertex positions
-    std::vector<SurfaceVertex> surfaceVertices(vertices.size());
-    for (size_t i = 0; i < vertices.size(); i++) {
-        surfaceVertices[i].position = glm::vec4(vertices[i].pos, 1.0f);
-        surfaceVertices[i].color = glm::vec4(vertices[i].color, 1.0f);
-    }
-    
-    VkDeviceSize bufferSize = sizeof(SurfaceVertex) * surfaceVertices.size();
-
-    // Create a staging buffer
-    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    // Copy data to staging buffer
-    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
-    memcpy(stagingData, surfaceVertices.data(), static_cast<size_t>(bufferSize));
-
-    // Copy from staging buffer to surface buffer
-    commandPool.copyBuffer(stagingBuffer, stagingOffset, surfaceBuffer, surfaceBufferOffset_, bufferSize);
-    
-    // Also update surface vertex buffer
-    commandPool.copyBuffer(stagingBuffer, stagingOffset, surfaceVertexBuffer, surfaceVertexBufferOffset_, bufferSize);
-
-    // Free staging buffer
-    memoryAllocator.free(stagingBuffer, stagingOffset);
-}
-
 void Model::updateIndexBuffer() {
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
@@ -564,13 +455,5 @@ void Model::cleanup() {
     if (indexBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(indexBuffer, indexBufferOffset_);
         indexBuffer = VK_NULL_HANDLE;
-    }
-    if (surfaceBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(surfaceBuffer, surfaceBufferOffset_);
-        surfaceBuffer = VK_NULL_HANDLE;
-    }
-    if (surfaceVertexBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(surfaceVertexBuffer, surfaceVertexBufferOffset_);
-        surfaceVertexBuffer = VK_NULL_HANDLE;
     }
 }

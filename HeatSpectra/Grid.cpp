@@ -8,15 +8,18 @@
 #include "ResourceManager.hpp"
 #include "VulkanDevice.hpp"
 #include "Grid.hpp"
+#include "GridLabel.hpp"
 
 
-Grid::Grid(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass)
-    : vulkanDevice(vulkanDevice), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
+Grid::Grid(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass, CommandPool& commandPool)
+    : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), uniformBufferManager(uniformBufferManager) {
     createGridDescriptorPool(vulkanDevice, maxFramesInFlight);
     createGridDescriptorSetLayout(vulkanDevice);
     createGridDescriptorSets(vulkanDevice, uniformBufferManager, maxFramesInFlight);
 
     createGridPipeline(vulkanDevice, renderPass);
+    
+    gridLabel = std::make_unique<GridLabel>(vulkanDevice, memoryAllocator, uniformBufferManager, maxFramesInFlight, renderPass, commandPool);
 }
 
 Grid::~Grid() {
@@ -46,7 +49,7 @@ void Grid::createGridDescriptorSetLayout(const VulkanDevice& vulkanDevice) {
     gridUboLayoutBinding.descriptorCount = 1;
     gridUboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     gridUboLayoutBinding.pImmutableSamplers = nullptr;
-    gridUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    gridUboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutBinding gridSamplerLayoutBinding{};
     gridSamplerLayoutBinding.binding = 1;
@@ -145,7 +148,7 @@ void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass ren
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;  // Don't cull - we handle visibility in shader
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -229,9 +232,25 @@ void Grid::createGridPipeline(const VulkanDevice& vulkanDevice, VkRenderPass ren
 }
 
 void Grid::cleanup(VulkanDevice& vulkanDevice) const {
+    if (gridLabel) {
+        gridLabel->cleanup(vulkanDevice);
+    }
+    
     vkDestroyPipeline(vulkanDevice.getDevice(), gridPipeline, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), gridPipelineLayout, nullptr);
 
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), gridDescriptorSetLayout, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), gridDescriptorPool, nullptr);
+}
+
+void Grid::updateLabels(const glm::vec3& gridSize) {
+    if (gridLabel) {
+        gridLabel->updateLabels(gridSize);
+    }
+}
+
+void Grid::renderLabels(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+    if (gridLabel) {
+        gridLabel->render(commandBuffer, currentFrame);
+    }
 }

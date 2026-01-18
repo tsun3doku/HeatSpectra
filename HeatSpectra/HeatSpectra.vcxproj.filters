@@ -54,12 +54,6 @@
     <ClCompile Include="HeatSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\TetGen\predicates.cxx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libs\TetGen\tetgen.cxx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="HeatSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -75,14 +69,8 @@
     <ClCompile Include="iODT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AABBTree.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="HalfEdgeMesh.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SignPostMesh.cpp">
-      <Filter>Header Files</Filter>
     </ClCompile>
     <ClCompile Include="GeodesicTracer.cpp">
       <Filter>Source Files</Filter>
@@ -100,6 +88,66 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Gizmo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SignPostMesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CommonSubdivision.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SupportingHalfedge.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VulkanBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HashGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HeatReceiver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SurfelRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HashGridRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WireframeRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GridLabel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="InputManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiSeeder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TriangleHashGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiKDTree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiIntegrator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoxelGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PointRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LloydCompute.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiGeoCompute.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -123,9 +171,6 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\heat_tetra.comp">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="shaders\heat_surface.comp">
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\heat_source.comp">
@@ -155,10 +200,79 @@
     <None Include="shaders\gizmo.vert">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="shaders\intrinsicOverlay.frag">
+    <None Include="shaders\intrinsic_supporting.frag">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="shaders\intrinsicOverlay.vert">
+    <None Include="shaders\intrinsic_supporting.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_supporting.geom">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_buffer.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_normals.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_normals.geom">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_normals.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\hash_grid_build.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\hash_grid_vis.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\hash_grid_vis.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_vertex_normals.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_vertex_normals.geom">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\intrinsic_vertex_normals.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\surfel_debug.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\surfel_debug.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\grid_label.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\grid_label.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_voronoi.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\voronoi_surface.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\voronoi_surface.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_geometry.slang">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\point_cloud.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\point_cloud.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_contact_centroid.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_surface.slang">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -199,6 +313,12 @@
     <ClInclude Include="HeatSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LloydCompute.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiGeoCompute.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="libs\TetGen\tetgen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -217,9 +337,6 @@
     <ClInclude Include="iODT.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AABBTree.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="HalfEdgeMesh.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -236,6 +353,63 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Gizmo.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CommonSubdivision.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SupportingHalfedge.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VulkanBuffer.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashGrid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HeatReceiver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SurfelRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashGridRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WireframeRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GridLabel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="InputManager.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiSeeder.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TriangleHashGrid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="predicates.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\nanoflann\include\nanoflann.hpp">
+      <Filter>Libs</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiKDTree.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiIntegrator.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoxelGrid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PointRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -23,10 +23,11 @@ struct UniformBufferObject {
 };  // 208 bytes
 
 struct GridUniformBufferObject {
-    alignas(16) glm::mat4 view; // 16 byte aligned
-    alignas(16) glm::mat4 proj; // 16 byte aligned
-    alignas(16) glm::vec3 pos;  // 16 byte aligned
-};  // 144 bytes
+    alignas(16) glm::mat4 view;         // 16 byte aligned
+    alignas(16) glm::mat4 proj;         // 16 byte aligned
+    alignas(16) glm::vec3 pos;          // 16 byte aligned
+    alignas(16) glm::vec3 gridSize;     // 16 byte aligned 
+};  // 128 bytes
 
 struct LightUniformBufferObject {
     alignas(16) glm::vec3 lightPos_Key; // 16 byte aligned
@@ -55,56 +56,90 @@ struct HitResult {
     float distance;
     uint32_t vertexIndex;
     uint32_t vertexIndices[3];
-    int edgeIndex = -1; 
+    int edgeIndex = -1;
 };
 
 struct TimeUniform {
-    float deltaTime;    
-    float totalTime;    
+    float deltaTime;
+    float totalTime;
 };  // 8 bytes
 
-struct SurfaceVertex {
-    glm::vec4 position; // 16 byte aligned
-    glm::vec4 color;    // 16 byte aligned
+struct SurfacePoint {
+    glm::vec3 position;        // 12 bytes
+    float temperature;         // 4 bytes (offset 12)
+    glm::vec3 normal;          // 12 bytes (offset 16)
+    float area;                // 4 bytes (offset 28)
+    glm::vec4 color;           // 16 bytes (offset 32)
+};  // 48 bytes
+
+struct SurfaceInterpolation {
+    uint32_t tetraIndex;           // Which tetra to interpolate from
+    float baryCoords[4];           // Bary coords for the 4 nodes of the tetra
+};  // 20 bytes
+
+struct VoronoiSurfaceMapping {
+    uint32_t cellIndex;            // Nearest Voronoi cell index
+    uint32_t _padding[3];          // GPU alignment to 16 bytes
+};  // 16 bytes
+
+struct IntrinsicTriangleData {
+    glm::vec3 center;              // Triangle centroid
+    float area;                    // Triangle area
+    glm::vec3 normal;              // Face normal 
+    float padding;                
 };  // 32 bytes
 
-struct TetrahedralElement {
-    uint32_t vertices[4];
-    float temperature;
-    float volume;
-    float density;
-    float specificHeat;
-    float conductivity;
-    float coolingRate;
+struct HeatSourceTriangleGPU {
+    glm::vec4 centerArea;
+    glm::vec4 normalPad;
+    glm::uvec4 indices;
 };
 
-struct FEAMesh {
-    std::vector<TetrahedralElement> elements;
-    std::vector<glm::vec4> nodes;
-    std::vector<glm::vec4> tetraCenters;
-    std::vector<float> nodeTemps;
-    std::vector<std::vector<uint32_t>> neighbors;
+struct IntrinsicVertexData {
+    glm::vec3 position;            // 3D world position
+    uint32_t intrinsicVertexId;    // ID in intrinsic mesh
+    glm::vec3 normal;              // Area weighted vertex normal
+    float padding;                 
+};  // 32 bytes 
+
+struct VoxelCellGPU {
+    float temperature;         // Current temperature
+    float prevTemperature;     // Previous timestep temperature
+    float thermalMass;         // Thermal capacity
+    float occupancy;           // Volume fraction 0.0-1.0
+    float density;             // kg/m^3
+    float specificHeat;        // J/(kg*K)
+    float conductivity;        // W/(m*K)
+    float coolingRate;         // W/(m^2*K)
 };
 
-struct TetraFrameBuffers {
-    std::vector<VkBuffer> readBuffers;
-    std::vector<VkDeviceMemory> readBufferMemories;
-    std::vector<VkDeviceSize> readBufferOffsets_;
-    std::vector<VkBuffer> writeBuffers;
-    std::vector<VkDeviceMemory> writeBufferMemories;
-    std::vector<VkDeviceSize> writeBufferOffsets_;
-    std::vector<void*> mappedReadData;
-    std::vector<void*> mappedWriteData;
+struct VoxelGridParams {
+    alignas(16) glm::vec3 gridMin;      // Grid origin
+    float cellSize;                     // Voxel cell size
+    alignas(16) glm::ivec3 gridDim;     // Dimensions (x,y,z)
+    uint32_t totalCells;                // Total number of voxels
+};
+
+// 
+struct SurfelParams {
+    float thermalConductance;  
+    float contactPressure;     
+    float frictionCoeff;      
+    float padding;         
 };
 
 struct HeatSourcePushConstant {
-    alignas(16) glm::mat4 heatSourceModelMatrix; // Heat source (torus) transform
-    alignas(16) glm::mat4 visModelMatrix;         // VisModel (tet mesh) transform
-};
+    alignas(16) glm::mat4 heatSourceModelMatrix;    
+    alignas(16) glm::mat4 visModelMatrix;
+    alignas(16) glm::mat4 inverseHeatSourceModelMatrix;
+    uint32_t maxNodeNeighbors;
+    uint32_t substepIndex;      // Current substep index (0 = update display)
+};  
 
 struct GeometryPushConstant {
-    alignas(16) glm::mat4 modelMatrix; // 16 byte aligned
-    int32_t useHeatColors;
+    alignas(16) glm::mat4 modelMatrix; 
+    float alpha;            // 1.0 = fully opaque
+    int32_t _padding[3];    
 };
 
 struct OutlinePushConstant {
@@ -113,95 +148,95 @@ struct OutlinePushConstant {
     alignas(16) glm::vec3 outlineColor;
 };  // 32 bytes
 
-struct HeatSourceVertex {
-    glm::vec4 position; // 16 byte aligned
+struct NormalPushConstant {
+    alignas(16) glm::mat4 modelMatrix;
+    float normalLength;
+    float avgArea;
+};
+
+struct VoronoiSeedGPU {
+    alignas(16) glm::vec3 pos;
+    uint32_t isSurface;         // 1 = surface, 0 = interior
+};
+
+struct VoronoiNeighborGPU {
+    uint32_t neighborIndex;     // Index into NodeBuffer
+    float interfaceArea;        // Area of the voronoi face shared with this neighbor
+    float distance;             // Distance to neighbor
+    uint32_t interfaceFaceID;   // Index into InterfaceFaceBuffer
+};
+
+struct VoronoiNodeGPU {
     float temperature;
-    float padding[3];
-};  // 32 bytes
-
-struct FaceRef {
-    uint32_t faceIndex;
-    uint8_t edgeNum;
+    float prevTemperature;
+    float thermalMass;      
+    float density;
+    float specificHeat;
+    float conductivity;
+    
+    float volume;               
+    uint32_t neighborOffset;    
+    uint32_t neighborCount;     
+    uint32_t interfaceNeighborCount; 
 };
 
-struct Edge {
-    uint32_t first, second;
-    Edge(uint32_t a, uint32_t b) : first(std::min(a, b)), second(std::max(a, b)) {}
-    bool operator==(const Edge& other) const {
-        return first == other.first && second == other.second;
-    }
+struct DebugCellGeometry {
+    uint32_t cellID;
+    uint32_t vertexCount;
+    uint32_t triangleCount;
+    float volume;
+    glm::vec4 vertices[48];
+    glm::uvec4 triangles[96]; 
 };
 
-struct EdgeData {
-    uint32_t v1, v2;
-    float length;
-    bool isFeature = false;
-    bool isConstraint = false;
-    std::vector<uint32_t> adjacentFaces;
-    float targetLength = 0.0f;
-};
+const uint32_t DEBUG_MAX_TRIANGLES = 64;
 
-struct EdgeHash {
-    size_t operator()(const Edge& e) const {
-        size_t seed = 0;
-        hash_combine(seed, e.first);
-        hash_combine(seed, e.second);
-        return seed;
-    }
+struct VolumeChunkInfo {
+    uint32_t triIndex;          // Triangle index
+    uint32_t skipped;           // 0=processed, 1=skip@plane0, 2=plane1, 3=plane2, 4=cap 
+    uint32_t goOut;             // 1 if go_out_triangle, 0 otherwise 
+    float triDet;               // Shadow cone determinant 
+    float chunkVolume;          // Volume contribution 
+    float chunkDet;             // Volume determinant for this chunk 
+    float cumulativeVolume;     // Running total after this chunk 
+    float padding;              // Alignment 
+};  // 32 bytes total
 
-private:
-    template <class T>
-    inline void hash_combine(size_t& seed, const T& v) const {
-        std::hash<T> hasher;
-        seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    }
-};
+struct VoronoiDumpInfo {
+    uint32_t cellID;
+    uint32_t isGhost;
+    uint32_t isInside;
+    uint32_t originOccupancy;    // Domain status of origin (0=outside, 1=border, 2=inside)
+    
+    glm::vec4 seedPos;           
+    
+    // Voxel corner range 
+    glm::ivec4 cornerMin;
+    glm::ivec4 cornerMax;
+    
+    uint32_t inDomain;           // 0=outside, 1=border, 2=inside
+    uint32_t addVolume;          // 1 if volume added initially
+    uint32_t cornerCount;        // Corners checked
+    uint32_t _padding;           // Alignment to 16 bytes
 
-struct Vec3Hash {
-    size_t operator()(const glm::vec3& v) const {
-        return std::hash<float>{}(v.x) ^
-            (std::hash<float>{}(v.y) << 1) ^
-            (std::hash<float>{}(v.z) << 2);
-    }
-};
+    glm::ivec4 firstInsideCorner; 
+    glm::ivec4 firstOutsideCorner; 
+    
+    // Origin of tetra
+    glm::vec4 origin;             
+    
+    float unrestrictedVolume;
+    float restrictedVolume;
+    float maxChunkDet;          
+    float totalRestrictedVolume;
+    
+    // Volume chunks breakdown (32 * 64 = 2048 bytes)
+    VolumeChunkInfo volumeChunks[DEBUG_MAX_TRIANGLES];
+    
+    // Voxel corner occupancy (4096 bytes)
+    uint32_t cornerOccupancy[1024];
+};  
 
-// Axis-Aligned Bounding Box
-struct AABB {
-    glm::vec3 min{ FLT_MAX };
-    glm::vec3 max{ -FLT_MAX };
+// Number of cells to capture debug info for
+const uint32_t DEBUG_DUMP_CELL_COUNT = 8;
 
-    void expand(const glm::vec3& point) {
-        min = glm::min(min, point);
-        max = glm::max(max, point);
-    }
-
-    void expand(const AABB& other) {
-        min = glm::min(min, other.min);
-        max = glm::max(max, other.max);
-    }
-
-    bool contains(const glm::vec3& point) const {
-        return (point.x >= min.x && point.x <= max.x) &&
-            (point.y >= min.y && point.y <= max.y) &&
-            (point.z >= min.z && point.z <= max.z);
-    }
-
-    bool intersects(const AABB& other) const {
-        return (min.x <= other.max.x && max.x >= other.min.x) &&
-            (min.y <= other.max.y && max.y >= other.min.y) &&
-            (min.z <= other.max.z && max.z >= other.min.z);
-    }
-
-    glm::vec3 center() const {
-        return (min + max) * 0.5f;
-    }
-};
-
-// Node for AABB Tree
-struct AABBNode {
-    AABB bounds;
-    std::vector<uint32_t> triangleIndices;
-    std::unique_ptr<AABBNode> left;
-    std::unique_ptr<AABBNode> right;
-    bool isLeaf = false;
-};

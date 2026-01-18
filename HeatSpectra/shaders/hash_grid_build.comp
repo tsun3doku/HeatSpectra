@@ -1,0 +1,142 @@
+#version 450
+layout(local_size_x = 256) in;
+
+struct SurfacePoint {
+    vec3 position;
+    float temperature;
+    vec3 normal;
+    float area;
+    vec4 color;
+};
+
+struct GridPoint {
+    vec4 position;
+    vec4 normal;        // xyz = normal, w unused
+    float temperature;
+    float area;
+    uint sourceIndex;
+    uint isHeatSource;
+};
+
+struct HashGridParams {
+    vec3 gridMin;
+    float cellSize;
+    ivec3 gridDimensions;
+    uint maxPointsPerCell;
+    uint totalCells;
+};
+
+layout(push_constant) uniform PushConstants {
+    mat4 transform;
+    uint pointCount;
+} pushConstants;
+
+layout(binding = 0) buffer SourceBuffer {
+    SurfacePoint sources[];
+} sourceBuffer;
+
+layout(binding = 1) buffer GridBuffer {
+    GridPoint gridPoints[];
+} gridBuffer;
+
+layout(binding = 2) buffer CellStartBuffer {
+    uint cellStarts[];
+} cellStartBuffer;
+
+layout(binding = 3) buffer CellCountBuffer {
+    uint cellCounts[];
+} cellCountBuffer;
+
+layout(binding = 4) buffer OccupiedCellsBuffer {
+    uint occupiedCells[];
+} occupiedCellsBuffer;
+
+layout(binding = 5) uniform ParamsBuffer {
+    HashGridParams params;
+} paramsBuffer;
+
+layout(binding = 6) buffer OccupiedCountBuffer {
+    uint occupiedCount;
+} occupiedCountBuffer;
+
+layout(binding = 7) buffer IndirectDrawBuffer {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} indirectDrawBuffer;
+
+// Hash function to convert 3D grid coordinates to 1D cell index
+uint getCellIndex(ivec3 gridCoord) {
+    HashGridParams params = paramsBuffer.params;
+    
+    // Clamp to grid bounds
+    gridCoord = clamp(gridCoord, ivec3(0), params.gridDimensions - ivec3(1));
+    
+    return gridCoord.x + 
+           gridCoord.y * params.gridDimensions.x + 
+           gridCoord.z * params.gridDimensions.x * params.gridDimensions.y;
+}
+
+// Convert world position to grid coordinates
+ivec3 worldToGrid(vec3 worldPos) {
+    HashGridParams params = paramsBuffer.params;
+    vec3 localPos = worldPos - params.gridMin;
+    return ivec3(floor(localPos / params.cellSize));
+}
+
+void insertPoint(vec3 worldPos, vec3 normal, float temperature, float area, uint sourceIndex) {
+    ivec3 gridCoord = worldToGrid(worldPos);
+    
+    // Check if in bounds
+    HashGridParams params = paramsBuffer.params;
+    if (any(lessThan(gridCoord, ivec3(0))) || any(greaterThanEqual(gridCoord, params.gridDimensions))) {
+        return;
+    }
+    
+    uint cellIndex = getCellIndex(gridCoord);
+    
+    // Atomically increment cell count
+    uint localIndex = atomicAdd(cellCountBuffer.cellCounts[cellIndex], 1);
+    
+    // Check if there is space
+    if (localIndex >= params.maxPointsPerCell) {
+        return;
+    }
+    
+    // Calculate global index in grid buffer
+    uint globalIndex = cellIndex * params.maxPointsPerCell + localIndex;
+    
+    // Store point
+    gridBuffer.gridPoints[globalIndex].position = vec4(worldPos, 1.0);
+    gridBuffer.gridPoints[globalIndex].normal = vec4(normal, 0.0);
+    gridBuffer.gridPoints[globalIndex].temperature = temperature;
+    gridBuffer.gridPoints[globalIndex].area = area;
+    gridBuffer.gridPoints[globalIndex].sourceIndex = sourceIndex;
+    gridBuffer.gridPoints[globalIndex].isHeatSource = 1;
+    
+    // If this is the first point in the cell, mark cell as occupied
+    if (localIndex == 0) {
+        uint occupiedIdx = atomicAdd(occupiedCountBuffer.occupiedCount, 1);
+        if (occupiedIdx < params.totalCells) {
+            occupiedCellsBuffer.occupiedCells[occupiedIdx] = cellIndex;
+        }
+        
+        // Update indirect draw command 
+        atomicAdd(indirectDrawBuffer.vertexCount, 24);
+        indirectDrawBuffer.instanceCount = 1;
+        indirectDrawBuffer.firstVertex = 0;
+        indirectDrawBuffer.firstInstance = 0;
+    }
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    
+    if (idx >= pushConstants.pointCount) return;
+    
+    // Grid is in model space
+    SurfacePoint sp = sourceBuffer.sources[idx];
+    vec3 modelPos = sp.position;
+    insertPoint(modelPos, sp.normal, sp.temperature, sp.area, idx);
+}

@@ -4,6 +4,7 @@
 #include "MemoryAllocator.hpp"
 #include "VulkanDevice.hpp"
 #include "UniformBufferManager.hpp"
+#include <array>
 
 UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, uint32_t maxFramesInFlight)
 : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), camera(camera) {
@@ -147,12 +148,13 @@ void UniformBufferManager::setColor(glm::vec3 newColor, UniformBufferObject& ubo
     }
 }
 
-void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo) {
+void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo, const glm::vec3& gridSize) {
     
     // Grid ubo shares same matrices as main ubo   
     gridUbo.view = ubo.view;
     gridUbo.proj = ubo.proj;
     gridUbo.pos = camera.getPosition();
+    gridUbo.gridSize = gridSize;
 
     memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
 }

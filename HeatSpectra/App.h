@@ -1,12 +1,16 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <memory>
 #include <vector>
+#include <chrono>
 #include <atomic>
+#include <memory>
 #include <glm/glm.hpp>
 
+class InputManager; 
+
 #include "VulkanWindow.h"
+#include "InputManager.hpp"
 #include "VulkanDevice.hpp"
 #include "Camera.hpp"
 #include "CommandBufferManager.hpp"
@@ -19,6 +23,7 @@ class GBuffer;
 class HeatSystem;
 class ModelSelection;
 class Gizmo;
+class WireframeRenderer;
 
 class App {
 public:
@@ -26,29 +31,31 @@ public:
     ~App(); 
 
     void run(VulkanWindow* qtWindow);  
-    void handleScrollInput(double xOffset, double yOffset);
-    void handleKeyInput(Qt::Key key, bool pressed);
-    void handleKeyInput(Qt::Key key, bool pressed, bool shiftPressed);
-    static void mouseClickCallback(void* userPtr, int button, float mouseX, float mouseY, bool shiftPressed) {
-        static_cast<App*>(userPtr)->handleMouseButton(button, mouseX, mouseY, shiftPressed);
-    }
-    void handleMouseMove(float mouseX, float mouseY);
-    void handleMouseRelease(int button, float mouseX, float mouseY);
-    void handleMouseButton(int button, float mouseX, float mouseY, bool shiftPressed);
-    void applyGizmoTranslation();
     
-    // Heat system control methods
     bool isHeatSystemActive() const;
     void toggleHeatSystem();
     void pauseHeatSystem();
     void resetHeatSystem();
     
-    // Mesh operations
-    void performRemeshing(int iterations=1, double minAngleDegrees=35.0, double maxEdgeLength=0.1, double stepSize=0.25);
+    void performRemeshing(int iterations=1, double minAngleDegrees=30.0, double maxEdgeLength=0.1, double stepSize=0.25);
     void loadModel(const std::string& modelPath);
+    void setPanSensitivity(float sensitivity);
     
-    bool wireframeEnabled;
-    bool commonSubdivisionEnabled;
+    enum class WireframeMode { Off, Wireframe, Shaded };
+    WireframeMode wireframeMode = WireframeMode::Off;
+    
+    bool intrinsicOverlayEnabled;
+    bool heatOverlayEnabled;
+    bool intrinsicNormalsEnabled;
+    bool intrinsicVertexNormalsEnabled;
+    bool hashGridEnabled;
+    bool surfelsEnabled;
+    bool voronoiEnabled;
+    bool pointsEnabled;
+    float intrinsicNormalLength;
+
+    std::unique_ptr<InputManager> inputManager;  
+    friend class InputManager;
 
 private:
     VulkanWindow* window;
@@ -86,19 +93,10 @@ private:
     std::unique_ptr<HeatSystem> heatSystem;
     std::unique_ptr<ModelSelection> modelSelection;
     std::unique_ptr<Gizmo> gizmo;
+    std::unique_ptr<WireframeRenderer> wireframeRenderer;
     Camera camera;
     glm::vec3 center;
     
-    double mouseX, mouseY;
-    
-    // Gizmo interaction state
-    bool isDraggingGizmo = false;
-    glm::vec3 modelStartPosition{0.0f};
-    glm::vec3 accumulatedTranslation{0.0f};  // UI thread writes total translation
-    glm::vec3 lastAppliedTranslation{0.0f};  // Render thread tracks what's been applied
-    float accumulatedRotation = 0.0f;  // UI thread writes total rotation angle (degrees)
-    float lastAppliedRotation = 0.0f;  // Render thread tracks applied rotation
-    glm::vec3 cachedGizmoPosition{0.0f};  // Cached during drag to prevent stuttering
     bool isShuttingDown;
     
     std::atomic<bool> isCameraUpdated;
@@ -109,7 +107,6 @@ private:
     void initSwapChain();
     void initRenderResources();
     void initVulkan();
-    void setupCallbacks();
     void mainLoop();
     void renderLoop();
     void cleanupSwapChain();

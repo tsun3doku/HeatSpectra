@@ -5,22 +5,25 @@
 #include "Structs.hpp"
 #include "File_utils.h"
 #include "ModelSelection.hpp"
+#include "WireframeRenderer.hpp"
+#include "Gizmo.hpp"
 #include "Model.hpp"
 #include "Grid.hpp"
 #include "HeatSource.hpp"
+#include "HeatReceiver.hpp"
 #include "HeatSystem.hpp"
 #include "VulkanImage.hpp"
 #include "UniformBufferManager.hpp"
+#include "iODT.hpp" 
 #include "ResourceManager.hpp"
 #include "DeferredRenderer.hpp"
 #include "MemoryAllocator.hpp"
 #include "VulkanDevice.hpp"
-#include "Gizmo.hpp"
 #include "GBuffer.hpp"
 
 GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager,
     uint32_t width, uint32_t height, VkExtent2D swapchainExtent, const std::vector<VkImageView> swapChainImageViews, VkFormat swapchainImageFormat, uint32_t maxFramesInFlight, CommandPool& cmdPool, bool drawWireframe)
-    : vulkanDevice(vulkanDevice), deferredRenderer(deferredRenderer), renderCommandPool(cmdPool) {
+    : vulkanDevice(vulkanDevice), deferredRenderer(deferredRenderer), resourceManager(resourceManager), renderCommandPool(cmdPool) {
 
     createFramebuffers(swapChainImageViews, swapchainExtent, maxFramesInFlight);
 
@@ -40,13 +43,27 @@ GBuffer::GBuffer(VulkanDevice& vulkanDevice, DeferredRenderer& deferredRenderer,
     createOutlineDescriptorPool(maxFramesInFlight);
     createOutlineDescriptorSetLayout();
     createOutlineDescriptorSets(maxFramesInFlight);
+    
+    // Create pool and layout for per-model descriptor sets (allocated on-demand per model)
+    createSupportingHalfedgeDescriptorPool(maxFramesInFlight);
+    createSupportingHalfedgeDescriptorSetLayout();
+    
+    // Create intrinsic normals visualization resources
+    createIntrinsicNormalsDescriptorPool(maxFramesInFlight);
+    createIntrinsicNormalsDescriptorSetLayout();
+    
+    // Create intrinsic vertex normals visualization resources
+    createIntrinsicVertexNormalsDescriptorPool(maxFramesInFlight);
+    createIntrinsicVertexNormalsDescriptorSetLayout();
 
     createGeometryPipeline(swapchainExtent);
     createLightingPipeline(swapchainExtent);
-    createWireframePipeline(swapchainExtent);
     createOutlinePipeline(swapchainExtent);
-    createIntrinsicOverlayPipeline(swapchainExtent);
+    createSupportingHalfedgePipeline(swapchainExtent);
+    createIntrinsicNormalsPipeline(swapchainExtent);
+    createIntrinsicVertexNormalsPipeline(swapchainExtent);
     createBlendPipeline(swapchainExtent);
+    createStencilOnlyPipeline(swapchainExtent);
 
     createCommandBuffers(maxFramesInFlight);
 }
@@ -204,12 +221,12 @@ void GBuffer::updateDescriptorSets(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorImageInfo, 2> imageInfos{};
         
-        // Depth texture (general layout for grid subpass)
+        // Depth texture 
         imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Stencil texture (general layout for grid subpass)
+        // Stencil texture
         imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
@@ -259,7 +276,7 @@ void GBuffer::createGeometryDescriptorSetLayout() {
     uboBinding.binding = 0; // UBO binding index
     uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboBinding.descriptorCount = 1;
-    uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; // Used in vertex and frag shader
+    uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     uboBinding.pImmutableSamplers = nullptr;
 
     std::array<VkDescriptorSetLayoutBinding, 1> bindings = { uboBinding };
@@ -289,16 +306,13 @@ void GBuffer::createGeometryDescriptorSets(ResourceManager& resourceManager, Uni
         throw std::runtime_error("Failed to allocate descriptor set!");
     }
     for (size_t i = 0; i < maxFramesInFlight; i++) {
-        // UBO descriptor
         VkDescriptorBufferInfo uboBufferInfo{};
         uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
         uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
-
         std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
-        // Write descriptor for the UBO
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = geometryDescriptorSets[i];
         descriptorWrites[0].dstBinding = 0; // Binding for UBO
@@ -322,7 +336,7 @@ void GBuffer::createLightingDescriptorPool(uint32_t maxFramesInFlight) {
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(maxFramesInFlight); // One descriptor set per frame in flight
+    poolInfo.maxSets = static_cast<uint32_t>(maxFramesInFlight);
 
     if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &lightingDescriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool for lighting pass");
@@ -596,12 +610,12 @@ void GBuffer::createOutlineDescriptorSets(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         std::array<VkDescriptorImageInfo, 2> imageInfos{};
         
-        // Depth texture (general layout for combined sampler)
+        // Depth texture 
         imageInfos[0].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[0].imageView = deferredRenderer.getDepthResolveSamplerViews()[i];
         imageInfos[0].sampler = depthSampler;
         
-        // Stencil texture (general layout for combined sampler)
+        // Stencil texture 
         imageInfos[1].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         imageInfos[1].imageView = deferredRenderer.getStencilMSAASamplerViews()[i];
         imageInfos[1].sampler = depthSampler;
@@ -647,6 +661,464 @@ void GBuffer::createDepthSampler() {
     }
 }
 
+void GBuffer::createSupportingHalfedgeDescriptorPool(uint32_t maxFramesInFlight) {
+    const uint32_t maxModels = 10;
+    
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    
+    // UBO 
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = maxFramesInFlight * maxModels;
+    
+    // Texture buffers (S, A, H, E, T, L, H_input, E_input, T_input, L_input)
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    poolSizes[1].descriptorCount = maxFramesInFlight * maxModels * 10;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = maxFramesInFlight * maxModels;  
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;  
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &supportingHalfedgeDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create supporting halfedge descriptor pool");
+    }
+}
+
+void GBuffer::createSupportingHalfedgeDescriptorSetLayout() {
+    std::array<VkDescriptorSetLayoutBinding, 11> bindings{};  
+    
+    // Binding 0: Main UBO 
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 1: S buffer (supporting halfedge indices)
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 2: A buffer (supporting angles)
+    bindings[2].binding = 2;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 3: H buffer (intrinsic halfedge data)
+    bindings[3].binding = 3;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[3].descriptorCount = 1;
+    bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 4: E buffer (intrinsic edge data)
+    bindings[4].binding = 4;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[4].descriptorCount = 1;
+    bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 5: T buffer (intrinsic triangle data)
+    bindings[5].binding = 5;
+    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[5].descriptorCount = 1;
+    bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 6: L buffer (intrinsic edge lengths)
+    bindings[6].binding = 6;
+    bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[6].descriptorCount = 1;
+    bindings[6].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 7: H_input buffer (input halfedge data)
+    bindings[7].binding = 7;
+    bindings[7].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[7].descriptorCount = 1;
+    bindings[7].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 8: E_input buffer (input edge data)
+    bindings[8].binding = 8;
+    bindings[8].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[8].descriptorCount = 1;
+    bindings[8].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 9: T_input buffer (input triangle data)
+    bindings[9].binding = 9;
+    bindings[9].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[9].descriptorCount = 1;
+    bindings[9].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    // Binding 10: L_input buffer (input edge lengths)
+    bindings[10].binding = 10;
+    bindings[10].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+    bindings[10].descriptorCount = 1;
+    bindings[10].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &supportingHalfedgeDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create supporting halfedge descriptor set layout");
+    }
+}
+
+void GBuffer::allocateDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
+    if (!model) 
+        return;
+    
+    // Check if already allocated
+    if (perModelSupportingHalfedgeDescriptorSets.find(model) != perModelSupportingHalfedgeDescriptorSets.end()) {
+        return;  
+    }
+    
+    std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, supportingHalfedgeDescriptorSetLayout);
+    
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = supportingHalfedgeDescriptorPool;
+    allocInfo.descriptorSetCount = maxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+    
+    std::vector<VkDescriptorSet> descriptorSets(maxFramesInFlight);
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate descriptor sets");
+    }
+    
+    perModelSupportingHalfedgeDescriptorSets[model] = descriptorSets;    
+}
+
+void GBuffer::updateDescriptorSetsForModel(Model* model, iODT* remesher, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+    if (!model || !remesher) 
+        return;
+    
+    if (perModelSupportingHalfedgeDescriptorSets.find(model) == perModelSupportingHalfedgeDescriptorSets.end()) {
+        allocateDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    
+    auto* supportingHalfedge = remesher->getSupportingHalfedge();
+    if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
+        return;
+    }
+    
+    const auto& descriptorSets = perModelSupportingHalfedgeDescriptorSets[model];
+    
+    // Update descriptor sets for all frames
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        std::array<VkWriteDescriptorSet, 11> descriptorWrites{};
+        
+        // Binding 0: UBO 
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+        
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+        
+        // Bindings 1-10: Texel buffers
+        VkBufferView bufferViews[10] = {
+            supportingHalfedge->getSupportingHalfedgeView(),
+            supportingHalfedge->getSupportingAngleView(),
+            supportingHalfedge->getHalfedgeView(),
+            supportingHalfedge->getEdgeView(),
+            supportingHalfedge->getTriangleView(),
+            supportingHalfedge->getLengthView(),
+            supportingHalfedge->getInputHalfedgeView(),
+            supportingHalfedge->getInputEdgeView(),
+            supportingHalfedge->getInputTriangleView(),
+            supportingHalfedge->getInputLengthView()
+        };
+        
+        for (int j = 0; j < 10; j++) {
+            descriptorWrites[j + 1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[j + 1].dstSet = descriptorSets[i];
+            descriptorWrites[j + 1].dstBinding = 1 + j;
+            descriptorWrites[j + 1].dstArrayElement = 0;
+            descriptorWrites[j + 1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+            descriptorWrites[j + 1].descriptorCount = 1;
+            descriptorWrites[j + 1].pTexelBufferView = &bufferViews[j];
+        }
+        
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }    
+}
+
+void GBuffer::createIntrinsicNormalsDescriptorPool(uint32_t maxFramesInFlight) {
+    const uint32_t maxModels = 10;
+    
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    
+    // UBO 
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = maxFramesInFlight * maxModels;
+    
+    // Storage buffer (intrinsic triangle data)
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = maxFramesInFlight * maxModels;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = maxFramesInFlight * maxModels;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &intrinsicNormalsDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create intrinsic normals descriptor pool");
+    }
+}
+
+void GBuffer::createIntrinsicNormalsDescriptorSetLayout() {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    
+    // Binding 0: IntrinsicTriangleData storage buffer
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    // Binding 1: UBO 
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &intrinsicNormalsDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create intrinsic normals descriptor set layout");
+    }
+}
+
+void GBuffer::allocateNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
+    if (!model) 
+        return;
+    
+    // Check if already allocated
+    if (perModelIntrinsicNormalsDescriptorSets.find(model) != perModelIntrinsicNormalsDescriptorSets.end()) {
+        return;  
+    }
+    
+    std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, intrinsicNormalsDescriptorSetLayout);
+    
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = intrinsicNormalsDescriptorPool;
+    allocInfo.descriptorSetCount = maxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+    
+    std::vector<VkDescriptorSet> descriptorSets(maxFramesInFlight);
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate intrinsic normals descriptor sets");
+    }
+    
+    perModelIntrinsicNormalsDescriptorSets[model] = descriptorSets;    
+}
+
+void GBuffer::updateNormalsDescriptorSetsForModel(Model* model, iODT* remesher, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+    if (!model || !remesher) 
+        return;
+    
+    if (perModelIntrinsicNormalsDescriptorSets.find(model) == perModelIntrinsicNormalsDescriptorSets.end()) {
+        allocateNormalsDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    
+    auto* supportingHalfedge = remesher->getSupportingHalfedge();
+    if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
+        return;
+    }
+    
+    VkBuffer triangleBuffer = supportingHalfedge->getIntrinsicTriangleBuffer();
+    VkDeviceSize triangleOffset = supportingHalfedge->getTriangleGeometryOffset();
+    size_t triangleCount = supportingHalfedge->getTriangleCount();
+    
+    if (triangleBuffer == VK_NULL_HANDLE || triangleCount == 0) {
+        return;
+    }
+    
+    const auto& descriptorSets = perModelIntrinsicNormalsDescriptorSets[model];
+    
+    // Update descriptor sets for all frames
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        
+        // Binding 0: IntrinsicTriangleData storage buffer
+        VkDescriptorBufferInfo triangleBufferInfo{};
+        triangleBufferInfo.buffer = triangleBuffer;
+        triangleBufferInfo.offset = triangleOffset;
+        triangleBufferInfo.range = triangleCount * sizeof(IntrinsicTriangleData);
+        
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &triangleBufferInfo;
+        
+        // Binding 1: UBO
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+        
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &uboBufferInfo;
+        
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }    
+}
+
+void GBuffer::createIntrinsicVertexNormalsDescriptorPool(uint32_t maxFramesInFlight) {
+    const uint32_t maxModels = 10;
+    
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    
+    // UBO 
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = maxFramesInFlight * maxModels;
+    
+    // Storage buffer (intrinsic vertex data)
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = maxFramesInFlight * maxModels;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = maxFramesInFlight * maxModels;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &intrinsicVertexNormalsDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create intrinsic vertex normals descriptor pool");
+    }
+}
+
+void GBuffer::createIntrinsicVertexNormalsDescriptorSetLayout() {
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+    
+    // Binding 0: IntrinsicVertexData storage buffer
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    // Binding 1: UBO 
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &intrinsicVertexNormalsDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create intrinsic vertex normals descriptor set layout");
+    }
+}
+
+void GBuffer::allocateVertexNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
+    if (!model) 
+        return;
+    
+    // Check if already allocated
+    if (perModelIntrinsicVertexNormalsDescriptorSets.find(model) != perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+        return;  
+    }
+    
+    std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, intrinsicVertexNormalsDescriptorSetLayout);
+    
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = intrinsicVertexNormalsDescriptorPool;
+    allocInfo.descriptorSetCount = maxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+    
+    std::vector<VkDescriptorSet> descriptorSets(maxFramesInFlight);
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate intrinsic vertex normals descriptor sets");
+    }
+    
+    perModelIntrinsicVertexNormalsDescriptorSets[model] = descriptorSets;    
+}
+
+void GBuffer::updateVertexNormalsDescriptorSetsForModel(Model* model, iODT* remesher, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+    if (!model || !remesher) 
+        return;
+    
+    if (perModelIntrinsicVertexNormalsDescriptorSets.find(model) == perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+        allocateVertexNormalsDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    
+    auto* supportingHalfedge = remesher->getSupportingHalfedge();
+    if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
+        return;
+    }
+    
+    VkBuffer vertexBuffer = supportingHalfedge->getIntrinsicVertexBuffer();
+    VkDeviceSize vertexOffset = supportingHalfedge->getVertexGeometryOffset();
+    size_t vertexCount = supportingHalfedge->getVertexCount();
+    
+    if (vertexBuffer == VK_NULL_HANDLE || vertexCount == 0) {
+        return;
+    }
+    
+    const auto& descriptorSets = perModelIntrinsicVertexNormalsDescriptorSets[model];
+    
+    // Update descriptor sets for all frames
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        
+        // Binding 0: IntrinsicVertexData storage buffer
+        VkDescriptorBufferInfo vertexBufferInfo{};
+        vertexBufferInfo.buffer = vertexBuffer;
+        vertexBufferInfo.offset = vertexOffset;
+        vertexBufferInfo.range = vertexCount * sizeof(IntrinsicVertexData);
+        
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &vertexBufferInfo;
+        
+        // Binding 1: UBO
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+        
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &uboBufferInfo;
+        
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }    
+}
+
 void GBuffer::createGeometryPipeline(VkExtent2D extent) {
     auto vertShaderCode = readFile("shaders/gbuffer_vert.spv");
     auto fragShaderCode = readFile("shaders/gbuffer_frag.spv");
@@ -673,20 +1145,14 @@ void GBuffer::createGeometryPipeline(VkExtent2D extent) {
 
     auto bindingDescriptions = Vertex::getBindingDescriptions();
     auto vertexAttributes = Vertex::getVertexAttributes();
-    auto surfaceVertexAttributes = Vertex::getSurfaceVertexAttributes();
 
     // Set vertex binding descriptions
     vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
 
-    // Combine vertex and surface attributes into a single vector
-    std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
-    attributeDescriptions.insert(attributeDescriptions.end(), vertexAttributes.begin(), vertexAttributes.end());
-    attributeDescriptions.insert(attributeDescriptions.end(), surfaceVertexAttributes.begin(), surfaceVertexAttributes.end());
-
     // Set vertex attribute descriptions
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributes.size());
+    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -932,170 +1398,6 @@ void GBuffer::createLightingPipeline(VkExtent2D swapchainExtent) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-void GBuffer::createWireframePipeline(VkExtent2D extent) {
-    auto vertCode = readFile("shaders/wireframe_vert.spv");
-    auto fragCode = readFile("shaders/wireframe_frag.spv");
-
-    VkShaderModule vertModule = createShaderModule(vulkanDevice, vertCode);
-    VkShaderModule fragModule = createShaderModule(vulkanDevice, fragCode);
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-    // Vertex input 
-    auto bindingDescriptions = Vertex::getBindingDescriptions();
-    auto vertexAttributes = Vertex::getVertexAttributes();
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
-    vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
-    std::vector<VkVertexInputAttributeDescription> positionAttribute = { vertexAttributes[0] };
-
-    // Set vertex attribute descriptions
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(positionAttribute.size());
-    vertexInputInfo.pVertexAttributeDescriptions = positionAttribute.data();
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    // Viewport state 
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    // Proper rasterization setup
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-    rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_NONE;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizer.depthBiasEnable = VK_FALSE;
-
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT; // 8x MSAA
-    multisampling.minSampleShading = 1.0f;
-    multisampling.pSampleMask = nullptr;
-    multisampling.alphaToCoverageEnable = VK_FALSE;
-    multisampling.alphaToOneEnable = VK_FALSE;
-
-    // Depth stencil should match geometry pipeline
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_FALSE; // Overlay
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_FALSE;
-
-    VkStencilOpState stencilOp{};
-    stencilOp.passOp = VK_STENCIL_OP_KEEP;      // Keep stencil value on pass
-    stencilOp.failOp = VK_STENCIL_OP_KEEP;      // Keep stencil value on fail
-    stencilOp.depthFailOp = VK_STENCIL_OP_KEEP; // Keep stenvil value on depth fail
-    stencilOp.compareOp = VK_COMPARE_OP_EQUAL;  // Pass if stencil value equals reference
-    stencilOp.compareMask = 0xFF;               // Compare all bits
-    stencilOp.writeMask = 0x00;                 // Write no bits
-    stencilOp.reference = 1;                    // Read value 1
-
-    depthStencil.front = stencilOp;
-    depthStencil.back = stencilOp;
-
-    // Color blending should match geometry subpass
-    VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
-
-    colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-        VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT |
-        VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachments[0].blendEnable = VK_TRUE;
-    colorBlendAttachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorBlendAttachments[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-
-    // Dont write color to normal attachment
-    colorBlendAttachments[1].colorWriteMask = 0;
-    colorBlendAttachments[1].blendEnable = VK_FALSE;
-
-    // Dont write color to position attachment
-    colorBlendAttachments[2].colorWriteMask = 0;
-    colorBlendAttachments[2].blendEnable = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 3;
-    colorBlending.pAttachments = colorBlendAttachments;
-
-    std::vector<VkDynamicState> dynamicStates = {
-    VK_DYNAMIC_STATE_VIEWPORT,
-    VK_DYNAMIC_STATE_SCISSOR,
-    VK_DYNAMIC_STATE_LINE_WIDTH
-    };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    // Add push constant for heat mode (same as geometry pipeline)
-    VkPushConstantRange wireframePushConstantRange{};
-    wireframePushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    wireframePushConstantRange.offset = 0;
-    wireframePushConstantRange.size = sizeof(GeometryPushConstant);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &wireframePushConstantRange;
-
-    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &wireframePipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create wireframe pipeline layout");
-    }
-
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = wireframePipelineLayout;
-    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
-    pipelineInfo.subpass = 0; // Geometry subpass
-
-    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &wireframePipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create wireframe pipeline");
-    }
-
-    vkDestroyShaderModule(vulkanDevice.getDevice(), vertModule, nullptr);
-    vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
-}
-
 void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     auto vertCode = readFile("shaders/outline_vert.spv");
     auto fragCode = readFile("shaders/outline_frag.spv");
@@ -1117,7 +1419,6 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-    // Fullscreen triangle created in vertex shader
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 0;
@@ -1151,7 +1452,7 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;  
     multisampling.minSampleShading = 1.0f;
     multisampling.pSampleMask = nullptr;
-    multisampling.alphaToCoverageEnable = VK_TRUE;  // Convert alpha to sample coverage mask
+    multisampling.alphaToCoverageEnable = VK_TRUE; 
     multisampling.alphaToOneEnable = VK_FALSE;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
@@ -1222,7 +1523,7 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = outlinePipelineLayout;
     pipelineInfo.renderPass = deferredRenderer.getRenderPass();
-    pipelineInfo.subpass = 2;  // Grid subpass - unified with gizmo selection 
+    pipelineInfo.subpass = 2;  // Grid subpass 
 
     if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outlinePipeline) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create outline pipeline");
@@ -1232,11 +1533,14 @@ void GBuffer::createOutlinePipeline(VkExtent2D extent) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
 }
 
-void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
-    auto vertShaderCode = readFile("shaders/intrinsicOverlay_vert.spv"); 
-    auto fragShaderCode = readFile("shaders/intrinsicOverlay_frag.spv");
+void GBuffer::createSupportingHalfedgePipeline(VkExtent2D extent) {
+
+    auto vertShaderCode = readFile("shaders/intrinsic_supporting_vert.spv"); 
+    auto geomShaderCode = readFile("shaders/intrinsic_supporting_geom.spv");  
+    auto fragShaderCode = readFile("shaders/intrinsic_supporting_frag.spv");
 
     VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
+    VkShaderModule geomShaderModule = createShaderModule(vulkanDevice, geomShaderCode);  
     VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
@@ -1245,30 +1549,30 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     vertShaderStageInfo.module = vertShaderModule;
     vertShaderStageInfo.pName = "main";
 
+    VkPipelineShaderStageCreateInfo geomShaderStageInfo{};
+    geomShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    geomShaderStageInfo.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    geomShaderStageInfo.module = geomShaderModule;
+    geomShaderStageInfo.pName = "main";
+
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     fragShaderStageInfo.module = fragShaderModule;
     fragShaderStageInfo.pName = "main";
 
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, geomShaderStageInfo, fragShaderStageInfo };
 
-    // Reuse Model vertex layout
     auto bindingDescriptions = Vertex::getBindingDescriptions();
     auto vertexAttributes = Vertex::getVertexAttributes();
-    auto surfaceVertexAttributes = Vertex::getSurfaceVertexAttributes();
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
 
-    std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
-    attributeDescriptions.insert(attributeDescriptions.end(), vertexAttributes.begin(), vertexAttributes.end());
-    attributeDescriptions.insert(attributeDescriptions.end(), surfaceVertexAttributes.begin(), surfaceVertexAttributes.end());
-
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributes.size());
+    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1298,12 +1602,12 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;    // Enable depth write for proper occlusion
+    depthStencil.depthWriteEnable = VK_FALSE;  
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    // Color attachments: match geometry's attachments count and setup (or only write to albedo)
+    // Match geometry's attachments count and setup
     VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
     for (int i = 0; i < 3; ++i) {
         colorBlendAttachments[i].colorWriteMask =
@@ -1336,26 +1640,26 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
-    // Push constant for model matrix
+    // Push constant for model matrix 
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4);
+    pushConstantRange.size = sizeof(glm::mat4); 
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &geometryDescriptorSetLayout;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &supportingHalfedgeDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &intrinsicOverlayPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create overlay line pipeline layout");
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &supportingHalfedgePipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create supporting halfedge pipeline layout!");
     }
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
+    pipelineInfo.stageCount = 3; 
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
     pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -1365,15 +1669,302 @@ void GBuffer::createIntrinsicOverlayPipeline(VkExtent2D extent) {
     pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = intrinsicOverlayPipelineLayout;
+    pipelineInfo.layout = supportingHalfedgePipelineLayout;
     pipelineInfo.renderPass = deferredRenderer.getRenderPass();
-    pipelineInfo.subpass = 0; // geometry pass so overlay renders with geometry attachments
+    pipelineInfo.subpass = 0; // geometry subpass 
 
-    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &intrinsicOverlayPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create overlay line pipeline!");
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &supportingHalfedgePipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create supporting halfedge pipeline!");
     }
 
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), geomShaderModule, nullptr);  
+    vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
+}
+
+void GBuffer::createIntrinsicNormalsPipeline(VkExtent2D extent) {
+    auto vertShaderCode = readFile("shaders/intrinsic_normals_vert.spv");
+    auto geomShaderCode = readFile("shaders/intrinsic_normals_geom.spv");
+    auto fragShaderCode = readFile("shaders/intrinsic_normals_frag.spv");
+
+    VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
+    VkShaderModule geomShaderModule = createShaderModule(vulkanDevice, geomShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo geomShaderStageInfo{};
+    geomShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    geomShaderStageInfo.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    geomShaderStageInfo.module = geomShaderModule;
+    geomShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, geomShaderStageInfo, fragShaderStageInfo };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+    // Point list topology
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 2.0f;  
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_FALSE; 
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
+    // Match geometry's attachments count
+    VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        colorBlendAttachments[i].colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachments[i].blendEnable = VK_TRUE;
+        colorBlendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
+    }
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 3;
+    colorBlending.pAttachments = colorBlendAttachments;
+
+    std::vector<VkDynamicState> dynamicStates = {
+         VK_DYNAMIC_STATE_VIEWPORT,
+         VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Push constant for model matrix, normal length, and average area
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(NormalPushConstant);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &intrinsicNormalsDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &intrinsicNormalsPipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create intrinsic normals pipeline layout!");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 3;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = intrinsicNormalsPipelineLayout;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
+    pipelineInfo.subpass = 0; // geometry subpass
+
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &intrinsicNormalsPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create intrinsic normals pipeline!");
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), geomShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
+}
+
+void GBuffer::createIntrinsicVertexNormalsPipeline(VkExtent2D extent) {
+    auto vertShaderCode = readFile("shaders/intrinsic_vertex_normals_vert.spv");
+    auto geomShaderCode = readFile("shaders/intrinsic_vertex_normals_geom.spv");
+    auto fragShaderCode = readFile("shaders/intrinsic_vertex_normals_frag.spv");
+
+    VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
+    VkShaderModule geomShaderModule = createShaderModule(vulkanDevice, geomShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo geomShaderStageInfo{};
+    geomShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    geomShaderStageInfo.stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    geomShaderStageInfo.module = geomShaderModule;
+    geomShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, geomShaderStageInfo, fragShaderStageInfo };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+    // Point list topology 
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 2.0f;  
+    rasterizer.cullMode = VK_CULL_MODE_NONE;  
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_FALSE;  
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
+    // Match geometry's attachments count
+    VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        colorBlendAttachments[i].colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachments[i].blendEnable = VK_TRUE;
+        colorBlendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
+    }
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 3;
+    colorBlending.pAttachments = colorBlendAttachments;
+
+    std::vector<VkDynamicState> dynamicStates = {
+         VK_DYNAMIC_STATE_VIEWPORT,
+         VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Push constant for model matrix, normal length, and average area
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(NormalPushConstant);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &intrinsicVertexNormalsDescriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &intrinsicVertexNormalsPipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create intrinsic vertex normals pipeline layout!");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 3;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = intrinsicVertexNormalsPipelineLayout;
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
+    pipelineInfo.subpass = 0; // geometry subpass
+
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &intrinsicVertexNormalsPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create intrinsic vertex normals pipeline!");
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), geomShaderModule, nullptr);
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
 }
 
@@ -1494,6 +2085,136 @@ void GBuffer::createBlendPipeline(VkExtent2D extent) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
 }
 
+void GBuffer::createStencilOnlyPipeline(VkExtent2D extent) {
+    // Uses same shaders as geometry pipeline
+    auto vertShaderCode = readFile("shaders/gbuffer_vert.spv");
+    auto fragShaderCode = readFile("shaders/gbuffer_frag.spv");
+
+    VkShaderModule vertShaderModule = createShaderModule(vulkanDevice, vertShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(vulkanDevice, fragShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    auto bindingDescriptions = Vertex::getBindingDescriptions();
+    auto vertexAttributes = Vertex::getVertexAttributes();
+
+    vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
+    vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributes.size());
+    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.data();
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_TRUE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_TRUE;
+    multisampling.minSampleShading = 1.0f;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_8_BIT;
+
+    // Write stencil only
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_FALSE;   
+    depthStencil.depthWriteEnable = VK_FALSE;  
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_TRUE;
+
+    VkStencilOpState stencilOp{};
+    stencilOp.passOp = VK_STENCIL_OP_REPLACE;
+    stencilOp.failOp = VK_STENCIL_OP_KEEP;
+    stencilOp.depthFailOp = VK_STENCIL_OP_KEEP;
+    stencilOp.compareOp = VK_COMPARE_OP_ALWAYS;
+    stencilOp.compareMask = 0xFF;
+    stencilOp.writeMask = 0xFF;
+    stencilOp.reference = 1;
+
+    depthStencil.front = stencilOp;
+    depthStencil.back = stencilOp;
+
+    // No color output
+    VkPipelineColorBlendAttachmentState colorBlendAttachments[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        colorBlendAttachments[i].colorWriteMask = 0; 
+        colorBlendAttachments[i].blendEnable = VK_FALSE;
+    }
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 3;
+    colorBlending.pAttachments = colorBlendAttachments;
+
+    std::vector<VkDynamicState> dynamicStates = {
+         VK_DYNAMIC_STATE_VIEWPORT,
+         VK_DYNAMIC_STATE_SCISSOR,
+         VK_DYNAMIC_STATE_DEPTH_BIAS,
+         VK_DYNAMIC_STATE_STENCIL_REFERENCE
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Reuse geometry pipeline layout
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = geometryPipelineLayout;  // Reuse geometry layout
+    pipelineInfo.renderPass = deferredRenderer.getRenderPass();
+    pipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &stencilOnlyPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create stencil-only pipeline!");
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
+    vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
+}
+
 VkFormat GBuffer::findDepthFormat(VkPhysicalDevice physicalDevice) {
     const std::vector<VkFormat> candidates = {
         VK_FORMAT_D32_SFLOAT,
@@ -1546,7 +2267,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
 }
 
 void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
-    ModelSelection& modelSelection, Gizmo& gizmo, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, bool drawWireframe, bool drawCommonSubdivision) {
+    ModelSelection& modelSelection, Gizmo& gizmo, WireframeRenderer& wireframeRenderer, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, int wireframeMode, bool drawIntrinsicOverlay, bool drawHeatOverlay, bool drawIntrinsicNormals, bool drawIntrinsicVertexNormals, float normalLength, bool drawHashGrid, bool drawSurfels, bool drawVoronoi, bool drawPoints) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[currentFrame];
 
     // Start recording commands  
@@ -1596,8 +2317,8 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
 
     vkCmdBeginRenderPass2(commandBuffer, &renderPassInfo, &subpassBeginInfo);
 
-    // Geometry subpass
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
+    VkPipeline currentPipeline = (wireframeMode == 1) ? stencilOnlyPipeline : geometryPipeline;
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currentPipeline);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1613,95 +2334,259 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     scissor.extent = extent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // Draw visModel 
-    VkBuffer visIndexBuffer = resourceManager.getVisModel().getIndexBuffer();
-    VkBuffer vertexBuffers[] = { resourceManager.getVisModel().getVertexBuffer(), resourceManager.getVisModel().getSurfaceVertexBuffer() };
-    VkDeviceSize vertexOffsets[] = {
-    resourceManager.getVisModel().getVertexBufferOffset(),
-    resourceManager.getVisModel().getSurfaceVertexBufferOffset()
-    };
-    
-    // Push constants for visModel
-    GeometryPushConstant visPushConstant{};
-    visPushConstant.modelMatrix = resourceManager.getVisModel().getModelMatrix();
-    visPushConstant.useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
-    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &visPushConstant);
-    
-    // Set stencil reference for visModel 
-    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
-    
-    // Push vismodel furthest away from camera 
-    vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
-    
-    vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, visIndexBuffer, resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
-    
-    // Reset depth bias
-    vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+    {
+        // Draw visModel 
+        VkBuffer visIndexBuffer = resourceManager.getVisModel().getIndexBuffer();
+        VkBuffer visVertexBuffer = resourceManager.getVisModel().getVertexBuffer();
+        VkDeviceSize visVertexOffset = resourceManager.getVisModel().getVertexBufferOffset();
+        
+        // Push constants for visModel
+        GeometryPushConstant visPushConstant{};
+        visPushConstant.modelMatrix = resourceManager.getVisModel().getModelMatrix();
+        visPushConstant.alpha = 1.0f;  
+        vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &visPushConstant);
+        
+        // Set stencil reference for visModel 
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
+        
+        // Push vismodel furthest away from camera 
+        vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
+        
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &visVertexBuffer, &visVertexOffset);
+        vkCmdBindIndexBuffer(commandBuffer, visIndexBuffer, resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
+        
+        // Reset depth bias
+        vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 
-    // Draw commonsub model with visModel's full transformation
-    if (drawCommonSubdivision) {
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipeline);
+        // Draw heat source model
+        VkBuffer heatVertexBuffer = resourceManager.getHeatModel().getVertexBuffer();
+        VkDeviceSize heatVertexOffset = resourceManager.getHeatModel().getVertexBufferOffset();
         
-        // Pass visModel's full model matrix so commonSub follows translation AND rotation
-        glm::mat4 modelMatrix = resourceManager.getVisModel().getModelMatrix();
-        vkCmdPushConstants(commandBuffer, intrinsicOverlayPipelineLayout, 
-            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
+        // Push constants for heat model
+        GeometryPushConstant heatPushConstant{};
+        heatPushConstant.modelMatrix = resourceManager.getHeatModel().getModelMatrix();
+        heatPushConstant.alpha = 1.0f; 
+        vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &heatPushConstant);
         
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 2);
+        
+        // Heat source model has same bias as vismodel
+        vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
+        
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &heatVertexBuffer, &heatVertexOffset);
+        vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getHeatModel().getIndices().size()), 1, 0, 0, 0);
+        
+        // Reset depth bias after heat source
+        vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+    }
+
+    // Draw intrinsic overlay for remeshed models
+    if (drawIntrinsicOverlay) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipeline);
         vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
         
-        VkBuffer intrinsicBuffers[] = { resourceManager.getCommonSubdivision().getVertexBuffer(), resourceManager.getCommonSubdivision().getSurfaceVertexBuffer() };
-        VkDeviceSize intrinsicOffsets[] = {
-            resourceManager.getCommonSubdivision().getVertexBufferOffset(),
-            resourceManager.getCommonSubdivision().getSurfaceVertexBufferOffset()
-        };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 2, intrinsicBuffers, intrinsicOffsets);
-        vkCmdBindIndexBuffer(commandBuffer, resourceManager.getCommonSubdivision().getIndexBuffer(), resourceManager.getCommonSubdivision().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicOverlayPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getCommonSubdivision().getIndices().size()), 1, 0, 0, 0);
+        // Iterate through all remeshed models
+        for (const auto& [model, remeshData] : resourceManager.getModelRemeshData()) {
+            if (!remeshData.isRemeshed) 
+                continue;
+            
+            auto* supportingHalfedge = remeshData.remesher->getSupportingHalfedge();
+            if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) 
+                continue;
+            
+            // Check if this model has descriptor sets allocated
+            auto it = perModelSupportingHalfedgeDescriptorSets.find(model);
+            if (it == perModelSupportingHalfedgeDescriptorSets.end()) {
+                std::cerr << "[GBuffer] Warning: No descriptor sets for remeshed model, skipping" << std::endl;
+                continue;
+            }
+            
+            const auto& modelDescriptorSets = it->second;
+            if (currentFrame >= modelDescriptorSets.size()) {
+                std::cerr << "[GBuffer] Warning: Invalid frame index for descriptor sets" << std::endl;
+                continue;
+            }
+            
+            // Push model matrix for this model
+            glm::mat4 modelMatrix = model->getModelMatrix();
+            vkCmdPushConstants(commandBuffer, supportingHalfedgePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
+            
+            // Bind this model's buffers
+            VkBuffer modelVertexBuffer = model->getVertexBuffer();
+            VkDeviceSize modelVertexOffset = model->getVertexBufferOffset();
+            
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
+            vkCmdBindIndexBuffer(commandBuffer, model->getIndexBuffer(), 
+                model->getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+            
+            // Bind this model's specific descriptor set
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                supportingHalfedgePipelineLayout, 0, 1, 
+                &modelDescriptorSets[currentFrame], 0, nullptr);
+            
+            // Draw this model
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->getIndices().size()), 1, 0, 0, 0);
+        }
         
         vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
     }
-    
-    // Draw wireframe on top
-    if (drawWireframe) {
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, wireframePipeline);
-        // Use same push constants as solid geometry (already has visModel matrix)
-        vkCmdPushConstants(commandBuffer, wireframePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &visPushConstant);
-        vkCmdBindVertexBuffers(commandBuffer, 0, 2, vertexBuffers, vertexOffsets);
-        vkCmdBindIndexBuffer(commandBuffer, resourceManager.getVisModel().getIndexBuffer(), resourceManager.getVisModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getVisModel().getIndices().size()), 1, 0, 0, 0);
+
+    // Draw intrinsic normals for remeshed models
+    if (drawIntrinsicNormals) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipeline);
+        
+        // Iterate through all remeshed models
+        for (const auto& [model, remeshData] : resourceManager.getModelRemeshData()) {
+            if (!remeshData.isRemeshed) 
+                continue;
+            
+            auto* supportingHalfedge = remeshData.remesher->getSupportingHalfedge();
+            if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) 
+                continue;
+            
+            size_t triangleCount = supportingHalfedge->getTriangleCount();
+            if (triangleCount == 0) 
+                continue;
+            
+            auto it = perModelIntrinsicNormalsDescriptorSets.find(model);
+            if (it == perModelIntrinsicNormalsDescriptorSets.end()) {
+                continue;
+            }
+            
+            const auto& modelDescriptorSets = it->second;
+            if (currentFrame >= modelDescriptorSets.size()) {
+                continue;
+            }
+            
+            float avgArea = 0.0f;
+            if (triangleCount > 0) {
+                avgArea = supportingHalfedge->getAverageTriangleArea();
+            }
+            
+            NormalPushConstant pushConstants{};
+            pushConstants.modelMatrix = model->getModelMatrix();
+            pushConstants.normalLength = normalLength;
+            pushConstants.avgArea = avgArea;
+            
+            vkCmdPushConstants(commandBuffer, intrinsicNormalsPipelineLayout, 
+                VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
+            
+            // Bind this model's specific descriptor set
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                intrinsicNormalsPipelineLayout, 0, 1, 
+                &modelDescriptorSets[currentFrame], 0, nullptr);
+            
+            // Draw using point list
+            vkCmdDraw(commandBuffer, static_cast<uint32_t>(triangleCount), 1, 0, 0);
+        }
     }
 
-    // Draw heat source model
-    VkBuffer heatBuffers[] = { resourceManager.getHeatModel().getVertexBuffer(), resourceManager.getHeatModel().getSurfaceVertexBuffer() };
-    VkDeviceSize heatOffsets[] = {
-    resourceManager.getHeatModel().getVertexBufferOffset(),
-    resourceManager.getHeatModel().getSurfaceVertexBufferOffset()
-    };
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipeline);
-    
-    // Push constants for heat model
-    GeometryPushConstant heatPushConstant{};
-    heatPushConstant.modelMatrix = resourceManager.getHeatModel().getModelMatrix();
-    heatPushConstant.useHeatColors = (heatSystem.getIsActive() || heatSystem.getIsPaused()) ? 1 : 0;
-    vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &heatPushConstant);
-    
-    vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 2);
-    
-    // Heat source model has same bias as vismodel
-    vkCmdSetDepthBias(commandBuffer, 1.0f, 0.0f, 1.0f);
-    
-    vkCmdBindVertexBuffers(commandBuffer, 0, 2, heatBuffers, heatOffsets);
-    vkCmdBindIndexBuffer(commandBuffer, resourceManager.getHeatModel().getIndexBuffer(), resourceManager.getHeatModel().getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, geometryPipelineLayout, 0, 1, &geometryDescriptorSets[currentFrame], 0, nullptr);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(resourceManager.getHeatModel().getIndices().size()), 1, 0, 0, 0);
-    
-    // Reset depth bias
-    vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
+    // Draw intrinsic vertex normals for remeshed models
+    if (drawIntrinsicVertexNormals) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicVertexNormalsPipeline);
+        
+        // Iterate through all remeshed models
+        for (const auto& [model, remeshData] : resourceManager.getModelRemeshData()) {
+            if (!remeshData.isRemeshed) 
+                continue;
+            
+            auto* supportingHalfedge = remeshData.remesher->getSupportingHalfedge();
+            if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) 
+                continue;
+            
+            size_t vertexCount = supportingHalfedge->getVertexCount();
+            if (vertexCount == 0) 
+                continue;
+            
+            auto it = perModelIntrinsicVertexNormalsDescriptorSets.find(model);
+            if (it == perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+                continue;
+            }
+            
+            const auto& modelDescriptorSets = it->second;
+            if (currentFrame >= modelDescriptorSets.size()) {
+                continue;
+            }
+            
+            NormalPushConstant pushConstants{};
+            pushConstants.modelMatrix = model->getModelMatrix();
+            pushConstants.normalLength = normalLength;
+            pushConstants.avgArea = 0.0f; // Not used for vertex normals
+            
+            vkCmdPushConstants(commandBuffer, intrinsicVertexNormalsPipelineLayout, 
+                VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
+            
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                intrinsicVertexNormalsPipelineLayout, 0, 1, 
+                &modelDescriptorSets[currentFrame], 0, nullptr);
+            
+            // Draw using point list 
+            vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertexCount), 1, 0, 0);
+        }
+    }
+
+    // Draw heat rendering
+    if (drawHeatOverlay && heatSystem.getIsActive()) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, heatSystem.getHeatRenderPipeline());
+        
+        // Draw heat source model with its constant temperature buffer
+        Model& heatModel = resourceManager.getHeatModel();
+        const auto& heatRenderDescriptorSets = heatSystem.getHeatSource().getHeatRenderDescriptorSets();
+        if (!heatRenderDescriptorSets.empty()) {
+            // Bind heat source descriptor set
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                heatSystem.getHeatRenderPipelineLayout(), 0, 1, 
+                &heatRenderDescriptorSets[currentFrame], 0, nullptr);
+            
+            // Set model matrix
+            glm::mat4 modelMatrix = heatModel.getModelMatrix();
+            vkCmdPushConstants(commandBuffer, heatSystem.getHeatRenderPipelineLayout(), 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(glm::mat4), &modelMatrix);
+            
+            // Draw heat source model
+            VkBuffer modelVertexBuffer = heatModel.getVertexBuffer();
+            VkDeviceSize modelVertexOffset = heatModel.getVertexBufferOffset();
+            
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
+            vkCmdBindIndexBuffer(commandBuffer, heatModel.getIndexBuffer(), 
+                heatModel.getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(heatModel.getIndices().size()), 1, 0, 0, 0);
+        }
+        
+        // Draw all receiver models with their computed heat data
+        const auto& receivers = heatSystem.getReceivers();
+        for (const auto& receiver : receivers) {
+            const auto& heatRenderDescriptorSets = receiver->getHeatRenderDescriptorSets();
+            if (heatRenderDescriptorSets.empty()) {
+                std::cerr << "[GBuffer] No heat render descriptor sets for receiver" << std::endl;
+                continue;
+            }
+            
+            // Bind this receiver's heat descriptor set
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                heatSystem.getHeatRenderPipelineLayout(), 0, 1, 
+                &heatRenderDescriptorSets[currentFrame], 0, nullptr);
+            
+            // Set model matrix
+            Model& model = receiver->getModel();
+            glm::mat4 modelMatrix = model.getModelMatrix();
+            vkCmdPushConstants(commandBuffer, heatSystem.getHeatRenderPipelineLayout(), 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(glm::mat4), &modelMatrix);
+            
+            // Draw this model with its heat overlay
+            VkBuffer modelVertexBuffer = model.getVertexBuffer();
+            VkDeviceSize modelVertexOffset = model.getVertexBufferOffset();
+            
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
+            vkCmdBindIndexBuffer(commandBuffer, model.getIndexBuffer(), 
+                model.getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getIndices().size()), 1, 0, 0, 0);
+        }
+    }
 
     // Transition to lighting subpass
     vkCmdNextSubpass2(commandBuffer, &nextSubpassBeginInfo, &nextSubpassEndInfo);
@@ -1742,6 +2627,50 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipeline());
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, resourceManager.getGrid().getGridPipelineLayout(), 0, 1, &resourceManager.getGrid().getGridDescriptorSets()[currentFrame], 0, nullptr);
     vkCmdDraw(commandBuffer, resourceManager.getGrid().vertexCount, 1, 0, 0);
+    
+    // Draw grid labels
+    resourceManager.getGrid().renderLabels(commandBuffer, currentFrame);
+    
+    // Draw hash grid visualization
+    if (drawHashGrid && heatSystem.getIsActive()) {
+        heatSystem.renderHashGrids(commandBuffer, currentFrame);
+    }
+    
+    // Draw surfel visualization 
+    if (drawSurfels && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
+        heatSystem.renderSurfels(commandBuffer, currentFrame, resourceManager.getHeatModel().getModelMatrix(), 0.0025);
+    }
+    
+    // Draw Voronoi surface visualization
+    if (drawVoronoi && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
+        heatSystem.renderVoronoiSurface(commandBuffer, currentFrame);
+    }
+    
+    // Draw occupancy point visualization
+    if (drawPoints && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
+        heatSystem.renderOccupancy(commandBuffer, currentFrame, extent);
+    }
+    
+    // wireframeMode: 1 = wire-only, 2 = shaded + wireframe
+    if (wireframeMode > 0) {
+        wireframeRenderer.bindPipeline(commandBuffer);
+        
+        // Draw wireframe for visModel
+        wireframeRenderer.renderModel(
+            commandBuffer,
+            resourceManager.getVisModel(),
+            geometryDescriptorSets[currentFrame],
+            resourceManager.getVisModel().getModelMatrix()
+        );
+        
+        // Draw wireframe for heatModel
+        wireframeRenderer.renderModel(
+            commandBuffer,
+            resourceManager.getHeatModel(),
+            geometryDescriptorSets[currentFrame],
+            resourceManager.getHeatModel().getModelMatrix()
+        );
+    }
     
     // Draw gizmo last 
     if (modelSelection.getSelected()) {
@@ -1791,27 +2720,35 @@ void GBuffer::cleanupFramebuffers(uint32_t maxFramesInFlight) {
 void GBuffer::cleanup(uint32_t maxFramesInFlight) {
     vkDestroyPipeline(vulkanDevice.getDevice(), geometryPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), lightingPipeline, nullptr);
-    vkDestroyPipeline(vulkanDevice.getDevice(), wireframePipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), outlinePipeline, nullptr);
-    vkDestroyPipeline(vulkanDevice.getDevice(), intrinsicOverlayPipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), supportingHalfedgePipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), intrinsicNormalsPipeline, nullptr);
     vkDestroyPipeline(vulkanDevice.getDevice(), blendPipeline, nullptr);
+    vkDestroyPipeline(vulkanDevice.getDevice(), stencilOnlyPipeline, nullptr);
 
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), geometryPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), lightingPipelineLayout, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), wireframePipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), outlinePipelineLayout, nullptr);
-    vkDestroyPipelineLayout(vulkanDevice.getDevice(), intrinsicOverlayPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), supportingHalfedgePipelineLayout, nullptr);
+    vkDestroyPipelineLayout(vulkanDevice.getDevice(), intrinsicNormalsPipelineLayout, nullptr);
     vkDestroyPipelineLayout(vulkanDevice.getDevice(), blendPipelineLayout, nullptr);
 
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), lightingDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), geometryDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), blendDescriptorSetLayout, nullptr);
     vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), outlineDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), supportingHalfedgeDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), intrinsicNormalsDescriptorSetLayout, nullptr);
 
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), lightingDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), geometryDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), blendDescriptorPool, nullptr);
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), outlineDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), supportingHalfedgeDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(vulkanDevice.getDevice(), intrinsicNormalsDescriptorPool, nullptr);
+    
+    perModelSupportingHalfedgeDescriptorSets.clear();
+    perModelIntrinsicNormalsDescriptorSets.clear();
     
     vkDestroySampler(vulkanDevice.getDevice(), depthSampler, nullptr);
 }

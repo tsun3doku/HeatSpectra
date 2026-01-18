@@ -1,16 +1,25 @@
 #pragma once 
 
+// Prevent Windows macros from interfering with GLM
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
 
 class Camera {
 public:
     void update(float deltaTime);   
-    void processKeyInput(bool wPressed, bool sPressed, bool aPressed, bool dPressed, bool qPressed, bool ePressed, bool shiftPressed, float deltaTime);  
-    void processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY);  
+    void processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY, bool shiftPressed = false);  
     void processMouseScroll(double xOffset, double yOffset);    
     void setLookAt(const glm::vec3& target);
+    void pan(float dx, float dy);
+    void resetRadius();
     glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight);
 
     bool isMousePressed;
@@ -25,38 +34,38 @@ public:
     }
 
     glm::vec3 getForwardDirection() const {
-        // Calculate the forward direction based on pitch and yaw
-        glm::vec3 forward;
-        forward.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw));
-        forward.y = sin(glm::radians(pitch));
-        forward.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
-        return forward; 
+        return orientation * glm::vec3(0.0f, 0.0f, 1.0f);
     }
 
-    float radius = 3.0f;        // Camera distance from origin
-    float sensitivity = 0.3f;   // Mouse interaction speed
+    float radius = 2.0f;            // Camera distance from origin
+    float sensitivity = 0.005f;     // Mouse interaction speed 
+    float panSensitivity = 0.001f;  // Panning speed multiplier
 
 private:
     glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);   // Starting position    
     glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);         // Up vector     
     glm::vec3 lookAt;
+    
+    glm::quat orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // Identity quaternion
 
-    glm::vec3 velocity = glm::vec3(0.0f);               // Movement velocity (WASD)
+    glm::vec3 velocity = glm::vec3(0.0f);               
 
-    glm::mat4 getRotationMatrix() const;                // Rotation matrix based on pitch and yaw
+    glm::mat4 getRotationMatrix() const;                
     glm::mat4 getProjMatrix(float aspectRatio) const {
     return glm::perspective(glm::radians(currentFov), aspectRatio, nearPlane, farPlane);
     }
 
-    float pitch = 0.0f;
-    float yaw = -90.0f;
-    float roll = 0.0f;
     float movementSpeed = 60.0f;
 
-    float nearPlane = 0.1f, farPlane = 100.0f;
+    float nearPlane = 0.01f, farPlane = 100.0f;
 
-    float fovVelocity = 0.0f;
+    float radiusVelocity = 0.0f;
     float dampingFactor = 0.1f;
     float currentFov = 45.0f;
-    float maxVelocity = 100.0f;
+    float baseFov = 45.0f;
+    float minFov = 10.0f; 
+    float zoomThreshold = 2.0f;
+    float maxVelocity = 5.0f;
+    float minRadius = 0.1f;
+    float maxRadius = 200.0f;
 };

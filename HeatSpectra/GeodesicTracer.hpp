@@ -44,7 +44,7 @@ public:
         int localEdgeIndex;                     // Local face edge index (0,1,2)
         glm::dvec3 finalBary;                   // Final barycentric coordinates after step
         glm::dvec2 dir2D;                       // Outgoing 2D direction
-        double distanceTraveled;                // Distance traveled after step
+        double distanceTraveled;                // Distance traveled to each path point
         double edgeParam;                       // Trace hit location along edge (0-1)
 
         FaceStepResult() 

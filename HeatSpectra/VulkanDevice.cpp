@@ -195,6 +195,8 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     deviceFeatures.wideLines = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
     deviceFeatures.independentBlend = VK_TRUE;
+    deviceFeatures.geometryShader = VK_TRUE;  // Required for intrinsic_supporting_geom.spv
+    deviceFeatures.shaderFloat64 = VK_TRUE;   // Required for double precision
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

@@ -130,9 +130,10 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>TETLIBRARY</PreprocessorDefinitions>
+      <PreprocessorDefinitions>
+      </PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/nanoflann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -167,7 +168,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindowsd.dll" "$(OutDir)
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;TETLIBRARY</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -203,26 +204,41 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="AABBTree.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
+    <ClCompile Include="CommonSubdivision.cpp" />
     <ClCompile Include="DeferredRenderer.cpp" />
     <ClCompile Include="GBuffer.cpp" />
     <ClCompile Include="GeodesicTracer.cpp" />
     <ClCompile Include="Gizmo.cpp" />
     <ClCompile Include="Grid.cpp" />
+    <ClCompile Include="GridLabel.cpp" />
     <ClCompile Include="HalfEdgeMesh.cpp" />
+    <ClCompile Include="HashGrid.cpp" />
+    <ClCompile Include="HashGridRenderer.cpp" />
     <ClCompile Include="HDR.cpp" />
+    <ClCompile Include="HeatReceiver.cpp" />
     <ClCompile Include="HeatSource.cpp" />
     <ClCompile Include="HeatSystem.cpp" />
+    <ClCompile Include="LloydCompute.cpp" />
+    <ClCompile Include="VoronoiGeoCompute.cpp" />
+    <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="iODT.cpp" />
-    <ClCompile Include="libs\TetGen\predicates.cxx" />
-    <ClCompile Include="libs\TetGen\tetgen.cxx" />
     <ClCompile Include="App.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="ModelSelection.cpp" />
+    <ClCompile Include="PointRenderer.cpp" />
+    <ClCompile Include="SupportingHalfedge.cpp" />
+    <ClCompile Include="SurfelRenderer.cpp" />
+    <ClCompile Include="TriangleHashGrid.cpp" />
+    <ClCompile Include="VoronoiIntegrator.cpp" />
+    <ClCompile Include="VoronoiKDTree.cpp" />
+    <ClCompile Include="VoronoiRenderer.cpp" />
+    <ClCompile Include="VoronoiSeeder.cpp" />
+    <ClCompile Include="VoxelGrid.cpp" />
+    <ClCompile Include="VulkanBuffer.cpp" />
     <ClCompile Include="VulkanWindow.cpp" />
     <ClCompile Include="MainQt.cpp">
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">input</DynamicSource>
@@ -242,6 +258,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="file_utils.cpp" />
     <ClCompile Include="UniformBufferManager.cpp" />
     <ClCompile Include="VulkanImage.cpp" />
+    <ClCompile Include="WireframeRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\blend.frag" />
@@ -252,39 +269,80 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\gizmo.vert" />
     <None Include="shaders\grid.frag" />
     <None Include="shaders\grid.vert" />
+    <None Include="shaders\grid_label.frag" />
+    <None Include="shaders\grid_label.vert" />
+    <None Include="shaders\hash_grid_build.comp" />
+    <None Include="shaders\hash_grid_vis.frag" />
+    <None Include="shaders\hash_grid_vis.vert" />
+    <None Include="shaders\heat_buffer.frag" />
+    <None Include="shaders\heat_contact_centroid.comp" />
+    <None Include="shaders\heat_geometry.slang" />
     <None Include="shaders\heat_source.comp" />
-    <None Include="shaders\heat_surface.comp" />
+    <None Include="shaders\heat_surface.slang" />
     <None Include="shaders\heat_tetra.comp" />
-    <None Include="shaders\intrinsicOverlay.frag" />
-    <None Include="shaders\intrinsicOverlay.vert" />
+    <None Include="shaders\heat_voronoi.comp" />
+    <None Include="shaders\intrinsic_normals.frag" />
+    <None Include="shaders\intrinsic_normals.geom" />
+    <None Include="shaders\intrinsic_normals.vert" />
+    <None Include="shaders\intrinsic_supporting.frag" />
+    <None Include="shaders\intrinsic_supporting.geom" />
+    <None Include="shaders\intrinsic_supporting.vert" />
+    <None Include="shaders\intrinsic_vertex_normals.frag" />
+    <None Include="shaders\intrinsic_vertex_normals.geom" />
+    <None Include="shaders\intrinsic_vertex_normals.vert" />
     <None Include="shaders\lighting.frag" />
     <None Include="shaders\lighting.vert" />
     <None Include="shaders\outline.frag" />
     <None Include="shaders\outline.vert" />
+    <None Include="shaders\point_cloud.frag" />
+    <None Include="shaders\point_cloud.vert" />
+    <None Include="shaders\surfel_debug.frag" />
+    <None Include="shaders\surfel_debug.vert" />
+    <None Include="shaders\voronoi_surface.frag" />
+    <None Include="shaders\voronoi_surface.vert" />
     <None Include="shaders\wireframe.frag" />
     <None Include="shaders\wireframe.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AABBTree.hpp" />
     <ClInclude Include="App.h" />
     <ClInclude Include="CommandBufferManager.hpp" />
+    <ClInclude Include="CommonSubdivision.hpp" />
     <ClInclude Include="DeferredRenderer.hpp" />
     <ClInclude Include="GBuffer.hpp" />
     <ClInclude Include="GeodesicTracer.hpp" />
     <ClInclude Include="Gizmo.hpp" />
     <ClInclude Include="Grid.hpp" />
+    <ClInclude Include="GridLabel.hpp" />
     <ClInclude Include="HalfEdgeMesh.hpp" />
+    <ClInclude Include="HashGrid.hpp" />
+    <ClInclude Include="HashGridRenderer.hpp" />
     <ClInclude Include="HDR.hpp" />
+    <ClInclude Include="HeatReceiver.hpp" />
     <ClInclude Include="HeatSource.hpp" />
     <ClInclude Include="HeatSystem.hpp" />
+    <ClInclude Include="LloydCompute.hpp" />
+    <ClInclude Include="VoronoiGeoCompute.hpp" />
+    <ClInclude Include="InputManager.hpp" />
     <ClInclude Include="iODT.hpp" />
-    <ClInclude Include="libs\TetGen\tetgen.h" />
+    <ClInclude Include="libs\nanoflann\include\nanoflann.hpp" />
+    <ClInclude Include="PointRenderer.hpp" />
+    <ClInclude Include="predicates.h" />
+    <ClInclude Include="TriangleHashGrid.hpp" />
+    <ClInclude Include="VoronoiIntegrator.hpp" />
+    <ClInclude Include="VoronoiKDTree.hpp" />
+    <ClInclude Include="VoronoiRenderer.hpp" />
+    <ClInclude Include="VoronoiSeeder.hpp" />
+    <ClInclude Include="VoxelGrid.hpp" />
+    <ClInclude Include="WireframeRenderer.hpp" />
     <QtMoc Include="MainQt.h" />
     <ClInclude Include="MemoryAllocator.hpp" />
     <ClInclude Include="Model.hpp" />
     <ClInclude Include="ModelSelection.hpp" />
     <ClInclude Include="ResourceManager.hpp" />
     <ClInclude Include="SignPostMesh.hpp" />
+    <ClInclude Include="SupportingHalfedge.hpp" />
+    <ClInclude Include="SurfelRenderer.hpp" />
+    <ClInclude Include="VulkanBuffer.hpp" />
     <ClInclude Include="VulkanDevice.hpp" />
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="file_utils.h" />

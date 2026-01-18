@@ -37,41 +37,39 @@ HINSTANCE VulkanWindow::getNativeInstance() {
 }
 
 bool VulkanWindow::isKeyPressed(Qt::Key key) const {
+    QMutexLocker locker(&mutex);
     return pressedKeys.contains(key);
 }
 
 void VulkanWindow::getMousePosition(double& x, double& y) const {
+    QMutexLocker locker(&mutex);
     x = mousePos.x();
     y = mousePos.y();
 }
 
 bool VulkanWindow::isMiddleButtonPressed() const {
+    QMutexLocker locker(&mutex);
     return middleButtonPressed;
 }
 
-void VulkanWindow::setScrollCallback(void (*callback)(void*, double, double), void* userPtr) {
+void VulkanWindow::setScrollCallback(std::function<void(double, double)> callback) {
     scrollCb = callback;
-    scrollUserPtr = userPtr;
 }
 
-void VulkanWindow::setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* userPtr) {
+void VulkanWindow::setKeyCallback(std::function<void(Qt::Key, bool)> callback) {
     keyCb = callback;
-    keyUserPtr = userPtr;
 }
 
-void VulkanWindow::setMouseClickCallback(void (*callback)(void*, int, float, float, bool), void* userPtr) {
+void VulkanWindow::setMouseClickCallback(std::function<void(int, float, float, bool)> callback) {
     mouseClickCb = callback;
-    mouseClickUserPtr = userPtr;
 }
 
-void VulkanWindow::setMouseMoveCallback(void (*callback)(void*, float, float), void* userPtr) {
+void VulkanWindow::setMouseMoveCallback(std::function<void(float, float)> callback) {
     mouseMoveCb = callback;
-    mouseMoveUserPtr = userPtr;
 }
 
-void VulkanWindow::setMouseReleaseCallback(void (*callback)(void*, int, float, float), void* userPtr) {
+void VulkanWindow::setMouseReleaseCallback(std::function<void(int, float, float)> callback) {
     mouseReleaseCb = callback;
-    mouseReleaseUserPtr = userPtr;
 }
 
 void VulkanWindow::resizeEvent(QResizeEvent* event) {
@@ -84,10 +82,14 @@ void VulkanWindow::keyPressEvent(QKeyEvent* event) {
     }
     
     Qt::Key key = static_cast<Qt::Key>(event->key());
-    pressedKeys.insert(key);
     
-    if (keyCb && keyUserPtr) {
-        keyCb(keyUserPtr, key, true);
+    {
+        QMutexLocker locker(&mutex);
+        pressedKeys.insert(key);
+    }
+    
+    if (keyCb) {
+        keyCb(key, true);
     }
     
     QWindow::keyPressEvent(event);
@@ -99,10 +101,14 @@ void VulkanWindow::keyReleaseEvent(QKeyEvent* event) {
     }
     
     Qt::Key key = static_cast<Qt::Key>(event->key());
-    pressedKeys.remove(key);
     
-    if (keyCb && keyUserPtr) {
-        keyCb(keyUserPtr, key, false);
+    {
+        QMutexLocker locker(&mutex);
+        pressedKeys.remove(key);
+    }
+    
+    if (keyCb) {
+        keyCb(key, false);
     }
     
     QWindow::keyReleaseEvent(event);
@@ -110,15 +116,16 @@ void VulkanWindow::keyReleaseEvent(QKeyEvent* event) {
 
 void VulkanWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
+        QMutexLocker locker(&mutex);
         middleButtonPressed = true;
     }
     
     // Trigger mouse click callback for left clicks
-    if (event->button() == Qt::LeftButton && mouseClickCb && mouseClickUserPtr) {
+    if (event->button() == Qt::LeftButton && mouseClickCb) {
         float mouseX = event->position().x();
         float mouseY = event->position().y();
         bool shiftPressed = event->modifiers() & Qt::ShiftModifier;
-        mouseClickCb(mouseClickUserPtr, static_cast<int>(event->button()), mouseX, mouseY, shiftPressed);
+        mouseClickCb(static_cast<int>(event->button()), mouseX, mouseY, shiftPressed);
     }
     
     QWindow::mousePressEvent(event);
@@ -126,37 +133,41 @@ void VulkanWindow::mousePressEvent(QMouseEvent* event) {
 
 void VulkanWindow::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
+        QMutexLocker locker(&mutex);
         middleButtonPressed = false;
     }
     
     // Trigger mouse release callback
-    if (mouseReleaseCb && mouseReleaseUserPtr) {
+    if (mouseReleaseCb) {
         float mouseX = event->position().x();
         float mouseY = event->position().y();
-        mouseReleaseCb(mouseReleaseUserPtr, static_cast<int>(event->button()), mouseX, mouseY);
+        mouseReleaseCb(static_cast<int>(event->button()), mouseX, mouseY);
     }
     
     QWindow::mouseReleaseEvent(event);
 }
 
 void VulkanWindow::mouseMoveEvent(QMouseEvent* event) {
-    mousePos = event->position();
+    {
+        QMutexLocker locker(&mutex);
+        mousePos = event->position();
+    }
     
     // Trigger mouse move callback
-    if (mouseMoveCb && mouseMoveUserPtr) {
+    if (mouseMoveCb) {
         float mouseX = event->position().x();
         float mouseY = event->position().y();
-        mouseMoveCb(mouseMoveUserPtr, mouseX, mouseY);
+        mouseMoveCb(mouseX, mouseY);
     }
     
     QWindow::mouseMoveEvent(event);
 }
 
 void VulkanWindow::wheelEvent(QWheelEvent* event) {
-    if (scrollCb && scrollUserPtr) {
+    if (scrollCb) {
         double xOffset = event->angleDelta().x() / 120.0;
         double yOffset = event->angleDelta().y() / 120.0;
-        scrollCb(scrollUserPtr, xOffset, yOffset);
+        scrollCb(xOffset, yOffset);
     }
     
     QWindow::wheelEvent(event);

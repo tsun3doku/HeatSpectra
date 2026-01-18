@@ -7,6 +7,7 @@
 
 #include "VulkanWindow.h"
 #include "App.h"
+#include "WireframeRenderer.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -20,6 +21,7 @@
 #include "MemoryAllocator.hpp"
 #include "UniformBufferManager.hpp"
 #include "ResourceManager.hpp"
+#include "Grid.hpp"
 #include "HeatSystem.hpp"
 #include "ModelSelection.hpp"
 #include "Gizmo.hpp"
@@ -27,6 +29,7 @@
 #include "GBuffer.hpp"
 #include "VulkanImage.hpp"
 #include "CommandBufferManager.hpp"
+#include "InputManager.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -76,202 +79,15 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-static void scrollCallback(void* userPtr, double xOffset, double yOffset) {
-    auto* app = static_cast<App*>(userPtr);
-    app->handleScrollInput(xOffset, yOffset);
-}
-
-static void keyCallback(void* userPtr, Qt::Key key, bool pressed) {
-    auto* app = static_cast<App*>(userPtr);
-    app->handleKeyInput(key, pressed);
-}
-
-static void mouseMoveCallback(void* userPtr, float mouseX, float mouseY) {
-    auto* app = static_cast<App*>(userPtr);
-    app->handleMouseMove(mouseX, mouseY);
-}
-
-static void mouseReleaseCallback(void* userPtr, int button, float mouseX, float mouseY) {
-    auto* app = static_cast<App*>(userPtr);
-    app->handleMouseRelease(button, mouseX, mouseY);
-}
-
-App::App() : wireframeEnabled(false), commonSubdivisionEnabled(false), 
-             currentFrame(0), frameRate(240), mouseX(0.0), mouseY(0.0),
-             isDraggingGizmo(false), isShuttingDown(false), isCameraUpdated(false), 
+App::App() : intrinsicOverlayEnabled(false), heatOverlayEnabled(false), intrinsicNormalsEnabled(false), intrinsicVertexNormalsEnabled(false), hashGridEnabled(false), surfelsEnabled(false), voronoiEnabled(false), pointsEnabled(false), intrinsicNormalLength(0.05f),
+             currentFrame(0), frameRate(240),
+             isShuttingDown(false), isCameraUpdated(false), 
              edgeSelectionRequested(false), isOperating(false) {}
 
 App::~App() = default;
 
-void App::handleScrollInput(double xOffset, double yOffset) {
-    camera.processMouseScroll(xOffset, yOffset);
-}
-
-void App::handleKeyInput(Qt::Key key, bool pressed) {
-    // Only handle key press, not release
-    if (!pressed) 
-        return;
-    
-    if (key == Qt::Key_H) {
-        wireframeEnabled = !wireframeEnabled;
-    }
-    else if (key == Qt::Key_C) {
-        commonSubdivisionEnabled = !commonSubdivisionEnabled;
-    }
-    else if (key == Qt::Key_Space) {
-        toggleHeatSystem();
-    }
-    else if (key == Qt::Key_P) {
-        pauseHeatSystem();
-    }
-    else if (key == Qt::Key_R) {
-        resetHeatSystem();
-    }
-}
-
-void App::handleKeyInput(Qt::Key key, bool pressed, bool shiftPressed) {
-    handleKeyInput(key, pressed);
-}
-
-void App::handleMouseButton(int button, float mouseX, float mouseY, bool shiftPressed) {
-    if (!resourceManager || !modelSelection || !gizmo) 
-        return;
-    
-    if (button != static_cast<int>(Qt::LeftButton)) 
-        return;
-    
-    int x = static_cast<int>(mouseX);
-    int y = static_cast<int>(mouseY);
-    
-    // Clamp to screen bounds 
-    x = std::max(0, std::min(x, static_cast<int>(swapChainExtent.width) - 1));
-    y = std::max(0, std::min(y, static_cast<int>(swapChainExtent.height) - 1));
-    
-    // Queue pick request for both model and gizmo selection (processed on render thread)
-    modelSelection->queuePickRequest(x, y, shiftPressed, mouseX, mouseY);
-}
-
-void App::applyGizmoTranslation() {   
-    // Check if gizmo was picked and initiate drag
-    if (!isDraggingGizmo && modelSelection && gizmo) {
-        PickedResult lastPick = modelSelection->getLastPickedResult();
-        if (lastPick.isGizmo() && modelSelection->getSelected()) {
-            // Convert PickedGizmoAxis to GizmoAxis
-            GizmoAxis hitAxis = GizmoAxis::None;
-            if (lastPick.gizmoAxis == PickedGizmoAxis::X) hitAxis = GizmoAxis::X;
-            else if (lastPick.gizmoAxis == PickedGizmoAxis::Y) hitAxis = GizmoAxis::Y;
-            else if (lastPick.gizmoAxis == PickedGizmoAxis::Z) hitAxis = GizmoAxis::Z;
-            
-            if (hitAxis != GizmoAxis::None) {
-                // Auto-detect mode based on stencil value: 3-5 = translate, 6-8 = rotate
-                if (lastPick.stencilValue >= 3 && lastPick.stencilValue <= 5) {
-                    gizmo->setMode(GizmoMode::Translate);
-                } else if (lastPick.stencilValue >= 6 && lastPick.stencilValue <= 8) {
-                    gizmo->setMode(GizmoMode::Rotate);
-                }
-                
-                // Start drag using original click position
-                PickingRequest pickReq = modelSelection->getLastPickRequest();
-                glm::vec3 gizmoPosition = gizmo->calculateGizmoPosition(*resourceManager, *modelSelection);
-                glm::vec3 rayOrigin = camera.getPosition();
-                glm::vec3 rayDir = camera.screenToWorldRay(pickReq.mouseX, pickReq.mouseY, swapChainExtent.width, swapChainExtent.height);
-                
-                isDraggingGizmo = true;
-                cachedGizmoPosition = gizmoPosition;
-                gizmo->startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
-                modelStartPosition = cachedGizmoPosition;
-                accumulatedTranslation = glm::vec3(0.0f);
-                accumulatedRotation = 0.0f;
-                
-                modelSelection->clearLastPickedResult();
-            }
-        }
-    }
-    
-    if (!isDraggingGizmo || !modelSelection || !resourceManager)
-        return;
-
-    const auto& selectedIDs = modelSelection->getSelectedModelIDsRenderThread();
-    
-    if (gizmo->getMode() == GizmoMode::Translate) {
-        glm::vec3 currentTranslation = accumulatedTranslation; 
-        glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
-        
-        if (glm::length(deltaTranslation) < 1e-6) 
-            return;
-        
-        // Apply incremental translation to all selected models
-        for (uint32_t id : selectedIDs) {
-            if (id == 1) {
-                resourceManager->getVisModel().translate(deltaTranslation);
-            } else if (id == 2) {
-                resourceManager->getHeatModel().translate(deltaTranslation);
-            }
-        }
-        
-        lastAppliedTranslation = currentTranslation;
-    }
-    else if (gizmo->getMode() == GizmoMode::Rotate) {
-        float currentRotation = accumulatedRotation;
-        float deltaRotation = currentRotation - lastAppliedRotation;
-        
-        if (fabs(deltaRotation) < 0.01f) 
-            return;
-        
-        // Get rotation axis
-        glm::vec3 rotationAxis;
-        GizmoAxis activeAxis = gizmo->getActiveAxis();
-        if (activeAxis == GizmoAxis::X) rotationAxis = glm::vec3(1, 0, 0);
-        else if (activeAxis == GizmoAxis::Y) rotationAxis = glm::vec3(0, 1, 0);
-        else if (activeAxis == GizmoAxis::Z) rotationAxis = glm::vec3(0, 0, 1);
-        else return;
-        
-        // Apply incremental rotation to all selected models around gizmo center
-        for (uint32_t id : selectedIDs) {
-            if (id == 1) {
-                resourceManager->getVisModel().rotate(glm::radians(deltaRotation), rotationAxis, cachedGizmoPosition);
-            } else if (id == 2) {
-                resourceManager->getHeatModel().rotate(glm::radians(deltaRotation), rotationAxis, cachedGizmoPosition);
-            }
-        }
-        
-        lastAppliedRotation = currentRotation;
-    }
-}
-
-void App::handleMouseMove(float mouseX, float mouseY) {
-    if (!gizmo || !resourceManager || !modelSelection) 
-        return;
-        
-    // Handle gizmo dragging 
-    if (isDraggingGizmo && gizmo) {
-        // Cast ray from current mouse position
-        glm::vec3 rayOrigin = camera.getPosition();
-        glm::vec3 rayDir = camera.screenToWorldRay(mouseX, mouseY, swapChainExtent.width, swapChainExtent.height);
-        
-        // Auto-detect based on active mode
-        if (gizmo->getMode() == GizmoMode::Translate) {
-            glm::vec3 newTranslation = gizmo->calculateTranslationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
-            accumulatedTranslation = newTranslation;
-        } 
-        else if (gizmo->getMode() == GizmoMode::Rotate) {
-            float angle = gizmo->calculateRotationDelta(rayOrigin, rayDir, cachedGizmoPosition, gizmo->getActiveAxis());
-            accumulatedRotation = angle;
-        }
-    }
-}
-
-void App::handleMouseRelease(int button, float mouseX, float mouseY) {
-    if (button != static_cast<int>(Qt::LeftButton)) return;
-    
-    if (isDraggingGizmo && gizmo) {        
-        isDraggingGizmo = false;
-        gizmo->endDrag();
-        accumulatedTranslation = glm::vec3(0.0f);
-        lastAppliedTranslation = glm::vec3(0.0f);
-        accumulatedRotation = 0.0f;
-        lastAppliedRotation = 0.0f;
-    }
+void App::setPanSensitivity(float sensitivity) { 
+    camera.panSensitivity = sensitivity; 
 }
 
 bool App::isHeatSystemActive() const {
@@ -284,9 +100,16 @@ bool App::isHeatSystemActive() const {
 void App::toggleHeatSystem() {
     if (heatSystem) {
         bool newState = !heatSystem->getIsActive();
-             
-        // Pause rendering until tet mesh is ready
-        if (newState && !heatSystem->getIsTetMeshReady()) {
+        
+        // Cant activate heat system until both models are remeshed
+        if (newState && !resourceManager->areRequiredModelsRemeshed()) {
+            std::cerr << "[App] Cannot activate heatsystem\n" << std::endl;
+            std::cerr << " Remesh all models before activating heatsystem" << std::endl;
+            return; 
+        }
+        
+        // Only pause rendering when turning on and tet mesh is being built
+        if (newState && !heatSystem->getIsVoronoiReady()) {
             vkDeviceWaitIdle(vulkanDevice.getDevice());
             isOperating.store(true, std::memory_order_release);
         }
@@ -299,7 +122,7 @@ void App::toggleHeatSystem() {
             heatSystem->requestReset();
         }
         
-        // Resume rendering
+        // Resume rendering after tet mesh is completed
         if (newState && isOperating.load(std::memory_order_acquire)) {
             isOperating.store(false, std::memory_order_release);
         }
@@ -315,6 +138,12 @@ void App::pauseHeatSystem() {
 
 void App::resetHeatSystem() {
     if (heatSystem) {
+        // Check before reactivating
+        if (!resourceManager->areRequiredModelsRemeshed()) {
+            std::cerr << "[App] Cannot reset/reactivate heat system: Both models must be remeshed!" << std::endl;
+            return;
+        }
+        
         bool wasPaused = heatSystem->getIsPaused();
         
         heatSystem->requestReset();
@@ -327,15 +156,55 @@ void App::resetHeatSystem() {
 }
 
 void App::performRemeshing(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize) {
-    if (!resourceManager) {
+    if (!resourceManager || !modelSelection) {
         return;
     }
     
     // Pause rendering and wait for GPU to finish
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     isOperating.store(true, std::memory_order_release);
-          
-    resourceManager->performRemeshing(iterations, minAngleDegrees, maxEdgeLength, stepSize);
+    
+    // Get the selected model from ModelSelection
+    uint32_t selectedModelID = modelSelection->getSelectedModelID();
+    Model* targetModel = resourceManager->getModelByID(selectedModelID);
+    
+    // If no model is selected (ID=0) or invalid, default to visModel
+    if (!targetModel) {
+        targetModel = &resourceManager->getVisModel();
+        std::cout << "[App] No model selected, defaulting to visModel" << std::endl;
+    } else {
+        std::cout << "[App] Remeshing model ID: " << selectedModelID << std::endl;
+    }
+    
+    resourceManager->setSelectedModel(targetModel);  
+    resourceManager->performRemeshing(targetModel, iterations, minAngleDegrees, maxEdgeLength, stepSize, *renderCommandPool, MAXFRAMESINFLIGHT);
+    
+    // Update descriptor sets for each remeshed model
+    iODT* remesher = resourceManager->getRemesherForModel(targetModel);
+    if (remesher && uniformBufferManager) {
+        gbuffer->updateDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+        gbuffer->updateNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+        gbuffer->updateVertexNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+    }
+        
+    // Recreate HeatSystem
+    if (heatSystem) {
+        heatSystem->cleanup();
+        heatSystem->cleanupResources();
+        heatSystem.reset();
+        
+        heatSystem = std::make_unique<HeatSystem>(
+            vulkanDevice,
+            *memoryAllocator,
+            *resourceManager,
+            *uniformBufferManager,
+            MAXFRAMESINFLIGHT,
+            *renderCommandPool,
+            swapChainExtent,
+            deferredRenderer->getRenderPass()
+        );
+        std::cout << "[App] HeatSystem recreated after remeshing" << std::endl;
+    }
     
     // Resume rendering
     isOperating.store(false, std::memory_order_release);   
@@ -376,7 +245,9 @@ void App::loadModel(const std::string& modelPath) {
             *resourceManager,
             *uniformBufferManager,
             MAXFRAMESINFLIGHT,
-            *renderCommandPool 
+            *renderCommandPool,
+            swapChainExtent,
+            deferredRenderer->getRenderPass()
         );
     }
     
@@ -393,7 +264,6 @@ void App::loadModel(const std::string& modelPath) {
 
 void App::run(VulkanWindow* qtWindow) {
     window = qtWindow;
-    setupCallbacks();
     initVulkan();
     mainLoop();
     cleanup();
@@ -404,9 +274,7 @@ void App::initCore() {
     setupDebugMessenger();
     createSurface();
     vulkanDevice.init(instance, surface, deviceExtensions, validationLayers, enableValidationLayers);
-    memoryAllocator = std::make_unique<MemoryAllocator>(vulkanDevice);
-    
-    // Create command pools for every thread
+    memoryAllocator = std::make_unique<MemoryAllocator>(vulkanDevice);    
     uiCommandPool = std::make_unique<CommandPool>(vulkanDevice, "UI Thread Pool");
     renderCommandPool = std::make_unique<CommandPool>(vulkanDevice, "Render Thread Pool");
 }
@@ -459,7 +327,9 @@ void App::initRenderResources() {
             *resourceManager,
             *uniformBufferManager,
             MAXFRAMESINFLIGHT,
-            *renderCommandPool  
+            *renderCommandPool,
+            swapChainExtent,
+            renderPass
         );
 
         // Create Gizmo for model transformation
@@ -472,7 +342,7 @@ void App::initRenderResources() {
             *renderCommandPool  
         );
 
-        // Create GBuffer last since it depends on all other components
+        // Create GBuffer 
         gbuffer = std::make_unique<GBuffer>(
             vulkanDevice,
             *deferredRenderer,
@@ -484,23 +354,41 @@ void App::initRenderResources() {
             swapChainImageFormat,
             MAXFRAMESINFLIGHT,
             *renderCommandPool,  
-            wireframeEnabled
+            false  // drawWireframe - unused, controlled by wireframeMode now
+        );
+        
+        // Create wireframe renderer
+        wireframeRenderer = std::make_unique<WireframeRenderer>(
+            vulkanDevice, 
+            gbuffer->getGbufferDescriptorSetLayout(),
+            renderPass,
+            2  // Overlay subpass (grid/points layer)
         );
 
         center = resourceManager->getVisModel().getBoundingBoxCenter();
         camera.setLookAt(center);
-    }
 
-void App::setupCallbacks() {
-    // Set up scroll callback for camera zoom
-    window->setScrollCallback(scrollCallback, this);
-    // Set up key callback for controls
-    window->setKeyCallback(keyCallback, this);
-    // Set up mouse callbacks for model selection and gizmo interaction
-    window->setMouseClickCallback(mouseClickCallback, this);
-    window->setMouseMoveCallback(mouseMoveCallback, this);
-    window->setMouseReleaseCallback(mouseReleaseCallback, this);
-}
+        // Create input manager
+        inputManager = std::make_unique<InputManager>(
+            camera, 
+            *gizmo, 
+            *modelSelection, 
+            *resourceManager, 
+            swapChainExtent, 
+            *window
+        );
+        
+        // Callbacks
+        inputManager->onWireframeToggled = [this]() { 
+            // Cycle through wireframe modes
+            wireframeMode = static_cast<WireframeMode>((static_cast<int>(wireframeMode) + 1) % 3);
+        };
+        inputManager->onIntrinsicOverlayToggled = [this]() { intrinsicOverlayEnabled = !intrinsicOverlayEnabled; };
+        inputManager->onHeatOverlayToggled = [this]() { heatOverlayEnabled = !heatOverlayEnabled; };
+        inputManager->onToggleHeatSystem = [this]() { toggleHeatSystem(); };
+        inputManager->onPauseHeatSystem = [this]() { pauseHeatSystem(); };
+        inputManager->onResetHeatSystem = [this]() { resetHeatSystem(); };  
+    }
 
 void App::initVulkan() {
         std::cout << "Initializing Vulkan..." << std::endl;
@@ -518,24 +406,22 @@ void App::mainLoop() {
             auto currentTime = std::chrono::high_resolution_clock::now();
             float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
             lastTime = currentTime;
-
-            // Get input state from Qt window
-            bool wPressed = window->isKeyPressed(Qt::Key_W);
-            bool sPressed = window->isKeyPressed(Qt::Key_S);
-            bool aPressed = window->isKeyPressed(Qt::Key_A);
-            bool dPressed = window->isKeyPressed(Qt::Key_D);
-            bool qPressed = window->isKeyPressed(Qt::Key_Q);
-            bool ePressed = window->isKeyPressed(Qt::Key_E);
+            
+            // Poll input
+            double x, y;
+            window->getMousePosition(x, y);
+            
+            bool middlePressed = window->isMiddleButtonPressed();
             bool shiftPressed = window->isKeyPressed(Qt::Key_Shift);
             
-            camera.processKeyInput(wPressed, sPressed, aPressed, dPressed, 
-                                  qPressed, ePressed, shiftPressed, deltaTime);
-            
-            // Get mouse state
-            bool middleButton = window->isMiddleButtonPressed();
-            double mouseX, mouseY;
-            window->getMousePosition(mouseX, mouseY);
-            camera.processMouseMovement(middleButton, mouseX, mouseY);
+            if (inputManager) {
+                inputManager->processInput(
+                    shiftPressed,
+                    middlePressed,
+                    x, y,
+                    deltaTime
+                );
+            }
             
             isCameraUpdated.store(true, std::memory_order_release);
         }
@@ -562,6 +448,11 @@ void App::renderLoop() {
                     std::chrono::high_resolution_clock::now() - lastFrameTime).count();
                 camera.update(deltaTime);
                 isCameraUpdated.store(false, std::memory_order_release);
+            }
+            
+            // Update Gizmo interaction
+            if (inputManager) {
+                inputManager->updateGizmo();
             }
             
             drawFrame();
@@ -598,6 +489,7 @@ void App::cleanupSwapChain() {
     }
 
 void App::recreateSwapChain() {
+        std::cout << "[App] recreateSwapChain() called" << std::endl;
         // Dont recreate swapchain on shutdown
         if (isShuttingDown)
             return;
@@ -622,11 +514,7 @@ void App::recreateSwapChain() {
 
         vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-        for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
-            vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
-            vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[i]);
-        }
-
+        // Clean up sync objects
         for (size_t i = 0; i < MAXFRAMESINFLIGHT; i++) {
             vkDestroySemaphore(vulkanDevice.getDevice(), renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(vulkanDevice.getDevice(), imageAvailableSemaphores[i], nullptr);
@@ -636,13 +524,14 @@ void App::recreateSwapChain() {
         }
 
         cleanupSwapChain();
-        heatSystem->cleanupResources();
+        
+        // Recreate command buffers
         gbuffer->createCommandBuffers(MAXFRAMESINFLIGHT);
 
         createSwapChain();
         createImageViews();
 
-        heatSystem->recreateResources(MAXFRAMESINFLIGHT);
+        heatSystem->recreateResources(MAXFRAMESINFLIGHT, swapChainExtent, deferredRenderer->getRenderPass());
 
         deferredRenderer->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
         gbuffer->updateDescriptorSets(MAXFRAMESINFLIGHT);
@@ -662,6 +551,9 @@ void App::cleanupRenderResources() {
         heatSystem->cleanup();
         if (gizmo) {
             gizmo->cleanup();
+        }
+        if (wireframeRenderer) {
+            wireframeRenderer->cleanup();
         }
 }
 
@@ -743,7 +635,6 @@ void App::createInstance() {
             VkValidationFeaturesEXT validationFeatures = {};
             validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 
-            // Enable both BEST_PRACTICES and DEBUG_PRINTF
             VkValidationFeatureEnableEXT enabledValidationFeatures[] = {
                 //VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
                 VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
@@ -912,7 +803,7 @@ void App::drawFrame() {
         // Wait for previous frame's fence
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        // Process pick results from previous frame (handles selection internally)
+        // Process pick results from previous frame 
         if (modelSelection) {
             modelSelection->processPickingRequests(currentFrame);
         }
@@ -923,10 +814,14 @@ void App::drawFrame() {
             imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+            std::cout << "[App::drawFrame] vkAcquireNextImageKHR returned " 
+                      << (result == VK_ERROR_OUT_OF_DATE_KHR ? "VK_ERROR_OUT_OF_DATE_KHR" : "VK_SUBOPTIMAL_KHR") 
+                      << " - triggering swapchain recreation" << std::endl;
             recreateSwapChain();
             return;
         }
         else if (result != VK_SUCCESS) {
+            std::cout << "[App::drawFrame] vkAcquireNextImageKHR FAILED with result=" << result << std::endl;
             throw std::runtime_error("Failed to acquire swap chain image");
         }
 
@@ -934,15 +829,18 @@ void App::drawFrame() {
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
 
-        // Apply gizmo translation on render thread (if dragging)
-        applyGizmoTranslation();
+        // Update gizmo interaction
+        if (inputManager) {
+            inputManager->updateGizmo();
+        }
         
-        // No vertex buffer updates needed - transforms happen via modelMatrix in shaders!
-        
+        // Process model selection requests
         UniformBufferObject ubo{};
         uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, ubo);
         GridUniformBufferObject gridUbo{};
-        uniformBufferManager->updateGridUniformBuffer(currentFrame, ubo, gridUbo);
+        glm::vec3 gridSize = resourceManager->calculateMaxBoundingBoxSize();
+        uniformBufferManager->updateGridUniformBuffer(currentFrame, ubo, gridUbo, gridSize);
+        resourceManager->getGrid().updateLabels(gridSize);
         LightUniformBufferObject lightUbo{};
         uniformBufferManager->updateLightUniformBuffer(currentFrame, lightUbo);
 
@@ -960,37 +858,23 @@ void App::drawFrame() {
         bool rightPressed = window->isKeyPressed(Qt::Key_Right);
         
         heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo, WIDTH, HEIGHT);
-        if (heatSystem->getIsActive() && heatSystem->getIsTetMeshReady()) {
-            // Wait for previous compute to finish
-            vkWaitForFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-            vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
+        heatSystem->recordComputeCommands(computeCommandBuffer, currentFrame);
 
-            heatSystem->recordComputeCommands(computeCommandBuffer, currentFrame);
+        VkSubmitInfo computeSubmitInfo{};
+        computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        computeSubmitInfo.commandBufferCount = 1;
+        computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
+        computeSubmitInfo.signalSemaphoreCount = 1;
+        computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
-            VkSubmitInfo computeSubmitInfo{};
-            computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            computeSubmitInfo.commandBufferCount = 1;
-            computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
-            computeSubmitInfo.signalSemaphoreCount = 1;
-            computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
+        vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, computeInFlightFences[currentFrame]);
 
-            vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, computeInFlightFences[currentFrame]);
-        }
-
-        std::vector<VkSemaphore> waitSemaphores;
-        std::vector<VkPipelineStageFlags> waitStages;
-
-        if (heatSystem->getIsActive() && heatSystem->getIsTetMeshReady()) {
-            waitSemaphores = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
-            waitStages = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        }
-        else {
-            waitSemaphores = { imageAvailableSemaphores[currentFrame] };
-            waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        }
+        // Always wait for compute
+        std::vector<VkSemaphore> waitSemaphores = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
+        std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
         // Graphics pass 
-        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, wireframeEnabled, commonSubdivisionEnabled);
+        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, *wireframeRenderer, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, static_cast<int>(wireframeMode), intrinsicOverlayEnabled, heatOverlayEnabled, intrinsicNormalsEnabled, intrinsicVertexNormalsEnabled, intrinsicNormalLength, hashGridEnabled, surfelsEnabled, voronoiEnabled, pointsEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1004,6 +888,11 @@ void App::drawFrame() {
 
         result = vkQueueSubmit(vulkanDevice.getGraphicsQueue(), 1, &graphicsSubmitInfo, inFlightFences[currentFrame]);
         if (result != VK_SUCCESS) {
+            std::cout << "[App::drawFrame] vkQueueSubmit FAILED with result=" << result;
+            if (result == VK_ERROR_DEVICE_LOST) {
+                std::cout << " (VK_ERROR_DEVICE_LOST)";
+            }
+            std::cout << " - triggering swapchain recreation" << std::endl;
             vkDeviceWaitIdle(vulkanDevice.getDevice());
             recreateSwapChain();
             return;
@@ -1020,6 +909,15 @@ void App::drawFrame() {
 
         result = vkQueuePresentKHR(vulkanDevice.getPresentQueue(), &presentInfo);
         if (result != VK_SUCCESS) {
+            std::cout << "[App::drawFrame] vkQueuePresentKHR returned " << result;
+            if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+                std::cout << " (VK_ERROR_OUT_OF_DATE_KHR)";
+            } else if (result == VK_SUBOPTIMAL_KHR) {
+                std::cout << " (VK_SUBOPTIMAL_KHR)";
+            } else if (result == VK_ERROR_DEVICE_LOST) {
+                std::cout << " (VK_ERROR_DEVICE_LOST)";
+            }
+            std::cout << " - triggering swapchain recreation" << std::endl;
             vkDeviceWaitIdle(vulkanDevice.getDevice());
             recreateSwapChain();
             return;
@@ -1138,6 +1036,10 @@ bool App::checkValidationLayerSupport() {
 VKAPI_ATTR VkBool32 VKAPI_CALL App::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
+    // Debug printf goes to stdout, validation messages to stderr
+    if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+        std::cout << pCallbackData->pMessage << std::endl;  // Print debug printf to stdout
+    }
     std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
 }

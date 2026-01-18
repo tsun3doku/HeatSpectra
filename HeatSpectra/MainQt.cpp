@@ -12,6 +12,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QMenuBar>
 #include <QMenu>
@@ -64,12 +65,6 @@ void MainWindow::createMenuBar() {
     // View menu
     QMenu* viewMenu = menuBar->addMenu("&View");
     
-    wireframeAction = new QAction("&Wireframe", this);
-    wireframeAction->setCheckable(true);
-    wireframeAction->setShortcut(Qt::Key_H);
-    connect(wireframeAction, &QAction::triggered, this, &MainWindow::onWireframeToggled);
-    viewMenu->addAction(wireframeAction);
-    
     remeshOverlayAction = new QAction("&Remesh Overlay", this);
     remeshOverlayAction->setCheckable(true);
     remeshOverlayAction->setShortcut(Qt::Key_C);
@@ -114,7 +109,7 @@ void MainWindow::createDockWidget() {
     minAngleSpinBox = new QDoubleSpinBox();
     minAngleSpinBox->setMinimum(0.0);
     minAngleSpinBox->setMaximum(60.0);
-    minAngleSpinBox->setValue(35.0);
+    minAngleSpinBox->setValue(30.0);
     minAngleSpinBox->setSingleStep(1.0);
     minAngleSpinBox->setDecimals(1);
     minAngleSpinBox->setToolTip("Minimum angle threshold for triangle quality (degrees)");
@@ -129,11 +124,11 @@ void MainWindow::createDockWidget() {
     maxEdgeLengthLayout->addWidget(maxEdgeLengthLabel);
     
     maxEdgeLengthSpinBox = new QDoubleSpinBox();
-    maxEdgeLengthSpinBox->setMinimum(0.01);
+    maxEdgeLengthSpinBox->setMinimum(0.001);
     maxEdgeLengthSpinBox->setMaximum(10.0);
     maxEdgeLengthSpinBox->setValue(0.1);
     maxEdgeLengthSpinBox->setSingleStep(0.01);
-    maxEdgeLengthSpinBox->setDecimals(3);
+    maxEdgeLengthSpinBox->setDecimals(4);
     maxEdgeLengthSpinBox->setToolTip("Maximum edge length for mesh refinement");
     maxEdgeLengthLayout->addWidget(maxEdgeLengthSpinBox);
     maxEdgeLengthLayout->addStretch();
@@ -163,16 +158,87 @@ void MainWindow::createDockWidget() {
     QLabel* viewLabel = new QLabel("<b>View Options</b>");
     layout->addWidget(viewLabel);
     
-    wireframeCheck = new QCheckBox("Wireframe (Ctrl+H)");
-    connect(wireframeCheck, &QCheckBox::toggled, this, &MainWindow::onWireframeToggled);
-    layout->addWidget(wireframeCheck);
+    wireframeModeCombo = new QComboBox();
+    wireframeModeCombo->addItem("Normal");
+    wireframeModeCombo->addItem("Wireframe");
+    wireframeModeCombo->addItem("Shaded Wire");
+    wireframeModeCombo->setCurrentIndex(0);
+    connect(wireframeModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &MainWindow::onWireframeModeChanged);
+    layout->addWidget(wireframeModeCombo);
     
     intrinsicCheck = new QCheckBox("Remesh Overlay (Ctrl+C)");
     connect(intrinsicCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicToggled);
     layout->addWidget(intrinsicCheck);
     
+    heatOverlayCheck = new QCheckBox("Heat Overlay (Ctrl+V)");
+    connect(heatOverlayCheck, &QCheckBox::toggled, this, &MainWindow::onHeatOverlayToggled);
+    layout->addWidget(heatOverlayCheck);
+    
+    intrinsicNormalsCheck = new QCheckBox("Normal Vectors");
+    connect(intrinsicNormalsCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicNormalsToggled);
+    layout->addWidget(intrinsicNormalsCheck);
+
+    intrinsicVertexNormalsCheck = new QCheckBox("Vertex Normals");
+    connect(intrinsicVertexNormalsCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicVertexNormalsToggled);
+    layout->addWidget(intrinsicVertexNormalsCheck);
+
+    // Normal length control
+    QHBoxLayout* normalLengthLayout = new QHBoxLayout();
+    QLabel* normalLengthLabel = new QLabel("  Normal Length:");
+    normalLengthLayout->addWidget(normalLengthLabel);
+
+    normalLengthSpinBox = new QDoubleSpinBox();
+    normalLengthSpinBox->setMinimum(0.001);
+    normalLengthSpinBox->setMaximum(10.0);
+    normalLengthSpinBox->setValue(0.05);
+    normalLengthSpinBox->setSingleStep(0.01);
+    normalLengthSpinBox->setDecimals(3);
+    normalLengthSpinBox->setToolTip("Length of normal vectors for visualization");
+    connect(normalLengthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+        this, &MainWindow::onNormalLengthChanged);
+    normalLengthLayout->addWidget(normalLengthSpinBox);
+    normalLengthLayout->addStretch();
+
+    layout->addLayout(normalLengthLayout);
+
+    // Pan Sensitivity control
+    QHBoxLayout* panSensLayout = new QHBoxLayout();
+    QLabel* panSensLabel = new QLabel("  Pan Sensitivity:");
+    panSensLayout->addWidget(panSensLabel);
+
+    panSensitivitySpinBox = new QDoubleSpinBox();
+    panSensitivitySpinBox->setMinimum(0.0);
+    panSensitivitySpinBox->setMaximum(10.0);
+    panSensitivitySpinBox->setValue(1.0);
+    panSensitivitySpinBox->setSingleStep(0.1);
+    panSensitivitySpinBox->setDecimals(2);
+    panSensitivitySpinBox->setToolTip("Sensitivity of camera panning (Default: 1.0)");
+    connect(panSensitivitySpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+        this, &MainWindow::onPanSensitivityChanged);
+    panSensLayout->addWidget(panSensitivitySpinBox);
+    panSensLayout->addStretch();
+
+    layout->addLayout(panSensLayout);
+
     layout->addSpacing(10);
     
+    hashGridCheck = new QCheckBox("Show Hash Grid");
+    connect(hashGridCheck, &QCheckBox::toggled, this, &MainWindow::onHashGridToggled);
+    layout->addWidget(hashGridCheck);
+    
+    surfelsCheck = new QCheckBox("Show Surfels");
+    connect(surfelsCheck, &QCheckBox::toggled, this, &MainWindow::onSurfelsToggled);
+    layout->addWidget(surfelsCheck);
+    
+    voronoiCheck = new QCheckBox("View Voronoi");
+    connect(voronoiCheck, &QCheckBox::toggled, this, &MainWindow::onVoronoiToggled);
+    layout->addWidget(voronoiCheck);
+    
+    pointsCheck = new QCheckBox("View Points");
+    connect(pointsCheck, &QCheckBox::toggled, this, &MainWindow::onPointsToggled);
+    layout->addWidget(pointsCheck);
+      
     // Heat simulation
     QLabel* heatLabel = new QLabel("<b>Heat Simulation</b>");
     layout->addWidget(heatLabel);
@@ -206,22 +272,15 @@ void MainWindow::onRemeshClicked() {
     }
 }
 
-void MainWindow::onWireframeToggled(bool checked) {
+void MainWindow::onWireframeModeChanged(int index) {
     if (app) {
-        app->wireframeEnabled = checked;
-    }
-    // Sync menu action and checkbox
-    if (wireframeAction && wireframeAction->isChecked() != checked) {
-        wireframeAction->setChecked(checked);
-    }
-    if (wireframeCheck && wireframeCheck->isChecked() != checked) {
-        wireframeCheck->setChecked(checked);
+        app->wireframeMode = static_cast<App::WireframeMode>(index);
     }
 }
 
 void MainWindow::onIntrinsicToggled(bool checked) {
     if (app) {
-        app->commonSubdivisionEnabled = checked;
+        app->intrinsicOverlayEnabled = checked;
     }
     // Sync menu action and checkbox
     if (remeshOverlayAction && remeshOverlayAction->isChecked() != checked) {
@@ -229,6 +288,81 @@ void MainWindow::onIntrinsicToggled(bool checked) {
     }
     if (intrinsicCheck && intrinsicCheck->isChecked() != checked) {
         intrinsicCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onHeatOverlayToggled(bool checked) {
+    if (app) {
+        app->heatOverlayEnabled = checked;
+    }
+    if (heatOverlayCheck && heatOverlayCheck->isChecked() != checked) {
+        heatOverlayCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onIntrinsicNormalsToggled(bool checked) {
+    if (app) {
+        app->intrinsicNormalsEnabled = checked;
+    }
+    if (intrinsicNormalsCheck && intrinsicNormalsCheck->isChecked() != checked) {
+        intrinsicNormalsCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onIntrinsicVertexNormalsToggled(bool checked) {
+    if (app) {
+        app->intrinsicVertexNormalsEnabled = checked;
+    }
+    if (intrinsicVertexNormalsCheck && intrinsicVertexNormalsCheck->isChecked() != checked) {
+        intrinsicVertexNormalsCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onHashGridToggled(bool checked) {
+    if (app) {
+        app->hashGridEnabled = checked;
+    }
+    if (hashGridCheck && hashGridCheck->isChecked() != checked) {
+        hashGridCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onSurfelsToggled(bool checked) {
+    if (app) {
+        app->surfelsEnabled = checked;
+    }
+    if (surfelsCheck && surfelsCheck->isChecked() != checked) {
+        surfelsCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onVoronoiToggled(bool checked) {
+    if (app) {
+        app->voronoiEnabled = checked;
+    }
+    if (voronoiCheck && voronoiCheck->isChecked() != checked) {
+        voronoiCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onPointsToggled(bool checked) {
+    if (app) {
+        app->pointsEnabled = checked;
+    }
+    if (pointsCheck && pointsCheck->isChecked() != checked) {
+        pointsCheck->setChecked(checked);
+    }
+}
+
+void MainWindow::onNormalLengthChanged(double value) {
+    if (app) {
+        app->intrinsicNormalLength = static_cast<float>(value);
+    }
+}
+
+void MainWindow::onPanSensitivityChanged(double value) {
+    if (app) {
+        app->setPanSensitivity(static_cast<float>(value) * 0.001f);
     }
 }
 

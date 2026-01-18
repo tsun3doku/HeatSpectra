@@ -8,6 +8,8 @@
 #include <QWindow>
 #include <QTimer>
 #include <QSet>
+#include <QMutex>
+#include <functional>
 #include <vulkan/vulkan.h>
 
 class Camera;
@@ -37,11 +39,11 @@ public:
     }
     
     // Callbacks for your App class
-    void setScrollCallback(void (*callback)(void*, double, double), void* userPtr);
-    void setKeyCallback(void (*callback)(void*, Qt::Key, bool), void* userPtr);
-    void setMouseClickCallback(void (*callback)(void*, int, float, float, bool), void* userPtr);
-    void setMouseMoveCallback(void (*callback)(void*, float, float), void* userPtr);
-    void setMouseReleaseCallback(void (*callback)(void*, int, float, float), void* userPtr);
+    void setScrollCallback(std::function<void(double, double)> callback);
+    void setKeyCallback(std::function<void(Qt::Key, bool)> callback);
+    void setMouseClickCallback(std::function<void(int, float, float, bool)> callback);
+    void setMouseMoveCallback(std::function<void(float, float)> callback);
+    void setMouseReleaseCallback(std::function<void(int, float, float)> callback);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -61,18 +63,11 @@ private:
     QPointF mousePos;
     
     // Callbacks
-    void (*scrollCb)(void*, double, double) = nullptr;
-    void* scrollUserPtr = nullptr;
-    
-    void (*keyCb)(void*, Qt::Key, bool) = nullptr;
-    void* keyUserPtr = nullptr;
-    
-    void (*mouseClickCb)(void*, int, float, float, bool) = nullptr;
-    void* mouseClickUserPtr = nullptr;
-    
-    void (*mouseMoveCb)(void*, float, float) = nullptr;
-    void* mouseMoveUserPtr = nullptr;
-    
-    void (*mouseReleaseCb)(void*, int, float, float) = nullptr;
-    void* mouseReleaseUserPtr = nullptr;
+    std::function<void(double, double)> scrollCb;
+    std::function<void(Qt::Key, bool)> keyCb;
+    std::function<void(int, float, float, bool)> mouseClickCb;
+    std::function<void(float, float)> mouseMoveCb;
+    std::function<void(int, float, float)> mouseReleaseCb;
+
+    mutable QMutex mutex;
 };

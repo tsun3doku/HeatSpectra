@@ -345,35 +345,48 @@ void Gizmo::createPipeline(VkRenderPass renderPass, VkExtent2D extent) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragModule, nullptr);
 }
 
-float Gizmo::applyFovScaling(float baseScale) const {
+float Gizmo::applyDistanceScaling(float baseScale, float distance) const {
+    const float REFERENCE_DISTANCE = 1.0f;
+    const float MAX_SCREEN_SPACE_SCALE = 0.20f; 
+    const float CAMERA_BASE_FOV = 45.0f;
+
+    // Calculate FOV compensation factor
+    // As FOV gets smaller, gizmo gets smaller
     float currentFov = camera.getFov();
+    float tanBase = glm::tan(glm::radians(CAMERA_BASE_FOV) / 2.0f);
+    float tanCurrent = glm::tan(glm::radians(currentFov) / 2.0f);
+    float fovFactor = tanCurrent / tanBase;
+
+    // Calculate base scale with screen size clamp
+    float maxBaseScale = MAX_SCREEN_SPACE_SCALE * REFERENCE_DISTANCE;
+    float effectiveBaseScale = std::min(baseScale, maxBaseScale);
+
+    // Apply distance and FOV scaling
+    float scaleFactor = (distance / REFERENCE_DISTANCE) * fovFactor;
     
-    const float BASE_FOV = 15.0f;
-    float fovScale = currentFov / BASE_FOV;
+    // Clamp to prevent extreme values 
+    scaleFactor = glm::clamp(scaleFactor, 0.01f, 50.0f);
     
-    fovScale = glm::clamp(fovScale, 0.05f, 2.0f);
-    
-    return baseScale * fovScale;
+    return effectiveBaseScale * scaleFactor;
 }
 
-float Gizmo::getArrowSize(float baseScale) const {
-    const float ARROW_SIZE_MULTIPLIER = 0.2f;
-    // Apply FOV scaling to arrow size
-    float fovScaled = applyFovScaling(baseScale);
-    return fovScaled * ARROW_SIZE_MULTIPLIER;
+float Gizmo::getArrowSize(float baseScale, float distance) const {
+    const float ARROW_SIZE_MULTIPLIER = 0.1f;
+    float scaled = applyDistanceScaling(baseScale, distance);
+    return scaled * ARROW_SIZE_MULTIPLIER;
 }
 
-float Gizmo::getArrowDistance(float baseScale) const {
+float Gizmo::getArrowDistance(float baseScale, float distance) const {
     const float DISTANCE_MULTIPLIER = 0.5f;
-    // Apply FOV scaling to arrow distance
-    float fovScaled = applyFovScaling(baseScale);
-    return fovScaled * DISTANCE_MULTIPLIER;
+    float scaled = applyDistanceScaling(baseScale, distance);
+    return scaled * DISTANCE_MULTIPLIER;
 }
 
 void Gizmo::render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, float scale) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     
     float finalScale = scale;
+    float distance = glm::distance(camera.getPosition(), position);
     
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -395,44 +408,47 @@ void Gizmo::render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const g
     // Show if not dragging or if translating on this axis
     if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::X)) {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 3);
-        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, false);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, distance, false);
     }
     
     if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::Y)) {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 4);
-        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, false);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, distance, false);
     }
     
     if (!isDragging || (currentMode == GizmoMode::Translate && activeAxis == GizmoAxis::Z)) {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 5);
-        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, false);
+        renderAxis(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, distance, false);
     }
     
     // Show if not dragging or if rotating on this axis
     if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::X)) {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 6);
-        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, false);
+        // Red Ring (X): 100% Scale
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(1, 0, 0), glm::vec3(0.9, 0.0, 0.05), finalScale, distance, false, 1.0f);
+    }
+
+    if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::Z)) {
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 8);
+        // Blue Ring (Z): 97% Scale 
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, distance, false, 0.97f);
     }
     
     if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::Y)) {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 7);
-        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, false);
-    }
-    
-    if (!isDragging || (currentMode == GizmoMode::Rotate && activeAxis == GizmoAxis::Z)) {
-        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 8);
-        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 0, 1), glm::vec3(0.0, 0.05, 0.9), finalScale, false);
+        // Green Ring (Y): 94% Scale 
+        renderRotationRing(commandBuffer, currentFrame, position, extent, glm::vec3(0, 1, 0), glm::vec3(0.05, 0.9, 0), finalScale, distance, false, 0.94f);
     }
 }
 
-void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered) {
+void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, float distance, bool hovered) {
     float aspectRatio = (float)extent.width / (float)extent.height;
     glm::mat4 view = camera.getViewMatrix();
     glm::mat4 proj = camera.getProjectionMatrix(aspectRatio);
     proj[1][1] *= -1; // Vulkan Y-axis flip
     
-    float offsetDistance = getArrowDistance(scale);
-    float arrowScale = getArrowSize(scale);
+    float offsetDistance = getArrowDistance(scale, distance);
+    float arrowScale = getArrowSize(scale, distance);
 
     glm::vec3 offsetPosition = position + direction * offsetDistance; 
     
@@ -476,15 +492,17 @@ void Gizmo::renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, con
     vkCmdDrawIndexed(commandBuffer, coneIndexCount, 1, 0, 0, 0);
 }
 
-void Gizmo::renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, bool hovered) {
+void Gizmo::renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, float distance, bool hovered, float radiusMultiplier) {
     float aspectRatio = (float)extent.width / (float)extent.height;
     glm::mat4 view = camera.getViewMatrix();
     glm::mat4 proj = camera.getProjectionMatrix(aspectRatio);
     proj[1][1] *= -1;
     
-    // Apply FOV scaling to ring size
-    float fovScaled = applyFovScaling(scale);
-    float ringScale = fovScaled * 0.75f; 
+    // Apply distance scaling to ring size
+    float scaled = applyDistanceScaling(scale, distance);
+    
+    // Apply radius multiplier after distance scaling
+    float ringScale = scaled * 0.75f * radiusMultiplier; 
     
     // Ring model lies in XY plane
     glm::mat4 rotation = glm::mat4(1.0f);
@@ -689,12 +707,12 @@ float Gizmo::calculateGizmoScale(ResourceManager& resourceManager, const ModelSe
         maxBBoxSize = std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z));
     }
     
-    const float BASE_SCALE_MULTIPLIER = 0.5f;  // gizmo is % of model size
+    const float BASE_SCALE_MULTIPLIER = 0.6f;  // gizmo is % of model size
     float gizmoScale = maxBBoxSize * BASE_SCALE_MULTIPLIER;
     
     // Clamp to prevent extreme sizes
-    const float MIN_SCALE = 0.1f;
-    const float MAX_SCALE = 0.5f;
+    const float MIN_SCALE = 0.4f;
+    const float MAX_SCALE = 1.0f;
     gizmoScale = glm::clamp(gizmoScale, MIN_SCALE, MAX_SCALE);
     
     return gizmoScale;

@@ -1,38 +1,47 @@
 #pragma once
 
+#include <functional>
+#include <string>
+#include <vector>
+#include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
+
+#include "Structs.hpp"
+
 class VulkanDevice;
 class MemoryAllocator;
 class Model;
 class CommandPool;
+class ResourceManager;
+class SupportingHalfedge;
+class UniformBufferManager;
 
 const std::string HEATSOURCE_PATH = "models/heatsource_torus.obj";
 
 class HeatSource {
 public:
-    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
+    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, ResourceManager& resourceManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
     ~HeatSource();
 
     void recreateResources(uint32_t maxFramesInFlight);
 
     void createSourceBuffer();
-    void initializeSurfaceBuffer();
+    void updateSourceBuffer(SupportingHalfedge* supportingHalfedge);
+
+    void updateHeatRenderDescriptors(
+        VkDescriptorSetLayout heatRenderDescriptorSetLayout,
+        VkDescriptorPool heatRenderDescriptorPool,
+        UniformBufferManager& uniformBufferManager,
+        uint32_t maxFramesInFlight);
 
     void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
-
-    void createHeatSourceDescriptorPool(uint32_t maxFramesInFlight);
-    void createHeatSourceDescriptorSets(uint32_t maxFramesInFlight);
-    void createHeatSourcePipeline();
-    void createHeatSourceDescriptorSetLayout();
-
-    void dispatchSourceCompute(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
     void cleanupResources();
     void cleanup();
 
     // Getters
-    size_t getVertexCount() const {
-        return heatModel.getVertexCount();
-    }
+    size_t getVertexCount() const;
+    size_t getIntrinsicVertexCount() const { return intrinsicVertexCount; }
     VkBuffer getVertexBuffer() const { 
         return heatModel.getVertexBuffer(); 
     }
@@ -49,8 +58,28 @@ public:
     VkDeviceSize getSourceBufferOffset() const {
         return sourceBufferOffset_;
     }
+    VkBuffer getTriangleGeometryBuffer() const {
+        return triangleGeometryBuffer;
+    }
+    VkDeviceSize getTriangleGeometryBufferOffset() const {
+        return triangleGeometryBufferOffset_;
+    }
+
+    VkBuffer getTriangleCentroidBuffer() const {
+        return triangleCentroidBuffer;
+    }
+    VkDeviceSize getTriangleCentroidBufferOffset() const {
+        return triangleCentroidBufferOffset_;
+    }
+    uint32_t getTriangleCount() const {
+        return triangleCount_;
+    }
     const HeatSourcePushConstant getHeatSourcePushConstant() const {
         return heatSourcePushConstant;
+    }
+    
+    const std::vector<VkDescriptorSet>& getHeatRenderDescriptorSets() const {
+        return heatRenderDescriptorSets;
     }
     
     // Setters
@@ -59,26 +88,35 @@ public:
     }
    
 private:
+    static std::vector<float> calculateVertexAreas(
+        size_t vertexCount,
+        const std::vector<uint32_t>& indices,
+        const std::function<glm::vec3(uint32_t)>& getVertexPosition);
+    
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Model& heatModel;
+    ResourceManager& resourceManager;
     CommandPool& renderCommandPool;  
-    uint32_t maxFramesInFlight;      
+    uint32_t maxFramesInFlight;
+    size_t intrinsicVertexCount = 0;      
 
     HeatSourcePushConstant heatSourcePushConstant;
 
-    VkDescriptorPool heatSourceDescriptorPool;
-    std::vector<VkDescriptorSet> heatSourceDescriptorSets;
-    VkDescriptorSetLayout heatSourceDescriptorLayout;
-
-    VkPipelineLayout heatSourcePipelineLayout;
-    VkPipeline heatSourcePipeline;
+    std::vector<VkDescriptorSet> heatRenderDescriptorSets;  
 
     VkBuffer sourceBuffer;
     VkDeviceMemory sourceBufferMemory;
     VkDeviceSize sourceBufferOffset_;
+    VkBufferView sourceBufferView = VK_NULL_HANDLE; 
+    
+    VkBuffer triangleGeometryBuffer;
+    VkDeviceSize triangleGeometryBufferOffset_;
+
+    VkBuffer triangleCentroidBuffer = VK_NULL_HANDLE;
+    VkDeviceSize triangleCentroidBufferOffset_ = 0;
+    uint32_t triangleCount_ = 0;
 
     VkBuffer heatSourceStagingBuffer;
     VkDeviceMemory heatSourceStagingMemory;
-
 };

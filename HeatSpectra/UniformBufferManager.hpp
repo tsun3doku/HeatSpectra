@@ -25,7 +25,7 @@ public:
 	void updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, UniformBufferObject& ubo);
 	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
 
-	void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo);
+	void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo, const glm::vec3& gridSize);
 	void updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo);
 	void updateSSAOKernelBuffer(uint32_t currentImage, SSAOKernelBufferObject& ssaoKernel);
 

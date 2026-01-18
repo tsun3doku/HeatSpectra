@@ -1,97 +1,104 @@
 #include "Camera.hpp"
+#include <algorithm>
 
 void Camera::update(float deltaTime) {
-    glm::mat4 rotationMatrix = getRotationMatrix();
+    // Apply zoom momentum
+    radiusVelocity *= (1.0f - dampingFactor);
+    radius += radiusVelocity;
 
-    position.x = radius * cos(glm::radians(pitch)) * cos(glm::radians(yaw));
-    position.y = radius * sin(glm::radians(pitch));
-    position.z = radius * cos(glm::radians(pitch)) * sin(glm::radians(yaw));
+    // Clamp radius
+    if (radius < minRadius) radius = minRadius;
+    if (radius > maxRadius) radius = maxRadius;
 
-    // Apply the roll to the up vector by rotating it around the front vector
-    glm::mat4 rollMat = glm::rotate(glm::mat4(1.0f), glm::radians(roll), glm::normalize(position - lookAt));
-    up = glm::normalize(glm::mat3(rollMat) * up); 
-    roll = 0.0f; // Reset roll
+    // Dynamic FOV at close range (macro mode)
+    if (radius < zoomThreshold) {
+        float t = (radius - minRadius) / (zoomThreshold - minRadius);
+        t = glm::clamp(t, 0.0f, 1.0f);
+        t = t * t * (3.0f - 2.0f * t); 
+        currentFov = glm::mix(minFov, baseFov, t);
+    } else {
+        currentFov = baseFov;
+    }
 
-    fovVelocity *= (1.0f - dampingFactor); 
+    // Calculate position based on orientation and radius
+    glm::vec3 forward = orientation * glm::vec3(0.0f, 0.0f, 1.0f);
+    position = lookAt - forward * radius;
 
-    currentFov += fovVelocity;  // Accumulate change in fov over time
-
-    float minFov = 1.0f;
-    float maxFov = 30.0f;
-    if (currentFov < minFov) currentFov = minFov;
-    if (currentFov > maxFov) currentFov = maxFov;
+    // Update up vector
+    up = orientation * glm::vec3(0.0f, 1.0f, 0.0f);
 }
 
 void Camera::setLookAt(const glm::vec3& center) {
     lookAt = center;
 }
 
-void Camera::processKeyInput(bool wPressed, bool sPressed, bool aPressed, bool dPressed,
-                            bool qPressed, bool ePressed, bool shiftPressed, float deltaTime) {
-    float speed = movementSpeed * deltaTime;
-    
-    if (wPressed) {
-        pitch += speed;     // Pitch up
-    }
-    else if (sPressed) {
-        pitch -= speed;     // Pitch down
-    }
-    
-    if (aPressed) {
-        yaw += speed;       // Rotate right around the model (clockwise around y-axis)
-    }
-    else if (dPressed) {
-        yaw -= speed;       // Rotate left around the model (counter-clockwise around y-axis)
-    }
-    
-    if (qPressed) {
-        roll += speed;      // Roll left (counter-clockwise around forward axis)
-    }
-    else if (ePressed) {
-        roll -= speed;      // Roll right (clockwise around forward axis)
-    }
-    
-    // Reset up vector when Shift+Q or Shift+E is pressed
-    if (shiftPressed && (qPressed || ePressed)) {
-        up = glm::vec3(0.0f, 1.0f, 0.0f);
-    }
-}
 
-void Camera::processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY) {
+void Camera::processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY, bool shiftPressed) {
     static double lastX = 0.0;
     static double lastY = 0.0;
     
     if (middleButtonPressed) {
         if (!isMousePressed) {
-            lastX = mouseX;         // Set initial mouse position
+            lastX = mouseX;
             lastY = mouseY;
-            isMousePressed = true;  // Set true to track mouse movement
+            isMousePressed = true;
         }
 
-        double dx = mouseX - lastX;  // Change in x
-        double dy = mouseY - lastY;  // Change in y
+        double dx = mouseX - lastX;
+        double dy = mouseY - lastY;
 
-        yaw += dx * sensitivity;
-        pitch += dy * sensitivity;
+        if (shiftPressed) {
+            pan((float)dx, (float)dy);
+        } else {
+            // Rotate around world UP (Yaw)
+            glm::quat yawQuat = glm::angleAxis((float)(-dx * sensitivity), glm::vec3(0.0f, 1.0f, 0.0f));
+            
+            // Rotate around local right (Pitch)
+            glm::vec3 right = orientation * glm::vec3(1.0f, 0.0f, 0.0f);
+            glm::quat pitchQuat = glm::angleAxis((float)(dy * sensitivity), right);
 
-        if (pitch > 86.0f) pitch = 86.0f;
-        if (pitch < -86.0f) pitch = -86.0f;
+            // Apply rotations
+            orientation = yawQuat * pitchQuat * orientation;
+            orientation = glm::normalize(orientation);
+        }
 
-        // Update last positions
         lastX = mouseX;
         lastY = mouseY;
     }
     else {
-        isMousePressed = false;  // Reset when mouse is released
+        isMousePressed = false;
     }
 }
 
-void Camera::processMouseScroll(double xOffset, double yOffset) {
-    float zoomSpeed = 0.25f;  
-    fovVelocity += (float)(-yOffset) * zoomSpeed;
+void Camera::pan(float dx, float dy) {
+    float panSpeed = radius * panSensitivity;
 
-    if (fovVelocity > maxVelocity) fovVelocity = maxVelocity;
-    if (fovVelocity < -maxVelocity) fovVelocity = -maxVelocity;
+    glm::vec3 right = orientation * glm::vec3(1.0f, 0.0f, 0.0f);
+    glm::vec3 cameraUp = orientation * glm::vec3(0.0f, 1.0f, 0.0f);
+
+    glm::vec3 offset = right * dx * panSpeed + cameraUp * dy * panSpeed;
+
+    lookAt += offset;
+}
+
+void Camera::resetRadius() {
+    radius = 2.0f;
+    radiusVelocity = 0.0f;
+}
+
+void Camera::processMouseScroll(double xOffset, double yOffset) {
+    float baseZoomSpeed = 0.01f;
+    float zoomSpeed = baseZoomSpeed;
+
+    // Slow down zoom at close range
+    if (radius < 1.0f) {
+        zoomSpeed = baseZoomSpeed * std::max(0.1f, radius);
+    }
+
+    radiusVelocity += (float)(-yOffset) * zoomSpeed;
+
+    if (radiusVelocity > maxVelocity) radiusVelocity = maxVelocity;
+    if (radiusVelocity < -maxVelocity) radiusVelocity = -maxVelocity;
 }
 
 glm::mat4 Camera::getViewMatrix() const {
@@ -103,11 +110,7 @@ glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
 }
 
 glm::mat4 Camera::getRotationMatrix() const {
-    glm::mat4 rotationYaw = glm::rotate(glm::mat4(1.0f), glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f));       // Rotate around Y-axis (yaw)
-    glm::mat4 rotationPitch = glm::rotate(glm::mat4(1.0f), glm::radians(pitch), glm::vec3(1.0f, 0.0f, 0.0f));   // Rotate around X-axis (pitch)
-
-    glm::mat4 rotationMatrix = rotationYaw * rotationPitch;
-    return rotationMatrix;
+    return glm::mat4_cast(orientation);
 }
 
 glm::vec3 Camera::screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight) {

@@ -2,6 +2,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <functional>
 
 class Model;
 
@@ -88,7 +89,7 @@ public:
 	bool flipEdge(uint32_t edgeIdx);
 	bool isDelaunayEdge(uint32_t heIdx) const;
 	int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
-
+	
 	// Refinement
 	uint32_t addIntrinsicVertex();
 	uint32_t splitTriangleIntrinsic(uint32_t faceIdx, double r0, double r1, double r2);

@@ -25,7 +25,7 @@ layout(location = 0) in vec2 inUV;
 layout(location = 0) out vec4 fragColor;
 
 const float lightIntensity_Rim = 0.0f;
-const float lightIntensity_Key = 15.0f;
+const float lightIntensity_Key = 0.0f;
 
 float computeDiffuse(vec3 normal, vec3 lightDir) {
     return max(dot(normal, lightDir), 0.0);

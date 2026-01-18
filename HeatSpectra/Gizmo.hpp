@@ -76,17 +76,17 @@ public:
     void createRingGeometry();
     void createPipeline(VkRenderPass renderPass, VkExtent2D extent);
 
-    float applyFovScaling(float baseScale) const;
+    float applyDistanceScaling(float baseScale, float distance) const;
 
     void render(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, float scale = 1.0f);   
-    void renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, bool hovered);
-    void renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, bool hovered);
+    void renderAxis(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& direction, const glm::vec3& color, float scale, float distance, bool hovered);
+    void renderRotationRing(VkCommandBuffer commandBuffer, uint32_t currentFrame, const glm::vec3& position, VkExtent2D extent, const glm::vec3& axis, const glm::vec3& color, float scale, float distance, bool hovered, float radiusMultiplier = 1.0f);
     
     glm::vec3 calculateGizmoPosition(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
     float calculateGizmoScale(class ResourceManager& resourceManager, const class ModelSelection& modelSelection);
     
-    float getArrowSize(float baseScale) const;      
-    float getArrowDistance(float baseScale) const;  
+    float getArrowSize(float baseScale, float distance) const;      
+    float getArrowDistance(float baseScale, float distance) const;  
    
     void setMode(GizmoMode mode) { 
         currentMode = mode; 

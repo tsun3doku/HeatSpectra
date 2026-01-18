@@ -4,41 +4,54 @@
 layout(set = 0, binding = 0) uniform ViewUniforms {
     mat4 view;  // View matrix
     mat4 proj;  // Projection matrix
-    vec3 pos;   // Camera position (optional)
+    vec3 pos;   // Camera position
+    vec3 gridSize;  // Grid size (width, depth, height)
 } viewUniforms;
 
-layout(location = 1) out vec3 nearPoint;     // Near point output
-layout(location = 2) out vec3 farPoint;      // Far point output
-layout(location = 3) out mat4 fragView;      // View matrix output
-layout(location = 7) out mat4 fragProj;      // Projection matrix output
-layout(location = 11) out vec3 cameraPos; // Camera position output
-
-// Grid positions in clipped space
-vec3 gridPlane[6] = vec3[] (
-    vec3(1, 1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
-    vec3(-1, -1, 0), vec3(1, 1, 0), vec3(1, -1, 0)
-);
-
-vec3 UnprojectPoint(float x, float y, float z, mat4 view, mat4 projection) {
-    mat4 viewInv = inverse(view);
-    mat4 projInv = inverse(projection);
-    vec4 unprojectedPoint = viewInv * projInv * vec4(x, y, z, 1.0);
-    return unprojectedPoint.xyz / unprojectedPoint.w;
-}
+layout(location = 0) out flat int planeID;   // Which plane: 0=floor, 1-4=walls
+layout(location = 1) out vec3 worldPos;      // World space position
+layout(location = 2) out vec3 cameraPos;     // Camera position
 
 void main() {
-    vec3 p = gridPlane[gl_VertexIndex].xyz;
-
-    // Unprojecting points
-    nearPoint = UnprojectPoint(p.x, p.y, 0.0, viewUniforms.view, viewUniforms.proj);
-    farPoint = UnprojectPoint(p.x, p.y, 1.0, viewUniforms.view, viewUniforms.proj);
-
-    // Pass the view and projection matrices to the fragment shader
-    fragView = viewUniforms.view;
-    fragProj = viewUniforms.proj;
-
+    int planeIndex = gl_VertexIndex / 6;  // 0=floor, 1-4=walls
+    int vertexInPlane = gl_VertexIndex % 6;
+    
+    planeID = planeIndex;
+    
+    float halfW = viewUniforms.gridSize.x * 0.5;
+    float halfD = viewUniforms.gridSize.y * 0.5;
+    float height = viewUniforms.gridSize.z;
+    
+    vec3 positions[6] = vec3[](
+        vec3(1, 1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
+        vec3(-1, -1, 0), vec3(1, 1, 0), vec3(1, -1, 0)
+    );
+    vec3 p = positions[vertexInPlane];
+    
+    // Generate actual geometry for each plane
+    if (planeID == 0) {
+        // Floor plane (XZ at y=0)
+        worldPos = vec3(p.x * halfW, 0.0, p.y * halfD);
+    }
+    else if (planeID == 1) {
+        // +X wall (YZ plane) - from y=0 to y=height
+        worldPos = vec3(halfW, (p.y + 1.0) * 0.5 * height, p.x * halfD);
+    }
+    else if (planeID == 2) {
+        // -X wall (YZ plane) - from y=0 to y=height
+        worldPos = vec3(-halfW, (p.y + 1.0) * 0.5 * height, p.x * halfD);
+    }
+    else if (planeID == 3) {
+        // +Z wall (XY plane) - from y=0 to y=height
+        worldPos = vec3(p.x * halfW, (p.y + 1.0) * 0.5 * height, halfD);
+    }
+    else {
+        // -Z wall (XY plane) - from y=0 to y=height
+        worldPos = vec3(p.x * halfW, (p.y + 1.0) * 0.5 * height, -halfD);
+    }
+    
     cameraPos = viewUniforms.pos;
-
-    // Set gl_Position for the vertex
-    gl_Position = vec4(p, 1.0);
+    
+    // Transform to clip space
+    gl_Position = viewUniforms.proj * viewUniforms.view * vec4(worldPos, 1.0);
 }

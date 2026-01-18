@@ -5,7 +5,6 @@ layout(local_size_x = 256) in;
 
 struct TetraElement {
     uint vertices[4];
-    float temperature;
     float volume;
     float density;
     float specificHeat;
@@ -13,26 +12,45 @@ struct TetraElement {
     float coolingRate;
 };
 
-struct HeatSourceVertex {
-    vec4 position;
+struct SurfacePoint {
+    vec3 position;
     float temperature;
+    vec3 normal;
+    float area;
+    vec4 color;
 };
 
 layout(binding = 0) buffer TetraBuffer {
     TetraElement elements[];
 } tetraBuffer;
 
-layout(binding = 1) buffer TemperatureWriteBuffer {
-    float temperatures[];
-} temperatureWriteBuffer;
+layout(binding = 1) buffer NodeTemperatureWriteBuffer {
+    uint temperatures[];
+} nodeTemperatureWriteBuffer;
 
-layout(binding = 2) buffer TemperatureReadBuffer {
-    float temperatures[];
-} temperatureReadBuffer;
+layout(binding = 2) buffer NodeTemperatureReadBuffer {
+    uint temperatures[];
+} nodeTemperatureReadBuffer;
 
-layout(binding = 3) buffer NeighborBuffer {
-    int neighbors[];
-} neighborBuffer;
+struct Node {
+    vec4 position;
+    float temperature;
+    float prevTemperature;
+    float temperatureRate;
+    float thermalMass;
+};
+
+layout(binding = 7) buffer NodeBuffer {
+    Node nodes[];
+} nodeBuffer;
+
+layout(binding = 3) buffer NodeNeighborBuffer {
+    int neighbors[]; 
+} nodeNeighborBuffer;
+
+layout(binding = 8) buffer EdgeAreaBuffer {
+    float areas[]; 
+} edgeAreaBuffer;
 
 layout(binding = 4) buffer CenterBuffer {
     vec4 centers[];
@@ -44,100 +62,89 @@ layout(binding = 5) uniform TimeBuffer {
 } timeBuffer;
 
 layout(binding = 6) buffer HeatSourceBuffer {
-    HeatSourceVertex heatSources[];
+    SurfacePoint heatSources[];
 } heatSourceBuffer;
 
-layout(push_constant) uniform PushConstantBlock {
-    mat4 heatSourceModelMatrix;     // Heat source transform
-    mat4 visModelMatrix;            // VisModel transform
+layout(push_constant) uniform PushConstants {
+    mat4 heatSourceModelMatrix;    
+    mat4 visModelMatrix;
+    mat4 inverseHeatSourceModelMatrix;
+    uint maxNodeNeighbors;
 } pushConstants;
 
-
 void main() {
-    uint tetraID = gl_GlobalInvocationID.x;
-    if (tetraID >= tetraBuffer.elements.length()) return;
+    uint nodeID = gl_GlobalInvocationID.x;
+    if (nodeID >= nodeBuffer.nodes.length())
+        return;
 
-    // Read tetrahedron data
-    TetraElement tetra = tetraBuffer.elements[tetraID];
-    float temperature = temperatureReadBuffer.temperatures[tetraID];
-    // Transform tet center to world space to compare with heat source
-    vec3 center = (pushConstants.visModelMatrix * vec4(centerBuffer.centers[tetraID].xyz, 1.0)).xyz;
+    // Read uint and convert to float
+    float currentTemp = uintBitsToFloat(nodeTemperatureReadBuffer.temperatures[nodeID]);
+    vec3 currentNodePos = (pushConstants.visModelMatrix * nodeBuffer.nodes[nodeID].position).xyz;
     
-    // ---------- Heat Source Contribution ----------
-    const float HEAT_RADIUS = 0.006;
-    float heatGeneration = 0.0; // q'' term
-    float maxSourceTemp = 0.0;
+    float thermalCapacity = nodeBuffer.nodes[nodeID].thermalMass;
+    if (thermalCapacity < 0.00001) 
+    thermalCapacity = 0.00025;  // Minimum capacity
     
-    for (uint i = 0; i < heatSourceBuffer.heatSources.length(); i++) {
-        vec4 transformedPos = pushConstants.heatSourceModelMatrix * heatSourceBuffer.heatSources[i].position;
-        vec3 heatPos = transformedPos.xyz;
-        float heatTemp = heatSourceBuffer.heatSources[i].temperature;
-        maxSourceTemp = max(maxSourceTemp, heatTemp);
+    // Get average material properties from elements 
+    float conductivity = 200.0;     // Default (Aluminum W/(m·K))
+    float coolingRate = 0.01;       // Default ambient cooling coefficient
+    
+    if (tetraBuffer.elements.length() > 0) {
+        conductivity = tetraBuffer.elements[0].conductivity;
+        coolingRate = tetraBuffer.elements[0].coolingRate;
+    }
         
-        float dist = distance(center, heatPos);
-        if (dist < HEAT_RADIUS) {
-            float intensity = (1.0 - dist / HEAT_RADIUS) * heatTemp;
-            heatGeneration += intensity * timeBuffer.deltaTime * 0.25;
-        }
+    // Get this node's neighbor list from buffer
+    int maxNeighbors = int(pushConstants.maxNodeNeighbors);
+    int nodeBaseIndex = int(nodeID) * (1 + maxNeighbors);
+    int neighborCount = nodeNeighborBuffer.neighbors[nodeBaseIndex];
+    
+    // Precompute conductance coefficients (k * A / L / capacity)
+    float conductances[32];  // Max neighbors
+    float totalConductance = 0.0;
+    int areaBaseIndex = int(nodeID) * maxNeighbors;
+    
+    for (int i = 0; i < neighborCount && i < 32; i++) {
+        //read neighbor at nodeBaseIndex+1+i
+        int neighborNode = nodeNeighborBuffer.neighbors[nodeBaseIndex + 1 + i];
+        if (neighborNode < 0) 
+        break;
+        
+        vec3 neighborNodePos = (pushConstants.visModelMatrix * nodeBuffer.nodes[neighborNode].position).xyz;
+        float edgeLength = distance(currentNodePos, neighborNodePos);
+        if (edgeLength < 0.0001) edgeLength = 0.0001;
+        
+        float edgeArea = edgeAreaBuffer.areas[areaBaseIndex + i];
+        
+        // Conductance coefficient: (k * A / L) / capacity
+        conductances[i] = (conductivity * edgeArea / edgeLength) / thermalCapacity;
+        totalConductance += conductances[i];
     }
     
-    // ---------- Conduction Term ----------
-    float conductionTerm = 0.0;
-    int baseIndex = int(tetraID) * 5;
-    int neighborCount = neighborBuffer.neighbors[baseIndex];
+    // Semi implicit update for pure diffusion 
+    // Formula: T_new = (T_old + dt * sum(c_i * T_neighbor)) / (1 + dt * sum(c_i))
+    float dt = timeBuffer.deltaTime;
     
-    for (int i = 0; i < neighborCount; ++i) {
-        int neighborIdx = neighborBuffer.neighbors[baseIndex + 1 + i];
-        if (neighborIdx < 0 || neighborIdx >= tetraBuffer.elements.length()) 
-        continue;
+    // Denominator for implicit method
+    float denominator = 1.0 + dt * totalConductance;
+    
+    // Numerator: current temp + contributions from neighbors
+    float numerator = currentTemp;
+    
+    for (int i = 0; i < neighborCount && i < 32; i++) {
+        int neighborNode = nodeNeighborBuffer.neighbors[nodeBaseIndex + 1 + i];
+        if (neighborNode < 0) break;
         
-        // Read neighbor temperature and properties
-        float neighborTemp = temperatureReadBuffer.temperatures[neighborIdx];
-        TetraElement neighborTetra = tetraBuffer.elements[neighborIdx];
-        
-        float avgVolume = (tetra.volume + neighborTetra.volume) * 0.5;
-        float sharedArea = pow(avgVolume, 2.0/3.0) * 0.5;
-        
-        // Distance between centers (both in world space)
-        vec3 neighborCenter = (pushConstants.visModelMatrix * vec4(centerBuffer.centers[neighborIdx].xyz, 1.0)).xyz;
-        float centerDistance = distance(center, neighborCenter);
-        if (centerDistance < 0.001) 
-        centerDistance = 0.001;
-        
-        // Average conductivity 
-        float k_avg = (tetra.conductivity + neighborTetra.conductivity) * 0.5;
-        
-        // Heat flux through shared face: -k * (dT/dx) * A
-        // Where dT/dx is approximated as (neighborTemp - temperature) / centerDistance
-        float heatFlux = k_avg * (neighborTemp - temperature) / centerDistance * sharedArea;
-        
-        // Add to conduction term
-        conductionTerm += heatFlux;
+        float neighborTemp = uintBitsToFloat(nodeTemperatureReadBuffer.temperatures[neighborNode]);
+        numerator += dt * conductances[i] * neighborTemp;
     }
     
-    // ---------- Complete Heat Equation Implementation ----------
+    // Solve for new temperature 
+    float newTemp = numerator / denominator;
     
-    float thermalMass = tetra.density * tetra.specificHeat * tetra.volume;
-
-    // Ensure minimum thermal mass to avoid instability
-    thermalMass = max(thermalMass, 0.001); 
+    // Physical bounds 
+    newTemp = max(newTemp, 0.0);
     
-    // Temperature change rate: (conductionTerm + heatGeneration) / thermalMass
-    float temperatureChangeRate = (conductionTerm + heatGeneration) / thermalMass;
-    
-    // Limit the maximum temperature change per step for stability
-    float maxTempChange = 10.0;
-    temperatureChangeRate = clamp(temperatureChangeRate, -maxTempChange, maxTempChange);
-
-    // Update temperature using explicit time integration
-    temperature += temperatureChangeRate * timeBuffer.deltaTime;
-
-    // Ambient cooling 
-    temperature *= (1.0 - tetra.coolingRate * 0.1 * timeBuffer.deltaTime);
-
-    // Ensure temperature stays positive
-    temperature = max(temperature, 0.0);
-    
-    // Write updated temperature
-    temperatureWriteBuffer.temperatures[tetraID] = temperature;
+    // Write back to node temperature buffer
+    nodeTemperatureWriteBuffer.temperatures[nodeID] = floatBitsToUint(newTemp);
 }

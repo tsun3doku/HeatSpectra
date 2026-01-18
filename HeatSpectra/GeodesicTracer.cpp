@@ -36,13 +36,12 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t ver
     glm::dvec2 dirVertex = glm::normalize(dirInRefVertex);
 
     // Bounds check for vertex index
-    const auto& vertices = conn.getVertices();
-    if (vertexIdx >= vertices.size()) {
-        //std::cout << "[traceFromVertex] ERROR: vertexIdx " << vertexIdx << " out of bounds (size=" << vertices.size() << ")\n";
+    if (vertexIdx >= verts.size()) {
+        //std::cout << "[traceFromVertex] ERROR: vertexIdx " << vertexIdx << " out of bounds (size=" << verts.size() << ")\n";
         return fail;
     }
 
-    uint32_t firstHe = vertices[vertexIdx].halfEdgeIdx;
+    uint32_t firstHe = verts[vertexIdx].halfEdgeIdx;
     if (firstHe == HalfEdgeMesh::INVALID_INDEX) {
         //std::cout << "[traceFromVertex] vertex has no halfedge\n";
         return fail;
@@ -152,22 +151,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t ver
     // Convert back to angle
     double newA = std::arg(poweredDir);
 
-    // DEBUG: show result of power scaling
-    {
-        double angleStart = std::atan2(intervalStart.y, intervalStart.x);
-        double angleDir = std::atan2(dirVertex.y, dirVertex.x);
-        glm::dvec2 rotatedVertexDir(std::cos(angleStart + newA), std::sin(angleStart + newA));
-        double heLen = glm::length(hvv_vert[wedgeHe]);
-        glm::dvec2 rotatedVertexVec = rotatedVertexDir * heLen;
-
-        /*
-        std::cout << "[traceFromVertex] angleStart=" << angleStart << " angleDir=" << angleDir << "\n";
-        std::cout << "  traceDirRelative=(" << traceDirRelativeToStart.real() << "," << traceDirRelativeToStart.imag() << ")\n";
-        std::cout << "  power=" << power << " poweredDir=(" << poweredDir.real() << "," << poweredDir.imag() << ")\n";
-        std::cout << "  newA=" << newA << " rotatedVertexDir=(" << rotatedVertexDir.x << "," << rotatedVertexDir.y << ")\n";
-        */
-    }
-
     // Convert to face coordinates
     glm::dvec2 startDirInFace = glm::normalize(hvf_face[wedgeHe]);
     double startFaceAngle = std::atan2(startDirInFace.y, startDirInFace.x);
@@ -201,6 +184,14 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t ver
     //std::cout << "[traceFromVertex] power=" << power << " traceFaceAngle=" << traceFaceAngle << "\n";
 
     auto cont = traceFromFace(startFace, startBary, glm::normalize(traceDirInFace), remaining);
+    
+    // Merge results: baseResult already has the vertex point as its last pathPoint
+    // cont's first pathPoint is also the vertex (start of new trace), so skip it to avoid duplication
+    if (!cont.pathPoints.empty()) {
+        cont.pathPoints.erase(cont.pathPoints.begin()); // Remove duplicate vertex point
+    }
+    
+    // Now merge baseResult into cont
     cont.pathPoints.insert(cont.pathPoints.begin(), baseResult.pathPoints.begin(), baseResult.pathPoints.end());
     cont.steps.insert(cont.steps.begin(), baseResult.steps.begin(), baseResult.steps.end());
     cont.distance += (totalLength - remaining);
@@ -269,7 +260,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
         // Take one step across the current triangle
         FaceStepResult step = traceInFace(currPoint, dir2D, remaining);
-        result.steps.push_back(step);
 
         if (!step.success) {
             //std::cout << "[traceFromFace] traceInFace failed at iter=" << iter << std::endl;
@@ -277,7 +267,8 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         }
 
         // Update remaining distance
-        remaining -= step.distanceTraveled;
+        double stepDist = step.distanceTraveled;
+        remaining -= stepDist;
 
         //std::cout << "[traceFromFace] STEP: distanceTraveled=" << step.distanceTraveled << " remaining=" << remaining << " (was " << (remaining + step.distanceTraveled) << ")\n";
 
@@ -295,6 +286,11 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
             // Add vertex point to path
             result.pathPoints.push_back(vertexPoint);
+            
+            // Add corresponding step
+            FaceStepResult pathStep = step;
+            pathStep.distanceTraveled = stepDist;
+            result.steps.push_back(pathStep);
 
             // Trace end point on vertex
             if (remaining <= EPS_REMAIN) {
@@ -311,7 +307,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             // Face to vertex direction conversion
             const auto& hvf_face = mesh.getHalfedgeVectorsInFace();   
             const auto& hvv_vert = mesh.getHalfedgeVectorsInVertex();
-            const auto& vertices = conn.getVertices();
 
             // Find the halfedge incoming to the vertex in the current face
             uint32_t inHe = HalfEdgeMesh::INVALID_INDEX;
@@ -447,6 +442,12 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                         result.exitPoint = vertexExit;
                         result.position3D = glm::vec3(evaluateSurfacePoint(vertexExit));
                         result.pathPoints.push_back(vertexExit);
+                        
+                        // Add final step
+                        FaceStepResult pathStep = step;
+                        pathStep.distanceTraveled = stepDist;
+                        result.steps.push_back(pathStep);
+                        
                         return result;
                     }
                     else {
@@ -594,6 +595,12 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                             result.exitPoint = edgeExit;
                             result.position3D = glm::vec3(pEdge); // Canonical interpolation
                             result.pathPoints.push_back(edgeExit);
+                            
+                            // Add final step
+                            FaceStepResult pathStep = step;
+                            pathStep.distanceTraveled = stepDist;
+                            result.steps.push_back(pathStep);
+                            
                             return result;
                         }
                         else {
@@ -617,6 +624,11 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                 result.exitPoint = exitPoint;
                 result.position3D = glm::vec3(evaluateSurfacePoint(exitPoint));
                 result.pathPoints.push_back(exitPoint); 
+                
+                // Add final step
+                FaceStepResult pathStep = step;
+                pathStep.distanceTraveled = stepDist;
+                result.steps.push_back(pathStep);
 
                 return result;
             }
@@ -705,6 +717,12 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
             result.exitPoint = edgeExit;
             result.position3D = glm::vec3(pEdge);
             result.pathPoints.push_back(edgeExit);
+            
+            // Add final step
+            FaceStepResult pathStep = step;
+            pathStep.distanceTraveled = stepDist;
+            result.steps.push_back(pathStep);
+            
             return result;
         }
 
@@ -733,6 +751,11 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
         // Add edge crossing point to path
         result.pathPoints.push_back(edgeExit);
+        
+        // Add corresponding step
+        FaceStepResult pathStep = step;
+        pathStep.distanceTraveled = stepDist;
+        result.steps.push_back(pathStep);
 
         // Transport direction using vector rotation
         dir2D = rotateVectorAcrossEdge(

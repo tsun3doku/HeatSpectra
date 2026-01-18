@@ -17,7 +17,6 @@
 #include "File_utils.h" 
 #include "Structs.hpp"
 
-class AABBTree;
 class Camera;
 class VulkanDevice;
 class MemoryAllocator;
@@ -28,22 +27,15 @@ struct Vertex {
     glm::vec3 normal;   // Vertex normal
     glm::vec2 texCoord; // Texture coordinates
 
-    static std::array<VkVertexInputBindingDescription, 2> getBindingDescriptions() {
-        std::array<VkVertexInputBindingDescription, 2> bindingDescriptions{};
+    static std::array<VkVertexInputBindingDescription, 1> getBindingDescriptions() {
+        std::array<VkVertexInputBindingDescription, 1> bindingDescriptions{};
 
-        // Main vertex binding (positions, normals, texcoords)
+        // Main vertex binding (positions, normals, texcoords, colors)
         VkVertexInputBindingDescription mainBinding{};
         mainBinding.binding         = 0;
         mainBinding.stride          = sizeof(Vertex); 
         mainBinding.inputRate       = VK_VERTEX_INPUT_RATE_VERTEX;
         bindingDescriptions[0]      = mainBinding;
-
-        // Surface binding (dynamic color from compute shader)
-        VkVertexInputBindingDescription surfaceBinding{};
-        surfaceBinding.binding      = 1;
-        surfaceBinding.stride       = sizeof(SurfaceVertex); 
-        surfaceBinding.inputRate    = VK_VERTEX_INPUT_RATE_VERTEX;
-        bindingDescriptions[1]      = surfaceBinding;
 
         return bindingDescriptions;
     }
@@ -75,21 +67,6 @@ struct Vertex {
         return vertexAttributes;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 2> getSurfaceVertexAttributes() {
-        std::array<VkVertexInputAttributeDescription, 2> surfaceVertexAttributes{};
-
-        surfaceVertexAttributes[0].binding  = 1;
-        surfaceVertexAttributes[0].location = 4;
-        surfaceVertexAttributes[0].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
-        surfaceVertexAttributes[0].offset   = offsetof(SurfaceVertex, position); 
-
-        surfaceVertexAttributes[1].binding  = 1;
-        surfaceVertexAttributes[1].location = 5;
-        surfaceVertexAttributes[1].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
-        surfaceVertexAttributes[1].offset   = offsetof(SurfaceVertex, color);
-
-        return surfaceVertexAttributes;
-    }
 
     bool operator==(const Vertex& other) const {
         return pos == other.pos &&
@@ -119,19 +96,15 @@ public:
     void init(const std::string modelPath);
 
     void loadModel(const std::string& modelPath);
-    void buildAABBTree();
 
     void createVertexBuffer();
     void createIndexBuffer();
-    void createSurfaceBuffer();
 
     void equalizeFaceAreas();
-    void weldVertices(float epsilon);
     void recalculateNormals();
     void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
     void updateVertexBuffer();
     void updateIndexBuffer();
-    void updateSurfaceBuffer();
     void saveOBJ(const std::string& path) const;
     
     void translate(const glm::vec3& translation);
@@ -163,7 +136,7 @@ public:
     const std::vector<Vertex>& getVertices() const {
         return vertices;
     }
-    const size_t& getVertexCount() const {
+    size_t getVertexCount() const {
         return vertices.size();
     }
     const std::vector<uint32_t>& getIndices() const {
@@ -172,33 +145,20 @@ public:
 
     glm::vec3 getFaceNormal(uint32_t faceIndex) const;
 
-    VkBuffer getVertexBuffer() {
+    VkBuffer getVertexBuffer() const {
         return vertexBuffer;
     }
-    VkDeviceSize getVertexBufferOffset() {
+    VkDeviceSize getVertexBufferOffset() const {
         return vertexBufferOffset_;
     }
 
-    VkBuffer getIndexBuffer() {
+    VkBuffer getIndexBuffer() const {
         return indexBuffer;
     }
-    VkDeviceSize getIndexBufferOffset() {
+    VkDeviceSize getIndexBufferOffset() const {
         return indexBufferOffset_;
     }
 
-    VkBuffer getSurfaceBuffer() {
-        return surfaceBuffer;
-    }
-    VkDeviceSize getSurfaceBufferOffset() {
-        return surfaceBufferOffset_;
-    }
-
-    VkBuffer getSurfaceVertexBuffer() {
-        return surfaceVertexBuffer;
-    }
-    VkDeviceSize getSurfaceVertexBufferOffset() {
-        return surfaceVertexBufferOffset_;
-    }
 
     glm::vec3 getModelPosition() {
         return modelPosition;
@@ -208,9 +168,6 @@ public:
         return modelMatrix;
     }
 
-    std::unique_ptr<AABBTree>& getAABBTree() {
-        return aabbTree;
-    }
 
     void setModelPosition(const glm::vec3& position) { 
         modelPosition = position; 
@@ -232,7 +189,6 @@ private:
     CommandPool& commandPool;
     
     std::atomic<bool> needsGPUUpdate{false};  
-    std::unique_ptr<AABBTree> aabbTree;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
@@ -242,13 +198,6 @@ private:
 
 	VkBuffer indexBuffer;
     VkDeviceSize indexBufferOffset_;
-
-    VkBuffer surfaceBuffer;
-    VkDeviceSize surfaceBufferOffset_;
-    SurfaceVertex* mappedSurfaceVertices = nullptr;
-
-    VkBuffer surfaceVertexBuffer;
-    VkDeviceSize surfaceVertexBufferOffset_;
 
     glm::vec3 modelPosition = glm::vec3(0.0f);
     glm::mat4 modelMatrix = glm::mat4(1.0f);
