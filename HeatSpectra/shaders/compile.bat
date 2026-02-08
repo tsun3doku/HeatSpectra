@@ -53,6 +53,9 @@ C:/VulkanSDK/1.3.283.0/Bin/glslc.exe gizmo.frag -o gizmo_frag.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe point_cloud.vert -o point_cloud_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe point_cloud.frag -o point_cloud_frag.spv
 
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe contact_lines.vert -o contact_lines_vert.spv
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe contact_lines.frag -o contact_lines_frag.spv
+
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe --target-env=vulkan1.3 hash_grid_build.comp -o hash_grid_build_comp.spv
 
 slangc heat_surface.slang -target spirv -o heat_surface_comp.spv

@@ -150,6 +150,12 @@
     <ClCompile Include="VoronoiGeoCompute.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ContactInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactLineRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.vert">
@@ -275,6 +281,8 @@
     <None Include="shaders\heat_surface.slang">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\contact_lines.frag" />
+    <None Include="shaders\contact_lines.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_utils.h">
@@ -317,9 +325,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VoronoiGeoCompute.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libs\TetGen\tetgen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="HeatSource.hpp">
@@ -410,6 +415,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PointRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContactInterface.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContactLineRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GeometryUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

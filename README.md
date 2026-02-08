@@ -4,11 +4,6 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 
 ![Heat Transfer Capture](x64/Release/capture.png)
 
-## Requirements
-- Windows 10
-- Vulkan SDK 1.3
-- Visual Studio 
-
 ## Quick Start
 1. Download the latest demo release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page
 2. Extract the zip file
@@ -17,15 +12,25 @@ Realtime thermal analysis visualization using tetrahedral mesh elements and comp
 ### Hardware Requirements
 - GPU with Vulkan 1.3 or higher support ([Check GPU compatibility](https://vulkan.gpuinfo.org/))
 
-## Setup
-1. Clone the repository
-2. Build shaders using `compile.bat` in `shaders` folder
-3. Open solution in Visual Studio
-4. Build and run in Release mode
+### Prerequisites
+- [CMake](https://cmake.org/download/) 
+- [Qt 6](https://www.qt.io/download) (Core, Gui, Widgets components)
+- [Vulkan SDK](https://vulkan.lunarg.com/) 1.3 or higher
 
-## Controls
--  Middle mouse for camera panning
--  WASDQE for additional camera controls
+### Build Steps
 
-## TODO
-- Remeshing is currently cosmetic only
+1. Clone the repository with submodules:
+   ```bash
+   git clone --recursive https://github.com/tsun3doku/HeatSpectra.git
+   cd HeatSpectra
+   ```
+
+2. Configure and build:
+   ```bash
+   mkdir build && cd build
+   cmake .. -DCMAKE_PREFIX_PATH="/YOURPATH/TO/Qt/6.x.x/msvc2022_64"
+   cmake --build . --config Release
+   ```
+
+3. Run the program within build/release
+

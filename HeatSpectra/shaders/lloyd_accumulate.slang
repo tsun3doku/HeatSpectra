@@ -377,8 +377,9 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
     uint flags = seedFlags[cellID];
     bool isGhost = (flags & 1u) != 0u;
+    bool isSurface = (flags & 2u) != 0u;
 
-    if (isGhost)
+    if (isGhost || isSurface)
     {
         lloydAccum[cellID] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         return;

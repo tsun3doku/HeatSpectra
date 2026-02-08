@@ -40,6 +40,7 @@ public:
     void performRemeshing(int iterations=1, double minAngleDegrees=30.0, double maxEdgeLength=0.1, double stepSize=0.25);
     void loadModel(const std::string& modelPath);
     void setPanSensitivity(float sensitivity);
+    void setRenderPaused(bool paused);
     
     enum class WireframeMode { Off, Wireframe, Shaded };
     WireframeMode wireframeMode = WireframeMode::Off;
@@ -52,6 +53,7 @@ public:
     bool surfelsEnabled;
     bool voronoiEnabled;
     bool pointsEnabled;
+    bool contactLinesEnabled;
     float intrinsicNormalLength;
 
     std::unique_ptr<InputManager> inputManager;  

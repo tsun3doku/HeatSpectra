@@ -9,7 +9,7 @@
 
 //
 //                                                  [ Proper alignment here is important  
-//                                                    - SIMD requires 16 byte alignment 
+//                                                    - SIMD requires 16 byte vector alignment 
 //                                                    - glm::vec3 is a 12 byte container ]
 //
 // 
@@ -72,11 +72,6 @@ struct SurfacePoint {
     glm::vec4 color;           // 16 bytes (offset 32)
 };  // 48 bytes
 
-struct SurfaceInterpolation {
-    uint32_t tetraIndex;           // Which tetra to interpolate from
-    float baryCoords[4];           // Bary coords for the 4 nodes of the tetra
-};  // 20 bytes
-
 struct VoronoiSurfaceMapping {
     uint32_t cellIndex;            // Nearest Voronoi cell index
     uint32_t _padding[3];          // GPU alignment to 16 bytes
@@ -95,33 +90,29 @@ struct HeatSourceTriangleGPU {
     glm::uvec4 indices;
 };
 
+struct ContactSampleGPU {
+    uint32_t sourceTriangleIndex;
+    float u;
+    float v;
+    float wArea;
+};
+
+struct ContactPairGPU {
+    ContactSampleGPU samples[7];
+    float contactArea;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+
 struct IntrinsicVertexData {
     glm::vec3 position;            // 3D world position
     uint32_t intrinsicVertexId;    // ID in intrinsic mesh
     glm::vec3 normal;              // Area weighted vertex normal
     float padding;                 
-};  // 32 bytes 
+};   
 
-struct VoxelCellGPU {
-    float temperature;         // Current temperature
-    float prevTemperature;     // Previous timestep temperature
-    float thermalMass;         // Thermal capacity
-    float occupancy;           // Volume fraction 0.0-1.0
-    float density;             // kg/m^3
-    float specificHeat;        // J/(kg*K)
-    float conductivity;        // W/(m*K)
-    float coolingRate;         // W/(m^2*K)
-};
-
-struct VoxelGridParams {
-    alignas(16) glm::vec3 gridMin;      // Grid origin
-    float cellSize;                     // Voxel cell size
-    alignas(16) glm::ivec3 gridDim;     // Dimensions (x,y,z)
-    uint32_t totalCells;                // Total number of voxels
-};
-
-// 
-struct SurfelParams {
+struct SurfelParams {              // Not used may remove soon
     float thermalConductance;  
     float contactPressure;     
     float frictionCoeff;      
@@ -133,12 +124,12 @@ struct HeatSourcePushConstant {
     alignas(16) glm::mat4 visModelMatrix;
     alignas(16) glm::mat4 inverseHeatSourceModelMatrix;
     uint32_t maxNodeNeighbors;
-    uint32_t substepIndex;      // Current substep index (0 = update display)
+    uint32_t substepIndex;      // 0 = update display
 };  
 
 struct GeometryPushConstant {
     alignas(16) glm::mat4 modelMatrix; 
-    float alpha;            // 1.0 = fully opaque
+    float alpha;            
     int32_t _padding[3];    
 };
 
@@ -146,7 +137,7 @@ struct OutlinePushConstant {
     float outlineThickness;
     uint32_t selectedModelID;
     alignas(16) glm::vec3 outlineColor;
-};  // 32 bytes
+};  
 
 struct NormalPushConstant {
     alignas(16) glm::mat4 modelMatrix;
@@ -154,16 +145,11 @@ struct NormalPushConstant {
     float avgArea;
 };
 
-struct VoronoiSeedGPU {
-    alignas(16) glm::vec3 pos;
-    uint32_t isSurface;         // 1 = surface, 0 = interior
-};
-
 struct VoronoiNeighborGPU {
-    uint32_t neighborIndex;     // Index into NodeBuffer
+    uint32_t neighborIndex;     
     float interfaceArea;        // Area of the voronoi face shared with this neighbor
     float distance;             // Distance to neighbor
-    uint32_t interfaceFaceID;   // Index into InterfaceFaceBuffer
+    uint32_t interfaceFaceID;  
 };
 
 struct VoronoiNodeGPU {
@@ -199,13 +185,13 @@ struct VolumeChunkInfo {
     float chunkVolume;          // Volume contribution 
     float chunkDet;             // Volume determinant for this chunk 
     float cumulativeVolume;     // Running total after this chunk 
-    float padding;              // Alignment 
-};  // 32 bytes total
+    float padding;             
+};  
 
 struct VoronoiDumpInfo {
     uint32_t cellID;
     uint32_t isGhost;
-    uint32_t isInside;
+    uint32_t _padding0;
     uint32_t originOccupancy;    // Domain status of origin (0=outside, 1=border, 2=inside)
     
     glm::vec4 seedPos;           

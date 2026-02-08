@@ -31,6 +31,7 @@ private slots:
     void onSurfelsToggled(bool checked);
     void onVoronoiToggled(bool checked);
     void onPointsToggled(bool checked);
+    void onContactLinesToggled(bool checked);
     void onNormalLengthChanged(double value);
     void onPanSensitivityChanged(double value);
     void onToggleHeatClicked();
@@ -58,6 +59,7 @@ private:
     QCheckBox* surfelsCheck;
     QCheckBox* voronoiCheck;
     QCheckBox* pointsCheck;
+    QCheckBox* contactLinesCheck;
     QDoubleSpinBox* normalLengthSpinBox;
     QPushButton* remeshBtn;
     QSpinBox* remeshIterationsSpinBox;

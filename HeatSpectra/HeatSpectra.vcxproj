@@ -207,6 +207,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="CommandBufferManager.cpp" />
     <ClCompile Include="CommonSubdivision.cpp" />
+    <ClCompile Include="ContactInterface.cpp" />
+    <ClCompile Include="ContactLineRenderer.cpp" />
     <ClCompile Include="DeferredRenderer.cpp" />
     <ClCompile Include="GBuffer.cpp" />
     <ClCompile Include="GeodesicTracer.cpp" />
@@ -263,6 +265,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
   <ItemGroup>
     <None Include="shaders\blend.frag" />
     <None Include="shaders\blend.vert" />
+    <None Include="shaders\contact_lines.frag" />
+    <None Include="shaders\contact_lines.vert" />
     <None Include="shaders\gbuffer.frag" />
     <None Include="shaders\gbuffer.vert" />
     <None Include="shaders\gizmo.frag" />
@@ -307,9 +311,12 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="App.h" />
     <ClInclude Include="CommandBufferManager.hpp" />
     <ClInclude Include="CommonSubdivision.hpp" />
+    <ClInclude Include="ContactInterface.hpp" />
+    <ClInclude Include="ContactLineRenderer.hpp" />
     <ClInclude Include="DeferredRenderer.hpp" />
     <ClInclude Include="GBuffer.hpp" />
     <ClInclude Include="GeodesicTracer.hpp" />
+    <ClInclude Include="GeometryUtils.hpp" />
     <ClInclude Include="Gizmo.hpp" />
     <ClInclude Include="Grid.hpp" />
     <ClInclude Include="GridLabel.hpp" />

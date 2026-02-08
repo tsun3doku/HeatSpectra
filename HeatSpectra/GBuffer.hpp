@@ -76,7 +76,7 @@ public:
     void freeCommandBuffers();
     void recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
         class ModelSelection& modelSelection, class Gizmo& gizmo, WireframeRenderer& wireframeRenderer, std::vector<VkImageView> swapChainImageViews,
-        uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, int wireframeMode, bool drawIntrinsicOverlay, bool drawHeatOverlay, bool drawIntrinsicNormals = false, bool drawIntrinsicVertexNormals = false, float normalLength = 0.05, bool drawHashGrid = false, bool drawSurfels = false, bool drawVoronoi = false, bool drawPoints = false);
+        uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, int wireframeMode, bool drawIntrinsicOverlay, bool drawHeatOverlay, bool drawIntrinsicNormals = false, bool drawIntrinsicVertexNormals = false, float normalLength = 0.05, bool drawHashGrid = false, bool drawSurfels = false, bool drawVoronoi = false, bool drawPoints = false, bool drawContactLines = false);
 
     void cleanupFramebuffers(uint32_t maxFramesInFlight);
     void cleanup(uint32_t maxFramesInFlight);

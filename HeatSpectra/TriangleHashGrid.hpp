@@ -12,6 +12,7 @@ public:
 
     void build(const Model& model, const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize);
     void getNearbyTriangles(const glm::vec3& position, std::vector<size_t>& outTriangles) const;
+    void getNearbyTriangles(const glm::vec3& position, int radiusCells, std::vector<size_t>& outTriangles) const;
     void clear();
 
     size_t hashCell(int x, int y, int z) const;

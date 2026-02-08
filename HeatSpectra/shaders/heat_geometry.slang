@@ -33,7 +33,7 @@ struct MeshTriangle
 struct VoxelGridParams
 {
     float3 gridMin;
-    float  cellSize;   // world->canonical scale (canonical = (world-gridMin) * cellSize)
+    float  cellSize;  
     int3   gridDim;
     uint   totalCells;
 };
@@ -52,29 +52,26 @@ struct VolumeChunkInfo
 
 struct VoronoiDumpInfo
 {
-    // Cell identification (16 bytes)
     uint   cellID;
     uint   isGhost;
-    uint   isInside;
+    uint   _padding0;
     uint   originOccupancy;
 
-    float4 seedPos;              // 16 bytes
+    float4 seedPos;              
 
-    int4   cornerMin;            // 16 bytes
-    int4   cornerMax;            // 16 bytes
+    int4   cornerMin;           
+    int4   cornerMax;           
 
-    // Domain classification (16 bytes)
     uint   inDomain;
     uint   addVolume;
     uint   cornerCount;
-    uint   _padding;             // Alignment to 16 bytes
+    uint   _padding;             
 
-    int4   firstInsideCorner;    // 16 bytes
-    int4   firstOutsideCorner;   // 16 bytes
+    int4   firstInsideCorner;   
+    int4   firstOutsideCorner;   
 
-    float4 origin;               // 16 bytes
+    float4 origin;              
 
-    // Volume breakdown (16 bytes)
     float  unrestrictedVolume;
     float  restrictedVolume;
     float  maxChunkDet;
@@ -94,7 +91,7 @@ struct DebugCellGeometry
     uint4  triangles[96];
 };
 
-static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 17011, 14383, 53563, 0, 0, 0, 0, 0 };
+static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 59903, 0, 0, 0, 0, 0, 0, 0 };
 
 [[vk::binding(0)]]  RWStructuredBuffer<VoronoiNode> nodes;
 [[vk::binding(1)]]  StructuredBuffer<MeshTriangle>  meshTriangles;
@@ -924,7 +921,7 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
         dumpInfo[debugSlot].inDomain = inDomain;
         dumpInfo[debugSlot].originOccupancy = inDomain;
         dumpInfo[debugSlot].addVolume = addVolume ? 1u : 0u;
-        dumpInfo[debugSlot].isInside = addVolume ? 1u : 0u;
+        dumpInfo[debugSlot]._padding0 = 0u;
         dumpInfo[debugSlot].cornerCount = cornerCount;
         dumpInfo[debugSlot].firstInsideCorner = firstInsideCorner;
         dumpInfo[debugSlot].firstOutsideCorner = firstOutsideCorner;
@@ -1091,9 +1088,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
             nodes[cellID].interfaceNeighborCount++;
         }
     }
-
-
-
     return restrictedVolume;
 }
 

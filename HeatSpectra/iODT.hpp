@@ -49,7 +49,9 @@ public:
     bool delaunayRefinement(int maxIters, float minAngleDegrees);
     std::vector<RefinementCandidate> findRefinementCandidates(float minAngleThreshold, float maxAreaThreshold, float minAreaThreshold);
     bool insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex);
+    bool insertPoint(uint32_t faceIdx, const glm::dvec3& baryCoords, uint32_t& outVertex, bool* outWasInserted = nullptr);
     bool splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiagFront, uint32_t& outDiagBack, uint32_t HESplit, double t = 0.5);
+    bool splitEdge(uint32_t heEdge, double tParam, uint32_t& outNewV, bool* outWasInserted = nullptr);
 
     bool computeWeightedCircumcenter(uint32_t vertIdx, uint32_t& outRefFace, int& outLocalRefIdx, glm::dvec2& outAvgVec, double& outAvgLen);
     bool resolveVertex(uint32_t newVertexIdx, const GeodesicTracer::SurfacePoint& intrinsicPoint);

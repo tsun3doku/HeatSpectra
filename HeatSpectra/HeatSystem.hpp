@@ -23,7 +23,8 @@ class SurfelRenderer;
 class HashGridRenderer;
 class VoronoiRenderer;
 class PointRenderer;
-class LloydCompute;
+class ContactLineRenderer;
+class ContactInterface;
 class VoronoiGeoCompute;
 class VoronoiIntegrator;
 
@@ -45,7 +46,7 @@ public:
     void createTimeBuffer();
     void initializeVoronoi();
     
-    void generateVoronoiDiagram(bool enableLloyd);
+    void generateVoronoiDiagram();
     void exportDebugCellsToOBJ();
     void exportCellVolumes();
     void exportVoronoiDumpInfo(); 
@@ -76,6 +77,7 @@ public:
     void renderHashGrids(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
+    void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
     
     // Getters for Voronoi
     VkBuffer getSeedPositionBuffer() const { return seedPositionBuffer; }
@@ -108,11 +110,13 @@ public:
 
 
 private:    
+    void initializeContactInterface();
+
     void initializeSurfelRenderers(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeHashGridRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
-    void initializeLloydCompute();
+    void initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiGeoCompute();
     void createVoronoiGeometryBuffers(const VoronoiIntegrator& integrator, const std::vector<uint32_t>& seedFlags);
     void uploadOccupancyPoints(const VoxelGrid& voxelGrid);
@@ -124,18 +128,21 @@ private:
     CommandPool& renderCommandPool; 
     std::unique_ptr<HeatSource> heatSource;
     std::vector<std::unique_ptr<HeatReceiver>> receivers;
+	std::vector<std::vector<ContactPairGPU>> receiverContactPairs;
     Camera* camera = nullptr;
     
     std::unique_ptr<HashGridRenderer> hashGridRenderer;
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;
-    std::unique_ptr<LloydCompute> lloydCompute;
+    std::unique_ptr<ContactLineRenderer> contactLineRenderer;
+	std::unique_ptr<ContactInterface> contactInterface;
     std::unique_ptr<VoronoiGeoCompute> voronoiGeoCompute;
     
     uint32_t maxFramesInFlight;
  
     std::unique_ptr<VoronoiSeeder> voronoiSeeder;
     std::unique_ptr<class VoronoiIntegrator> voronoiIntegrator; 
+    std::vector<uint32_t> voronoiSeedFlags;
     bool isVoronoiSeederReady = false;
     bool isVoronoiReady = false; 
     
@@ -189,11 +196,7 @@ private:
     VkDeviceSize seedFlagsBufferOffset_;
     void* mappedSeedPositionData = nullptr;
     
-    VkBuffer relevantMeshIndicesBuffer = VK_NULL_HANDLE;
-    VkDeviceSize relevantMeshIndicesBufferOffset_;
     
-    VkBuffer spatialInfoBuffer = VK_NULL_HANDLE;
-    VkDeviceSize spatialInfoBufferOffset_;
 
     VkBuffer voxelGridParamsBuffer = VK_NULL_HANDLE;           
     VkDeviceSize voxelGridParamsBufferOffset_;
@@ -201,11 +204,7 @@ private:
     VkBuffer voxelOccupancyBuffer = VK_NULL_HANDLE;            
     VkDeviceSize voxelOccupancyBufferOffset_;
     
-    VkBuffer voxelMeshPointsBuffer = VK_NULL_HANDLE;           
-    VkDeviceSize voxelMeshPointsBufferOffset_;
     
-    VkBuffer voxelMeshTrianglesBuffer = VK_NULL_HANDLE;         
-    VkDeviceSize voxelMeshTrianglesBufferOffset_;
     
     VkBuffer voxelTrianglesListBuffer = VK_NULL_HANDLE;       
     VkDeviceSize voxelTrianglesListBufferOffset_;

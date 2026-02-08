@@ -19,11 +19,6 @@ public:
         VkBuffer seedPositionBuffer = VK_NULL_HANDLE;
         VkDeviceSize seedPositionBufferOffset = 0;
 
-        VkBuffer relevantMeshIndicesBuffer = VK_NULL_HANDLE;
-        VkDeviceSize relevantMeshIndicesBufferOffset = 0;
-
-        VkBuffer spatialInfoBuffer = VK_NULL_HANDLE;
-        VkDeviceSize spatialInfoBufferOffset = 0;
 
         VkBuffer voxelGridParamsBuffer = VK_NULL_HANDLE;
         VkDeviceSize voxelGridParamsBufferOffset = 0;
@@ -32,11 +27,6 @@ public:
         VkBuffer voxelOccupancyBuffer = VK_NULL_HANDLE;
         VkDeviceSize voxelOccupancyBufferOffset = 0;
 
-        VkBuffer voxelMeshPointsBuffer = VK_NULL_HANDLE;
-        VkDeviceSize voxelMeshPointsBufferOffset = 0;
-
-        VkBuffer voxelMeshTrianglesBuffer = VK_NULL_HANDLE;
-        VkDeviceSize voxelMeshTrianglesBufferOffset = 0;
 
         VkBuffer voxelTrianglesListBuffer = VK_NULL_HANDLE;
         VkDeviceSize voxelTrianglesListBufferOffset = 0;

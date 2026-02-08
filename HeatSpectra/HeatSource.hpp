@@ -23,7 +23,6 @@ public:
     HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, ResourceManager& resourceManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
     ~HeatSource();
 
-    void recreateResources(uint32_t maxFramesInFlight);
 
     void createSourceBuffer();
     void updateSourceBuffer(SupportingHalfedge* supportingHalfedge);
@@ -36,7 +35,6 @@ public:
 
     void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
 
-    void cleanupResources();
     void cleanup();
 
     // Getters

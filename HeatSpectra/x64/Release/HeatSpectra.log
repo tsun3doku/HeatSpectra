@@ -1,11 +1,31 @@
 ﻿   Qt/MSBuild: 3.4.1.0
   Reading Qt configuration (C:/Qt/6.9.3/msvc2022_64/bin/qmake)
    Qt: 6.9.3
-  TriangleHashGrid.cpp
+  App.cpp
+  GBuffer.cpp
+  HeatReceiver.cpp
+  HeatSystem.cpp
+  ResourceManager.cpp
+  VoronoiIntegrator.cpp
+  VoronoiKDTree.cpp
+  VoronoiSeeder.cpp
+  VoxelGrid.cpp
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\VoronoiIntegrator.cpp(12,93): warning C4267: 'argument': conversion from 'size_t' to 'glm::vec<3,glm::f64,glm::packed_highp>::length_type', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(516,40): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1294,43): warning C4267: '=': conversion from 'size_t' to 'uint32_t', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\HeatSystem.cpp(1788,31): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\GBuffer.cpp(2641,112): warning C4244: 'argument': conversion from 'double' to 'int', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\VoronoiKDTree.hpp(12,31): warning C4267: 'argument': conversion from 'size_t' to 'glm::vec<3,float,glm::packed_highp>::length_type', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\VoronoiKDTree.hpp(12,31): warning C4267: 'argument': conversion from 'size_t' to 'glm::vec<3,float,glm::packed_highp>::length_type', possible loss of data
+C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
   Generating code
-  38 of 12265 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+  133 of 12361 functions ( 1.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    58 functions had inline decision re-evaluated but remain unchanged
+    108 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
   0 File(s) copied

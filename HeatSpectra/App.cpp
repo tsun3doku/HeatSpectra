@@ -79,7 +79,7 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-App::App() : intrinsicOverlayEnabled(false), heatOverlayEnabled(false), intrinsicNormalsEnabled(false), intrinsicVertexNormalsEnabled(false), hashGridEnabled(false), surfelsEnabled(false), voronoiEnabled(false), pointsEnabled(false), intrinsicNormalLength(0.05f),
+App::App() : intrinsicOverlayEnabled(false), heatOverlayEnabled(false), intrinsicNormalsEnabled(false), intrinsicVertexNormalsEnabled(false), hashGridEnabled(false), surfelsEnabled(false), voronoiEnabled(false), pointsEnabled(false), contactLinesEnabled(false), intrinsicNormalLength(0.05f),
              currentFrame(0), frameRate(240),
              isShuttingDown(false), isCameraUpdated(false), 
              edgeSelectionRequested(false), isOperating(false) {}
@@ -88,6 +88,15 @@ App::~App() = default;
 
 void App::setPanSensitivity(float sensitivity) { 
     camera.panSensitivity = sensitivity; 
+}
+
+void App::setRenderPaused(bool paused) {
+    if (paused) {
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
+        isOperating.store(true, std::memory_order_release);
+    } else {
+        isOperating.store(false, std::memory_order_release);
+    }
 }
 
 bool App::isHeatSystemActive() const {
@@ -116,6 +125,16 @@ void App::toggleHeatSystem() {
         
         heatSystem->setActive(newState);
         heatSystem->setIsPaused(false);
+
+        if (newState && gbuffer && resourceManager && uniformBufferManager) {
+            Model* heatModel = &resourceManager->getHeatModel();
+            iODT* remesher = resourceManager->getRemesherForModel(heatModel);
+            if (remesher) {
+                gbuffer->updateDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+                gbuffer->updateNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+                gbuffer->updateVertexNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+            }
+        }
         
         // Reset simulation if sim is turned off
         if (!newState) {
@@ -828,6 +847,7 @@ void App::drawFrame() {
         VkCommandBuffer commandBuffer = gbuffer->getCommandBuffers()[currentFrame];
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
+        vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
 
         // Update gizmo interaction
         if (inputManager) {
@@ -874,7 +894,7 @@ void App::drawFrame() {
         std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
         // Graphics pass 
-        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, *wireframeRenderer, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, static_cast<int>(wireframeMode), intrinsicOverlayEnabled, heatOverlayEnabled, intrinsicNormalsEnabled, intrinsicVertexNormalsEnabled, intrinsicNormalLength, hashGridEnabled, surfelsEnabled, voronoiEnabled, pointsEnabled);
+        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, *wireframeRenderer, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, static_cast<int>(wireframeMode), intrinsicOverlayEnabled, heatOverlayEnabled, intrinsicNormalsEnabled, intrinsicVertexNormalsEnabled, intrinsicNormalLength, hashGridEnabled, surfelsEnabled, voronoiEnabled, pointsEnabled, contactLinesEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

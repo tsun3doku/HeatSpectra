@@ -134,50 +134,6 @@ void LloydCompute::dispatch(int numIterations, float alpha, float maxStep) {
     commandPool.endCommands(cmd);
 }
 
-void LloydCompute::cleanupResources() {
-    if (accumulatePipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(vulkanDevice.getDevice(), accumulatePipeline, nullptr);
-        accumulatePipeline = VK_NULL_HANDLE;
-    }
-    if (accumulatePipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(vulkanDevice.getDevice(), accumulatePipelineLayout, nullptr);
-        accumulatePipelineLayout = VK_NULL_HANDLE;
-    }
-    if (updatePipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(vulkanDevice.getDevice(), updatePipeline, nullptr);
-        updatePipeline = VK_NULL_HANDLE;
-    }
-    if (updatePipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(vulkanDevice.getDevice(), updatePipelineLayout, nullptr);
-        updatePipelineLayout = VK_NULL_HANDLE;
-    }
-    if (descriptorPool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
-        descriptorPool = VK_NULL_HANDLE;
-    }
-    if (descriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), descriptorSetLayout, nullptr);
-        descriptorSetLayout = VK_NULL_HANDLE;
-    }
-
-    initialized = false;
-}
-
-void LloydCompute::cleanup() {
-    if (lloydAccumBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(lloydAccumBuffer, lloydAccumBufferOffset);
-        lloydAccumBuffer = VK_NULL_HANDLE;
-        mappedLloydAccumData = nullptr;
-    }
-    if (lloydParamsBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(lloydParamsBuffer, lloydParamsBufferOffset);
-        lloydParamsBuffer = VK_NULL_HANDLE;
-        mappedLloydParamsData = nullptr;
-    }
-
-    cleanupResources();
-}
-
 void LloydCompute::createDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -313,4 +269,48 @@ void LloydCompute::createUpdatePipeline() {
     }
 
     vkDestroyShaderModule(vulkanDevice.getDevice(), module, nullptr);
+}
+
+void LloydCompute::cleanupResources() {
+    if (accumulatePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), accumulatePipeline, nullptr);
+        accumulatePipeline = VK_NULL_HANDLE;
+    }
+    if (accumulatePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), accumulatePipelineLayout, nullptr);
+        accumulatePipelineLayout = VK_NULL_HANDLE;
+    }
+    if (updatePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), updatePipeline, nullptr);
+        updatePipeline = VK_NULL_HANDLE;
+    }
+    if (updatePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), updatePipelineLayout, nullptr);
+        updatePipelineLayout = VK_NULL_HANDLE;
+    }
+    if (descriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
+        descriptorPool = VK_NULL_HANDLE;
+    }
+    if (descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), descriptorSetLayout, nullptr);
+        descriptorSetLayout = VK_NULL_HANDLE;
+    }
+
+    initialized = false;
+}
+
+void LloydCompute::cleanup() {
+    if (lloydAccumBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(lloydAccumBuffer, lloydAccumBufferOffset);
+        lloydAccumBuffer = VK_NULL_HANDLE;
+        mappedLloydAccumData = nullptr;
+    }
+    if (lloydParamsBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(lloydParamsBuffer, lloydParamsBufferOffset);
+        lloydParamsBuffer = VK_NULL_HANDLE;
+        mappedLloydParamsData = nullptr;
+    }
+
+    cleanupResources();
 }

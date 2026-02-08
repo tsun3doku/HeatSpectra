@@ -17,11 +17,10 @@ public:
     void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     
     // Connect the data (call when buffers change)
-    void updateDescriptors(Model& model, VkBuffer mappingBuffer, VkDeviceSize mappingOffset, 
-                          uint32_t vertexCount, VkBuffer seedBuffer, VkDeviceSize seedOffset,
-                          VkBuffer nodeBuffer, VkDeviceSize nodeOffset,
-                          VkBuffer neighborBuffer, VkDeviceSize neighborOffset,
-                          uint32_t maxFrames);
+    void updateDescriptors(uint32_t frameIndex, VkBuffer mappingBuffer, VkDeviceSize mappingOffset, 
+                           uint32_t vertexCount, VkBuffer seedBuffer, VkDeviceSize seedOffset,
+                           VkBuffer nodeBuffer, VkDeviceSize nodeOffset,
+                           VkBuffer neighborBuffer, VkDeviceSize neighborOffset);
 
     // The draw call (pass model matrix for transformations)
     void render(VkCommandBuffer cmd, VkBuffer vertexBuffer, VkDeviceSize vertexOffset,

@@ -238,6 +238,10 @@ void MainWindow::createDockWidget() {
     pointsCheck = new QCheckBox("View Points");
     connect(pointsCheck, &QCheckBox::toggled, this, &MainWindow::onPointsToggled);
     layout->addWidget(pointsCheck);
+
+    contactLinesCheck = new QCheckBox("Show Contact Lines");
+    connect(contactLinesCheck, &QCheckBox::toggled, this, &MainWindow::onContactLinesToggled);
+    layout->addWidget(contactLinesCheck);
       
     // Heat simulation
     QLabel* heatLabel = new QLabel("<b>Heat Simulation</b>");
@@ -354,6 +358,15 @@ void MainWindow::onPointsToggled(bool checked) {
     }
 }
 
+void MainWindow::onContactLinesToggled(bool checked) {
+    if (app) {
+        app->contactLinesEnabled = checked;
+    }
+    if (contactLinesCheck && contactLinesCheck->isChecked() != checked) {
+        contactLinesCheck->setChecked(checked);
+    }
+}
+
 void MainWindow::onNormalLengthChanged(double value) {
     if (app) {
         app->intrinsicNormalLength = static_cast<float>(value);
@@ -398,7 +411,12 @@ void MainWindow::onResetHeatClicked() {
 }
 
 void MainWindow::onOpenModel() {
+    if (app) {
+        app->setRenderPaused(true);
+    }
+
     QString filename = QFileDialog::getOpenFileName(this, "Open Model", "models", "3D Models (*.obj *.ply);;OBJ Files (*.obj);;PLY Files (*.ply)");
+
     if (!filename.isEmpty() && app) {
         try {
             std::string modelPath = filename.toStdString();
@@ -411,6 +429,10 @@ void MainWindow::onOpenModel() {
         catch (const std::exception& e) {
             QMessageBox::critical(this, "Error", QString("Failed to load model: %1").arg(e.what()));
         }
+    }
+
+    if (app) {
+        app->setRenderPaused(false);
     }
 }
 
@@ -435,7 +457,6 @@ int main(int argc, char** argv) {
     MainWindow mainWindow;
     mainWindow.show();
     
-    // Get the Vulkan window
     VulkanWindow* vulkanWindow = mainWindow.getVulkanWindow();    
     
     // Wait for window to be sized

@@ -49,35 +49,37 @@ void VoronoiGeoCompute::updateDescriptors(const Bindings& bindings) {
         voxelParamsRange = VK_WHOLE_SIZE;
     }
 
-    std::array<VkDescriptorBufferInfo, 17> infos = {
-        VkDescriptorBufferInfo{currentBindings.voronoiNodeBuffer, currentBindings.voronoiNodeBufferOffset, nodeRange},
-        VkDescriptorBufferInfo{currentBindings.meshTriangleBuffer, currentBindings.meshTriangleBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.seedPositionBuffer, currentBindings.seedPositionBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.relevantMeshIndicesBuffer, currentBindings.relevantMeshIndicesBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.spatialInfoBuffer, currentBindings.spatialInfoBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voxelGridParamsBuffer, currentBindings.voxelGridParamsBufferOffset, voxelParamsRange},
-        VkDescriptorBufferInfo{currentBindings.voxelOccupancyBuffer, currentBindings.voxelOccupancyBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voxelMeshPointsBuffer, currentBindings.voxelMeshPointsBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voxelMeshTrianglesBuffer, currentBindings.voxelMeshTrianglesBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voxelTrianglesListBuffer, currentBindings.voxelTrianglesListBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voxelOffsetsBuffer, currentBindings.voxelOffsetsBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.neighborIndicesBuffer, currentBindings.neighborIndicesBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.interfaceAreasBuffer, currentBindings.interfaceAreasBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.interfaceNeighborIdsBuffer, currentBindings.interfaceNeighborIdsBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.debugCellGeometryBuffer, currentBindings.debugCellGeometryBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.seedFlagsBuffer, currentBindings.seedFlagsBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.voronoiDumpBuffer, currentBindings.voronoiDumpBufferOffset, VK_WHOLE_SIZE},
+    struct BindingWrite {
+        uint32_t binding;
+        VkDescriptorType type;
+        VkDescriptorBufferInfo info;
     };
 
-    std::array<VkWriteDescriptorSet, 17> writes{};
-    for (uint32_t i = 0; i < static_cast<uint32_t>(writes.size()); i++) {
+    std::array<BindingWrite, 13> bindingWrites = {
+        BindingWrite{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voronoiNodeBuffer, currentBindings.voronoiNodeBufferOffset, nodeRange}},
+        BindingWrite{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.meshTriangleBuffer, currentBindings.meshTriangleBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.seedPositionBuffer, currentBindings.seedPositionBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelGridParamsBuffer, currentBindings.voxelGridParamsBufferOffset, voxelParamsRange}},
+        BindingWrite{6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelOccupancyBuffer, currentBindings.voxelOccupancyBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelTrianglesListBuffer, currentBindings.voxelTrianglesListBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelOffsetsBuffer, currentBindings.voxelOffsetsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.neighborIndicesBuffer, currentBindings.neighborIndicesBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.interfaceAreasBuffer, currentBindings.interfaceAreasBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{13, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.interfaceNeighborIdsBuffer, currentBindings.interfaceNeighborIdsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{14, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.debugCellGeometryBuffer, currentBindings.debugCellGeometryBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{15, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.seedFlagsBuffer, currentBindings.seedFlagsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voronoiDumpBuffer, currentBindings.voronoiDumpBufferOffset, VK_WHOLE_SIZE}},
+    };
+
+    std::array<VkWriteDescriptorSet, 13> writes{};
+    for (size_t i = 0; i < bindingWrites.size(); i++) {
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = descriptorSet;
-        writes[i].dstBinding = i;
+        writes[i].dstBinding = bindingWrites[i].binding;
         writes[i].dstArrayElement = 0;
         writes[i].descriptorCount = 1;
-        writes[i].descriptorType = (i == 5) ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writes[i].pBufferInfo = &infos[i];
+        writes[i].descriptorType = bindingWrites[i].type;
+        writes[i].pBufferInfo = &bindingWrites[i].info;
     }
 
     vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
@@ -189,12 +191,8 @@ void VoronoiGeoCompute::createDescriptorSetLayout() {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -219,7 +217,7 @@ void VoronoiGeoCompute::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = 16;
+    poolSizes[0].descriptorCount = 12;
 
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = 1;

@@ -107,6 +107,38 @@ void TriangleHashGrid::getNearbyTriangles(const glm::vec3& position, std::vector
     }
 }
 
+void TriangleHashGrid::getNearbyTriangles(const glm::vec3& position, int radiusCells, std::vector<size_t>& outTriangles) const {
+    outTriangles.clear();
+    if (radiusCells <= 1) {
+        getNearbyTriangles(position, outTriangles);
+        return;
+    }
+
+    glm::ivec3 cell = worldToCell(position);
+    const int r = radiusCells;
+
+    for (int dz = -r; dz <= r; dz++) {
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                int cx = cell.x + dx;
+                int cy = cell.y + dy;
+                int cz = cell.z + dz;
+
+                if (cx < 0 || cx >= gridDim_.x ||
+                    cy < 0 || cy >= gridDim_.y ||
+                    cz < 0 || cz >= gridDim_.z) 
+                    continue;
+
+                size_t hash = hashCell(cx, cy, cz);
+                auto it = grid_.find(hash);
+                if (it != grid_.end()) {
+                    outTriangles.insert(outTriangles.end(), it->second.begin(), it->second.end());
+                }
+            }
+        }
+    }
+}
+
 void TriangleHashGrid::clear() {
     grid_.clear();
 }

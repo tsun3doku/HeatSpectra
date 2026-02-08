@@ -2267,7 +2267,7 @@ void logImageDetails(VulkanDevice& vulkanDevice, VkImage image, VkImageCreateInf
 }
 
 void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& heatSystem, 
-    ModelSelection& modelSelection, Gizmo& gizmo, WireframeRenderer& wireframeRenderer, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, int wireframeMode, bool drawIntrinsicOverlay, bool drawHeatOverlay, bool drawIntrinsicNormals, bool drawIntrinsicVertexNormals, float normalLength, bool drawHashGrid, bool drawSurfels, bool drawVoronoi, bool drawPoints) {
+    ModelSelection& modelSelection, Gizmo& gizmo, WireframeRenderer& wireframeRenderer, std::vector<VkImageView> swapChainImageViews, uint32_t currentFrame, uint32_t imageIndex, uint32_t maxFramesInFlight, VkExtent2D extent, int wireframeMode, bool drawIntrinsicOverlay, bool drawHeatOverlay, bool drawIntrinsicNormals, bool drawIntrinsicVertexNormals, float normalLength, bool drawHashGrid, bool drawSurfels, bool drawVoronoi, bool drawPoints, bool drawContactLines) {
     VkCommandBuffer commandBuffer = gbufferCommandBuffers[currentFrame];
 
     // Start recording commands  
@@ -2631,27 +2631,27 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
     // Draw grid labels
     resourceManager.getGrid().renderLabels(commandBuffer, currentFrame);
     
-    // Draw hash grid visualization
+    // Draw hash grid 
     if (drawHashGrid && heatSystem.getIsActive()) {
         heatSystem.renderHashGrids(commandBuffer, currentFrame);
     }
     
-    // Draw surfel visualization 
+    // Draw surfel 
     if (drawSurfels && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
         heatSystem.renderSurfels(commandBuffer, currentFrame, resourceManager.getHeatModel().getModelMatrix(), 0.0025);
     }
     
-    // Draw Voronoi surface visualization
+    // Draw Voronoi surface 
     if (drawVoronoi && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
         heatSystem.renderVoronoiSurface(commandBuffer, currentFrame);
     }
     
-    // Draw occupancy point visualization
+    // Draw occupancy points
     if (drawPoints && heatSystem.getIsActive() && heatSystem.getIsVoronoiReady()) {
         heatSystem.renderOccupancy(commandBuffer, currentFrame, extent);
     }
-    
-    // wireframeMode: 1 = wire-only, 2 = shaded + wireframe
+
+    // wireframeMode: 1 = wireframe only, 2 = shaded + wireframe
     if (wireframeMode > 0) {
         wireframeRenderer.bindPipeline(commandBuffer);
         
@@ -2670,6 +2670,11 @@ void GBuffer::recordCommandBuffer(ResourceManager& resourceManager, HeatSystem& 
             geometryDescriptorSets[currentFrame],
             resourceManager.getHeatModel().getModelMatrix()
         );
+    }
+
+    // Draw contact pairing line
+    if (drawContactLines && heatSystem.getIsActive()) {
+        heatSystem.renderContactLines(commandBuffer, currentFrame, extent);
     }
     
     // Draw gizmo last 

@@ -29,8 +29,9 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
     uint flags = seedFlags[cellID];
     bool isGhost = (flags & 1u) != 0u;
+    bool isSurface = (flags & 2u) != 0u;
 
-    if (isGhost) return;
+    if (isGhost || isSurface) return;
 
     float4 acc = lloydAccum[cellID];
     float area = acc.w;

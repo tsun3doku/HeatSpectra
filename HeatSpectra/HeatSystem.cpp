@@ -19,8 +19,9 @@
 #include "HashGridRenderer.hpp"
 #include "VoronoiRenderer.hpp"
 #include "PointRenderer.hpp"
+#include "ContactLineRenderer.hpp"
+#include "ContactInterface.hpp"
 #include "HeatSystem.hpp"
-#include "LloydCompute.hpp"
 #include "VoronoiGeoCompute.hpp"
 #include "VoronoiIntegrator.hpp"
 #include "TriangleHashGrid.hpp"
@@ -32,6 +33,10 @@
 #include <iomanip>
 #include <cmath>
 #include <cfloat>
+
+#include <algorithm>
+
+#include <limits>
 
 HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
     UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& cmdPool,
@@ -59,8 +64,10 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
     initializeHashGridRenderer(renderPass, maxFramesInFlight);
     initializeVoronoiRenderer(renderPass, maxFramesInFlight);
     initializePointRenderer(renderPass, maxFramesInFlight);
+    initializeContactLineRenderer(renderPass, maxFramesInFlight);
 
-    initializeLloydCompute();
+	contactInterface = std::make_unique<ContactInterface>(resourceManager);
+
     initializeVoronoiGeoCompute();
 
     createComputeCommandBuffers(maxFramesInFlight);
@@ -72,7 +79,7 @@ void HeatSystem::createContactDescriptorPool(uint32_t maxFramesInFlight) {
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 10;
+    poolSizes[0].descriptorCount = totalSets * 11;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = totalSets * 2;
 
@@ -102,6 +109,7 @@ void HeatSystem::createContactDescriptorSetLayout() {
         {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -194,10 +202,6 @@ void HeatSystem::initializeHashGridRenderer(VkRenderPass renderPass, uint32_t ma
     }
 }
 
-void HeatSystem::initializeLloydCompute() {
-    lloydCompute = std::make_unique<LloydCompute>(vulkanDevice, memoryAllocator, renderCommandPool);
-}
-
 void HeatSystem::initializeVoronoiGeoCompute() {
     voronoiGeoCompute = std::make_unique<VoronoiGeoCompute>(vulkanDevice, renderCommandPool);
 }
@@ -285,142 +289,244 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
             );
         }
     }   
+
+	if (contactLineRenderer) {
+		contactLineRenderer->cleanup();
+		contactLineRenderer.reset();
+	}
+	initializeContactLineRenderer(renderPass, maxFramesInFlight);
+	if (contactLineRenderer && contactInterface) {
+		const auto& cachedOutlines = contactInterface->getCachedOutlineVertices();
+		if (!cachedOutlines.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> outlineVerts;
+			outlineVerts.reserve(cachedOutlines.size());
+			for (size_t i = 0; i < cachedOutlines.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedOutlines[i].position;
+				v.color = cachedOutlines[i].color;
+				outlineVerts.push_back(v);
+			}
+			contactLineRenderer->uploadOutlines(outlineVerts);
+		}
+		const auto& cachedCorrespondences = contactInterface->getCachedCorrespondenceVertices();
+		if (!cachedCorrespondences.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> corrVerts;
+			corrVerts.reserve(cachedCorrespondences.size());
+			for (size_t i = 0; i < cachedCorrespondences.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedCorrespondences[i].position;
+				v.color = cachedCorrespondences[i].color;
+				corrVerts.push_back(v);
+			}
+			contactLineRenderer->uploadCorrespondences(corrVerts);
+		}
+	}
+
     createComputeCommandBuffers(maxFramesInFlight);
 }
 
 void HeatSystem::processResetRequest() {
     if (needsReset.exchange(false, std::memory_order_acq_rel)) {
         vkDeviceWaitIdle(vulkanDevice.getDevice());
-        initializeVoronoi(); 
+        initializeVoronoi();
     }
 }
 
 void HeatSystem::setActive(bool active) {
-    if (active && !isVoronoiSeederReady) {
-        resourceManager.buildCommonSubdivision();
-   
-        // Generate seeds for meshless Voronoi
-        voronoiSeeder->generateSeeds(
-            resourceManager.getIntrinsicTriangles(), 
-            resourceManager.getCommonSubdivision().getVertices(), 
-            resourceManager.getVisModel(), 
-            0.005f
-        );
-        
-        voronoiSeeder->buildSpatialIndex();   
-        voronoiSeeder->exportSeedsToOBJ("voronoi_seeds.obj");
-        isVoronoiSeederReady = true;  
-        
-        std::cout << "[HeatSystem] Using Voronoi VEM" << std::endl;
-        generateVoronoiDiagram(true);
-                
-        // Create receivers for all remeshed models except the heat source model
-        Model* heatModelPtr = &resourceManager.getHeatModel();
-        for (const auto& [model, remeshData] : resourceManager.getModelRemeshData()) {
-            if (model != heatModelPtr && remeshData.isRemeshed) {
-                addReceiver(model);
-                
-                if (!receivers.empty()) {
-                    receivers.back()->computeVoronoiSurfaceMapping(voronoiSeeder.get());
-                }
-            }
-        }
-        
-        executeBufferTransfers();
-        
-        isVoronoiReady = true; 
-    } 
-    isActive = active;
+	if (active && !isVoronoiSeederReady) {
+		resourceManager.buildCommonSubdivision();
+
+		voronoiSeeder->generateSeeds(
+			resourceManager.getIntrinsicTriangles(),
+			resourceManager.getCommonSubdivision().getVertices(),
+			resourceManager.getVisModel(),
+			0.005f
+		);
+
+		voronoiSeeder->exportSeedsToOBJ("voronoi_seeds.obj");
+		isVoronoiSeederReady = true;
+
+		std::cout << "[HeatSystem] Using Voronoi VEM" << std::endl;
+		generateVoronoiDiagram();
+
+		Model* heatModelPtr = &resourceManager.getHeatModel();
+		for (const auto& [model, remeshData] : resourceManager.getModelRemeshData()) {
+			if (model != heatModelPtr && remeshData.isRemeshed) {
+				addReceiver(model);
+
+				if (!receivers.empty() && voronoiIntegrator) {
+					auto* iodt = resourceManager.getRemesherForModel(&receivers.back()->getModel());
+					if (iodt) {
+						auto* sh = iodt->getSupportingHalfedge();
+						if (sh) {
+							auto intrinsicMesh = sh->buildIntrinsicMesh();
+							std::vector<glm::vec3> surfacePoints;
+							surfacePoints.reserve(intrinsicMesh.vertices.size());
+							for (size_t vi = 0; vi < intrinsicMesh.vertices.size(); ++vi) {
+								surfacePoints.push_back(intrinsicMesh.vertices[vi].position);
+							}
+
+							std::vector<uint32_t> cellIndices;
+							voronoiIntegrator->computeSurfacePointMapping(
+								surfacePoints,
+								voronoiSeedFlags,
+								K_NEIGHBORS,
+								cellIndices
+							);
+							receivers.back()->stageVoronoiSurfaceMapping(cellIndices);
+						}
+					}
+				}
+			}
+		}
+
+		initializeContactInterface();
+		executeBufferTransfers();
+		isVoronoiReady = true;
+	}
+	isActive = active;
+}
+
+void HeatSystem::initializeContactInterface() {
+	if (!contactInterface) {
+		contactInterface = std::make_unique<ContactInterface>(resourceManager);
+	}
+
+	ContactInterface::Settings settings{};
+	contactInterface->mapSurfacePoints(
+		resourceManager.getHeatModel(),
+		receivers,
+		receiverContactPairs,
+        settings
+	);
+
+	if (contactLineRenderer) {
+		const auto& cachedOutlines = contactInterface->getCachedOutlineVertices();
+		if (!cachedOutlines.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> outlineVerts;
+			outlineVerts.reserve(cachedOutlines.size());
+			for (size_t i = 0; i < cachedOutlines.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedOutlines[i].position;
+				v.color = cachedOutlines[i].color;
+				outlineVerts.push_back(v);
+			}
+			contactLineRenderer->uploadOutlines(outlineVerts);
+		}
+		const auto& cachedCorrespondences = contactInterface->getCachedCorrespondenceVertices();
+		if (!cachedCorrespondences.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> corrVerts;
+			corrVerts.reserve(cachedCorrespondences.size());
+			for (size_t i = 0; i < cachedCorrespondences.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedCorrespondences[i].position;
+				v.color = cachedCorrespondences[i].color;
+				corrVerts.push_back(v);
+			}
+			contactLineRenderer->uploadCorrespondences(corrVerts);
+		}
+	}
+}
+
+void HeatSystem::initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
+	contactLineRenderer = std::make_unique<ContactLineRenderer>(
+		vulkanDevice,
+		memoryAllocator,
+		uniformBufferManager
+	);
+	contactLineRenderer->initialize(renderPass, 2, maxFramesInFlight);
+}
+
+void HeatSystem::renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
+	if (!contactLineRenderer || !isActive) {
+		return;
+	}
+
+	glm::mat4 modelMatrix(1.0f);
+	contactLineRenderer->render(cmdBuffer, frameIndex, modelMatrix, extent);
 }
 
 void HeatSystem::requestReset() {
-    needsReset.store(true, std::memory_order_release);
+	needsReset.store(true, std::memory_order_release);
 }
 
 void HeatSystem::initializeVoronoi() {
-    if (!mappedTempBufferA || !mappedTempBufferB) 
-        return;
-    
-    float* tempsA = static_cast<float*>(mappedTempBufferA);
-    float* tempsB = static_cast<float*>(mappedTempBufferB);
-    
-    for (uint32_t i = 0; i < voronoiNodeCount; i++) {
-        tempsA[i] = AMBIENT_TEMPERATURE;
-        tempsB[i] = AMBIENT_TEMPERATURE;
-    }
+	if (!mappedTempBufferA || !mappedTempBufferB)
+		return;
+
+	float* tempsA = static_cast<float*>(mappedTempBufferA);
+	float* tempsB = static_cast<float*>(mappedTempBufferB);
+
+	for (uint32_t i = 0; i < voronoiNodeCount; i++) {
+		tempsA[i] = AMBIENT_TEMPERATURE;
+		tempsB[i] = AMBIENT_TEMPERATURE;
+	}
 }
 
 void HeatSystem::createTimeBuffer() {
-    VkDeviceSize bufferSize = sizeof(TimeUniform);
+	VkDeviceSize bufferSize = sizeof(TimeUniform);
 
-    createUniformBuffer(
-        memoryAllocator, vulkanDevice,
-        bufferSize,
-        timeBuffer, timeBufferOffset_, &mappedTimeData
-    );
+	createUniformBuffer(
+		memoryAllocator, vulkanDevice,
+		bufferSize,
+		timeBuffer, timeBufferOffset_, &mappedTimeData
+	);
 }
 
 void HeatSystem::createSurfaceDescriptorPool(uint32_t maxFramesInFlight) {
-    const uint32_t MAX_HEAT_MODELS = 10;
-    const uint32_t totalSets = (MAX_HEAT_MODELS * 2);
-    
-    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+	const uint32_t MAX_HEAT_MODELS = 10;
+	const uint32_t totalSets = (MAX_HEAT_MODELS * 2);
 
-    // Storage buffers
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 3;
-    
-    // Uniform buffers: Bindings 3 (Time), 8 (HashGrid Params), 9 (Surfel Params)
-    // Total 3 uniform buffers per set
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[1].descriptorCount = totalSets * 1;
+	std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = totalSets;
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	poolSizes[0].descriptorCount = totalSets * 3;
 
-    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr,
-        &surfaceDescriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create surface descriptor pool");
-    }
+	poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSizes[1].descriptorCount = totalSets * 1;
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+	poolInfo.pPoolSizes = poolSizes.data();
+	poolInfo.maxSets = totalSets;
+
+	if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr,
+		&surfaceDescriptorPool) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to create surface descriptor pool");
+	}
 }
 
 void HeatSystem::createSurfaceDescriptorSetLayout() {
-    std::vector<VkDescriptorSetLayoutBinding> bindings = {
-        // Binding 0: Node temperatures READ buffer
-        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        // Binding 1: Surface buffer
-        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        // Binding 3: Time buffer
-        {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        // Binding 9: Voronoi surface mapping buffer
-        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-    };
+	std::vector<VkDescriptorSetLayoutBinding> bindings = {
+		{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+		{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+		{3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+		{9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+	};
 
-    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
-    bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
+	bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
 
-    std::vector<VkDescriptorBindingFlags> flags(bindings.size(),
-        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-        VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT);
+	std::vector<VkDescriptorBindingFlags> flags(bindings.size(),
+		VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT);
 
-    bindingFlags.bindingCount = flags.size();
-    bindingFlags.pBindingFlags = flags.data();
+	bindingFlags.bindingCount = flags.size();
+	bindingFlags.pBindingFlags = flags.data();
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
-    layoutInfo.pNext = &bindingFlags;
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfo.pBindings = bindings.data();
+	layoutInfo.pNext = &bindingFlags;
 
-    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr,
-        &surfaceDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create surface descriptor set layout");
-    }
+	if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr,
+		&surfaceDescriptorSetLayout) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to create surface descriptor set layout");
+	}
 }
 
 void HeatSystem::createSurfacePipeline() {
@@ -614,44 +720,14 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
     );
     std::cout << "  Seed flags: " << seedFlags.size() << " seeds" << std::endl;
     
-    // Binding 8: Relevant mesh indices 
-    auto indices = integrator.getRelevantMeshIndices();
-    if (indices.empty()) indices.push_back(0);
-    
-    bufferSize = sizeof(uint32_t) * indices.size();
-    createStorageBuffer(
-        memoryAllocator, vulkanDevice,
-        indices.data(), bufferSize,
-        relevantMeshIndicesBuffer, relevantMeshIndicesBufferOffset_, &mappedPtr
-    );
-    std::cout << "  Mesh indices: " << integrator.getRelevantMeshIndices().size() << " references" << std::endl;
-    
-    // Binding 9: Spatial info
-    std::vector<SpatialInfoGPU> spatialInfos;
-    const auto& spatialOffsets = integrator.getRelevantMeshOffsets();
-    const auto& spatialCounts = integrator.getRelevantMeshCounts();
-    
-    for (size_t i = 0; i < spatialOffsets.size(); i++) {
-        spatialInfos.push_back({spatialOffsets[i], spatialCounts[i]});
-    }
-    if (spatialInfos.empty()) spatialInfos.push_back({});
-    
-    bufferSize = sizeof(SpatialInfoGPU) * spatialInfos.size();
-    createStorageBuffer(
-        memoryAllocator, vulkanDevice,
-        spatialInfos.data(), bufferSize,
-        spatialInfoBuffer, spatialInfoBufferOffset_, &mappedPtr
-    );
-    std::cout << "  Spatial infos: " << (spatialInfos.size() > 1 ? spatialInfos.size() : 0) << " cells" << std::endl;
-        
-    // VoxelGrid buffers (bindings 11-15)
+    // VoxelGrid buffers (bindings 5, 6, 9, 10)
     if (integrator.hasVoxelGrid()) {
         const auto& voxelGrid = integrator.getVoxelGrid();
         const auto& params = voxelGrid.getParams();
         
         std::cout << "  Creating VoxelGrid GPU buffers..." << std::endl;
         
-        // Binding 11: Voxel grid parameters (uniform buffer)
+        // Binding 5: Voxel grid parameters (uniform buffer)
         bufferSize = sizeof(VoxelGrid::VoxelGridParams);
         createUniformBuffer(
             memoryAllocator, vulkanDevice, bufferSize,
@@ -662,7 +738,7 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
         }
         std::cout << "    Grid params: " << params.gridDim.x << "^3" << std::endl;
         
-        // Binding 12: Occupancy data
+        // Binding 6: Occupancy data
         // Store as uint32_t elements so shaders can safely read `uint occupancy[]`.
         auto occupancy8 = voxelGrid.getOccupancyData();
         if (occupancy8.empty()) occupancy8.push_back(0);
@@ -679,31 +755,7 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
         );
         std::cout << "    Occupancy: " << occupancy8.size() << " corners" << std::endl;
         
-        // Binding 13: Mesh points
-        auto meshPoints = voxelGrid.getMeshPoints();
-        if (meshPoints.empty()) meshPoints.push_back(glm::vec3(0.0f));
-        bufferSize = sizeof(glm::vec3) * meshPoints.size();
-        createStorageBuffer(
-            memoryAllocator, vulkanDevice,
-            meshPoints.data(), bufferSize,
-            voxelMeshPointsBuffer, voxelMeshPointsBufferOffset_, &mappedPtr,
-            true // Send data to GPU
-        );
-        std::cout << "    Mesh points: " << voxelGrid.getMeshPoints().size() << std::endl;
-        
-        // Binding 14: Mesh triangles (3 indices per triangle)
-        auto meshTriangles = voxelGrid.getMeshTriangles();
-        if (meshTriangles.empty()) meshTriangles.push_back(0);
-        bufferSize = sizeof(int32_t) * meshTriangles.size();
-        createStorageBuffer(
-            memoryAllocator, vulkanDevice,
-            meshTriangles.data(), bufferSize,
-            voxelMeshTrianglesBuffer, voxelMeshTrianglesBufferOffset_, &mappedPtr,
-            true // Send data to GPU
-        );
-        std::cout << "    Mesh triangles: " << (voxelGrid.getMeshTriangles().size() / 3) << std::endl;
-        
-        // Binding 15: Triangle list
+        // Binding 9: Triangle list
         const auto& trianglesList = voxelGrid.getTrianglesList();  
         if (trianglesList.empty()) {
             std::cerr << "ERROR: VoxelGrid trianglesList is empty!" << std::endl;
@@ -717,7 +769,7 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
         );
         std::cout << "    Triangle list: " << voxelGrid.getTrianglesList().size() << " refs" << std::endl;
         
-        // Binding 16: Offsets
+        // Binding 10: Offsets
         const auto& offsets = voxelGrid.getOffsets();  
         if (offsets.empty()) {
             std::cerr << "ERROR: VoxelGrid offsets is empty!" << std::endl;
@@ -735,7 +787,7 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
     std::cout << "[HeatSystem] Voronoi geometry buffers created" << std::endl;
 }
 
-void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
+void HeatSystem::generateVoronoiDiagram() {
     if (!voronoiSeeder) {
         std::cerr << "[HeatSystem] Error: Voronoi seeder not ready" << std::endl;
         return;
@@ -749,17 +801,13 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
     // Collect all seeds and their flags
     std::vector<glm::dvec3> seedPositions;
 
-    // Bit layout: 0=isGhost, 1=isSurface, 2=isInside
-    std::vector<uint32_t> seedFlags;  
+    // Bit layout: 0=isGhost, 1=isSurface
+    voronoiSeedFlags.clear();
     seedPositions.reserve(seeds.size());
-    seedFlags.reserve(seeds.size());
+    voronoiSeedFlags.reserve(seeds.size());
     
     uint32_t regularSeedCount = 0;
     for (const auto& seed : seeds) {
-        // Skip surface seeds, could be used in the future
-        if (seed.isSurface) 
-            continue;
-        
         seedPositions.push_back(glm::dvec3(seed.pos));
         
         uint32_t flags = 0;
@@ -767,17 +815,12 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
             flags |= 1;      // bit 0
         if (seed.isSurface) 
             flags |= 2;      // bit 1
-        if (seed.isInside)
-            flags |= 4;      // bit 2
-        seedFlags.push_back(flags);
+        voronoiSeedFlags.push_back(flags);
         
         if (!seed.isGhost) {
             regularSeedCount++;
         }
     }
-    
-    std::cout << "[HeatSystem] GPU mode: " << seedPositions.size() << " total seeds (" 
-              << regularSeedCount << " regular, " << (seedPositions.size() - regularSeedCount) << " ghost/surface)" << std::endl;
     
     voronoiNodeCount = static_cast<uint32_t>(seedPositions.size());
     
@@ -785,7 +828,7 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
     {
         std::ofstream seedMapFile("cell_seed_positions.txt");
         seedMapFile << "# Cell Index -> Seed Position\n";
-        seedMapFile << "# NOTE: Using GPU filtered seed positions (cells.size() = " << seedPositions.size() << ")\n";
+        seedMapFile << "# Seed positions (cells.size() = " << seedPositions.size() << ")\n";
         for (size_t i = 0; i < seedPositions.size(); i++) {
             const auto& pos = seedPositions[i];
             seedMapFile << "Cell " << i << " -> Seed at (" 
@@ -807,9 +850,7 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
     triangleGrid.build(resourceManager.getVisModel(), gridMin, gridMax, cellSize);
     voronoiIntegrator->buildVoxelGrid(resourceManager.getVisModel(), triangleGrid, 128);
     
-    voronoiIntegrator->computeSpatialMapping(seedPositions.size(), seedPositions, K_NEIGHBORS);
-   
-    createVoronoiGeometryBuffers(*voronoiIntegrator, seedFlags);
+    createVoronoiGeometryBuffers(*voronoiIntegrator, voronoiSeedFlags);
     
     // Create geometry precompute resources
     std::cout << "[HeatSystem] Creating geometry precompute shader..." << std::endl;
@@ -827,24 +868,12 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
         bindings.seedPositionBuffer = seedPositionBuffer;
         bindings.seedPositionBufferOffset = seedPositionBufferOffset_;
 
-        bindings.relevantMeshIndicesBuffer = relevantMeshIndicesBuffer;
-        bindings.relevantMeshIndicesBufferOffset = relevantMeshIndicesBufferOffset_;
-
-        bindings.spatialInfoBuffer = spatialInfoBuffer;
-        bindings.spatialInfoBufferOffset = spatialInfoBufferOffset_;
-
         bindings.voxelGridParamsBuffer = voxelGridParamsBuffer;
         bindings.voxelGridParamsBufferOffset = voxelGridParamsBufferOffset_;
         bindings.voxelGridParamsBufferRange = sizeof(VoxelGrid::VoxelGridParams);
 
         bindings.voxelOccupancyBuffer = voxelOccupancyBuffer;
         bindings.voxelOccupancyBufferOffset = voxelOccupancyBufferOffset_;
-
-        bindings.voxelMeshPointsBuffer = voxelMeshPointsBuffer;
-        bindings.voxelMeshPointsBufferOffset = voxelMeshPointsBufferOffset_;
-
-        bindings.voxelMeshTrianglesBuffer = voxelMeshTrianglesBuffer;
-        bindings.voxelMeshTrianglesBufferOffset = voxelMeshTrianglesBufferOffset_;
 
         bindings.voxelTrianglesListBuffer = voxelTrianglesListBuffer;
         bindings.voxelTrianglesListBufferOffset = voxelTrianglesListBufferOffset_;
@@ -873,67 +902,17 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
         voronoiGeoCompute->updateDescriptors(bindings);
     }
 
-    // Lloyd relaxation on GPU 
-    if (enableLloyd && lloydCompute) {
-        lloydCompute->initialize(voronoiNodeCount);
-
-        LloydCompute::Bindings bindings;
-        bindings.seedPositionBuffer = seedPositionBuffer;
-        bindings.seedPositionBufferOffset = seedPositionBufferOffset_;
-        bindings.meshTriangleBuffer = meshTriangleBuffer;
-        bindings.meshTriangleBufferOffset = meshTriangleBufferOffset_;
-        bindings.voxelTrianglesListBuffer = voxelTrianglesListBuffer;
-        bindings.voxelTrianglesListBufferOffset = voxelTrianglesListBufferOffset_;
-        bindings.voxelOffsetsBuffer = voxelOffsetsBuffer;
-        bindings.voxelOffsetsBufferOffset = voxelOffsetsBufferOffset_;
-        bindings.neighborIndicesBuffer = neighborIndicesBuffer;
-        bindings.neighborIndicesBufferOffset = neighborIndicesBufferOffset_;
-        bindings.seedFlagsBuffer = seedFlagsBuffer;
-        bindings.seedFlagsBufferOffset = seedFlagsBufferOffset_;
-        bindings.voxelGridParamsBuffer = voxelGridParamsBuffer;
-        bindings.voxelGridParamsBufferOffset = voxelGridParamsBufferOffset_;
-        bindings.voxelGridParamsBufferRange = sizeof(VoxelGrid::VoxelGridParams);
-
-        lloydCompute->updateDescriptors(bindings);
-        lloydCompute->dispatch(20, 0.3f, 0.0f);
-    }
-
     // Copy GPU seed positions back into VoronoiSeeder 
     {
         const auto& seedsRef = voronoiSeeder->getSeeds();
-        std::vector<size_t> gpuToSeeder;
-        gpuToSeeder.reserve(voronoiNodeCount);
-        for (size_t sIdx = 0; sIdx < seedsRef.size(); sIdx++) {
-            if (seedsRef[sIdx].isSurface)
-                continue;
-            gpuToSeeder.push_back(sIdx);
-        }
-
-        if (mappedSeedPositionData && gpuToSeeder.size() == voronoiNodeCount) {
+        if (mappedSeedPositionData) {
             glm::vec4* seedPos = static_cast<glm::vec4*>(mappedSeedPositionData);
-            for (uint32_t i = 0; i < voronoiNodeCount; i++) {
-                voronoiSeeder->updateSeedPosition(gpuToSeeder[i], glm::vec3(seedPos[i]));
+            uint32_t count = voronoiNodeCount;
+            if (count > static_cast<uint32_t>(seedsRef.size())) {
+                count = static_cast<uint32_t>(seedsRef.size());
             }
-        }
-    }
-
-    voronoiSeeder->exportSeedsToOBJ("voronoi_seeds.obj");
-
-    {
-        if (mappedSeedPositionData && voronoiIntegrator) {
-            glm::vec4* seedPos = static_cast<glm::vec4*>(mappedSeedPositionData);
-            std::vector<glm::dvec3> newSeedPositions;
-            newSeedPositions.reserve(voronoiNodeCount);
-            for (uint32_t i = 0; i < voronoiNodeCount; i++) {
-                newSeedPositions.push_back(glm::dvec3(seedPos[i].x, seedPos[i].y, seedPos[i].z));
-            }
-
-            voronoiIntegrator->computeNeighbors(newSeedPositions, K_NEIGHBORS);
-
-            auto& neighborIndices = voronoiIntegrator->getNeighborIndices();
-            void* mappedPtr = memoryAllocator.getMappedPointer(neighborIndicesBuffer, neighborIndicesBufferOffset_);
-            if (mappedPtr) {
-                memcpy(mappedPtr, neighborIndices.data(), neighborIndices.size() * sizeof(uint32_t));
+            for (uint32_t i = 0; i < count; i++) {
+                voronoiSeeder->updateSeedPosition(i, glm::vec3(seedPos[i]));
             }
         }
     }
@@ -977,7 +956,7 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
         std::memset(mappedInjectionKTBuffer, 0, static_cast<size_t>(injectionBufferSize));
     }
 
-    std::cout << "[HeatSystem] Created ping-pong temp buffers (" << voronoiNodeCount << " floats)" << std::endl;
+    std::cout << "[HeatSystem] Created ping pong temp buffers (" << voronoiNodeCount << " floats)" << std::endl;
     
     // Initialize temperatures
     initializeVoronoi();
@@ -988,9 +967,7 @@ void HeatSystem::generateVoronoiDiagram(bool enableLloyd) {
     createVoronoiDescriptorSetLayout();
     createVoronoiPipeline();
     createVoronoiDescriptorSets(maxFramesInFlight);
-    std::cout << "[HeatSystem] Voronoi pipeline ready" << std::endl;    
     
-    // Upload occupancy points to PointRenderer (already initialized in constructor)
     uploadOccupancyPoints(voronoiIntegrator->getVoxelGrid());
     
     std::cout << "[HeatSystem] Geometry precomputation complete" << std::endl;
@@ -1103,7 +1080,7 @@ void HeatSystem::exportVoronoiDumpInfo() {
     dumpFile << "Negative volume cells: " << negativeVolumeCount << " Sum =" << totalRestrictedVolumeNegAbs << ")\n";
     dumpFile << "\n";
     
-    uint32_t debugCellIDs[] = {17011, 14383, 53563};  
+    uint32_t debugCellIDs[] = {59903};  
     
     for (uint32_t slot = 0; slot < DEBUG_DUMP_CELL_COUNT; slot++) {
         const VoronoiDumpInfo& info = dumpInfos[slot];
@@ -1114,7 +1091,7 @@ void HeatSystem::exportVoronoiDumpInfo() {
         
         dumpFile << "CELL " << info.cellID << " (Slot " << slot << ")\n";
         dumpFile << "Seed: (" << info.seedPos.x << ", " << info.seedPos.y << ", " << info.seedPos.z << ")\n";
-        dumpFile << "Flags: isGhost=" << info.isGhost << ", isInside=" << info.isInside << "\n";
+        dumpFile << "Flags: isGhost=" << info.isGhost << "\n";
         dumpFile << "inDomain: " << info.inDomain << " (addVolume=" << info.addVolume << ")\n";
         dumpFile << "Origin: (" << info.origin.x << ", " << info.origin.y << ", " << info.origin.z << ") status=" << info.originOccupancy << "\n";
         dumpFile << "FirstInsideCorner: (" << info.firstInsideCorner.x << "," << info.firstInsideCorner.y << "," << info.firstInsideCorner.z << ")\n";
@@ -1723,21 +1700,6 @@ void HeatSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameI
         
         // Only render if mapping buffer exists
         if (mappingBuffer != VK_NULL_HANDLE && vertexCount > 0) {
-            // Update descriptors with physics buffers for fragment shader
-            voronoiRenderer->updateDescriptors(
-                model, 
-                mappingBuffer, 
-                mappingOffset, 
-                vertexCount,
-                getSeedPositionBuffer(),
-                getSeedPositionBufferOffset(),
-                getVoronoiNodeBuffer(),
-                getVoronoiNodeBufferOffset(),
-                getVoronoiNeighborBuffer(),    
-                getVoronoiNeighborBufferOffset(),
-                maxFramesInFlight
-            );
-            
             voronoiRenderer->render(
                 cmdBuffer, 
                 model.getVertexBuffer(), 
@@ -2161,6 +2123,35 @@ void HeatSystem::executeBufferTransfers() {
     }
     // Update heat source render descriptors for viz
     heatSource->updateHeatRenderDescriptors(heatRenderDescriptorSetLayout, heatRenderDescriptorPool, uniformBufferManager, maxFramesInFlight);
+
+    // Update Voronoi renderer descriptors once after buffers are ready.
+    if (voronoiRenderer) {
+        for (const auto& receiver : receivers) {
+            VkBuffer mappingBuffer = receiver->getVoronoiMappingBuffer();
+            VkDeviceSize mappingOffset = receiver->getVoronoiMappingBufferOffset();
+            Model& model = receiver->getModel();
+            uint32_t vertexCount = static_cast<uint32_t>(model.getVertices().size());
+
+            if (mappingBuffer == VK_NULL_HANDLE || vertexCount == 0) {
+                continue;
+            }
+
+            for (uint32_t frameIndex = 0; frameIndex < maxFramesInFlight; ++frameIndex) {
+                voronoiRenderer->updateDescriptors(
+                    frameIndex,
+                    mappingBuffer,
+                    mappingOffset,
+                    vertexCount,
+                    getSeedPositionBuffer(),
+                    getSeedPositionBufferOffset(),
+                    getVoronoiNodeBuffer(),
+                    getVoronoiNodeBufferOffset(),
+                    getVoronoiNeighborBuffer(),
+                    getVoronoiNeighborBufferOffset()
+                );
+            }
+        }
+    }
 }
 
 void HeatSystem::cleanupResources() {    
@@ -2218,13 +2209,26 @@ void HeatSystem::cleanupResources() {
         heatRenderDescriptorSetLayout = VK_NULL_HANDLE;
     }
 
-    if (heatSource) {
-        heatSource->cleanupResources();
-    }
+
     
     if (hashGridRenderer) {
         hashGridRenderer->cleanup();
     }
+
+    if (voronoiRenderer) {
+        voronoiRenderer->cleanup();
+        voronoiRenderer.reset();
+    }
+
+    if (pointRenderer) {
+        pointRenderer->cleanup();
+        pointRenderer.reset();
+    }
+
+	if (contactLineRenderer) {
+		contactLineRenderer->cleanup();
+		contactLineRenderer.reset();
+	}
 
     if (voronoiPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vulkanDevice.getDevice(), voronoiPipeline, nullptr);
@@ -2241,10 +2245,6 @@ void HeatSystem::cleanupResources() {
     if (voronoiDescriptorSetLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), voronoiDescriptorSetLayout, nullptr);
         voronoiDescriptorSetLayout = VK_NULL_HANDLE;
-    }
-
-    if (lloydCompute) {
-        lloydCompute->cleanupResources();
     }
 
     if (voronoiGeoCompute) {
@@ -2275,10 +2275,6 @@ void HeatSystem::cleanup() {
         mappedInjectionKTBuffer = nullptr;
     }
 
-    if (lloydCompute) {
-        lloydCompute->cleanup();
-    }
-  
     for (auto& receiver : receivers) {
         if (receiver) {
             receiver->cleanup();
@@ -2289,4 +2285,3 @@ void HeatSystem::cleanup() {
         heatSource->cleanup();
     }
 }
-

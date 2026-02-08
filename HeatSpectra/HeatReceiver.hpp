@@ -26,7 +26,8 @@ public:
 
     void initializeReceiverBuffer();
 
-    void computeVoronoiSurfaceMapping(class VoronoiSeeder* seeder);
+    void stageVoronoiSurfaceMapping(const std::vector<uint32_t>& cellIndices);
+
     void updateDescriptors(
         VkDescriptorSetLayout surfaceLayout,
         VkDescriptorSetLayout renderLayout,
@@ -55,6 +56,8 @@ public:
         VkBuffer injectionKTBuffer,
         VkDeviceSize injectionKTBufferOffset,
         uint32_t nodeCount);
+
+	void uploadContactPairs(const std::vector<ContactPairGPU>& pairs);
 
     void updateContactDescriptors(
         VkDescriptorSetLayout contactLayout,
@@ -122,6 +125,9 @@ public:
     VkBuffer getVoronoiMappingBuffer() const { return voronoiMappingBuffer; }
     VkDeviceSize getVoronoiMappingBufferOffset() const { return voronoiMappingBufferOffset; }
 
+	VkBuffer getContactPairBuffer() const { return contactPairBuffer; }
+	VkDeviceSize getContactPairBufferOffset() const { return contactPairBufferOffset; }
+
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
@@ -172,6 +178,9 @@ private:
     VkDeviceSize voronoiMappingStagingOffset = 0;
     void* voronoiMappingStagingData = nullptr;
     VkDeviceSize voronoiMappingBufferSize = 0;
+
+	VkBuffer contactPairBuffer = VK_NULL_HANDLE;
+	VkDeviceSize contactPairBufferOffset = 0;
 
 };
 

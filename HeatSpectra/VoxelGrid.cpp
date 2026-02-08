@@ -10,166 +10,225 @@
 #include <fstream>
 #include <omp.h>
 
-namespace {
-    constexpr float CANONICAL_DOMAIN_SIZE = 1000.0f;
-    constexpr float CANONICAL_SCALE = 990.222f;
-    constexpr float CANONICAL_BIAS = 4.998f;
+const glm::vec3 VoxelGrid::RANDOM_DIRS[NUM_RANDOM_DIRS] = {
+    glm::normalize(glm::vec3(0.267f, 0.534f, 0.802f)),
+    glm::normalize(glm::vec3(-0.577f, 0.577f, 0.577f)),
+    glm::normalize(glm::vec3(0.707f, -0.707f, 0.0f)),
+    glm::normalize(glm::vec3(-0.333f, -0.667f, 0.667f)),
+    glm::normalize(glm::vec3(0.0f, 0.894f, -0.447f)),
+    glm::normalize(glm::vec3(0.816f, 0.408f, -0.408f)),
+    glm::normalize(glm::vec3(-0.447f, 0.0f, 0.894f)),
+};
 
-    inline glm::vec3 toCanonical(const glm::vec3& worldPos, const glm::vec3& gridMin, float scale) {
-        return (worldPos - gridMin) * scale;
+glm::vec3 VoxelGrid::toCanonical(const glm::vec3& worldPos) const {
+    return (worldPos - params.gridMin) * params.cellSize;
+}
+
+glm::vec3 VoxelGrid::toWorld(const glm::vec3& canonicalPos) const {
+    return canonicalPos / params.cellSize + params.gridMin;
+}
+
+bool VoxelGrid::triBoxOverlap(const float boxcenter[3], const float boxhalfsize[3], const float triverts[3][3]) {
+    float v0[3], v1[3], v2[3];
+    float e0[3], e1[3], e2[3];
+    float min, max, p0, p1, p2, rad;
+    float fex, fey, fez;
+    float normal[3];
+
+    // Make boxcenter (0,0,0)
+    for (int i = 0; i < 3; i++) {
+        v0[i] = triverts[0][i] - boxcenter[i];
+        v1[i] = triverts[1][i] - boxcenter[i];
+        v2[i] = triverts[2][i] - boxcenter[i];
     }
 
-    inline glm::vec3 toWorld(const glm::vec3& canonicalPos, const glm::vec3& gridMin, float scale) {
-        return canonicalPos / scale + gridMin;
+    // Calculate edges
+    for (int i = 0; i < 3; i++) {
+        e0[i] = v1[i] - v0[i];
+        e1[i] = v2[i] - v1[i];
+        e2[i] = v0[i] - v2[i];
     }
 
-    inline int clampInt(int v, int lo, int hi) {
-        return std::max(lo, std::min(v, hi));
+    // 9 axis tests: cross products of triangle edges with coordinate axes
+    fex = std::fabs(e0[0]);
+    fey = std::fabs(e0[1]);
+    fez = std::fabs(e0[2]);
+
+    // AXISTEST_X01
+    p0 = e0[2] * v0[1] - e0[1] * v0[2];
+    p2 = e0[2] * v2[1] - e0[1] * v2[2];
+
+    if (p0 < p2) { min = p0; max = p2; 
+    } else { 
+        min = p2; max = p0; 
     }
 
-    // Tomas Akenine-Moller triBoxOverlap (triangle vs AABB)
-    // boxcenter, boxhalfsize, triverts must all be in the same coordinate space.
-    // Returns true if triangle overlaps box.
-    static bool triBoxOverlap(const float boxcenter[3], const float boxhalfsize[3], const float triverts[3][3]) {
-        float v0[3], v1[3], v2[3];
-        float e0[3], e1[3], e2[3];
-        float min, max, p0, p1, p2, rad;
-        float fex, fey, fez;
-        float normal[3];
-
-        // Move everything so the boxcenter is in (0,0,0)
-        for (int i = 0; i < 3; i++) {
-            v0[i] = triverts[0][i] - boxcenter[i];
-            v1[i] = triverts[1][i] - boxcenter[i];
-            v2[i] = triverts[2][i] - boxcenter[i];
-        }
-
-        // Compute edges
-        for (int i = 0; i < 3; i++) {
-            e0[i] = v1[i] - v0[i];
-            e1[i] = v2[i] - v1[i];
-            e2[i] = v0[i] - v2[i];
-        }
-
-        // 9 axis tests: cross products of triangle edges with coordinate axes
-        fex = std::fabs(e0[0]);
-        fey = std::fabs(e0[1]);
-        fez = std::fabs(e0[2]);
-
-        // AXISTEST_X01(e0[2], e0[1])
-        p0 = e0[2] * v0[1] - e0[1] * v0[2];
-        p2 = e0[2] * v2[1] - e0[1] * v2[2];
-        if (p0 < p2) { min = p0; max = p2; } else { min = p2; max = p0; }
-        rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Y02(e0[2], e0[0])
-        p0 = -e0[2] * v0[0] + e0[0] * v0[2];
-        p2 = -e0[2] * v2[0] + e0[0] * v2[2];
-        if (p0 < p2) { min = p0; max = p2; } else { min = p2; max = p0; }
-        rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Z12(e0[1], e0[0])
-        p1 = e0[1] * v1[0] - e0[0] * v1[1];
-        p2 = e0[1] * v2[0] - e0[0] * v2[1];
-        if (p2 < p1) { min = p2; max = p1; } else { min = p1; max = p2; }
-        rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
-        if (min > rad || max < -rad) return false;
-
-        fex = std::fabs(e1[0]);
-        fey = std::fabs(e1[1]);
-        fez = std::fabs(e1[2]);
-
-        // AXISTEST_X01(e1[2], e1[1])
-        p0 = e1[2] * v0[1] - e1[1] * v0[2];
-        p2 = e1[2] * v2[1] - e1[1] * v2[2];
-        if (p0 < p2) { min = p0; max = p2; } else { min = p2; max = p0; }
-        rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Y02(e1[2], e1[0])
-        p0 = -e1[2] * v0[0] + e1[0] * v0[2];
-        p2 = -e1[2] * v2[0] + e1[0] * v2[2];
-        if (p0 < p2) { min = p0; max = p2; } else { min = p2; max = p0; }
-        rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Z0(e1[1], e1[0])
-        p0 = e1[1] * v0[0] - e1[0] * v0[1];
-        p1 = e1[1] * v1[0] - e1[0] * v1[1];
-        if (p0 < p1) { min = p0; max = p1; } else { min = p1; max = p0; }
-        rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
-        if (min > rad || max < -rad) return false;
-
-        fex = std::fabs(e2[0]);
-        fey = std::fabs(e2[1]);
-        fez = std::fabs(e2[2]);
-
-        // AXISTEST_X2(e2[2], e2[1])
-        p0 = e2[2] * v0[1] - e2[1] * v0[2];
-        p1 = e2[2] * v1[1] - e2[1] * v1[2];
-        if (p0 < p1) { min = p0; max = p1; } else { min = p1; max = p0; }
-        rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Y1(e2[2], e2[0])
-        p0 = -e2[2] * v0[0] + e2[0] * v0[2];
-        p1 = -e2[2] * v1[0] + e2[0] * v1[2];
-        if (p0 < p1) { min = p0; max = p1; } else { min = p1; max = p0; }
-        rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
-        if (min > rad || max < -rad) return false;
-
-        // AXISTEST_Z12(e2[1], e2[0])
-        p1 = e2[1] * v1[0] - e2[0] * v1[1];
-        p2 = e2[1] * v2[0] - e2[0] * v2[1];
-        if (p2 < p1) { min = p2; max = p1; } else { min = p1; max = p2; }
-        rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
-        if (min > rad || max < -rad) return false;
-
-        // Test overlap in the {x,y,z}-directions
-        min = std::min(std::min(v0[0], v1[0]), v2[0]);
-        max = std::max(std::max(v0[0], v1[0]), v2[0]);
-        if (min > boxhalfsize[0] || max < -boxhalfsize[0]) return false;
-
-        min = std::min(std::min(v0[1], v1[1]), v2[1]);
-        max = std::max(std::max(v0[1], v1[1]), v2[1]);
-        if (min > boxhalfsize[1] || max < -boxhalfsize[1]) return false;
-
-        min = std::min(std::min(v0[2], v1[2]), v2[2]);
-        max = std::max(std::max(v0[2], v1[2]), v2[2]);
-        if (min > boxhalfsize[2] || max < -boxhalfsize[2]) return false;
-
-        // Test if the box intersects the plane of the triangle
-        normal[0] = e0[1] * e1[2] - e0[2] * e1[1];
-        normal[1] = e0[2] * e1[0] - e0[0] * e1[2];
-        normal[2] = e0[0] * e1[1] - e0[1] * e1[0];
-
-        // plane-box overlap
-        float vmin[3], vmax[3];
-        for (int q = 0; q < 3; q++) {
-            float v = v0[q];
-            if (normal[q] > 0.0f) {
-                vmin[q] = -boxhalfsize[q] - v;
-                vmax[q] =  boxhalfsize[q] - v;
-            } else {
-                vmin[q] =  boxhalfsize[q] - v;
-                vmax[q] = -boxhalfsize[q] - v;
-            }
-        }
-        float dotmin = normal[0] * vmin[0] + normal[1] * vmin[1] + normal[2] * vmin[2];
-        float dotmax = normal[0] * vmax[0] + normal[1] * vmax[1] + normal[2] * vmax[2];
-        if (dotmin > 0.0f) return false;
-        if (dotmax >= 0.0f) return true;
+    rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
+    if (min > rad || max < -rad) 
         return false;
+
+    // AXISTEST_Y02
+    p0 = -e0[2] * v0[0] + e0[0] * v0[2];
+    p2 = -e0[2] * v2[0] + e0[0] * v2[2];
+
+    if (p0 < p2) { min = p0; max = p2; 
+    } else { 
+        min = p2; max = p0; 
     }
+
+    rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // AXISTEST_Z12
+    p1 = e0[1] * v1[0] - e0[0] * v1[1];
+    p2 = e0[1] * v2[0] - e0[0] * v2[1];
+
+    if (p2 < p1) { min = p2; max = p1; 
+    } else { 
+        min = p1; max = p2; 
+    }
+
+    rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
+    if (min > rad || max < -rad) 
+        return false;
+
+    fex = std::fabs(e1[0]);
+    fey = std::fabs(e1[1]);
+    fez = std::fabs(e1[2]);
+
+    // AXISTEST_X01
+    p0 = e1[2] * v0[1] - e1[1] * v0[2];
+    p2 = e1[2] * v2[1] - e1[1] * v2[2];
+
+    if (p0 < p2) { min = p0; max = p2; 
+    } else { 
+        min = p2; max = p0; 
+    }
+
+    rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // AXISTEST_Y02
+    p0 = -e1[2] * v0[0] + e1[0] * v0[2];
+    p2 = -e1[2] * v2[0] + e1[0] * v2[2];
+
+    if (p0 < p2) { min = p0; max = p2; 
+    } else { 
+        min = p2; max = p0; 
+    }
+
+    rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // AXISTEST_Z0
+    p0 = e1[1] * v0[0] - e1[0] * v0[1];
+    p1 = e1[1] * v1[0] - e1[0] * v1[1];
+
+    if (p0 < p1) { min = p0; max = p1; 
+    } else { 
+        min = p1; max = p0; 
+    }
+
+    rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
+    if (min > rad || max < -rad) 
+        return false;
+
+    fex = std::fabs(e2[0]);
+    fey = std::fabs(e2[1]);
+    fez = std::fabs(e2[2]);
+
+    // AXISTEST_X2
+    p0 = e2[2] * v0[1] - e2[1] * v0[2];
+    p1 = e2[2] * v1[1] - e2[1] * v1[2];
+
+    if (p0 < p1) { min = p0; max = p1; 
+    } else { 
+        min = p1; max = p0; 
+    }
+
+    rad = fez * boxhalfsize[1] + fey * boxhalfsize[2];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // AXISTEST_Y1
+    p0 = -e2[2] * v0[0] + e2[0] * v0[2];
+    p1 = -e2[2] * v1[0] + e2[0] * v1[2];
+
+    if (p0 < p1) { min = p0; max = p1; 
+    } else { 
+        min = p1; max = p0; 
+    }
+
+    rad = fez * boxhalfsize[0] + fex * boxhalfsize[2];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // AXISTEST_Z12
+    p1 = e2[1] * v1[0] - e2[0] * v1[1];
+    p2 = e2[1] * v2[0] - e2[0] * v2[1];
+
+    if (p2 < p1) { min = p2; max = p1; 
+    } else { 
+        min = p1; max = p2; 
+    }
+
+    rad = fey * boxhalfsize[0] + fex * boxhalfsize[1];
+    if (min > rad || max < -rad) 
+        return false;
+
+    // Test overlap 
+    min = std::min(std::min(v0[0], v1[0]), v2[0]);
+    max = std::max(std::max(v0[0], v1[0]), v2[0]);
+    if (min > boxhalfsize[0] || max < -boxhalfsize[0]) 
+        return false;
+
+    min = std::min(std::min(v0[1], v1[1]), v2[1]);
+    max = std::max(std::max(v0[1], v1[1]), v2[1]);
+    if (min > boxhalfsize[1] || max < -boxhalfsize[1]) 
+        return false;
+
+    min = std::min(std::min(v0[2], v1[2]), v2[2]);
+    max = std::max(std::max(v0[2], v1[2]), v2[2]);
+    if (min > boxhalfsize[2] || max < -boxhalfsize[2]) 
+        return false;
+
+    // Test if the box intersects the plane of the triangle
+    normal[0] = e0[1] * e1[2] - e0[2] * e1[1];
+    normal[1] = e0[2] * e1[0] - e0[0] * e1[2];
+    normal[2] = e0[0] * e1[1] - e0[1] * e1[0];
+
+    // Plane box overlap
+    float vmin[3], vmax[3];
+    for (int q = 0; q < 3; q++) {
+        float v = v0[q];
+        if (normal[q] > 0.0f) {
+            vmin[q] = -boxhalfsize[q] - v;
+            vmax[q] =  boxhalfsize[q] - v;
+        } else {
+            vmin[q] =  boxhalfsize[q] - v;
+            vmax[q] = -boxhalfsize[q] - v;
+        }
+    }
+
+    float dotmin = normal[0] * vmin[0] + normal[1] * vmin[1] + normal[2] * vmin[2];
+    float dotmax = normal[0] * vmax[0] + normal[1] * vmax[1] + normal[2] * vmax[2];
+
+    if (dotmin > 0.0f) 
+        return false;
+    if (dotmax >= 0.0f) 
+        return true;
+
+    return false;
 }
 
 VoxelGrid::VoxelGrid() {
-    params_.gridMin = glm::vec3(0.0f);
-    params_.cellSize = 1.0f;
-    params_.gridDim = glm::ivec3(1);
-    params_.totalCells = 1;
+    params.gridMin = glm::vec3(0.0f);
+    params.cellSize = 1.0f;
+    params.gridDim = glm::ivec3(1);
+    params.totalCells = 1;
 }
 
 VoxelGrid::~VoxelGrid() {
@@ -192,10 +251,6 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
         meshMax = glm::max(meshMax, vertex.pos);
     }
 
-    // OpenCL/Geogram style: work in a canonical [0..1000]^3 domain.
-    // We encode the world->canonical mapping using only {gridMin, cellSize}:
-    //   canonical = (world - gridMin) * cellSize
-    // with gridMin chosen so that world bbox min maps to CANONICAL_BIAS.
     glm::vec3 extent = meshMax - meshMin;
     float maxExtent = std::max(std::max(extent.x, extent.y), extent.z);
     if (maxExtent < 1e-20f) {
@@ -204,10 +259,10 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     }
 
     float scale = CANONICAL_SCALE / maxExtent;
-    params_.cellSize = scale;
-    params_.gridMin = meshMin - glm::vec3(CANONICAL_BIAS / scale);
-    params_.gridDim = glm::ivec3(gridSize);
-    params_.totalCells = static_cast<uint32_t>(gridSize * gridSize * gridSize);
+    params.cellSize = scale;
+    params.gridMin = meshMin - glm::vec3(CANONICAL_BIAS / scale);
+    params.gridDim = glm::ivec3(gridSize);
+    params.totalCells = static_cast<uint32_t>(gridSize * gridSize * gridSize);
 
     float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(gridSize);
     float worldVoxelSize = canonicalVoxelSize / scale;
@@ -221,13 +276,13 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     buildTriangleLists(mesh, triangleGrid);
 
     int numCorners = (gridSize + 1) * (gridSize + 1) * (gridSize + 1);
-    occupancy_.assign(numCorners, 0);  // Default: OUTSIDE
+    occupancy.assign(numCorners, 0);  // Default: OUTSIDE
 
-    int dimX = params_.gridDim.x;
-    int dimY = params_.gridDim.y;
-    int dimZ = params_.gridDim.z;
+    int dimX = params.gridDim.x;
+    int dimY = params.gridDim.y;
+    int dimZ = params.gridDim.z;
 
-    const float borderThreshold = worldVoxelSize * 0.25f;
+    const float borderThreshold = worldVoxelSize * 0.1f;
 
     std::cout << " Detecting border corners (distance < " << borderThreshold << ")..." << std::endl;
 
@@ -239,16 +294,16 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
         for (int y = 0; y <= dimY; y++) {
             for (int x = 0; x <= dimX; x++) {
                 glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
-                glm::vec3 cornerPos = toWorld(canonicalCornerPos, params_.gridMin, scale);
+                glm::vec3 cornerPos = toWorld(canonicalCornerPos);
                 float dist = distanceToNearestTriangle(cornerPos, mesh, triangleGrid);
 
                 size_t idx = getCornerIndex(x, y, z);
 
                 if (dist < borderThreshold) {
-                    occupancy_[idx] = 1;  // Border
+                    occupancy[idx] = 1;  // Border
                     borderCount++;
                 } else {
-                    occupancy_[idx] = 255; // OUTSIDE
+                    occupancy[idx] = 255; // OUTSIDE
                 }
             }
         }
@@ -267,18 +322,18 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
                 size_t idx = getCornerIndex(x, y, z);
 
                 // Skip border corners
-                if (occupancy_[idx] == 1) 
+                if (occupancy[idx] == 1) 
                     continue;
 
                 glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
-                glm::vec3 cornerPos = toWorld(canonicalCornerPos, params_.gridMin, scale);
-                bool isInside = isInsideMonteCarlo(cornerPos, mesh, 3); 
+                glm::vec3 cornerPos = toWorld(canonicalCornerPos);
+                bool isInside = isInsideMonteCarlo(cornerPos, mesh, 7); 
 
                 if (isInside) {
-                    occupancy_[idx] = 2;  // Inside
+                    occupancy[idx] = 2;  // Inside
                     insideCount++;
                 } else {
-                    occupancy_[idx] = 0;  // Outside
+                    occupancy[idx] = 0;  // Outside
                     outsideCount++;
                 }
             }
@@ -291,14 +346,7 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     std::cout << "[VoxelGrid] Build complete" << std::endl;
 }
 
-bool VoxelGrid::rayTriangleIntersect(
-    const glm::vec3& rayOrigin, 
-    const glm::vec3& rayDir,
-    const glm::vec3& v0, 
-    const glm::vec3& v1, 
-    const glm::vec3& v2,
-    float& t
-) const {
+bool VoxelGrid::rayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& t) const {
     const float EPSILON = 1e-8f;
 
     glm::vec3 edge1 = v1 - v0;
@@ -327,18 +375,6 @@ bool VoxelGrid::rayTriangleIntersect(
     t = f * glm::dot(edge2, q);
     return t > EPSILON;  
 }
-
-// Pseudo-random ray directions 
-static const glm::vec3 RANDOM_DIRS[] = {
-    glm::normalize(glm::vec3(0.267f, 0.534f, 0.802f)),
-    glm::normalize(glm::vec3(-0.577f, 0.577f, 0.577f)),
-    glm::normalize(glm::vec3(0.707f, -0.707f, 0.0f)),
-    glm::normalize(glm::vec3(-0.333f, -0.667f, 0.667f)),
-    glm::normalize(glm::vec3(0.0f, 0.894f, -0.447f)),
-    glm::normalize(glm::vec3(0.816f, 0.408f, -0.408f)),
-    glm::normalize(glm::vec3(-0.447f, 0.0f, 0.894f)),
-};
-static const int NUM_RANDOM_DIRS = sizeof(RANDOM_DIRS) / sizeof(RANDOM_DIRS[0]);
 
 bool VoxelGrid::isInsideMonteCarlo(const glm::vec3& point, const Model& mesh, int numRays) const {
     const auto& vertices = mesh.getVertices();
@@ -463,61 +499,7 @@ float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& 
     return minDist;
 }
 
-bool VoxelGrid::triangleAABBIntersect(const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2,
-                                       const glm::vec3& boxMin, const glm::vec3& boxMax) const {
-    glm::vec3 boxCenter = (boxMin + boxMax) * 0.5f;
-    glm::vec3 boxHalfSize = (boxMax - boxMin) * 0.5f;
-    
-    // Translate triangle to box centered coords
-    glm::vec3 tv0 = v0 - boxCenter;
-    glm::vec3 tv1 = v1 - boxCenter;
-    glm::vec3 tv2 = v2 - boxCenter;
-    
-    // Test triangle AABB vs box AABB
-    glm::vec3 triMin = glm::min(glm::min(tv0, tv1), tv2);
-    glm::vec3 triMax = glm::max(glm::max(tv0, tv1), tv2);
-    
-    if (glm::any(glm::greaterThan(triMin, boxHalfSize)) || glm::any(glm::lessThan(triMax, -boxHalfSize))) {
-        return false;
-    }
-    
-    // Test separating axes 
-    glm::vec3 edges[3] = {tv1 - tv0, tv2 - tv1, tv0 - tv2};
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            glm::vec3 axis(0.0f);
-            axis[j] = 1.0f;
-            glm::vec3 sep = glm::cross(edges[i], axis);
-            
-            // Project all 3 triangle vertices onto this axis
-            float p0 = glm::dot(tv0, sep);
-            float p1 = glm::dot(tv1, sep);
-            float p2 = glm::dot(tv2, sep);
-            
-            // Find min/max of triangle projection
-            float pMin = std::min(std::min(p0, p1), p2);
-            float pMax = std::max(std::max(p0, p1), p2);
-            
-            // Box projection radius on this axis
-            float r = boxHalfSize.x * std::abs(sep.x) + boxHalfSize.y * std::abs(sep.y) + boxHalfSize.z * std::abs(sep.z);
-            
-            // Check if projections overlap: [-r, r] vs [pMin, pMax]
-            if (pMax < -r || pMin > r) {
-                return false;
-            }
-        }
-    }
-    
-    // Test triangle normal
-    glm::vec3 normal = glm::cross(edges[0], edges[1]);
-    float d = glm::dot(normal, tv0);
-    float r = boxHalfSize.x * std::abs(normal.x) + boxHalfSize.y * std::abs(normal.y) + boxHalfSize.z * std::abs(normal.z);
-    if (std::abs(d) > r) {
-        return false;
-    }
-    
-    return true;
-}
+
 
 void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& triangleGrid) {
     std::cout << "  Building triangle spatial lists..." << std::endl;
@@ -525,26 +507,20 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
     const auto& vertices = mesh.getVertices();
     const auto& indices = mesh.getIndices();
 
-    meshPoints_.reserve(vertices.size());
+    meshPoints.reserve(vertices.size());
     for (const auto& vertex : vertices) {
-        meshPoints_.push_back(vertex.pos);
+        meshPoints.push_back(vertex.pos);
     }
 
-    meshTriangles_.reserve(indices.size());
+    meshTriangles.reserve(indices.size());
     for (uint32_t idx : indices) {
-        meshTriangles_.push_back(static_cast<int32_t>(idx));
+        meshTriangles.push_back(static_cast<int32_t>(idx));
     }
 
-    // OpenCL/Geogram pattern:
-    // 1) Use canonical domain [0..1000]^3 with voxel size = 1000 / gridDim
-    // 2) For each triangle, compute its AABB in canonical space, map to voxel range,
-    //    then use triBoxOverlap to confirm overlap before inserting.
+    int gridSize = params.gridDim.x;
+    int numVoxels = params.gridDim.x * params.gridDim.y * params.gridDim.z;
+    offsets.resize(numVoxels + 1, 0);
 
-    int gridSize = params_.gridDim.x;
-    int numVoxels = params_.gridDim.x * params_.gridDim.y * params_.gridDim.z;
-    offsets_.resize(numVoxels + 1, 0);
-
-    float scale = params_.cellSize;
     float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(gridSize);
 
     std::vector<std::vector<int32_t>> voxelTriangles(static_cast<size_t>(numVoxels));
@@ -563,9 +539,9 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
         glm::vec3 w1 = meshVertices[i1].pos;
         glm::vec3 w2 = meshVertices[i2].pos;
 
-        glm::vec3 c0 = toCanonical(w0, params_.gridMin, scale);
-        glm::vec3 c1 = toCanonical(w1, params_.gridMin, scale);
-        glm::vec3 c2 = toCanonical(w2, params_.gridMin, scale);
+        glm::vec3 c0 = toCanonical(w0);
+        glm::vec3 c1 = toCanonical(w1);
+        glm::vec3 c2 = toCanonical(w2);
 
         glm::vec3 bbMin(FLT_MAX), bbMax(-FLT_MAX);
         bbMin = glm::min(bbMin, c0); bbMax = glm::max(bbMax, c0);
@@ -614,63 +590,64 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
     // Build flat triangle list and offsets
     int currentOffset = 0;
     for (int i = 0; i < numVoxels; i++) {
-        offsets_[i] = currentOffset;
+        offsets[i] = currentOffset;
         auto& list = voxelTriangles[static_cast<size_t>(i)];
         std::sort(list.begin(), list.end());
         list.erase(std::unique(list.begin(), list.end()), list.end());
         for (int32_t triID : list) {
-            trianglesList_.push_back(triID);
+            trianglesList.push_back(triID);
         }
         currentOffset += static_cast<int>(list.size());
     }
-    offsets_[numVoxels] = currentOffset;
+    offsets[numVoxels] = currentOffset;
 
-    std::cout << "  Triangle lists: " << trianglesList_.size() << " references across " 
+    std::cout << "  Triangle lists: " << trianglesList.size() << " references across " 
               << numVoxels << " voxels" << std::endl;
 }
 
 uint8_t VoxelGrid::getOccupancy(int x, int y, int z) const {
-    if (x < 0 || x > params_.gridDim.x ||
-        y < 0 || y > params_.gridDim.y ||
-        z < 0 || z > params_.gridDim.z) {
+    if (x < 0 || x > params.gridDim.x ||
+        y < 0 || y > params.gridDim.y ||
+        z < 0 || z > params.gridDim.z) {
         return 0;  // Outside
     }
-    return occupancy_[getCornerIndex(x, y, z)];
+    return occupancy[getCornerIndex(x, y, z)];
 }
 
 glm::vec3 VoxelGrid::getCornerPosition(int x, int y, int z) const {
-    float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(params_.gridDim.x);
+    float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(params.gridDim.x);
     glm::vec3 canonical = glm::vec3(x, y, z) * canonicalVoxelSize;
-    return toWorld(canonical, params_.gridMin, params_.cellSize);
+    return toWorld(canonical);
 }
 
 glm::ivec3 VoxelGrid::worldToVoxel(const glm::vec3& pos) const {
-    float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(params_.gridDim.x);
-    glm::vec3 canonical = toCanonical(pos, params_.gridMin, params_.cellSize);
+    float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(params.gridDim.x);
+    glm::vec3 canonical = toCanonical(pos);
     glm::vec3 gridPos = canonical / canonicalVoxelSize;
     return glm::ivec3(
-        glm::clamp(static_cast<int>(gridPos.x), 0, params_.gridDim.x),
-        glm::clamp(static_cast<int>(gridPos.y), 0, params_.gridDim.y),
-        glm::clamp(static_cast<int>(gridPos.z), 0, params_.gridDim.z)
+        glm::clamp(static_cast<int>(gridPos.x), 0, params.gridDim.x),
+        glm::clamp(static_cast<int>(gridPos.y), 0, params.gridDim.y),
+        glm::clamp(static_cast<int>(gridPos.z), 0, params.gridDim.z)
     );
 }
 
+
 size_t VoxelGrid::getCornerIndex(int x, int y, int z) const {
-    int stride = params_.gridDim.x + 1;
+    int stride = params.gridDim.x + 1;
     return z * stride * stride + y * stride + x;
 }
 
 void VoxelGrid::exportOccupancyVisualization(const std::string& filename) const {
-    int dimX = params_.gridDim.x;
-    int dimY = params_.gridDim.y;
-    int dimZ = params_.gridDim.z;
+    int dimX = params.gridDim.x;
+    int dimY = params.gridDim.y;
+    int dimZ = params.gridDim.z;
 
     // Count non-outside points
     int insideCount = 0, borderCount = 0;
     for (int z = 0; z <= dimZ; z++) {
         for (int y = 0; y <= dimY; y++) {
             for (int x = 0; x <= dimX; x++) {
-                uint8_t occ = occupancy_[getCornerIndex(x, y, z)];
+                uint8_t occ = occupancy[getCornerIndex(x, y, z)];
                 if (occ == 1) borderCount++;
                 else if (occ == 2) insideCount++;
             }
@@ -701,8 +678,9 @@ void VoxelGrid::exportOccupancyVisualization(const std::string& filename) const 
     for (int z = 0; z <= dimZ; z++) {
         for (int y = 0; y <= dimY; y++) {
             for (int x = 0; x <= dimX; x++) {
-                uint8_t occ = occupancy_[getCornerIndex(x, y, z)];
-                if (occ == 0) continue;
+                uint8_t occ = occupancy[getCornerIndex(x, y, z)];
+                if (occ == 0) 
+                    continue;
 
                 glm::vec3 pos = getCornerPosition(x, y, z);
 

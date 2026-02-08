@@ -49,8 +49,6 @@ std::vector<float> HeatSource::calculateVertexAreas(size_t vertexCount, const st
     return vertexAreas;
 }
 
-void HeatSource::recreateResources(uint32_t maxFramesInFlight) {
-}
 
 void HeatSource::createSourceBuffer() {
     // Check if model is remeshed 
@@ -106,7 +104,6 @@ void HeatSource::createSourceBuffer() {
     void* mapped = memoryAllocator.getMappedPointer(stagingBufferHandle, stagingBufferOffset);
     memcpy(mapped, surfacePoints.data(), static_cast<size_t>(bufferSize));
 
-    // Allocate source buffer (for heat injection, hash grid, and rendering)
     auto [sourceBufferHandle, sourceBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -540,8 +537,6 @@ void HeatSource::updateHeatRenderDescriptors(
     std::cout << "[HeatSource] Heat render descriptors updated" << std::endl;
 }
 
-void HeatSource::cleanupResources() {
-}
 
 size_t HeatSource::getVertexCount() const {
     return intrinsicVertexCount > 0 ? intrinsicVertexCount : heatModel.getVertexCount();

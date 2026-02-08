@@ -28,6 +28,52 @@ HeatReceiver::HeatReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAl
 HeatReceiver::~HeatReceiver() {
 }
 
+void HeatReceiver::uploadContactPairs(const std::vector<ContactPairGPU>& pairs) {
+	VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
+	VkDeviceSize bufferSize = sizeof(ContactPairGPU) * pairs.size();
+
+	if (contactPairBuffer != VK_NULL_HANDLE) {
+		memoryAllocator.free(contactPairBuffer, contactPairBufferOffset);
+		contactPairBuffer = VK_NULL_HANDLE;
+		contactPairBufferOffset = 0;
+	}
+
+	if (bufferSize == 0) {
+		return;
+	}
+
+	VkBuffer stagingBuffer;
+	VkDeviceSize stagingOffset;
+	void* stagingData;
+	createStagingBuffer(
+		memoryAllocator,
+		bufferSize,
+		stagingBuffer,
+		stagingOffset,
+		&stagingData
+	);
+	memcpy(stagingData, pairs.data(), static_cast<size_t>(bufferSize));
+
+	auto [pairHandle, pairOffset] = memoryAllocator.allocate(
+		bufferSize,
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		storageAlignment
+	);
+	contactPairBuffer = pairHandle;
+	contactPairBufferOffset = pairOffset;
+
+	VkCommandBuffer cmd = renderCommandPool.beginCommands();
+	VkBufferCopy region{};
+	region.srcOffset = stagingOffset;
+	region.dstOffset = contactPairBufferOffset;
+	region.size = bufferSize;
+	vkCmdCopyBuffer(cmd, stagingBuffer, contactPairBuffer, 1, &region);
+	renderCommandPool.endCommands(cmd);
+
+	memoryAllocator.free(stagingBuffer, stagingOffset);
+}
+
 void HeatReceiver::createReceiverBuffers() {
     auto* iodt = resourceManager.getRemesherForModel(&receiverModel);
     if (!iodt)
@@ -73,10 +119,7 @@ void HeatReceiver::createReceiverBuffers() {
         vertexBufferSize,
         surfaceVertexBuffer, surfaceVertexBufferOffset
     );
-    
-    // Interpolation buffer logic removed (as per TetGen cleanup)
-    
-    // Upload triangle indices (device local) via staging
+        
     {
         if (triangleIndicesBuffer != VK_NULL_HANDLE) {
             memoryAllocator.free(triangleIndicesBuffer, triangleIndicesBufferOffset);
@@ -116,7 +159,6 @@ void HeatReceiver::createReceiverBuffers() {
         memoryAllocator.free(stagingBuffer, stagingOffset);
     }
 
-    // Upload triangle centroids (device local) via staging
     {
         if (triangleCentroidBuffer != VK_NULL_HANDLE) {
             memoryAllocator.free(triangleCentroidBuffer, triangleCentroidBufferOffset);
@@ -203,13 +245,11 @@ void HeatReceiver::createReceiverBuffers() {
               << triangleCount << " triangles" << std::endl;
 }
 
-
-// Helper to initialize buffer data
 void HeatReceiver::initializeReceiverBuffer() {
     auto* iodt = resourceManager.getRemesherForModel(&receiverModel);
     if (!iodt)
         return;
-
+    
     auto* supportingHalfedge = iodt->getSupportingHalfedge();
     if (!supportingHalfedge)
         return;
@@ -273,112 +313,25 @@ void HeatReceiver::initializeReceiverBuffer() {
 
 }
 
-void HeatReceiver::computeVoronoiSurfaceMapping(VoronoiSeeder* seeder) {
-    if (!seeder) {
-        std::cerr << "[HeatReceiver] Invalid VoronoiSeeder" << std::endl;
-        return;
-    }
-    
-    // Get intrinsic mesh vertices (what the shader actually uses)
-    auto* iodt = resourceManager.getRemesherForModel(&receiverModel);
-    if (!iodt) 
-        return;
-    
-    auto* supportingHalfedge = iodt->getSupportingHalfedge();
-    if (!supportingHalfedge) 
-        return;
-    
-    // Rebuild intrinsic mesh locally since we don't store it
-    auto intrinsicMesh = supportingHalfedge->buildIntrinsicMesh();
-    size_t vertexCount = intrinsicMesh.vertices.size();
+void HeatReceiver::stageVoronoiSurfaceMapping(const std::vector<uint32_t>& cellIndices) {
+	if (cellIndices.empty()) {
+		return;
+	}
+	if (intrinsicVertexCount != 0 && cellIndices.size() != intrinsicVertexCount) {
+		return;
+	}
 
-    
-    if (vertexCount == 0) {
-        std::cerr << "[HeatReceiver] Intrinsic mesh has no vertices" << std::endl;
-        return;
-    }
-    
-    const auto& allSeeds = seeder->getSeeds();
-    
-    // Extract only regular seeds AND calculate their correct GPU indices
-    std::vector<VoronoiSeeder::Seed> regularSeeds;
-    std::vector<uint32_t> regularToBufferIndex;  
-    
-    regularSeeds.reserve(allSeeds.size());
-    regularToBufferIndex.reserve(allSeeds.size());
-    
-    // CRITICAL: Track GPU index as it appears in HeatSystem's buffers
-    // HeatSystem skips surface seeds, so we must not count them
-    uint32_t currentGpuIndex = 0;
-    
-    for (uint32_t i = 0; i < allSeeds.size(); i++) {
-        const auto& seed = allSeeds[i];
-        
-        // HeatSystem skips surface seeds in GPU buffer creation
-        if (seed.isSurface) {
-            continue; // Don't increment gpuIndex for surface seeds!
-        }
-        
-        // If we reach here, this seed exists in GPU buffer at 'currentGpuIndex'
-        
-        // CRITICAL: Only MAP to regular (non-ghost) seeds.
-        // Some seeds can be outside the mesh but still have restricted Voronoi volume inside the mesh.
-        if (!seed.isGhost) {
-            regularSeeds.push_back(seed);
-            
-            // Store the ACTUAL GPU buffer index, not raw allSeeds index!
-            regularToBufferIndex.push_back(currentGpuIndex);  
-        }
-        
-        // Increment GPU index for every non-surface seed (Interior + Exterior + Ghost)
-        // This keeps us in sync with HeatSystem::generateVoronoiDiagram
-        currentGpuIndex++;
-    }
-    
-    if (regularSeeds.empty()) {
-        std::cerr << "[HeatReceiver] No regular seeds found" << std::endl;
-        return;
-    }
-    
-    std::cout << "[HeatReceiver] Building KDtree from " << regularSeeds.size() << " regular seeds..." << std::endl;
-    
-    // Build KDtree from regular seeds only
-    SeedAdapter adapter{regularSeeds};
-    SeedKDTree kdTree(3, adapter, {10});
-    
-    std::vector<VoronoiSurfaceMapping> mappingData(vertexCount);
-    
-    std::cout << "[HeatReceiver] Mapping " << vertexCount << " intrinsic vertices to Voronoi cells..." << std::endl;
-    
-    // Map each intrinsic vertex to nearest regular voronoi cell
-    for (size_t i = 0; i < vertexCount; i++) {
-        glm::vec3 vertexPos = intrinsicMesh.vertices[i].position; 
-        float query[3] = {vertexPos.x, vertexPos.y, vertexPos.z};
-        
-        // Query KDtree for nearest regular seed 
-        uint32_t regularIdx; 
-        float distSq;
-        kdTree.knnSearch(query, 1, &regularIdx, &distSq);
-        
-        uint32_t bufferIdx = regularToBufferIndex[regularIdx];
-        
-        mappingData[i].cellIndex = bufferIdx; 
-    }
-    
-    std::cout << "[HeatReceiver] Mapped " << vertexCount << " intrinsic vertices" << std::endl;
-    std::cout << "[HeatReceiver] Regular cell count: " << regularSeeds.size() << std::endl;
-    std::cout << "[HeatReceiver] First 10 cell mappings (buffer indices): ";
-    for (size_t i = 0; i < std::min<size_t>(10, mappingData.size()); i++) {
-        std::cout << mappingData[i].cellIndex << " ";
-    }
-    std::cout << std::endl;
-    
-    // Upload to staging buffer
-    VkDeviceSize bufferSize = sizeof(VoronoiSurfaceMapping) * vertexCount;
-    
-    VkBuffer stagingBuffer;
-    VkDeviceSize stagingOffset;
-    void* stagingData;
+	std::vector<VoronoiSurfaceMapping> mappingData(cellIndices.size());
+	for (size_t i = 0; i < cellIndices.size(); ++i) {
+		mappingData[i].cellIndex = cellIndices[i];
+	}
+
+	// Upload to staging buffer
+	VkDeviceSize bufferSize = sizeof(VoronoiSurfaceMapping) * cellIndices.size();
+	
+	VkBuffer stagingBuffer;
+	VkDeviceSize stagingOffset;
+	void* stagingData;
     createStagingBuffer(
         memoryAllocator,
         bufferSize,
@@ -387,10 +340,10 @@ void HeatReceiver::computeVoronoiSurfaceMapping(VoronoiSeeder* seeder) {
     
     memcpy(stagingData, mappingData.data(), bufferSize);
     
-    voronoiMappingStagingBuffer = stagingBuffer;
-    voronoiMappingStagingOffset = stagingOffset;
-    voronoiMappingStagingData = stagingData;
-    voronoiMappingBufferSize = bufferSize;
+    	voronoiMappingStagingBuffer = stagingBuffer;
+	voronoiMappingStagingOffset = stagingOffset;
+	voronoiMappingStagingData = stagingData;
+	voronoiMappingBufferSize = bufferSize;
 }
 
 void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
@@ -401,9 +354,7 @@ void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
         VkBufferCopy vertexCopyRegion = { initStagingOffset, surfaceVertexBufferOffset, initBufferSize };
         vkCmdCopyBuffer(commandBuffer, initStagingBuffer, surfaceVertexBuffer, 1, &vertexCopyRegion);
     }
-    
-    // interpStagingBuffer removed
-    
+        
     if (voronoiMappingStagingBuffer != VK_NULL_HANDLE) {
         VkBufferCopy voronoiMappingCopyRegion = { voronoiMappingStagingOffset, voronoiMappingBufferOffset, voronoiMappingBufferSize };
         vkCmdCopyBuffer(commandBuffer, voronoiMappingStagingBuffer, voronoiMappingBuffer, 1, &voronoiMappingCopyRegion);
@@ -417,7 +368,7 @@ void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
     vkCmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,  // Allow both compute and vertex shaders to read
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 
         0,
         1, &memBarrier,
         0, nullptr,
@@ -447,8 +398,6 @@ void HeatReceiver::updateDescriptors(
         return;
     }
     
-    // Only allocate descriptor sets if they don't exist yet
-    // CRITICAL: Don't clear and reallocate - that exhausts the pool!
     if (heatRenderDescriptorSets.empty()) {
         heatRenderDescriptorSets.resize(maxFramesInFlight);
         
@@ -510,7 +459,6 @@ void HeatReceiver::updateDescriptors(
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), 12, descriptorWrites.data(), 0, nullptr);
     }
     
-    // Only allocate surface descriptor sets if they don't exist yet
     if (surfaceComputeSetA == VK_NULL_HANDLE || surfaceComputeSetB == VK_NULL_HANDLE) {
         std::vector<VkDescriptorSetLayout> surfacePingPongLayouts = {surfaceLayout, surfaceLayout};
         
@@ -606,7 +554,6 @@ void HeatReceiver::updateDescriptors(
     }
 
     std::cout << "[HeatReceiver] Descriptors updated" << std::endl;
-    
 }
 
 void HeatReceiver::updateContactDescriptors(
@@ -670,10 +617,11 @@ void HeatReceiver::updateContactDescriptors(
             VkDescriptorBufferInfo{voronoiMappingBuffer, voronoiMappingBufferOffset, sizeof(VoronoiSurfaceMapping) * intrinsicVertexCount},
             VkDescriptorBufferInfo{injectionKBuffer, injectionKBufferOffset, sizeof(uint32_t) * nodeCount},
             VkDescriptorBufferInfo{injectionKTBuffer, injectionKTBufferOffset, sizeof(uint32_t) * nodeCount},
+            VkDescriptorBufferInfo{contactPairBuffer, contactPairBufferOffset, VK_WHOLE_SIZE},
         };
 
-        std::vector<VkWriteDescriptorSet> writes(12);
-        for (int j = 0; j < 12; j++) {
+        std::vector<VkWriteDescriptorSet> writes(13);
+        for (int j = 0; j < 13; j++) {
             writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[j].dstSet = contactComputeSetA;
             writes[j].dstBinding = j;
@@ -683,7 +631,7 @@ void HeatReceiver::updateContactDescriptors(
             writes[j].pBufferInfo = &bufferInfos[j];
         }
 
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 12, writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 13, writes.data(), 0, nullptr);
     }
 
     // Set B: read tempBufferB
@@ -701,10 +649,11 @@ void HeatReceiver::updateContactDescriptors(
             VkDescriptorBufferInfo{voronoiMappingBuffer, voronoiMappingBufferOffset, sizeof(VoronoiSurfaceMapping) * intrinsicVertexCount},
             VkDescriptorBufferInfo{injectionKBuffer, injectionKBufferOffset, sizeof(uint32_t) * nodeCount},
             VkDescriptorBufferInfo{injectionKTBuffer, injectionKTBufferOffset, sizeof(uint32_t) * nodeCount},
+            VkDescriptorBufferInfo{contactPairBuffer, contactPairBufferOffset, VK_WHOLE_SIZE},
         };
 
-        std::vector<VkWriteDescriptorSet> writes(12);
-        for (int j = 0; j < 12; j++) {
+        std::vector<VkWriteDescriptorSet> writes(13);
+        for (int j = 0; j < 13; j++) {
             writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[j].dstSet = contactComputeSetB;
             writes[j].dstBinding = j;
@@ -714,36 +663,36 @@ void HeatReceiver::updateContactDescriptors(
             writes[j].pBufferInfo = &bufferInfos[j];
         }
 
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 12, writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 13, writes.data(), 0, nullptr);
     }
 }
 
 void HeatReceiver::recreateDescriptors(
-    VkDescriptorSetLayout surfaceLayout,
-    VkDescriptorPool surfacePool,
-    VkDescriptorSetLayout renderLayout,
-    VkDescriptorPool renderPool,
-    UniformBufferManager& uboManager,
-    VkBuffer tempBufferA, VkDeviceSize tempBufferAOffset,
-    VkBuffer tempBufferB, VkDeviceSize tempBufferBOffset,
-    VkBuffer timeBuffer, VkDeviceSize timeBufferOffset,
-    uint32_t maxFramesInFlight,
-    uint32_t nodeCount) {
-    
-    updateDescriptors(
-        surfaceLayout,
-        renderLayout,
-        surfacePool,
-        renderPool,
-        uboManager,
-        tempBufferA,
-        tempBufferAOffset,
-        tempBufferB,
-        tempBufferBOffset,
-        timeBuffer,
-        timeBufferOffset,
-        maxFramesInFlight,
-        nodeCount);
+	VkDescriptorSetLayout surfaceLayout,
+	VkDescriptorPool surfacePool,
+	VkDescriptorSetLayout renderLayout,
+	VkDescriptorPool renderPool,
+	UniformBufferManager& uboManager,
+	VkBuffer tempBufferA, VkDeviceSize tempBufferAOffset,
+	VkBuffer tempBufferB, VkDeviceSize tempBufferBOffset,
+	VkBuffer timeBuffer, VkDeviceSize timeBufferOffset,
+	uint32_t maxFramesInFlight,
+	uint32_t nodeCount) {
+	
+	updateDescriptors(
+		surfaceLayout,
+		renderLayout,
+		surfacePool,
+		renderPool,
+		uboManager,
+		tempBufferA,
+		tempBufferAOffset,
+		tempBufferB,
+		tempBufferBOffset,
+		timeBuffer,
+		timeBufferOffset,
+		maxFramesInFlight,
+		nodeCount);
 }
 
 void HeatReceiver::recreateContactDescriptors(
@@ -791,10 +740,6 @@ void HeatReceiver::cleanup() {
         memoryAllocator.free(surfaceVertexBuffer, surfaceVertexBufferOffset);
         surfaceVertexBuffer = VK_NULL_HANDLE;
     }
-
-    // interpolationBuffer REMOVED
-
-
     if (triangleIndicesBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(triangleIndicesBuffer, triangleIndicesBufferOffset);
         triangleIndicesBuffer = VK_NULL_HANDLE;
@@ -807,6 +752,11 @@ void HeatReceiver::cleanup() {
         memoryAllocator.free(voronoiMappingBuffer, voronoiMappingBufferOffset);
         voronoiMappingBuffer = VK_NULL_HANDLE;
     }
+	if (contactPairBuffer != VK_NULL_HANDLE) {
+		memoryAllocator.free(contactPairBuffer, contactPairBufferOffset);
+		contactPairBuffer = VK_NULL_HANDLE;
+		contactPairBufferOffset = 0;
+	}
 
     cleanupStagingBuffers();
 }
