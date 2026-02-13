@@ -1,12 +1,34 @@
-/x64/Debug/
-/HeatSpectra/x64/Debug/
+# Build output directories
+/build/
+/out/
+/x64/
+/HeatSpectra/x64/
+/Debug/
+/Release/
+/HeatSpectra/Debug/
+/HeatSpectra/Release/
+
+# CMake generated files
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/compile_commands.json
+/CTestTestfile.cmake
+/Makefile
+/cmake-build-*/
+
+# IDE/editor settings
 .vs/
 .vscode/
 .idea/
-*.pdb
-*.ilk
+*.VC.db
+*.VC.VC.opendb
 *.ipch
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
+
+# Linker/debug artifacts
+*.pdb
+*.ilk
