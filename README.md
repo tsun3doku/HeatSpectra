@@ -2,7 +2,7 @@
 
 Realtime thermal analysis visualization using tetrahedral mesh elements and compute shaders
 
-![Heat Transfer Capture](x64/Release/capture.png)
+![Heat Transfer Capture](HeatSpectra/docs/capture.png)
 
 ## Quick Start
 1. Download the latest demo release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page
