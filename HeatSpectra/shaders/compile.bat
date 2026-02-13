@@ -44,6 +44,7 @@ C:/VulkanSDK/1.3.283.0/Bin/glslc.exe hash_grid_vis.frag -o hash_grid_vis_frag.sp
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe surfel_debug.vert -o surfel_debug_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe surfel_debug.frag -o surfel_debug_frag.spv
 
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe voronoi_surface.geom -o voronoi_surface_geom.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe voronoi_surface.vert -o voronoi_surface_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe voronoi_surface.frag -o voronoi_surface_frag.spv
 
@@ -67,6 +68,8 @@ C:/VulkanSDK/1.3.283.0/Bin/glslc.exe --target-env=vulkan1.3 heat_source.comp -o 
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe --target-env=vulkan1.3 heat_voronoi.comp -o heat_voronoi_comp.spv
 
 slangc heat_geometry.slang -target spirv -o heat_geometry_comp.spv
+
+slangc voronoi_candidates_intrinsic.slang -target spirv -o voronoi_candidates_comp.spv
 
 slangc lloyd_accumulate.slang -target spirv -o lloyd_accumulate_comp.spv
 

@@ -2,8 +2,9 @@
 
 // Standard vertex attributes from Model
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec3 inColor;
+layout(location = 1) in vec3 inColor;
+layout(location = 2) in vec3 inNormal;
+layout(location = 3) in vec2 inTexCoord;
 
 // Camera UBO (view/proj only, model comes from push constant)
 layout(binding = 0) uniform UniformBufferObject {
@@ -22,30 +23,15 @@ layout(push_constant) uniform PushConstants {
     int _pad2;
 } pc;
 
-// VoronoiSurfaceMapping buffer (matches Structs.hpp)
-struct VoronoiSurfaceMapping {
-    uint cellIndex;
-    uint _pad[3]; // 16-byte alignment
-};
-
-layout(std430, binding = 1) readonly buffer MappingBuffer {
-    VoronoiSurfaceMapping mappings[];
-};
-
-// Output to fragment shader
-// Use "flat" interpolation so colors don't blur across triangles
-layout(location = 0) out flat uint vHintCellID;
-layout(location = 1) out vec3 vNormal;
-layout(location = 2) out vec3 vWorldPos;
-layout(location = 3) out vec3 vModelPos;
+// Output to geometry shader
+layout(location = 0) out vec3 vNormal;
+layout(location = 1) out vec3 vWorldPos;
+layout(location = 2) out vec3 vModelPos;
 
 void main() {
     // Use push constant model matrix (same as gbuffer.vert)
     vec4 worldPos = pc.modelMatrix * vec4(inPosition, 1.0);
     gl_Position = ubo.proj * ubo.view * worldPos;
-    
-    // Lookup the cell ID for this specific vertex
-    vHintCellID = mappings[gl_VertexIndex].cellIndex;
     
     // Transform normal to world space for lighting
     vNormal = normalize(mat3(pc.modelMatrix) * inNormal);

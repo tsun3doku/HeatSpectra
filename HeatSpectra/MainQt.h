@@ -18,7 +18,7 @@ public:
     ~MainWindow();
     
     VulkanWindow* getVulkanWindow() { return vulkanWindow; }
-    void setApp(App* application) { app = application; }
+    void setApp(App* application) { app = application; syncHeatButtonState(); }
 
 private slots:
     void onRemeshClicked();
@@ -46,6 +46,7 @@ protected:
 private:
     void createMenuBar();
     void createDockWidget();
+    void syncHeatButtonState();
     
     VulkanWindow* vulkanWindow;
     App* app;

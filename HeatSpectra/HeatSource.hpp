@@ -13,25 +13,16 @@ class MemoryAllocator;
 class Model;
 class CommandPool;
 class ResourceManager;
-class SupportingHalfedge;
-class UniformBufferManager;
 
 const std::string HEATSOURCE_PATH = "models/heatsource_torus.obj";
 
 class HeatSource {
 public:
-    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, ResourceManager& resourceManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
+    HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, ResourceManager& resourceManager, CommandPool& renderCommandPool);
     ~HeatSource();
 
 
     void createSourceBuffer();
-    void updateSourceBuffer(SupportingHalfedge* supportingHalfedge);
-
-    void updateHeatRenderDescriptors(
-        VkDescriptorSetLayout heatRenderDescriptorSetLayout,
-        VkDescriptorPool heatRenderDescriptorPool,
-        UniformBufferManager& uniformBufferManager,
-        uint32_t maxFramesInFlight);
 
     void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
 
@@ -40,21 +31,15 @@ public:
     // Getters
     size_t getVertexCount() const;
     size_t getIntrinsicVertexCount() const { return intrinsicVertexCount; }
-    VkBuffer getVertexBuffer() const { 
-        return heatModel.getVertexBuffer(); 
-    }
-    VkBuffer getIndexBuffer() const { 
-        return heatModel.getIndexBuffer(); 
-    }
-    size_t getIndexCount() const {
-        return heatModel.getIndices().size();
-    }
 
     VkBuffer getSourceBuffer() const {
         return sourceBuffer;
     }
     VkDeviceSize getSourceBufferOffset() const {
         return sourceBufferOffset_;
+    }
+    VkBufferView getSourceBufferView() const {
+        return sourceBufferView;
     }
     VkBuffer getTriangleGeometryBuffer() const {
         return triangleGeometryBuffer;
@@ -76,10 +61,6 @@ public:
         return heatSourcePushConstant;
     }
     
-    const std::vector<VkDescriptorSet>& getHeatRenderDescriptorSets() const {
-        return heatRenderDescriptorSets;
-    }
-    
     // Setters
     void setHeatSourcePushConstant(glm::mat4 modelMatrix) {
         heatSourcePushConstant.heatSourceModelMatrix = modelMatrix;
@@ -96,15 +77,10 @@ private:
     Model& heatModel;
     ResourceManager& resourceManager;
     CommandPool& renderCommandPool;  
-    uint32_t maxFramesInFlight;
     size_t intrinsicVertexCount = 0;      
 
     HeatSourcePushConstant heatSourcePushConstant;
-
-    std::vector<VkDescriptorSet> heatRenderDescriptorSets;  
-
     VkBuffer sourceBuffer;
-    VkDeviceMemory sourceBufferMemory;
     VkDeviceSize sourceBufferOffset_;
     VkBufferView sourceBufferView = VK_NULL_HANDLE; 
     
@@ -114,7 +90,4 @@ private:
     VkBuffer triangleCentroidBuffer = VK_NULL_HANDLE;
     VkDeviceSize triangleCentroidBufferOffset_ = 0;
     uint32_t triangleCount_ = 0;
-
-    VkBuffer heatSourceStagingBuffer;
-    VkDeviceMemory heatSourceStagingMemory;
 };

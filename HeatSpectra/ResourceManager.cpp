@@ -166,7 +166,10 @@ void ResourceManager::reloadModels(const std::string& modelPath) {
     selectedModel = nullptr;
 }
 
-void ResourceManager::buildCommonSubdivision() {
+void ResourceManager::buildCommonSubdivision(bool enable) {
+    if (!enable) {
+        return;
+    }
     if (!isModelRemeshed(visModel.get())) {
         std::cerr << "[ResourceManager] Cannot build common subdivision: VisModel not remeshed" << std::endl;
         return;

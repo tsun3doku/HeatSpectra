@@ -18,18 +18,8 @@ public:
         double edgeLengths[3]           = { 0,0,0 };
     };
 
-    struct pair_hash {
-        template <class T1, class T2>
-        std::size_t operator()(const std::pair<T1, T2>& p) const {
-            auto h1 = std::hash<T1>{}(p.first);
-            auto h2 = std::hash<T2>{}(p.second);
-            return h1 ^ (h2 << 1);
-        }
-    };
-
     // Construction
     void buildFromModel(const Model& srcModel);
-    void applyToModel(Model& dstModel) const;
     Triangle2D layoutTriangle(uint32_t faceIdx) const;
 
     // Intrinsic operations

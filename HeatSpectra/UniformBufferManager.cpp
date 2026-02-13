@@ -11,6 +11,7 @@ UniformBufferManager::UniformBufferManager(VulkanDevice& vulkanDevice, MemoryAll
     createUniformBuffers(maxFramesInFlight);
     createGridUniformBuffers(maxFramesInFlight);
     createLightUniformBuffers(maxFramesInFlight);
+    createMaterialUniformBuffers(maxFramesInFlight);
     createSSAOKernelBuffers(maxFramesInFlight);
 }
 
@@ -80,6 +81,27 @@ void UniformBufferManager::createLightUniformBuffers(uint32_t maxFramesInFlight)
     }
 }
 
+void UniformBufferManager::createMaterialUniformBuffers(uint32_t maxFramesInFlight) {
+    VkDeviceSize bufferSize = sizeof(MaterialUniformBufferObject);
+
+    materialBuffers.resize(maxFramesInFlight);
+    materialBuffersMapped.resize(maxFramesInFlight);
+    materialBufferOffsets_.resize(maxFramesInFlight);
+
+    for (size_t i = 0; i < maxFramesInFlight; i++) {
+        auto [buffer, offset] = memoryAllocator.allocate(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+        );
+
+        materialBuffers[i] = buffer;
+        materialBufferOffsets_[i] = offset;
+        materialBuffersMapped[i] = memoryAllocator.getMappedPointer(buffer, offset);
+    }
+}
+
 void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
     VkDeviceSize bufferSize = sizeof(SSAOKernelBufferObject);
 
@@ -126,15 +148,12 @@ void UniformBufferManager::createSSAOKernelBuffers(uint32_t maxFramesInFlight) {
 }
 
 void UniformBufferManager::updateUniformBuffer(VkExtent2D swapChainExtent, uint32_t currentImage, UniformBufferObject& ubo) {
-    // No rotation - use identity matrix
     ubo.model = glm::mat4(1.0f);
-
-    // Camera matrices
     ubo.view = camera.getViewMatrix();
     ubo.proj = camera.getProjectionMatrix((float)swapChainExtent.width / (float)swapChainExtent.height);
     ubo.proj[1][1] *= -1;
 
-    ubo.color = glm::vec3(0.044f, 0.044f, 0.044f);
+    ubo.color = glm::vec3(1.0f, 1.0f, 1.0f);
 
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -159,15 +178,6 @@ void UniformBufferManager::updateGridUniformBuffer(uint32_t currentImage, const 
     memcpy(gridUniformBuffersMapped[currentImage], &gridUbo, sizeof(gridUbo));
 }
 
-void UniformBufferManager::updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo) {
-    glm::vec3 cameraPosition = camera.getPosition();
-    glm::vec3 cameraForward = camera.getForwardDirection();
-    lightUbo.lightPos_Key = glm::vec3(0.0f, 2.0f, 0.0f);
-    lightUbo.lightPos_Rim = cameraForward - cameraPosition;
-    lightUbo.lightAmbient = glm::vec3(0.005f, 0.005f, 0.005f);
-    memcpy(lightBuffersMapped[currentImage], &lightUbo, sizeof(lightUbo));
-}
-
 void UniformBufferManager::updateSSAOKernelBuffer(uint32_t currentImage, SSAOKernelBufferObject& ssaoKernel) {
     memcpy(SSAOKernelBuffersMapped[currentImage], &ssaoKernel, sizeof(ssaoKernel));
 }
@@ -189,10 +199,14 @@ void UniformBufferManager::cleanup(uint32_t maxFramesInFlight) {
             std::cout << "Freed light uniform buffers " << lightBuffers[i] << std::endl;
         }
 
+        if (materialBuffers[i] != VK_NULL_HANDLE) {
+            memoryAllocator.free(materialBuffers[i], 0);
+            std::cout << "Freed material uniform buffers " << materialBuffers[i] << std::endl;
+        }
+
         if (SSAOKernelBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(SSAOKernelBuffers[i], 0);
             std::cout << "Freed SSAO kernel uniform buffers " << SSAOKernelBuffers[i] << std::endl;
         }
     }
 }
-

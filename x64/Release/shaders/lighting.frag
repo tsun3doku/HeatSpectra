@@ -9,9 +9,11 @@ layout(set = 0, binding = 4) uniform UniformBufferObject {
 } ubo;
 
 layout(set = 0, binding = 5) uniform LightUniformBufferObject {
-    vec3 lightPos_Key;
-    vec3 lightPos_Rim;
+    vec3 lightPos_Key;   
+    vec3 lightPos_Rim;   
     vec3 lightAmbient;
+    vec4 lightParams; // x=keyIntensity, y=rimIntensity, z=ambientIntensity
+    vec3 cameraPos;
 } lightUbo;
 
 // Input attachments for Gbuffer data
@@ -24,47 +26,81 @@ layout(location = 0) in vec2 inUV;
 // Output color
 layout(location = 0) out vec4 fragColor;
 
-const float lightIntensity_Rim = 0.0f;
-const float lightIntensity_Key = 0.0f;
+const float PI = 3.14159265359;
 
-float computeDiffuse(vec3 normal, vec3 lightDir) {
-    return max(dot(normal, lightDir), 0.0);
+float distributionGGX(float NdotH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = max(NdotH * NdotH * (a2 - 1.0) + 1.0, 1e-4);
+    return a2 / max(PI * denom * denom, 1e-4);
 }
 
-vec3 rgb2hsl(vec3 c) {
-    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-
-    float d = q.x - min(q.w, q.y);
-    vec3 e = vec3(d, 1e-10, 1e-10);
-    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e.y)), d / (q.x + e.z), q.x);
+float geometrySchlickGGX(float NdotX, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) * 0.125;
+    return NdotX / max(NdotX * (1.0 - k) + k, 1e-4);
 }
 
-vec3 hsl2rgb(vec3 c) {
-    vec3 p = abs(fract(c.x + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - vec3(3.0));
-    return c.z * mix(vec3(1.0), clamp(p - vec3(1.0), 0.0, 1.0), c.y);
+float geometrySmith(float NdotV, float NdotL, float roughness) {
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 evaluateDirectionalBRDF(vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness, vec3 F0, vec3 radiance) {
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.0);
+    if (NdotL <= 0.0 || NdotV <= 0.0) {
+        return vec3(0.0);
+    }
+
+    vec3 H = normalize(V + L);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
+
+    float D = distributionGGX(NdotH, roughness);
+    float G = geometrySmith(NdotV, NdotL, roughness);
+    vec3 F = fresnelSchlick(VdotH, F0);
+
+    vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
+    vec3 diffuse = (vec3(1.0) - F) * albedo * (1.0 / PI);
+
+    return (diffuse + specular) * radiance * NdotL;
 }
 
 void main() {
     // Read Gbuffer data
-    vec3 albedo = subpassLoad(inputAlbedo).rgb;  
-    vec3 normal = normalize(subpassLoad(inputNormal).rgb); 
-    vec3 position = subpassLoad(inputPosition).rgb;
+    vec4 albedoSample = subpassLoad(inputAlbedo);
+    float coverage = clamp(albedoSample.a, 0.0, 1.0);
+    if (coverage <= 0.0) {
+        // No geometry coverage at this sample: keep the cleared lighting color.
+        discard;
+    }
 
-    float diffuse_Key = computeDiffuse(normal, lightUbo.lightPos_Key);
-    float diffuse_Rim = computeDiffuse(normal, lightUbo.lightPos_Rim);
-    vec3 ambientLight = lightUbo.lightAmbient;
+    vec4 normalSample = subpassLoad(inputNormal);
+    vec4 positionSample = subpassLoad(inputPosition);
 
-    vec3 diffuseLighting_Key = diffuse_Key * albedo * lightIntensity_Key;
-    vec3 diffuseLighting_Rim = diffuse_Rim * albedo * lightIntensity_Rim;
-    vec3 totalLighting = ambientLight + diffuseLighting_Key + diffuseLighting_Rim;
+    vec3 albedo = albedoSample.rgb;
+    vec3 normal = normalize(normalSample.rgb);
+    vec3 position = positionSample.rgb;
+    float roughness = clamp(normalSample.a, 0.04, 1.0);
+    float specularF0 = clamp(positionSample.a, 0.0, 1.0);
 
-    vec3 hsl = rgb2hsl(albedo);
-    hsl.z *= (1.0 + log(1.0 + dot(totalLighting, vec3(0.333))) * 0.5);
+    vec3 viewDir = normalize(lightUbo.cameraPos - position);
+    vec3 F0 = vec3(specularF0);
 
-    vec3 finalColor = hsl2rgb(hsl);
+    vec3 keyDir = normalize(-lightUbo.lightPos_Key);
+    vec3 rimDir = normalize(-lightUbo.lightPos_Rim);
+    vec3 keyRadiance = vec3(max(lightUbo.lightParams.x, 0.0));
+    vec3 rimRadiance = vec3(max(lightUbo.lightParams.y, 0.0));
+    vec3 ambient = albedo * lightUbo.lightAmbient * max(lightUbo.lightParams.z, 0.0);
 
-    // Final fragment color
-    fragColor = vec4(finalColor, 1.0);  // Output the calculated lighting
+    vec3 direct = evaluateDirectionalBRDF(normal, viewDir, keyDir, albedo, roughness, F0, keyRadiance) +
+                  evaluateDirectionalBRDF(normal, viewDir, rimDir, albedo, roughness, F0, rimRadiance);
+    vec3 litColor = ambient + direct;
+
+    // Silhouette coverage is handled by per-sample stencil in lighting subpass.
+    fragColor = vec4(litColor, 1.0);
 }

@@ -129,9 +129,6 @@
     <ClCompile Include="TriangleHashGrid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiKDTree.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="VoronoiIntegrator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -154,6 +151,18 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ContactLineRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoronoiCandidateCompute.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LightingSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MaterialSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HeatRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -283,6 +292,10 @@
     </None>
     <None Include="shaders\contact_lines.frag" />
     <None Include="shaders\contact_lines.vert" />
+    <None Include="shaders\voronoi_surface.geom">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\voronoi_candidates_intrinsic.slang" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="file_utils.h">
@@ -366,9 +379,6 @@
     <ClInclude Include="SupportingHalfedge.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VulkanBuffer.hpp">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="HashGrid.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -402,9 +412,6 @@
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp">
       <Filter>Libs</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiKDTree.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="VoronoiIntegrator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -425,6 +432,21 @@
     </ClInclude>
     <ClInclude Include="GeometryUtils.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VoronoiCandidateCompute.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LightingSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MaterialSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HeatRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VulkanBuffer.hpp">
+      <Filter>Shaders</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

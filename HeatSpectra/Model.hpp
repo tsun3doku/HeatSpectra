@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <cstdint>
 
 #include "File_utils.h" 
 #include "Structs.hpp"
@@ -76,6 +77,27 @@ struct Vertex {
     }
 };
 
+struct ModelCornerKey {
+    int32_t vertexIndex = -1;
+    int32_t texcoordIndex = -1;
+    int32_t normalIndex = -1;
+
+    bool operator==(const ModelCornerKey& other) const {
+        return vertexIndex == other.vertexIndex &&
+            texcoordIndex == other.texcoordIndex &&
+            normalIndex == other.normalIndex;
+    }
+};
+
+struct ModelCornerKeyHash {
+    size_t operator()(const ModelCornerKey& key) const {
+        size_t h0 = std::hash<int32_t>{}(key.vertexIndex);
+        size_t h1 = std::hash<int32_t>{}(key.texcoordIndex);
+        size_t h2 = std::hash<int32_t>{}(key.normalIndex);
+        return h0 ^ (h1 << 1) ^ (h2 << 2);
+    }
+};
+
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const& vertex) const {
@@ -99,26 +121,20 @@ public:
 
     void createVertexBuffer();
     void createIndexBuffer();
+    void createRenderVertexBuffer();
+    void createRenderIndexBuffer();
 
     void equalizeFaceAreas();
     void recalculateNormals();
     void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
     void updateVertexBuffer();
     void updateIndexBuffer();
+    void updateRenderVertexBuffer();
+    void updateRenderIndexBuffer();
     void saveOBJ(const std::string& path) const;
     
     void translate(const glm::vec3& translation);
     void rotate(float angleRadians, const glm::vec3& axis, const glm::vec3& pivot);
-    
-    bool needsVertexBufferUpdate() const { 
-        return needsGPUUpdate.load(); 
-    }
-    
-    void applyPendingGPUUpdate() {
-        if (needsGPUUpdate.exchange(false)) {
-            updateVertexBuffer();
-        }
-    }
 
     void recreateBuffers();
     void cleanup();
@@ -143,6 +159,13 @@ public:
         return indices;
     }
 
+    const std::vector<Vertex>& getRenderVertices() const {
+        return renderVertices;
+    }
+    const std::vector<uint32_t>& getRenderIndices() const {
+        return renderIndices;
+    }
+
     glm::vec3 getFaceNormal(uint32_t faceIndex) const;
 
     VkBuffer getVertexBuffer() const {
@@ -157,6 +180,20 @@ public:
     }
     VkDeviceSize getIndexBufferOffset() const {
         return indexBufferOffset_;
+    }
+
+    VkBuffer getRenderVertexBuffer() const {
+        return renderVertexBuffer != VK_NULL_HANDLE ? renderVertexBuffer : vertexBuffer;
+    }
+    VkDeviceSize getRenderVertexBufferOffset() const {
+        return renderVertexBuffer != VK_NULL_HANDLE ? renderVertexBufferOffset_ : vertexBufferOffset_;
+    }
+
+    VkBuffer getRenderIndexBuffer() const {
+        return renderIndexBuffer != VK_NULL_HANDLE ? renderIndexBuffer : indexBuffer;
+    }
+    VkDeviceSize getRenderIndexBufferOffset() const {
+        return renderIndexBuffer != VK_NULL_HANDLE ? renderIndexBufferOffset_ : indexBufferOffset_;
     }
 
 
@@ -177,9 +214,13 @@ public:
     }
     void setIndices(const std::vector<uint32_t>& newIndices) {
         indices = newIndices;
+        renderIndices = indices;
+        hasSplitRenderMesh = false;
     }
     void setVertices(const std::vector<Vertex>& newVertices) { 
-        vertices = newVertices; 
+        vertices = newVertices;
+        renderVertices = vertices;
+        hasSplitRenderMesh = false;
     }
 
 private:
@@ -187,11 +228,13 @@ private:
     MemoryAllocator& memoryAllocator;
     Camera& camera;
     CommandPool& commandPool;
-    
-    std::atomic<bool> needsGPUUpdate{false};  
 
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+    std::vector<Vertex> renderVertices;
+    std::vector<uint32_t> renderIndices;
+
+    bool hasSplitRenderMesh = false;
 
 	VkBuffer vertexBuffer;
     VkDeviceSize vertexBufferOffset_;
@@ -199,7 +242,12 @@ private:
 	VkBuffer indexBuffer;
     VkDeviceSize indexBufferOffset_;
 
+    VkBuffer renderVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceSize renderVertexBufferOffset_ = 0;
+
+    VkBuffer renderIndexBuffer = VK_NULL_HANDLE;
+    VkDeviceSize renderIndexBufferOffset_ = 0;
+
     glm::vec3 modelPosition = glm::vec3(0.0f);
     glm::mat4 modelMatrix = glm::mat4(1.0f);
-    std::vector<glm::vec3> faceNormals;
 }; 

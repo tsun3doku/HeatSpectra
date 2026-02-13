@@ -35,6 +35,9 @@ public:
     const std::vector<VkImage>& getGridImages() const {
         return gridImages;
     }
+    const std::vector<VkImage>& getSurfaceOverlayImages() const {
+        return surfaceOverlayImages;
+    }
 
     const std::vector<VkImageView>& getAlbedoViews() const {
         return albedoViews;
@@ -50,6 +53,9 @@ public:
     }
     const std::vector<VkImageView>& getGridViews() const {
         return gridViews;
+    }
+    const std::vector<VkImageView>& getSurfaceOverlayViews() const {
+        return surfaceOverlayViews;
     }
 
     const std::vector<VkImageView>& getAlbedoResolveViews() const {
@@ -73,6 +79,9 @@ public:
     const std::vector<VkImageView>& getGridResolveViews() const {
         return gridResolveViews;
     }
+    const std::vector<VkImageView>& getSurfaceOverlayResolveViews() const {
+        return surfaceOverlayResolveViews;
+    }
     const std::vector<VkImageView>& getLightingViews() const {
         return lightingViews;
     }
@@ -87,14 +96,14 @@ private:
     VulkanDevice& vulkanDevice;
     VkRenderPass renderPass;
 
-    std::vector<VkImage> albedoImages, normalImages, positionImages, depthImages, gridImages, lightingImages;
-    std::vector<VkDeviceMemory> albedoMemories, normalMemories, positionMemories, depthMemories, gridMemories, lightingMemories;
-    std::vector<VkImageView> albedoViews, normalViews, positionViews, depthViews, gridViews, lightingViews;
+    std::vector<VkImage> albedoImages, normalImages, positionImages, depthImages, gridImages, surfaceOverlayImages, lightingImages;
+    std::vector<VkDeviceMemory> albedoMemories, normalMemories, positionMemories, depthMemories, gridMemories, surfaceOverlayMemories, lightingMemories;
+    std::vector<VkImageView> albedoViews, normalViews, positionViews, depthViews, gridViews, surfaceOverlayViews, lightingViews;
     VkImageCreateInfo albedoImageInfo, normalImageInfo, positionImageInfo, depthImageInfo, gridImageInfo;
 
-    std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews, lightingResolveViews;
+    std::vector<VkImageView> albedoResolveViews, normalResolveViews, positionResolveViews, depthResolveViews, gridResolveViews, surfaceOverlayResolveViews, lightingResolveViews;
     std::vector<VkImageView> depthResolveSamplerViews; 
     std::vector<VkImageView> stencilMSAASamplerViews; 
-    std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages, lightingResolveImages;
-    std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories, lightingResolveMemories;
+    std::vector<VkImage> albedoResolveImages, normalResolveImages, positionResolveImages, depthResolveImages, gridResolveImages, surfaceOverlayResolveImages, lightingResolveImages;
+    std::vector<VkDeviceMemory> albedoResolveMemories, normalResolveMemories, positionResolveMemories, depthResolveMemories, gridResolveMemories, surfaceOverlayResolveMemories, lightingResolveMemories;
 };  

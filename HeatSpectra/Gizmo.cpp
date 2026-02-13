@@ -281,21 +281,25 @@ void Gizmo::createPipeline(VkRenderPass renderPass, VkExtent2D extent) {
     depthStencil.front = stencilOp;
     depthStencil.back = stencilOp;
     
-    VkPipelineColorBlendAttachmentState colorAttachment{};
-    colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
-                                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorAttachment.blendEnable = VK_TRUE;  
-    colorAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    colorAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    VkPipelineColorBlendAttachmentState colorAttachments[2] = {};
+    // Surface overlay target disabled for gizmo lines.
+    colorAttachments[0].colorWriteMask = 0;
+    colorAttachments[0].blendEnable = VK_FALSE;
+    // Line overlay target.
+    colorAttachments[1].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorAttachments[1].blendEnable = VK_TRUE;
+    colorAttachments[1].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorAttachments[1].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorAttachments[1].colorBlendOp = VK_BLEND_OP_ADD;
+    colorAttachments[1].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorAttachments[1].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorAttachments[1].alphaBlendOp = VK_BLEND_OP_ADD;
     
     VkPipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.attachmentCount = 1;  
-    colorBlending.pAttachments = &colorAttachment;
+    colorBlending.attachmentCount = 2;
+    colorBlending.pAttachments = colorAttachments;
     
     VkPushConstantRange pushRange{};
     pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;

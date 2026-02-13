@@ -59,7 +59,7 @@ public:
 	void reloadModels(const std::string& modelPath);
 	void cleanup();
 
-    void buildCommonSubdivision();
+    void buildCommonSubdivision(bool enable = false);
 
 	// Getters
 	Grid& getGrid() {

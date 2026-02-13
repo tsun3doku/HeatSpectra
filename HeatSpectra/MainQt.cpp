@@ -20,6 +20,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QCloseEvent>
+#include <QTimer>
 
 #include <iostream>
 #include <thread>
@@ -264,6 +265,13 @@ void MainWindow::createDockWidget() {
     dockWidget->setLayout(layout);
     dock->setWidget(dockWidget);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    syncHeatButtonState();
+
+    QTimer* heatUiSyncTimer = new QTimer(this);
+    heatUiSyncTimer->setInterval(100);
+    connect(heatUiSyncTimer, &QTimer::timeout, this, &MainWindow::syncHeatButtonState);
+    heatUiSyncTimer->start();
 }
 
 void MainWindow::onRemeshClicked() {
@@ -379,35 +387,54 @@ void MainWindow::onPanSensitivityChanged(double value) {
     }
 }
 
+void MainWindow::syncHeatButtonState() {
+    if (!toggleHeatBtn || !pauseHeatBtn) {
+        return;
+    }
+
+    if (!app) {
+        toggleHeatBtn->setText("Start Simulation (Space)");
+        pauseHeatBtn->setEnabled(false);
+        return;
+    }
+
+    const bool isActive = app->isHeatSystemActive();
+    const bool isPaused = app->isHeatSystemPaused();
+
+    if (!isActive) {
+        toggleHeatBtn->setText("Start Simulation (Space)");
+        pauseHeatBtn->setEnabled(false);
+        return;
+    }
+
+    if (isPaused) {
+        toggleHeatBtn->setText("Resume Simulation (Space)");
+        pauseHeatBtn->setEnabled(false);
+    } else {
+        toggleHeatBtn->setText("Stop Simulation (Space)");
+        pauseHeatBtn->setEnabled(true);
+    }
+}
+
 void MainWindow::onToggleHeatClicked() {
     if (app) {
         app->toggleHeatSystem();
-        
-        if (app->isHeatSystemActive()) {
-            toggleHeatBtn->setText("Stop Simulation (Space)");
-        } else {
-            toggleHeatBtn->setText("Start Simulation (Space)");
-        }
     }
+    syncHeatButtonState();
 }
 
 void MainWindow::onPauseHeatClicked() {
     if (app) {
         app->pauseHeatSystem();
-        toggleHeatBtn->setText("Start Simulation (Space)");
     }
+    syncHeatButtonState();
 }
 
 void MainWindow::onResetHeatClicked() {
     if (app) {
         app->resetHeatSystem();
-        
-        if (app->isHeatSystemActive()) {
-            toggleHeatBtn->setText("Stop Simulation (Space)");
-        } else {
-            toggleHeatBtn->setText("Start Simulation (Space)");
-        }
     }
+    syncHeatButtonState();
 }
 
 void MainWindow::onOpenModel() {
@@ -421,8 +448,7 @@ void MainWindow::onOpenModel() {
         try {
             std::string modelPath = filename.toStdString();
             app->loadModel(modelPath);
-            
-            toggleHeatBtn->setText("Start Simulation (Space)");
+            syncHeatButtonState();
             
             QMessageBox::information(this, "Success", QString("Model loaded: %1").arg(filename));
         }

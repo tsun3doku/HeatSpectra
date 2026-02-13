@@ -1,13 +1,11 @@
 #include "VoronoiSeeder.hpp"
+#include "Model.hpp"
 #include <iostream>
 #include <algorithm>
 #include <random>
 #include <fstream>
 #include <omp.h>
-#include <map>
-#include <set>
 #include <unordered_set>
-#include <queue>
 #include <glm/gtx/norm.hpp>
 
 VoronoiSeeder::VoronoiSeeder() {
@@ -16,16 +14,15 @@ VoronoiSeeder::VoronoiSeeder() {
 VoronoiSeeder::~VoronoiSeeder() {
 }
 
-void VoronoiSeeder::generateSeeds(const std::vector<CommonSubdivision::IntrinsicTriangle>& intrinsicTriangles, const std::vector<Vertex>& commonVertices, const Model& volumeMesh, float targetCellSize) {
+void VoronoiSeeder::generateSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh, const Model& volumeMesh, float targetCellSize, VoxelGrid& voxelGrid, int voxelResolution) {
     seeds.clear();
     cellSize = targetCellSize;
 
-    if (intrinsicTriangles.empty() || commonVertices.empty()) {
-        std::cout << "[VoronoiSeeder] No intrinsic triangles or vertices provided for seed generation." << std::endl;
+    if (intrinsicMesh.vertices.empty() || intrinsicMesh.triangles.empty()) {
+        std::cout << "[VoronoiSeeder] Empty intrinsic mesh" << std::endl;
         return;
     }
 
-    std::cout << "[VoronoiSeeder] Generating Seeds ..." << std::endl;
     std::cout << "  Cell Size: " << cellSize << std::endl;
 
     // Calculate bounding box
@@ -38,13 +35,7 @@ void VoronoiSeeder::generateSeeds(const std::vector<CommonSubdivision::Intrinsic
         minBounds = glm::min(minBounds, vertex.pos);
         maxBounds = glm::max(maxBounds, vertex.pos);
     }
-    // Include surface seeds
-    for (const auto& vertex : commonVertices) {
-        minBounds = glm::min(minBounds, vertex.pos);
-        maxBounds = glm::max(maxBounds, vertex.pos);
-    }
-
-    // Extended padding to allow ghost seeds beyond mesh bounds
+    // Padding to allow ghost seeds beyond mesh bounds
     float padding = cellSize * 3.0f;
 
     gridMin = minBounds - glm::vec3(padding);
@@ -57,27 +48,20 @@ void VoronoiSeeder::generateSeeds(const std::vector<CommonSubdivision::Intrinsic
 
     gridMax = gridMin + glm::vec3(gridDim) * cellSize;
 
-    std::cout << "  Grid Dimensions: " << gridDim.x << " x " << gridDim.y << " x " << gridDim.z << std::endl;
+    generateSurfaceSeeds(intrinsicMesh);
 
-    generateSurfaceSeeds(commonVertices, intrinsicTriangles);
-
-    // Build a single triangle hash grid and reuse it.
     TriangleHashGrid sharedTriGrid;
     sharedTriGrid.build(volumeMesh, gridMin, gridMax, cellSize);
 
-    // Build unsigned distance field for filtering
     buildSDFGrid(volumeMesh, sharedTriGrid);
 
-    // Build voxel grid for inside/out classification (one-time per seed generation)
-    const int voxelResolution = 64;
+    // Build voxel grid for in/out classification (owned by HeatSystem)
     voxelGrid.build(volumeMesh, sharedTriGrid, voxelResolution);
-    voxelGridBuilt = (voxelGrid.getGridSize() > 0);
+    const VoxelGrid* voxelGridRef = (voxelGrid.getGridSize() > 0) ? &voxelGrid : nullptr;
     
     // Only generate seeds within this distance
     float maxDistFromSurface = cellSize * 1.5f;  
-    generateBlueNoiseSeeds(maxDistFromSurface);
-
-    std::cout << "[VoronoiSeeder] Total seeds: " << seeds.size() << std::endl;
+    generateBlueNoiseSeeds(maxDistFromSurface, voxelGridRef);
 }
 
 
@@ -142,8 +126,6 @@ void VoronoiSeeder::buildSDFGrid(const Model& volumeMesh, const TriangleHashGrid
     size_t totalCells = static_cast<size_t>(sdfGridDim.x) * sdfGridDim.y * sdfGridDim.z;
     sdfGrid.resize(totalCells);
 
-    std::cout << "  SDF Grid: " << sdfGridDim.x << "x" << sdfGridDim.y << "x" << sdfGridDim.z << std::endl;
-
     triHashGrid = triangleGrid;
 
     // Calculate SDF value at each grid vertex
@@ -155,21 +137,19 @@ void VoronoiSeeder::buildSDFGrid(const Model& volumeMesh, const TriangleHashGrid
 
                 float unsignedDist = computePointToMeshDistance(gridPoint, volumeMesh);
 
-                // Use sdfGridDim for indexing (unsigned distance only)
+                // Use sdfGridDim for indexing
                 size_t idx = z * sdfGridDim.y * sdfGridDim.x + y * sdfGridDim.x + x;
                 sdfGrid[idx] = unsignedDist;
             }
         }
     }
-
-    std::cout << "  SDF grid built (" << totalCells << " cells)." << std::endl;
 }
 
 float VoronoiSeeder::sampleSDFGrid(const glm::vec3& pos) const {
-    // Convert world position to SDF grid space
+    // Convert world position to grid space
     glm::vec3 gridPos = (pos - gridMin) / sdfCellSize;
 
-    // Clamp to SDF grid range
+    // Clamp to grid range
     gridPos.x = glm::clamp(gridPos.x, 0.0f, static_cast<float>(sdfGridDim.x - 1));
     gridPos.y = glm::clamp(gridPos.y, 0.0f, static_cast<float>(sdfGridDim.y - 1));
     gridPos.z = glm::clamp(gridPos.z, 0.0f, static_cast<float>(sdfGridDim.z - 1));
@@ -206,22 +186,10 @@ float VoronoiSeeder::sampleSDFGrid(const glm::vec3& pos) const {
     return c0 * (1 - fz) + c1 * fz;
 }
 
-void VoronoiSeeder::generateSurfaceSeeds(const std::vector<Vertex>& commonVertices, const std::vector<CommonSubdivision::IntrinsicTriangle>& intrinsicTriangles) {
-    std::map<uint32_t, glm::vec3> intrinsicVertexPositions;
-    
-    for (const auto& tri : intrinsicTriangles) {
-        for (size_t k = 0; k < 3; k++) {
-            uint32_t intrinsicID = tri.intrinsicVertices[k];
-            uint32_t commonIdx = tri.indices[tri.cornerIndices[k]];
-            intrinsicVertexPositions[intrinsicID] = commonVertices[commonIdx].pos;
-        }
+void VoronoiSeeder::generateSurfaceSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh) {
+    for (const auto& vertex : intrinsicMesh.vertices) {
+        seeds.push_back(Seed(vertex.position, true));
     }
-    
-    for (const auto& [id, pos] : intrinsicVertexPositions) {
-        seeds.push_back(Seed(pos, true));
-    }
-    
-    std::cout << "  Generated " << seeds.size() << " surface seeds." << std::endl;
 }
 
 size_t VoronoiSeeder::computeSpatialHash(const glm::vec3& pos, float hashCellSize) const {
@@ -258,16 +226,12 @@ bool VoronoiSeeder::isTooCloseToExisting(const glm::vec3& candidatePos, float po
     return false;
 }
 
-void VoronoiSeeder::generateBlueNoiseSeeds(float maxDistFromSurface) {
+void VoronoiSeeder::generateBlueNoiseSeeds(float maxDistFromSurface, const VoxelGrid* voxelGrid) {
     std::default_random_engine generator(42);
     std::uniform_real_distribution<float> uniform01(0.0f, 1.0f);
     
     float basePoissonRadius = cellSize * 0.8f;
     int maxAttempts = 30;
-    
-    int seedCount = 0;
-    int skippedCount = 0;
-    int sdfSkippedCount = 0; 
     
     float hashCellSize = basePoissonRadius;
     std::unordered_map<size_t, std::vector<glm::vec3>> spatialHash;
@@ -296,38 +260,26 @@ void VoronoiSeeder::generateBlueNoiseSeeds(float maxDistFromSurface) {
                     float distToSurface = sampleSDFGrid(candidatePos);
 
                     bool isInside = false;
-                    if (voxelGridBuilt) {
-                        glm::ivec3 voxel = voxelGrid.worldToVoxel(candidatePos);
-                        uint8_t occ = voxelGrid.getOccupancy(voxel.x, voxel.y, voxel.z);
+                    if (voxelGrid) {
+                        glm::ivec3 voxel = voxelGrid->worldToVoxel(candidatePos);
+                        uint8_t occ = voxelGrid->getOccupancy(voxel.x, voxel.y, voxel.z);
                         isInside = (occ == 2 || occ == 1);
                     }
 
-                    // Ghosts are outside the mesh beyond the padding distance.
                     bool isGhost = (!isInside && distToSurface > maxDistFromSurface);
-
-                    
+     
                     if (!isTooCloseToExisting(candidatePos, basePoissonRadius, hashCellSize, spatialHash)) {
                         seeds.push_back(Seed(candidatePos, false, isGhost));
                         
                         size_t hash = computeSpatialHash(candidatePos, hashCellSize);
                         spatialHash[hash].push_back(candidatePos);
                         
-                        if (isGhost) {
-                            sdfSkippedCount++;
-                        } else {
-                            seedCount++;
-                        }
                         seedPlaced = true;
                     }
                 }
                 
-                if (!seedPlaced) {
-                    skippedCount++;
-                }
             }
         }
     }
     
-    std::cout << "  Generated " << seedCount << " regular seeds + " << sdfSkippedCount << " ghost seeds (max dist: " << maxDistFromSurface << ")" << std::endl;
-    std::cout << "  Skipped " << skippedCount << " cells (insufficient spacing)" << std::endl;
 }

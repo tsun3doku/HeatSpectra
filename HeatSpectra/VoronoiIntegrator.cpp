@@ -1,5 +1,4 @@
 #include "VoronoiIntegrator.hpp"
-#include "TriangleHashGrid.hpp"
 #include <iostream>
 #include <algorithm>
 #include <set>
@@ -20,21 +19,21 @@ struct SeedPointCloudAdapter {
     template <class BBOX> bool kdtree_get_bbox(BBOX&) const { return false; }
 };
 
-void VoronoiIntegrator::extractNeighborIndices(const std::vector<std::vector<uint32_t>>& neighborIndices,
-    const std::vector<glm::dvec3>& seedPositions,int K) {
-    neighborIndices_.clear();
-    seedPositions_.clear();
+void VoronoiIntegrator::extractNeighborIndices(const std::vector<std::vector<uint32_t>>& inputNeighborIndices,
+    const std::vector<glm::dvec3>& inputSeedPositions,int K) {
+    neighborIndices.clear();
+    seedPositions.clear();
         
     // Flatten 2D neighbor array to 1D GPU buffer
-    neighborIndices_.reserve(neighborIndices.size() * K);
-    for (const auto& cellNeighbors : neighborIndices) {
-        neighborIndices_.insert(neighborIndices_.end(), 
+    neighborIndices.reserve(inputNeighborIndices.size() * K);
+    for (const auto& cellNeighbors : inputNeighborIndices) {
+        neighborIndices.insert(neighborIndices.end(), 
                                cellNeighbors.begin(), cellNeighbors.end());
     }
     
     // Store seed positions for GPU
-    for (const auto& seed : seedPositions) {
-        seedPositions_.push_back(glm::vec4(seed, 1.0f));  // w=1.0 for regular cells
+    for (const auto& seed : inputSeedPositions) {
+        seedPositions.push_back(glm::vec4(seed, 1.0f));  // w=1.0 for regular cells
     }
 }
 
@@ -55,7 +54,7 @@ void VoronoiIntegrator::computeNeighbors(const std::vector<glm::dvec3>& seedPosi
     
     std::vector<std::vector<uint32_t>> neighborIndices;
     neighborIndices.reserve(seedPositions.size());
-    kNearestDistances_.resize(seedPositions.size(), 0.0f);
+    kNearestDistances.resize(seedPositions.size(), 0.0f);
     
     // For each seed, find K+1 nearest using KDtree
     for (size_t i = 0; i < seedPositions.size(); i++) {
@@ -80,7 +79,7 @@ void VoronoiIntegrator::computeNeighbors(const std::vector<glm::dvec3>& seedPosi
         }
         
         // Store max K nearest distance for this cell
-        kNearestDistances_[i] = maxDist;
+        kNearestDistances[i] = maxDist;
         
         while (kNeighbors.size() < K) {
             kNeighbors.push_back(UINT32_MAX);
@@ -96,7 +95,7 @@ void VoronoiIntegrator::computeNeighbors(const std::vector<glm::dvec3>& seedPosi
 }
 
 void VoronoiIntegrator::extractMeshTriangles(const Model& surfaceMesh) {
-    meshTriangles_.clear();
+    meshTriangles.clear();
     
     const auto& vertices = surfaceMesh.getVertices();
     const auto& indices = surfaceMesh.getIndices();
@@ -111,36 +110,36 @@ void VoronoiIntegrator::extractMeshTriangles(const Model& surfaceMesh) {
         tri.v1 = glm::vec4(v1.pos, 0.0f);
         tri.v2 = glm::vec4(v2.pos, 0.0f);
         
-        meshTriangles_.push_back(tri);
+        meshTriangles.push_back(tri);
     }
     
-    std::cout << "[VoronoiIntegrator] Extracted " << meshTriangles_.size() << " mesh triangles" << std::endl;
+    std::cout << "[VoronoiIntegrator] Extracted " << meshTriangles.size() << " mesh triangles" << std::endl;
 }
 
 bool VoronoiIntegrator::pointInUnrestrictedCell(uint32_t cellId, const glm::vec3& p, uint32_t K) const {
-    if (cellId >= seedPositions_.size()) {
+    if (cellId >= seedPositions.size()) {
         return false;
     }
     if (K == 0) {
         return false;
     }
-    if (neighborIndices_.size() < static_cast<size_t>(cellId + 1) * static_cast<size_t>(K)) {
+    if (neighborIndices.size() < static_cast<size_t>(cellId + 1) * static_cast<size_t>(K)) {
         return false;
     }
 
-    const glm::vec3 S(seedPositions_[cellId]);
+    const glm::vec3 S(seedPositions[cellId]);
     const uint32_t base = cellId * K;
     const float eps = 1e-5f;
 
     for (uint32_t n = 0; n < K; ++n) {
-        uint32_t neigh = neighborIndices_[base + n];
+        uint32_t neigh = neighborIndices[base + n];
         if (neigh == UINT32_MAX) {
             break;
         }
-        if (neigh >= seedPositions_.size()) {
+        if (neigh >= seedPositions.size()) {
             continue;
         }
-        const glm::vec3 B(seedPositions_[neigh]);
+        const glm::vec3 B(seedPositions[neigh]);
         glm::vec3 dir = S - B;
         float dirNorm = glm::length(dir);
         if (dirNorm < 1e-10f) {
@@ -169,10 +168,10 @@ void VoronoiIntegrator::computeSurfacePointMapping(const std::vector<glm::vec3>&
     if (surfacePoints.empty()) {
         return;
     }
-    if (seedFlags.size() != seedPositions_.size()) {
+    if (seedFlags.size() != seedPositions.size()) {
         return;
     }
-    if (seedPositions_.empty() || neighborIndices_.empty()) {
+    if (seedPositions.empty() || neighborIndices.empty()) {
         return;
     }
     if (K == 0) {
@@ -181,16 +180,16 @@ void VoronoiIntegrator::computeSurfacePointMapping(const std::vector<glm::vec3>&
 
     std::vector<glm::vec3> regularSeedPos;
     std::vector<uint32_t> regularToCell;
-    regularSeedPos.reserve(seedPositions_.size());
-    regularToCell.reserve(seedPositions_.size());
+    regularSeedPos.reserve(seedPositions.size());
+    regularToCell.reserve(seedPositions.size());
 
-    for (uint32_t cellId = 0; cellId < static_cast<uint32_t>(seedPositions_.size()); ++cellId) {
+    for (uint32_t cellId = 0; cellId < static_cast<uint32_t>(seedPositions.size()); ++cellId) {
         uint32_t flags = seedFlags[cellId];
         bool isGhost = (flags & 1u) != 0u;
         if (isGhost) {
             continue;
         }
-        const glm::vec4& s = seedPositions_[cellId];
+        const glm::vec4& s = seedPositions[cellId];
         regularSeedPos.push_back(glm::vec3(s.x, s.y, s.z));
         regularToCell.push_back(cellId);
     }
@@ -247,17 +246,4 @@ void VoronoiIntegrator::computeSurfacePointMapping(const std::vector<glm::vec3>&
 
         outCellIndices[i] = chosenCell;
     }
-}
-
-void VoronoiIntegrator::buildVoxelGrid(
-    const Model& mesh,
-    const TriangleHashGrid& triangleGrid,
-    int gridSize
-) {
-    std::cout << "[VoronoiIntegrator] Building voxel grid..." << std::endl;
-    voxelGrid_.build(mesh, triangleGrid, gridSize);
-    
-    voxelGrid_.exportOccupancyVisualization("voxel_occupancy.ply");
-    
-    std::cout << "[VoronoiIntegrator] Voxel grid complete" << std::endl;
 }

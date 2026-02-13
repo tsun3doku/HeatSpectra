@@ -7,6 +7,11 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     vec3 color;
 } ubo;
 
+layout(set = 0, binding = 1) uniform MaterialUniformBufferObject {
+    vec4 baseColorRoughness; // xyz=baseColor, w=roughness
+    vec4 specular;           // x=specularF0
+} materialUbo;
+
 // Inputs from the vertex shader
 layout(location = 0) in vec3 fragColor;       
 layout(location = 1) in vec3 fragNormal;          
@@ -19,8 +24,12 @@ layout(location = 1) out vec4 gNormal;
 layout(location = 2) out vec4 gPosition;
 
 void main() {
-    // Write outputs to the gbuffer attachments
-    gAlbedo = vec4(fragColor, 1.0);                  
-    gNormal = vec4(normalize(fragNormal), 0.0);     
-    gPosition = vec4(fragPos, 1.0);  
+    vec3 baseColor = materialUbo.baseColorRoughness.rgb * fragColor;
+    float roughness = clamp(materialUbo.baseColorRoughness.w, 0.04, 1.0);
+    float specularF0 = clamp(materialUbo.specular.x, 0.0, 1.0);
+
+    // Pack roughness/F0 in existing channels so we keep the same GBuffer attachment count.
+    gAlbedo = vec4(baseColor, 1.0);
+    gNormal = vec4(normalize(fragNormal), roughness);
+    gPosition = vec4(fragPos, specularF0);
 }

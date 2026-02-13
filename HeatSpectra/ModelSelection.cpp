@@ -22,7 +22,7 @@ void ModelSelection::createPickingCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.queueFamilyIndex = indices.graphicsAndComputeFamily.value();
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;  // Allow individual command buffer reset
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;  
     
     if (vkCreateCommandPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &pickingCommandPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create picking command pool");
@@ -119,12 +119,6 @@ void ModelSelection::processPickingRequests(uint32_t currentFrame) {
         lastPickedResult = result;  
         lastPickRequest = request; 
         
-        // Debug output
-        std::cout << "Picked at (" << request.x << ", " << request.y << "): ";
-        if (result.isNone()) std::cout << "Nothing" << std::endl;
-        else if (result.isModel()) std::cout << "Model ID " << result.modelID << std::endl;
-        else if (result.isGizmo()) std::cout << "Gizmo Axis " << static_cast<int>(result.gizmoAxis) << std::endl;
-        
         // Handle selection based on picked result and shift state 
         if (result.isModel()) {
             if (request.shiftPressed) {
@@ -146,7 +140,7 @@ void ModelSelection::processPickingRequests(uint32_t currentFrame) {
 }
 
 void ModelSelection::createStagingBuffer() {
-    VkDeviceSize bufferSize = 1;  // Single byte for stencil value
+    VkDeviceSize bufferSize = 1;  
     
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -178,7 +172,6 @@ void ModelSelection::createStagingBuffer() {
 }
 
 PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame) {
-    // Create a single time command buffer for the copy
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -246,7 +239,6 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
     
     vkEndCommandBuffer(commandBuffer);
     
-    // Submit and wait with a temporary fence 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     VkFence copyFence;
@@ -262,23 +254,21 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
     vkDestroyFence(vulkanDevice.getDevice(), copyFence, nullptr);
     vkFreeCommandBuffers(vulkanDevice.getDevice(), pickingCommandPool, 1, &commandBuffer);
     
-    // Read stencil value and decode
     uint8_t stencilValue = *static_cast<uint8_t*>(stagingBufferMapped);
      
     PickedResult result;
      
+    result.stencilValue = stencilValue;
+
     // 1-2 = models
     // 3-5 = translation arrows (X, Y, Z)
-    // 6-8 = rotation rings (X, Y, Z)
-    
-    result.stencilValue = stencilValue;
+    // 6-8 = rotation rings (X, Y, Z)  
     
     if (stencilValue == 1 || stencilValue == 2) {
         result.type = PickedType::Model;
         result.modelID = stencilValue;
     } else if (stencilValue >= 3 && stencilValue <= 8) {
         result.type = PickedType::Gizmo;
-        // Map both translation (3-5) and rotation (6-8) to X/Y/Z
         result.gizmoAxis = static_cast<PickedGizmoAxis>(((stencilValue - 3) % 3) + 1);
     } else {
         result.type = PickedType::None;

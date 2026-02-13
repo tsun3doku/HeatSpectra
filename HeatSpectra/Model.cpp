@@ -7,8 +7,8 @@
 
 #include <array>
 #include <unordered_map>
-#include <glm/gtx/norm.hpp>
 #include <algorithm>
+#include <cstdint>
 
 #include "VulkanDevice.hpp"
 #include "MemoryAllocator.hpp"
@@ -19,10 +19,11 @@
 
 void Model::init(const std::string modelPath) {
     loadModel(modelPath);
-    recalculateNormals(); 
-  
+
     createVertexBuffer();
     createIndexBuffer();
+    createRenderVertexBuffer();
+    createRenderIndexBuffer();
 }
 
 Model::Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool)
@@ -36,22 +37,22 @@ Model::~Model() {
 void Model::recreateBuffers() {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-    size_t oldIndexCount = indices.size();
-    size_t oldVertCount = vertices.size();
-    VkBuffer   oldVB = vertexBuffer;
-    VkBuffer   oldIB = indexBuffer;
-    VkDeviceSize oldOffset = indexBufferOffset_;
-
     cleanup();
 
     createVertexBuffer();
     createIndexBuffer();
+    createRenderVertexBuffer();
+    createRenderIndexBuffer();
 
     std::cout << "*** recreateBuffers() after creation ***\n"
         << "    new VB handle: " << vertexBuffer
         << "  offset: " << vertexBufferOffset_ << "\n"
         << "    new IB handle: " << indexBuffer
-        << "  offset: " << indexBufferOffset_ << "\n";
+        << "  offset: " << indexBufferOffset_ << "\n"
+        << "    new RVB handle: " << renderVertexBuffer
+        << "  offset: " << renderVertexBufferOffset_ << "\n"
+        << "    new RIB handle: " << renderIndexBuffer
+        << "  offset: " << renderIndexBufferOffset_ << "\n";
 }
 
 std::array<glm::vec3, 8> Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
@@ -116,6 +117,12 @@ void Model::loadModel(const std::string& modelPath) {
         throw std::runtime_error(warn + err);
     }
 
+    vertices.clear();
+    indices.clear();
+    renderVertices.clear();
+    renderIndices.clear();
+    hasSplitRenderMesh = false;
+
     // Create vertices directly from OBJ vertex list
     size_t vertexCount = attrib.vertices.size() / 3;
     vertices.resize(vertexCount);
@@ -132,9 +139,18 @@ void Model::loadModel(const std::string& modelPath) {
         vertices[i].texCoord = { 0.0f, 0.0f }; // Default UV
     }
 
-    // Process faces and build indices
+    bool hasAnyCornerNormal = false;
+    bool hasMissingCornerNormal = false;
+    std::unordered_map<ModelCornerKey, uint32_t, ModelCornerKeyHash> renderVertexMap;
+    renderVertexMap.reserve(attrib.vertices.size());
+
+    // Process faces and build topology + render indices
     for (const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
+            if (index.vertex_index < 0 || static_cast<size_t>(index.vertex_index) >= vertices.size()) {
+                continue;
+            }
+
             // Use the original vertex index directly
             indices.push_back(index.vertex_index);
 
@@ -145,16 +161,81 @@ void Model::loadModel(const std::string& modelPath) {
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                 };
             }
+
+            // Build render mesh keyed by OBJ corner indices (v/vt/vn)
+            ModelCornerKey key{};
+            key.vertexIndex = index.vertex_index;
+            key.texcoordIndex = index.texcoord_index;
+            key.normalIndex = index.normal_index;
+
+            auto it = renderVertexMap.find(key);
+            if (it == renderVertexMap.end()) {
+                Vertex renderVertex{};
+                renderVertex.pos = vertices[index.vertex_index].pos;
+                renderVertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
+                renderVertex.texCoord = vertices[index.vertex_index].texCoord;
+
+                if (index.texcoord_index >= 0 && index.texcoord_index < attrib.texcoords.size() / 2) {
+                    renderVertex.texCoord = glm::vec2(
+                        attrib.texcoords[2 * index.texcoord_index + 0],
+                        1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+                    );
+                }
+
+                renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                if (index.normal_index >= 0 && index.normal_index < attrib.normals.size() / 3) {
+                    hasAnyCornerNormal = true;
+                    renderVertex.normal = glm::vec3(
+                        attrib.normals[3 * index.normal_index + 0],
+                        attrib.normals[3 * index.normal_index + 1],
+                        attrib.normals[3 * index.normal_index + 2]
+                    );
+
+                    const float n2 = glm::dot(renderVertex.normal, renderVertex.normal);
+                    if (n2 > 1e-12f) {
+                        renderVertex.normal *= (1.0f / std::sqrt(n2));
+                    } else {
+                        renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+                    }
+                } else {
+                    hasMissingCornerNormal = true;
+                }
+
+                const uint32_t newRenderIndex = static_cast<uint32_t>(renderVertices.size());
+                renderVertices.push_back(renderVertex);
+                renderIndices.push_back(newRenderIndex);
+                renderVertexMap.emplace(key, newRenderIndex);
+            } else {
+                renderIndices.push_back(it->second);
+            }
         }
     }
 
-    // Initialize modelPosition to origin to match identity modelMatrix
-    // (getBoundingBoxCenter is only for AABB calculations, not transform)
+    // If file has no authored corner normals, use area-weighted fallback on render mesh.
+    if (!hasAnyCornerNormal || hasMissingCornerNormal) {
+        recalculateNormals();
+    }
+
+    // Fallback to welded data if split path failed to build.
+    if (renderVertices.empty() || renderIndices.empty()) {
+        renderVertices = vertices;
+        renderIndices = indices;
+        recalculateNormals();
+        hasSplitRenderMesh = false;
+    } else {
+        hasSplitRenderMesh = true;
+    }
+
     modelPosition = glm::vec3(0.0f);
-    // Buffers are created by init() or recreateBuffers(), not here
 }
 
 void Model::createVertexBuffer() {
+    if (vertices.empty()) {
+        vertexBuffer = VK_NULL_HANDLE;
+        vertexBufferOffset_ = 0;
+        return;
+    }
+
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     std::cout << "[BUFFER] createVertexBuffer(): uploading "
@@ -169,7 +250,6 @@ void Model::createVertexBuffer() {
     void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
     memcpy(stagingData, vertices.data(), static_cast<size_t>(bufferSize));
 
-    // Allocate the local device vertex buffer
     auto [vertexBufferHandle, vertexBufferOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -177,24 +257,25 @@ void Model::createVertexBuffer() {
         vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
     );
 
-    // Copy from the staging buffer to the vertex buffer
     commandPool.copyBuffer(stagingBuffer, stagingOffset, vertexBufferHandle, vertexBufferOffset, bufferSize);
-
-    // Free the staging buffer 
     memoryAllocator.free(stagingBuffer, stagingOffset);
 
-    // Assign handles and offsets
     vertexBuffer = vertexBufferHandle;
     vertexBufferOffset_ = vertexBufferOffset; 
 }
 
 void Model::createIndexBuffer() {
+    if (indices.empty()) {
+        indexBuffer = VK_NULL_HANDLE;
+        indexBufferOffset_ = 0;
+        return;
+    }
+
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     std::cout << "[BUFFER] createIndexBuffer(): uploading "
         << indices.size() << " indices\n";
 
-    // Allocate staging buffer using MemoryAllocator
     auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -211,15 +292,75 @@ void Model::createIndexBuffer() {
         vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
     );
 
-    // Copy data with offsets
     commandPool.copyBuffer(stagingBuffer, stagingOffset, indexBufferHandle, indexBufferOffset, bufferSize);
-
-    // Free staging buffer
     memoryAllocator.free(stagingBuffer, stagingOffset);
 
-    // Assign handles and offsets
     indexBuffer = indexBufferHandle;
     indexBufferOffset_ = indexBufferOffset;
+}
+
+void Model::createRenderVertexBuffer() {
+    if (renderVertices.empty()) {
+        renderVertexBuffer = VK_NULL_HANDLE;
+        renderVertexBufferOffset_ = 0;
+        return;
+    }
+
+    VkDeviceSize bufferSize = sizeof(renderVertices[0]) * renderVertices.size();
+
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, renderVertices.data(), static_cast<size_t>(bufferSize));
+
+    auto [bufferHandle, bufferOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        vulkanDevice.getPhysicalDeviceProperties().limits.minUniformBufferOffsetAlignment
+    );
+
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, bufferHandle, bufferOffset, bufferSize);
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+
+    renderVertexBuffer = bufferHandle;
+    renderVertexBufferOffset_ = bufferOffset;
+}
+
+void Model::createRenderIndexBuffer() {
+    if (renderIndices.empty()) {
+        renderIndexBuffer = VK_NULL_HANDLE;
+        renderIndexBufferOffset_ = 0;
+        return;
+    }
+
+    VkDeviceSize bufferSize = sizeof(renderIndices[0]) * renderIndices.size();
+
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, renderIndices.data(), static_cast<size_t>(bufferSize));
+
+    auto [bufferHandle, bufferOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment
+    );
+
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, bufferHandle, bufferOffset, bufferSize);
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+
+    renderIndexBuffer = bufferHandle;
+    renderIndexBufferOffset_ = bufferOffset;
 }
 
 glm::vec3 Model::getFaceNormal(uint32_t faceIndex) const {
@@ -269,97 +410,45 @@ void Model::equalizeFaceAreas() {
 }
 
 void Model::recalculateNormals() {
-    // Reset all normals
-    for (auto& vertex : vertices) {
+    // Recompute normals for render mesh only.
+    // Topology mesh stays untouched for contact/intrinsic systems.
+    if (renderVertices.empty() || renderIndices.empty()) {
+        return;
+    }
+
+    for (auto& vertex : renderVertices) {
         vertex.normal = glm::vec3(0.0f);
     }
 
-    // Edge angle threshold for sharp edges in radians
-    float sharpAngleThreshold = 20.0f * (3.14159f / 180.0f);
+    for (size_t i = 0; i + 2 < renderIndices.size(); i += 3) {
+        const uint32_t i0 = renderIndices[i];
+        const uint32_t i1 = renderIndices[i + 1];
+        const uint32_t i2 = renderIndices[i + 2];
+        if (i0 >= renderVertices.size() || i1 >= renderVertices.size() || i2 >= renderVertices.size()) {
+            continue;
+        }
 
-    // Create a map to track which faces contribute to which vertex normals
-    std::unordered_map<uint32_t, std::vector<glm::vec3>> vertexFaceNormals;
+        const glm::vec3 v0 = renderVertices[i0].pos;
+        const glm::vec3 v1 = renderVertices[i1].pos;
+        const glm::vec3 v2 = renderVertices[i2].pos;
 
-    // Calculate face normals and accumulate
-    for (size_t i = 0; i < indices.size(); i += 3) {
-        uint32_t i0 = indices[i];
-        uint32_t i1 = indices[i + 1];
-        uint32_t i2 = indices[i + 2];
+        const glm::vec3 faceNormal = glm::cross(v1 - v0, v2 - v0);
+        const float area2 = glm::dot(faceNormal, faceNormal);
+        if (area2 < 1e-20f) {
+            continue;
+        }
 
-        glm::vec3 v0 = vertices[i0].pos;
-        glm::vec3 v1 = vertices[i1].pos;
-        glm::vec3 v2 = vertices[i2].pos;
-
-        glm::vec3 faceNormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
-
-        // Store face normal for each vertex
-        vertexFaceNormals[i0].push_back(faceNormal);
-        vertexFaceNormals[i1].push_back(faceNormal);
-        vertexFaceNormals[i2].push_back(faceNormal);
+        renderVertices[i0].normal += faceNormal;
+        renderVertices[i1].normal += faceNormal;
+        renderVertices[i2].normal += faceNormal;
     }
 
-    // Process each vertex to determine if its on a sharp edge
-    for (auto& pair : vertexFaceNormals) {
-        uint32_t vertexIndex = pair.first;
-        std::vector<glm::vec3>& faceNormals = pair.second;
-
-        // Check if this vertex is on a sharp edge by looking at face normal angles
-        bool hasSharpEdge = false;
-        for (size_t i = 0; i < faceNormals.size(); i++) {
-            for (size_t j = i + 1; j < faceNormals.size(); j++) {
-                float angle = glm::acos(glm::clamp(glm::dot(faceNormals[i], faceNormals[j]), -1.0f, 1.0f));
-                if (angle > sharpAngleThreshold) {
-                    hasSharpEdge = true;
-                    break;
-                }
-            }
-            if (hasSharpEdge) break;
-        }
-
-        if (hasSharpEdge) {
-            // For vertices on sharp edges, group similar facing normals
-            std::vector<glm::vec3> normalGroups;
-            std::vector<int> normalGroupCounts;
-
-            for (const auto& faceNormal : faceNormals) {
-                bool foundGroup = false;
-                for (size_t i = 0; i < normalGroups.size(); i++) {
-                    float angle = glm::acos(glm::clamp(glm::dot(normalGroups[i], faceNormal), -1.0f, 1.0f));
-                    if (angle < sharpAngleThreshold) {
-                        // Add to existing group
-                        normalGroups[i] = (normalGroups[i] * float(normalGroupCounts[i]) + faceNormal) / float(normalGroupCounts[i] + 1);
-                        normalGroupCounts[i]++;
-                        foundGroup = true;
-                        break;
-                    }
-                }
-
-                if (!foundGroup) {
-                    // Create new group
-                    normalGroups.push_back(faceNormal);
-                    normalGroupCounts.push_back(1);
-                }
-            }
-
-            // Find the dominant normal group
-            int maxCount = 0;
-            glm::vec3 dominantNormal(0.0f);
-            for (size_t i = 0; i < normalGroups.size(); i++) {
-                if (normalGroupCounts[i] > maxCount) {
-                    maxCount = normalGroupCounts[i];
-                    dominantNormal = normalGroups[i];
-                }
-            }
-
-            vertices[vertexIndex].normal = glm::normalize(dominantNormal);
-        }
-        else {
-            // For smooth vertices, average all face normals
-            glm::vec3 avgNormal(0.0f);
-            for (const auto& normal : faceNormals) {
-                avgNormal += normal;
-            }
-            vertices[vertexIndex].normal = glm::normalize(avgNormal);
+    for (auto& vertex : renderVertices) {
+        const float len2 = glm::dot(vertex.normal, vertex.normal);
+        if (len2 > 1e-12f) {
+            vertex.normal *= (1.0f / std::sqrt(len2));
+        } else {
+            vertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
         }
     }
 }
@@ -367,9 +456,16 @@ void Model::recalculateNormals() {
 void Model::updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices) {
     vertices = newVertices;
     indices = newIndices;
-    
+    // Topology edits invalidate OBJ corner-split mapping; mirror topology for render.
+    renderVertices = vertices;
+    renderIndices = indices;
+    recalculateNormals();
+    hasSplitRenderMesh = false;
+
     updateVertexBuffer();
     updateIndexBuffer();
+    updateRenderVertexBuffer();
+    updateRenderIndexBuffer();
 }
 
 void Model::translate(const glm::vec3& translation) {    
@@ -393,6 +489,10 @@ void Model::rotate(float angleRadians, const glm::vec3& axis, const glm::vec3& p
 }
 
 void Model::updateVertexBuffer() {
+    if (vertices.empty() || vertexBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     // Create a staging buffer
@@ -414,6 +514,10 @@ void Model::updateVertexBuffer() {
 }
 
 void Model::updateIndexBuffer() {
+    if (indices.empty() || indexBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     // Create a staging buffer
@@ -434,6 +538,46 @@ void Model::updateIndexBuffer() {
     memoryAllocator.free(stagingBuffer, stagingOffset);
 }
 
+void Model::updateRenderVertexBuffer() {
+    if (renderVertices.empty() || renderVertexBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkDeviceSize bufferSize = sizeof(renderVertices[0]) * renderVertices.size();
+
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, renderVertices.data(), static_cast<size_t>(bufferSize));
+
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, renderVertexBuffer, renderVertexBufferOffset_, bufferSize);
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+}
+
+void Model::updateRenderIndexBuffer() {
+    if (renderIndices.empty() || renderIndexBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkDeviceSize bufferSize = sizeof(renderIndices[0]) * renderIndices.size();
+
+    auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* stagingData = memoryAllocator.getMappedPointer(stagingBuffer, stagingOffset);
+    memcpy(stagingData, renderIndices.data(), static_cast<size_t>(bufferSize));
+
+    commandPool.copyBuffer(stagingBuffer, stagingOffset, renderIndexBuffer, renderIndexBufferOffset_, bufferSize);
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+}
+
 void Model::saveOBJ(const std::string& path) const {
     std::ofstream out(path);
     // write vertices
@@ -451,9 +595,21 @@ void Model::cleanup() {
     if (vertexBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(vertexBuffer, vertexBufferOffset_);
         vertexBuffer = VK_NULL_HANDLE;
+        vertexBufferOffset_ = 0;
     }
     if (indexBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(indexBuffer, indexBufferOffset_);
         indexBuffer = VK_NULL_HANDLE;
+        indexBufferOffset_ = 0;
+    }
+    if (renderVertexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(renderVertexBuffer, renderVertexBufferOffset_);
+        renderVertexBuffer = VK_NULL_HANDLE;
+        renderVertexBufferOffset_ = 0;
+    }
+    if (renderIndexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(renderIndexBuffer, renderIndexBufferOffset_);
+        renderIndexBuffer = VK_NULL_HANDLE;
+        renderIndexBufferOffset_ = 0;
     }
 }

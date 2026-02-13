@@ -10,7 +10,7 @@ layout(push_constant) uniform PushConstants {
     vec3 outlineColor;
 } pc;
 
-layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outColor;
 
 void main() {
     ivec2 pixelCoord = ivec2(gl_FragCoord.xy);

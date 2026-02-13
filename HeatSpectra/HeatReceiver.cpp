@@ -6,13 +6,10 @@
 #include "ResourceManager.hpp"
 #include "iODT.hpp"
 #include "VulkanBuffer.hpp"
-#include "UniformBufferManager.hpp"
 #include "HeatSource.hpp"
 #include "HashGrid.hpp"
 #include "SurfelRenderer.hpp"
 #include "Structs.hpp"
-#include "VoronoiSeeder.hpp"
-#include "VoronoiKDTree.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -20,9 +17,9 @@
 #include <cstring>
 
 HeatReceiver::HeatReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& receiverModel, 
-    ResourceManager& resourceManager, CommandPool& renderCommandPool, uint32_t maxFramesInFlight)
+    ResourceManager& resourceManager, CommandPool& renderCommandPool)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), receiverModel(receiverModel), 
-    resourceManager(resourceManager), renderCommandPool(renderCommandPool), maxFramesInFlight(maxFramesInFlight) {
+    resourceManager(resourceManager), renderCommandPool(renderCommandPool) {
 }
 
 HeatReceiver::~HeatReceiver() {
@@ -87,7 +84,6 @@ void HeatReceiver::createReceiverBuffers() {
     
     auto intrinsicMeshData = supportingHalfedge->buildIntrinsicMesh();
     size_t vertexCount = intrinsicMeshData.vertices.size();
-
     size_t triangleCount = intrinsicMeshData.indices.size() / 3;
     
     if (vertexCount == 0) {
@@ -95,15 +91,15 @@ void HeatReceiver::createReceiverBuffers() {
         return;
     }
     
-    
     intrinsicVertexCount = vertexCount;
     intrinsicTriangleCount = triangleCount;
 
+    constexpr uint32_t K_CANDIDATES = 64;
     VkDeviceSize vertexBufferSize = sizeof(SurfacePoint) * vertexCount;
     VkDeviceSize triangleIndicesBufferSize = sizeof(uint32_t) * intrinsicMeshData.indices.size();
+    VkDeviceSize candidateBufferSize = sizeof(uint32_t) * triangleCount * K_CANDIDATES;
 
     VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
-
     
     createTexelBuffer(
         memoryAllocator, vulkanDevice,
@@ -141,7 +137,7 @@ void HeatReceiver::createReceiverBuffers() {
 
         auto [triIdxHandle, triIdxOffset] = memoryAllocator.allocate(
             triangleIndicesBufferSize,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             storageAlignment
         );
@@ -240,6 +236,58 @@ void HeatReceiver::createReceiverBuffers() {
         true,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT
     );
+
+    // Create Voronoi triangle mapping buffer
+    VkDeviceSize voronoiTriangleMappingBufferSize = sizeof(VoronoiSurfaceMapping) * triangleCount;
+    void* voronoiTriMappedPtr;
+    createStorageBuffer(
+        memoryAllocator, vulkanDevice,
+        nullptr, voronoiTriangleMappingBufferSize,
+        voronoiTriangleMappingBuffer, voronoiTriangleMappingBufferOffset, &voronoiTriMappedPtr,
+        true,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT
+    );
+
+    // Create Voronoi candidate buffer
+    if (voronoiCandidateBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiCandidateBuffer, voronoiCandidateBufferOffset);
+        voronoiCandidateBuffer = VK_NULL_HANDLE;
+        voronoiCandidateBufferOffset = 0;
+    }
+    if (candidateBufferSize > 0) {
+        auto [candHandle, candOffset] = memoryAllocator.allocate(
+            candidateBufferSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            storageAlignment
+        );
+        voronoiCandidateBuffer = candHandle;
+        voronoiCandidateBufferOffset = candOffset;
+
+        std::vector<uint32_t> initData(static_cast<size_t>(triangleCount) * K_CANDIDATES, 0xFFFFFFFFu);
+
+        VkBuffer stagingBuffer;
+        VkDeviceSize stagingOffset;
+        void* stagingData;
+        createStagingBuffer(
+            memoryAllocator,
+            candidateBufferSize,
+            stagingBuffer,
+            stagingOffset,
+            &stagingData
+        );
+        memcpy(stagingData, initData.data(), static_cast<size_t>(candidateBufferSize));
+
+        VkCommandBuffer cmd = renderCommandPool.beginCommands();
+        VkBufferCopy region{};
+        region.srcOffset = stagingOffset;
+        region.dstOffset = voronoiCandidateBufferOffset;
+        region.size = candidateBufferSize;
+        vkCmdCopyBuffer(cmd, stagingBuffer, voronoiCandidateBuffer, 1, &region);
+        renderCommandPool.endCommands(cmd);
+
+        memoryAllocator.free(stagingBuffer, stagingOffset);
+    }
     
     std::cout << "[HeatReceiver] Created buffers for " << vertexCount << " vertices, "
               << triangleCount << " triangles" << std::endl;
@@ -308,7 +356,6 @@ void HeatReceiver::initializeReceiverBuffer() {
 
     initStagingBuffer = stagingBuffer;
     initStagingOffset = stagingOffset;
-    initStagingData = stagingData;
     initBufferSize = bufferSize;
 
 }
@@ -340,10 +387,40 @@ void HeatReceiver::stageVoronoiSurfaceMapping(const std::vector<uint32_t>& cellI
     
     memcpy(stagingData, mappingData.data(), bufferSize);
     
-    	voronoiMappingStagingBuffer = stagingBuffer;
+	voronoiMappingStagingBuffer = stagingBuffer;
 	voronoiMappingStagingOffset = stagingOffset;
-	voronoiMappingStagingData = stagingData;
 	voronoiMappingBufferSize = bufferSize;
+}
+
+void HeatReceiver::stageVoronoiTriangleMapping(const std::vector<uint32_t>& cellIndices) {
+    if (cellIndices.empty()) {
+        return;
+    }
+    if (intrinsicTriangleCount != 0 && cellIndices.size() != intrinsicTriangleCount) {
+        return;
+    }
+
+    std::vector<VoronoiSurfaceMapping> mappingData(cellIndices.size());
+    for (size_t i = 0; i < cellIndices.size(); ++i) {
+        mappingData[i].cellIndex = cellIndices[i];
+    }
+
+    VkDeviceSize bufferSize = sizeof(VoronoiSurfaceMapping) * cellIndices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceSize stagingOffset;
+    void* stagingData;
+    createStagingBuffer(
+        memoryAllocator,
+        bufferSize,
+        stagingBuffer, stagingOffset, &stagingData
+    );
+
+    memcpy(stagingData, mappingData.data(), bufferSize);
+
+    voronoiTriangleMappingStagingBuffer = stagingBuffer;
+    voronoiTriangleMappingStagingOffset = stagingOffset;
+    voronoiTriangleMappingBufferSize = bufferSize;
 }
 
 void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
@@ -359,6 +436,10 @@ void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
         VkBufferCopy voronoiMappingCopyRegion = { voronoiMappingStagingOffset, voronoiMappingBufferOffset, voronoiMappingBufferSize };
         vkCmdCopyBuffer(commandBuffer, voronoiMappingStagingBuffer, voronoiMappingBuffer, 1, &voronoiMappingCopyRegion);
     }
+    if (voronoiTriangleMappingStagingBuffer != VK_NULL_HANDLE) {
+        VkBufferCopy voronoiTriMappingCopyRegion = { voronoiTriangleMappingStagingOffset, voronoiTriangleMappingBufferOffset, voronoiTriangleMappingBufferSize };
+        vkCmdCopyBuffer(commandBuffer, voronoiTriangleMappingStagingBuffer, voronoiTriangleMappingBuffer, 1, &voronoiTriMappingCopyRegion);
+    }
     
     VkMemoryBarrier memBarrier{};
     memBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -368,7 +449,7 @@ void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
     vkCmdPipelineBarrier(
         commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
         0,
         1, &memBarrier,
         0, nullptr,
@@ -376,89 +457,8 @@ void HeatReceiver::executeBufferTransfers(VkCommandBuffer commandBuffer) {
     );
 }
 
-void HeatReceiver::updateDescriptors(
-    VkDescriptorSetLayout surfaceLayout,
-    VkDescriptorSetLayout renderLayout,
-    VkDescriptorPool surfacePool,
-    VkDescriptorPool renderPool,
-    UniformBufferManager& uboManager,
-    VkBuffer tempBufferA, VkDeviceSize tempBufferAOffset,
-    VkBuffer tempBufferB, VkDeviceSize tempBufferBOffset,
-    VkBuffer timeBuffer, VkDeviceSize timeBufferOffset,
-    uint32_t maxFramesInFlight,
-    uint32_t nodeCount) {
-    
-    auto* iodt = resourceManager.getRemesherForModel(&receiverModel);
-    if (!iodt) 
-        return;
-    
-    auto* supportingHalfedge = iodt->getSupportingHalfedge();
-    if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
-        std::cerr << "[HeatReceiver] Supporting halfedge not ready" << std::endl;
-        return;
-    }
-    
-    if (heatRenderDescriptorSets.empty()) {
-        heatRenderDescriptorSets.resize(maxFramesInFlight);
-        
-        std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, renderLayout);
-        
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = renderPool;
-        allocInfo.descriptorSetCount = maxFramesInFlight;
-        allocInfo.pSetLayouts = layouts.data();
-        
-        if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, heatRenderDescriptorSets.data()) != VK_SUCCESS) {
-            std::cerr << "[HeatReceiver] Failed to allocate heat render descriptor sets" << std::endl;
-            return;
-        }
-    }
-
-    
-    for (size_t i = 0; i < maxFramesInFlight; i++) {
-        std::array<VkWriteDescriptorSet, 12> descriptorWrites{};
-        
-        VkDescriptorBufferInfo uboBufferInfo{};
-        uboBufferInfo.buffer = uboManager.getUniformBuffers()[i];
-        uboBufferInfo.offset = uboManager.getUniformBufferOffsets()[i];
-        uboBufferInfo.range = sizeof(UniformBufferObject);
-        
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = heatRenderDescriptorSets[i];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].dstArrayElement = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
-        
-        VkBufferView bufferViews[11] = {
-            supportingHalfedge->getSupportingHalfedgeView(),
-            supportingHalfedge->getSupportingAngleView(),
-            supportingHalfedge->getHalfedgeView(),
-            supportingHalfedge->getEdgeView(),
-            supportingHalfedge->getTriangleView(),
-            supportingHalfedge->getLengthView(),
-            supportingHalfedge->getInputHalfedgeView(),
-            supportingHalfedge->getInputEdgeView(),
-            supportingHalfedge->getInputTriangleView(),
-            supportingHalfedge->getInputLengthView(),
-            surfaceBufferView
-        };
-        
-        for (int j = 0; j < 11; j++) {
-            descriptorWrites[j + 1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[j + 1].dstSet = heatRenderDescriptorSets[i];
-            descriptorWrites[j + 1].dstBinding = 1 + j;
-            descriptorWrites[j + 1].dstArrayElement = 0;
-            descriptorWrites[j + 1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-            descriptorWrites[j + 1].descriptorCount = 1;
-            descriptorWrites[j + 1].pTexelBufferView = &bufferViews[j];
-        }
-        
-        vkUpdateDescriptorSets(vulkanDevice.getDevice(), 12, descriptorWrites.data(), 0, nullptr);
-    }
-    
+void HeatReceiver::updateDescriptors(VkDescriptorSetLayout surfaceLayout, VkDescriptorPool surfacePool, VkBuffer tempBufferA, VkDeviceSize tempBufferAOffset,
+    VkBuffer tempBufferB, VkDeviceSize tempBufferBOffset, VkBuffer timeBuffer, VkDeviceSize timeBufferOffset, uint32_t nodeCount) {
     if (surfaceComputeSetA == VK_NULL_HANDLE || surfaceComputeSetB == VK_NULL_HANDLE) {
         std::vector<VkDescriptorSetLayout> surfacePingPongLayouts = {surfaceLayout, surfaceLayout};
         
@@ -670,62 +670,22 @@ void HeatReceiver::updateContactDescriptors(
 void HeatReceiver::recreateDescriptors(
 	VkDescriptorSetLayout surfaceLayout,
 	VkDescriptorPool surfacePool,
-	VkDescriptorSetLayout renderLayout,
-	VkDescriptorPool renderPool,
-	UniformBufferManager& uboManager,
 	VkBuffer tempBufferA, VkDeviceSize tempBufferAOffset,
 	VkBuffer tempBufferB, VkDeviceSize tempBufferBOffset,
 	VkBuffer timeBuffer, VkDeviceSize timeBufferOffset,
-	uint32_t maxFramesInFlight,
 	uint32_t nodeCount) {
 	
 	updateDescriptors(
 		surfaceLayout,
-		renderLayout,
 		surfacePool,
-		renderPool,
-		uboManager,
 		tempBufferA,
 		tempBufferAOffset,
 		tempBufferB,
 		tempBufferBOffset,
 		timeBuffer,
 		timeBufferOffset,
-		maxFramesInFlight,
 		nodeCount);
 }
-
-void HeatReceiver::recreateContactDescriptors(
-    VkDescriptorSetLayout contactLayout,
-    VkDescriptorPool contactPool,
-    HeatSource& heatSource,
-    VkBuffer tempBufferA,
-    VkDeviceSize tempBufferAOffset,
-    VkBuffer tempBufferB,
-    VkDeviceSize tempBufferBOffset,
-    VkBuffer injectionKBuffer,
-    VkDeviceSize injectionKBufferOffset,
-    VkBuffer injectionKTBuffer,
-    VkDeviceSize injectionKTBufferOffset,
-    uint32_t nodeCount) {
-
-    updateContactDescriptors(
-        contactLayout,
-        contactPool,
-        heatSource,
-        tempBufferA,
-        tempBufferAOffset,
-        tempBufferB,
-        tempBufferBOffset,
-        injectionKBuffer,
-        injectionKBufferOffset,
-        injectionKTBuffer,
-        injectionKTBufferOffset,
-        nodeCount
-    );
-}
-
-
 
 void HeatReceiver::cleanup() {
     if (surfaceBufferView != VK_NULL_HANDLE) {
@@ -752,6 +712,15 @@ void HeatReceiver::cleanup() {
         memoryAllocator.free(voronoiMappingBuffer, voronoiMappingBufferOffset);
         voronoiMappingBuffer = VK_NULL_HANDLE;
     }
+    if (voronoiTriangleMappingBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiTriangleMappingBuffer, voronoiTriangleMappingBufferOffset);
+        voronoiTriangleMappingBuffer = VK_NULL_HANDLE;
+    }
+    if (voronoiCandidateBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiCandidateBuffer, voronoiCandidateBufferOffset);
+        voronoiCandidateBuffer = VK_NULL_HANDLE;
+        voronoiCandidateBufferOffset = 0;
+    }
 	if (contactPairBuffer != VK_NULL_HANDLE) {
 		memoryAllocator.free(contactPairBuffer, contactPairBufferOffset);
 		contactPairBuffer = VK_NULL_HANDLE;
@@ -765,16 +734,13 @@ void HeatReceiver::cleanupStagingBuffers() {
     if (initStagingBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(initStagingBuffer, initStagingOffset);
         initStagingBuffer = VK_NULL_HANDLE;
-        initStagingData = nullptr;
-    }
-    if (interpStagingBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(interpStagingBuffer, interpStagingOffset);
-        interpStagingBuffer = VK_NULL_HANDLE;
-        interpStagingData = nullptr;
     }
     if (voronoiMappingStagingBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(voronoiMappingStagingBuffer, voronoiMappingStagingOffset);
         voronoiMappingStagingBuffer = VK_NULL_HANDLE;
-        voronoiMappingStagingData = nullptr;
+    }
+    if (voronoiTriangleMappingStagingBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiTriangleMappingStagingBuffer, voronoiTriangleMappingStagingOffset);
+        voronoiTriangleMappingStagingBuffer = VK_NULL_HANDLE;
     }
 }

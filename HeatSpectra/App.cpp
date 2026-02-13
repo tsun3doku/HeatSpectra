@@ -30,6 +30,8 @@
 #include "VulkanImage.hpp"
 #include "CommandBufferManager.hpp"
 #include "InputManager.hpp"
+#include "LightingSystem.hpp"
+#include "MaterialSystem.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -106,9 +108,25 @@ bool App::isHeatSystemActive() const {
     return false;
 }
 
+bool App::isHeatSystemPaused() const {
+    if (heatSystem) {
+        return heatSystem->getIsPaused();
+    }
+    return false;
+}
+
 void App::toggleHeatSystem() {
     if (heatSystem) {
-        bool newState = !heatSystem->getIsActive();
+        const bool isActive = heatSystem->getIsActive();
+        const bool isPaused = heatSystem->getIsPaused();
+
+        // If currently paused, toggle acts as resume.
+        if (isActive && isPaused) {
+            heatSystem->setIsPaused(false);
+            return;
+        }
+
+        bool newState = !isActive;
         
         // Cant activate heat system until both models are remeshed
         if (newState && !resourceManager->areRequiredModelsRemeshed()) {
@@ -150,8 +168,7 @@ void App::toggleHeatSystem() {
 
 void App::pauseHeatSystem() {
     if (heatSystem && heatSystem->getIsActive()) {
-        heatSystem->setActive(false);
-        heatSystem->setIsPaused(true); 
+        heatSystem->setIsPaused(true);
     }
 }
 
@@ -321,6 +338,12 @@ void App::initRenderResources() {
             camera,
             MAXFRAMESINFLIGHT
         );
+
+        // Create MaterialSystem (CPU-side material state and default CAD material)
+        materialSystem = std::make_unique<MaterialSystem>(*uniformBufferManager);
+        
+        // Create LightingSystem (CPU-side lighting state)
+        lightingSystem = std::make_unique<LightingSystem>(camera, *uniformBufferManager);
 
         // Create ResourceManager 
         resourceManager = std::make_unique<ResourceManager>(
@@ -857,12 +880,18 @@ void App::drawFrame() {
         // Process model selection requests
         UniformBufferObject ubo{};
         uniformBufferManager->updateUniformBuffer(swapChainExtent, currentFrame, ubo);
+
         GridUniformBufferObject gridUbo{};
         glm::vec3 gridSize = resourceManager->calculateMaxBoundingBoxSize();
         uniformBufferManager->updateGridUniformBuffer(currentFrame, ubo, gridUbo, gridSize);
         resourceManager->getGrid().updateLabels(gridSize);
-        LightUniformBufferObject lightUbo{};
-        uniformBufferManager->updateLightUniformBuffer(currentFrame, lightUbo);
+
+        if (lightingSystem) {
+            lightingSystem->update(currentFrame);
+        }
+        if (materialSystem) {
+            materialSystem->update(currentFrame);
+        }
 
         VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
         vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
@@ -877,7 +906,7 @@ void App::drawFrame() {
         bool leftPressed = window->isKeyPressed(Qt::Key_Left);
         bool rightPressed = window->isKeyPressed(Qt::Key_Right);
         
-        heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo, WIDTH, HEIGHT);
+        heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo);
         heatSystem->recordComputeCommands(computeCommandBuffer, currentFrame);
 
         VkSubmitInfo computeSubmitInfo{};

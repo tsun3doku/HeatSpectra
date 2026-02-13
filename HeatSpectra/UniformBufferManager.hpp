@@ -26,17 +26,16 @@ public:
 	void setColor(glm::vec3 newColor, UniformBufferObject& ubo);
 
 	void updateGridUniformBuffer(uint32_t currentImage, const UniformBufferObject& ubo, GridUniformBufferObject& gridUbo, const glm::vec3& gridSize);
-	void updateLightUniformBuffer(uint32_t currentImage, LightUniformBufferObject& lightUbo);
 	void updateSSAOKernelBuffer(uint32_t currentImage, SSAOKernelBufferObject& ssaoKernel);
 
 	void createUniformBuffers(uint32_t maxFramesInFlight);
 	void createGridUniformBuffers(uint32_t maxFramesInFlight);
 	void createLightUniformBuffers(uint32_t maxFramesInFlight);
+	void createMaterialUniformBuffers(uint32_t maxFramesInFlight);
 	void createSSAOKernelBuffers(uint32_t maxFramesInFlight);
 	
 	void cleanup(uint32_t maxFramesInFlight);
 
-	// Getter functions for Main Uniform Buffers
 	const std::vector<VkBuffer>& getUniformBuffers() const {
 		return uniformBuffers;
 	}
@@ -50,7 +49,6 @@ public:
 		return uniformBufferOffsets_;
 	}
 
-	// Getter functions for Grid Uniform Buffers
 	const std::vector<VkBuffer>& getGridUniformBuffers() const {
 		return gridUniformBuffers;
 	}
@@ -61,7 +59,6 @@ public:
 		return gridUniformBufferOffsets_;
 	}
 
-	// Getter functions for Light Buffers
 	const std::vector<VkBuffer>& getLightBuffers() const {
 		return lightBuffers;
 	}
@@ -72,7 +69,16 @@ public:
 		return lightBufferOffsets_;
 	}
 
-	// Getter functions for SSAO Kernel Buffers
+	const std::vector<VkBuffer>& getMaterialBuffers() const {
+		return materialBuffers;
+	}
+	const std::vector<void*>& getMaterialBuffersMapped() const {
+		return materialBuffersMapped;
+	}
+	const std::vector<VkDeviceSize>& getMaterialBufferOffsets() const {
+		return materialBufferOffsets_;
+	}
+
 	const std::vector<VkBuffer>& getSSAOKernelBuffers() const {
 		return SSAOKernelBuffers;
 	}
@@ -99,6 +105,10 @@ private:
 	std::vector<VkBuffer> lightBuffers;
 	std::vector<void*> lightBuffersMapped;
 	std::vector<VkDeviceSize> lightBufferOffsets_;
+
+	std::vector<VkBuffer> materialBuffers;
+	std::vector<void*> materialBuffersMapped;
+	std::vector<VkDeviceSize> materialBufferOffsets_;
 
 	std::vector<VkBuffer> SSAOKernelBuffers;
 	std::vector<void*> SSAOKernelBuffersMapped;

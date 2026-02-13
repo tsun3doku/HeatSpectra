@@ -16,7 +16,7 @@ DeferredRenderer::~DeferredRenderer() {
 }
 
 void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkFormat swapchainImageFormat) {
-    VkAttachmentDescription2 attachments[13] = {};
+    VkAttachmentDescription2 attachments[15] = {};
     // Albedo attachment
     attachments[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -88,7 +88,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[8].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[8].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[8].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    // Grid MSAA color attachment 
+    // Line overlay MSAA color attachment
     attachments[9].sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2;
     attachments[9].format = swapchainImageFormat;
     attachments[9].samples = VK_SAMPLE_COUNT_8_BIT;
@@ -98,7 +98,7 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[9].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[9].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[9].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    // Grid resolve attachment 
+    // Line overlay resolve attachment
     attachments[10] = attachments[9];
     attachments[10].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[10].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -122,6 +122,10 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     attachments[12].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[12].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[12].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    // Surface overlay MSAA color attachment
+    attachments[13] = attachments[9];
+    // Surface overlay resolve attachment
+    attachments[14] = attachments[10];
 
     // Resolve attachments for color (indices 4, 5, 6)
     VkAttachmentReference2 resolveRefs[3] = {};
@@ -211,6 +215,13 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     lightingResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     lightingResolveRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
+    VkAttachmentReference2 lightingDepthRef = {};
+    lightingDepthRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    lightingDepthRef.pNext = nullptr;
+    lightingDepthRef.attachment = 3;  // Reuse geometry depth/stencil
+    lightingDepthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    lightingDepthRef.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+
     VkSubpassDescription2 lightingSubpass = {};
     lightingSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
     lightingSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -219,20 +230,28 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     lightingSubpass.colorAttachmentCount = 1;
     lightingSubpass.pColorAttachments = &lightingColorRef;
     lightingSubpass.pResolveAttachments = &lightingResolveRef;  // Resolve MSAA lighting
-    lightingSubpass.pDepthStencilAttachment = nullptr;          // No depth test for fullscreen lighting 
+    lightingSubpass.pDepthStencilAttachment = &lightingDepthRef; // Stencil mask geometry coverage
 
-    // Grid Subpass
-    VkAttachmentReference2 gridColorRef = {};
-    gridColorRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    gridColorRef.pNext = nullptr;
-    gridColorRef.attachment = 9;
-    gridColorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    gridColorRef.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    // Overlay subpass (surface + line overlays)
+    VkAttachmentReference2 overlayColorRefs[2] = {};
+    overlayColorRefs[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    overlayColorRefs[0].attachment = 13; // Surface overlay MSAA
+    overlayColorRefs[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    overlayColorRefs[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    overlayColorRefs[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    overlayColorRefs[1].attachment = 9;  // Line overlay MSAA
+    overlayColorRefs[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    overlayColorRefs[1].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-    VkAttachmentReference2 gridResolveRef{};
-    gridResolveRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    gridResolveRef.attachment = 10;
-    gridResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference2 overlayResolveRefs[2] = {};
+    overlayResolveRefs[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    overlayResolveRefs[0].attachment = 14; // Surface overlay resolve
+    overlayResolveRefs[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    overlayResolveRefs[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    overlayResolveRefs[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    overlayResolveRefs[1].attachment = 10; // Line overlay resolve
+    overlayResolveRefs[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    overlayResolveRefs[1].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkAttachmentReference2 gridDepthRef = {};
     gridDepthRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
@@ -243,24 +262,34 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
 
     VkSubpassDescription2 gridSubpass = {};
     gridSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
-    gridSubpass.pNext = &depthResolve; 
+    gridSubpass.pNext = &depthResolve;
     gridSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    gridSubpass.colorAttachmentCount = 1;
-    gridSubpass.pColorAttachments = &gridColorRef;
+    gridSubpass.colorAttachmentCount = 2;
+    gridSubpass.pColorAttachments = overlayColorRefs;
     gridSubpass.pDepthStencilAttachment = &gridDepthRef;
-    gridSubpass.pResolveAttachments = &gridResolveRef;
+    gridSubpass.pResolveAttachments = overlayResolveRefs;
 
-    VkAttachmentReference2 blendInputRefs[2] = {};
-    // Read grid resolve
+    VkAttachmentReference2 blendInputRefs[4] = {};
+    // Read surface overlay resolve
     blendInputRefs[0].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    blendInputRefs[0].attachment = 10;
+    blendInputRefs[0].attachment = 14;
     blendInputRefs[0].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     blendInputRefs[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    // Read lighting resolve
+    // Read line overlay resolve
     blendInputRefs[1].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
-    blendInputRefs[1].attachment = 11;
+    blendInputRefs[1].attachment = 10;
     blendInputRefs[1].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     blendInputRefs[1].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    // Read lighting resolve
+    blendInputRefs[2].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    blendInputRefs[2].attachment = 11;
+    blendInputRefs[2].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    blendInputRefs[2].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    // Read albedo resolve alpha for geometry coverage correction
+    blendInputRefs[3].sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    blendInputRefs[3].attachment = 4;
+    blendInputRefs[3].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    blendInputRefs[3].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkAttachmentReference2 blendOutputRef{};
     blendOutputRef.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
@@ -271,13 +300,13 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     VkSubpassDescription2 blendSubpass{};
     blendSubpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
     blendSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    blendSubpass.inputAttachmentCount = 2;  // Grid + Lighting
+    blendSubpass.inputAttachmentCount = 4;  // Surface + Line + Lighting + AlbedoCoverage
     blendSubpass.pInputAttachments = blendInputRefs;
     blendSubpass.colorAttachmentCount = 1;
     blendSubpass.pColorAttachments = &blendOutputRef;
 
     // Subpass Dependencies 
-    std::array<VkSubpassDependency2, 5> dependencies = {};
+    std::array<VkSubpassDependency2, 7> dependencies = {};
     dependencies[0].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
     dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[0].dstSubpass = 0; // Geomtry subpass
@@ -292,7 +321,8 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     dependencies[1].dstSubpass = 1; // Lighting subpass
     dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     dependencies[1].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -319,16 +349,35 @@ void DeferredRenderer::createRenderPass(const VulkanDevice& vulkanDevice, VkForm
     dependencies[4].srcSubpass = 1; // Lighting subpass
     dependencies[4].dstSubpass = 3; // Blend subpass
     dependencies[4].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[4].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;;
-    dependencies[4].srcAccessMask = 0;
-    dependencies[4].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[4].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[4].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[4].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies[4].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[5].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
+    dependencies[5].srcSubpass = 2; // Overlay subpass
+    dependencies[5].dstSubpass = 3; // Blend subpass
+    dependencies[5].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[5].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[5].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[5].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies[5].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[6].sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2;
+    dependencies[6].srcSubpass = 0; // Geometry subpass
+    dependencies[6].dstSubpass = 3; // Blend subpass
+    dependencies[6].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[6].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[6].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[6].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies[6].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     std::array<VkSubpassDescription2, 4> subpasses = { geometrySubpass, lightingSubpass, gridSubpass, blendSubpass };
 
     // Create Render Pass 
     VkRenderPassCreateInfo2 renderPassInfo2 = {};
     renderPassInfo2.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
-    renderPassInfo2.attachmentCount = 13;  // Updated for lighting MSAA + resolve + swapchain
+    renderPassInfo2.attachmentCount = 15;
     renderPassInfo2.pAttachments = attachments;
     renderPassInfo2.subpassCount = static_cast<uint32_t>(subpasses.size());
     renderPassInfo2.pSubpasses = subpasses.data();
@@ -382,6 +431,14 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
     gridResolveViews.resize(maxFramesInFlight);
     gridResolveImages.resize(maxFramesInFlight);
     gridResolveMemories.resize(maxFramesInFlight);
+
+    // Surface overlay resources
+    surfaceOverlayViews.resize(maxFramesInFlight);
+    surfaceOverlayImages.resize(maxFramesInFlight);
+    surfaceOverlayMemories.resize(maxFramesInFlight);
+    surfaceOverlayResolveViews.resize(maxFramesInFlight);
+    surfaceOverlayResolveImages.resize(maxFramesInFlight);
+    surfaceOverlayResolveMemories.resize(maxFramesInFlight);
 
     // Lighting resources
     lightingViews.resize(maxFramesInFlight);
@@ -484,6 +541,22 @@ void DeferredRenderer::createImageViews(const VulkanDevice& vulkanDevice, VkForm
             VK_SAMPLE_COUNT_1_BIT);
         gridResolveViews[i] = createImageView(vulkanDevice, gridResolveImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 
+        // Surface overlay image creation (multisampled)
+        createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, surfaceOverlayImages[i], surfaceOverlayMemories[i],
+            VK_SAMPLE_COUNT_8_BIT);
+        surfaceOverlayViews[i] = createImageView(vulkanDevice, surfaceOverlayImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        // Surface overlay resolve image
+        createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, surfaceOverlayResolveImages[i], surfaceOverlayResolveMemories[i],
+            VK_SAMPLE_COUNT_1_BIT);
+        surfaceOverlayResolveViews[i] = createImageView(vulkanDevice, surfaceOverlayResolveImages[i], swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+
         // Lighting image creation (multisampled) 
         createImage(vulkanDevice, extent.width, extent.height, swapchainImageFormat,
             VK_IMAGE_TILING_OPTIMAL,
@@ -513,6 +586,7 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImageView(vulkanDevice.getDevice(), positionViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), depthViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), gridViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), surfaceOverlayViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), albedoResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), normalResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), positionResolveViews[i], nullptr);
@@ -520,6 +594,7 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImageView(vulkanDevice.getDevice(), depthResolveSamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), stencilMSAASamplerViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), gridResolveViews[i], nullptr);
+            vkDestroyImageView(vulkanDevice.getDevice(), surfaceOverlayResolveViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), lightingViews[i], nullptr);
             vkDestroyImageView(vulkanDevice.getDevice(), lightingResolveViews[i], nullptr);
 
@@ -534,11 +609,13 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkDestroyImage(vulkanDevice.getDevice(), positionImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), depthImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), gridImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), surfaceOverlayImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), albedoResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), normalResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), positionResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), depthResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), gridResolveImages[i], nullptr);
+            vkDestroyImage(vulkanDevice.getDevice(), surfaceOverlayResolveImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), lightingImages[i], nullptr);
             vkDestroyImage(vulkanDevice.getDevice(), lightingResolveImages[i], nullptr);
 
@@ -553,11 +630,13 @@ void DeferredRenderer::cleanupImages(VulkanDevice& vulkanDevice, uint32_t maxFra
             vkFreeMemory(vulkanDevice.getDevice(), positionMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), depthMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), gridMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), surfaceOverlayMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), albedoResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), normalResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), positionResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), depthResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), gridResolveMemories[i], nullptr);
+            vkFreeMemory(vulkanDevice.getDevice(), surfaceOverlayResolveMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), lightingMemories[i], nullptr);
             vkFreeMemory(vulkanDevice.getDevice(), lightingResolveMemories[i], nullptr);
 

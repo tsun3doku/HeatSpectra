@@ -49,6 +49,23 @@ struct VoronoiSurfaceMapping
     uint _padding2;
 };
 
+struct ContactSampleGPU
+{
+    uint  sourceTriangleIndex;
+    float u;
+    float v;
+    float wArea;
+};
+
+struct ContactPairGPU
+{
+    ContactSampleGPU samples[7];
+    float contactArea;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+
 struct PushConstants
 {
     float4x4 heatSourceModelMatrix;
@@ -81,6 +98,8 @@ struct PushConstants
 [[vk::binding(9)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
 [[vk::binding(10)]] RWStructuredBuffer<uint> injectionKBuffer;
 [[vk::binding(11)]] RWStructuredBuffer<uint> injectionKTBuffer;
+
+[[vk::binding(12)]] StructuredBuffer<ContactPairGPU> contactPairBuffer;
 
 [[vk::push_constant]] cbuffer PushConstantsBuffer
 {
@@ -354,20 +373,21 @@ void main(uint3 dtid : SV_DispatchThreadID)
         return;
     }
 
-    SurfacePoint c = receiverCentroidBuffer[triID];
-    float3 surfacePosWorld = mul(pushConstants.visModelMatrix, float4(c.position, 1.0f)).xyz;
-
-    float3x3 visModel3x3 = (float3x3)pushConstants.visModelMatrix;
-    float3 receiverNormalWorld = normalize(mul(visModel3x3, c.normal));
-
-    float effectiveTemp = 0.0f;
-    float contactStrength = 0.0f;
-    queryNearbyHeatSource(surfacePosWorld, receiverNormalWorld, effectiveTemp, contactStrength);
-
-    if (contactStrength <= 0.0f)
+    uint pairCount = 0;
+    uint pairStride = 0;
+    contactPairBuffer.GetDimensions(pairCount, pairStride);
+    if (triID >= pairCount)
     {
         return;
     }
+
+    ContactPairGPU pair = contactPairBuffer[triID];
+    if (pair.contactArea <= 0.0f)
+    {
+        return;
+    }
+
+    float contactStrength = 1.0f;
 
     uint base = triID * 3u;
 
@@ -388,38 +408,43 @@ void main(uint3 dtid : SV_DispatchThreadID)
     uint c1 = voronoiMappingBuffer[v1].cellIndex;
     uint c2 = voronoiMappingBuffer[v2].cellIndex;
 
-    float w0 = 1.0f / 3.0f;
-    float w1 = 1.0f / 3.0f;
-    float w2 = 1.0f / 3.0f;
+    static const float3 recvBary[7] = {
+        float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f),
+        float3(0.0597158717f, 0.4701420641f, 0.4701420641f),
+        float3(0.4701420641f, 0.0597158717f, 0.4701420641f),
+        float3(0.4701420641f, 0.4701420641f, 0.0597158717f),
+        float3(0.7974269853f, 0.1012865073f, 0.1012865073f),
+        float3(0.1012865073f, 0.7974269853f, 0.1012865073f),
+        float3(0.1012865073f, 0.1012865073f, 0.7974269853f),
+    };
 
-    if (c0 == c1 && c1 == c2)
+    for (uint si = 0; si < 7u; ++si)
     {
-        addWeightedInjection(c0, 1.0f, effectiveTemp, contactStrength, c.area);
-        return;
-    }
+        ContactSampleGPU s = pair.samples[si];
+        if (s.sourceTriangleIndex == 0xFFFFFFFFu || s.wArea <= 0.0f)
+        {
+            continue;
+        }
 
-    if (c0 == c1)
-    {
-        addWeightedInjection(c0, w0 + w1, effectiveTemp, contactStrength, c.area);
-        addWeightedInjection(c2, w2, effectiveTemp, contactStrength, c.area);
-        return;
-    }
+        HeatSourceTriangle tri = heatSourceTriangleBuffer[s.sourceTriangleIndex];
+        uint i0 = tri.indices.x;
+        uint i1 = tri.indices.y;
+        uint i2 = tri.indices.z;
 
-    if (c0 == c2)
-    {
-        addWeightedInjection(c0, w0 + w2, effectiveTemp, contactStrength, c.area);
-        addWeightedInjection(c1, w1, effectiveTemp, contactStrength, c.area);
-        return;
-    }
+        float w0s = 1.0f - s.u - s.v;
+        float w1s = s.u;
+        float w2s = s.v;
 
-    if (c1 == c2)
-    {
-        addWeightedInjection(c1, w1 + w2, effectiveTemp, contactStrength, c.area);
-        addWeightedInjection(c0, w0, effectiveTemp, contactStrength, c.area);
-        return;
-    }
+        float t0 = heatSourceBuffer[i0].temperature;
+        float t1 = heatSourceBuffer[i1].temperature;
+        float t2 = heatSourceBuffer[i2].temperature;
+        float effectiveTemp = w0s * t0 + w1s * t1 + w2s * t2;
 
-    addWeightedInjection(c0, w0, effectiveTemp, contactStrength, c.area);
-    addWeightedInjection(c1, w1, effectiveTemp, contactStrength, c.area);
-    addWeightedInjection(c2, w2, effectiveTemp, contactStrength, c.area);
+        float area = s.wArea;
+        float3 bw = recvBary[si];
+
+        addWeightedInjection(c0, bw.x, effectiveTemp, contactStrength, area);
+        addWeightedInjection(c1, bw.y, effectiveTemp, contactStrength, area);
+        addWeightedInjection(c2, bw.z, effectiveTemp, contactStrength, area);
+    }
 }

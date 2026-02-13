@@ -24,6 +24,8 @@ class HeatSystem;
 class ModelSelection;
 class Gizmo;
 class WireframeRenderer;
+class LightingSystem;
+class MaterialSystem;
 
 class App {
 public:
@@ -33,6 +35,7 @@ public:
     void run(VulkanWindow* qtWindow);  
     
     bool isHeatSystemActive() const;
+    bool isHeatSystemPaused() const;
     void toggleHeatSystem();
     void pauseHeatSystem();
     void resetHeatSystem();
@@ -96,6 +99,8 @@ private:
     std::unique_ptr<ModelSelection> modelSelection;
     std::unique_ptr<Gizmo> gizmo;
     std::unique_ptr<WireframeRenderer> wireframeRenderer;
+    std::unique_ptr<LightingSystem> lightingSystem;
+    std::unique_ptr<MaterialSystem> materialSystem;
     Camera camera;
     glm::vec3 center;
     

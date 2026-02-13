@@ -33,7 +33,23 @@ struct LightUniformBufferObject {
     alignas(16) glm::vec3 lightPos_Key; // 16 byte aligned
     alignas(16) glm::vec3 lightPos_Rim; // 16 byte aligned
     alignas(16) glm::vec3 lightAmbient; // 16 byte aligned
-};  // 48 bytes
+    alignas(16) glm::vec4 lightParams;  // x=keyIntensity, y=rimIntensity, z=ambientIntensity, w=pad
+    alignas(16) glm::vec3 cameraPos;    // Camera world position for specular view direction
+    float _padding0 = 0.0f;
+};  // 80 bytes
+
+struct MaterialData {
+    alignas(16) glm::vec3 baseColor;    
+    float roughness;                   
+    float specularF0;                   
+    float _padding1 = 0.0f;
+    float _padding2 = 0.0f;
+};  // 32 bytes
+
+struct MaterialUniformBufferObject {
+    alignas(16) glm::vec4 baseColorRoughness; // xyz=baseColor, w=roughness
+    alignas(16) glm::vec4 specular;           // x=specularF0, yzw=reserved
+};  // 32 bytes
 
 struct SSAOKernelBufferObject {
     alignas(16) glm::vec4 SSAOKernel[16]; // 16 byte aligned
@@ -225,4 +241,3 @@ struct VoronoiDumpInfo {
 
 // Number of cells to capture debug info for
 const uint32_t DEBUG_DUMP_CELL_COUNT = 8;
-

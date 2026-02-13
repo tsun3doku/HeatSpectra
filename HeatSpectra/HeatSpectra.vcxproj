@@ -218,11 +218,15 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="HalfEdgeMesh.cpp" />
     <ClCompile Include="HashGrid.cpp" />
     <ClCompile Include="HashGridRenderer.cpp" />
+    <ClCompile Include="HeatRenderer.cpp" />
     <ClCompile Include="HDR.cpp" />
     <ClCompile Include="HeatReceiver.cpp" />
     <ClCompile Include="HeatSource.cpp" />
     <ClCompile Include="HeatSystem.cpp" />
+    <ClCompile Include="LightingSystem.cpp" />
+    <ClCompile Include="MaterialSystem.cpp" />
     <ClCompile Include="LloydCompute.cpp" />
+    <ClCompile Include="VoronoiCandidateCompute.cpp" />
     <ClCompile Include="VoronoiGeoCompute.cpp" />
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="iODT.cpp" />
@@ -236,7 +240,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="SurfelRenderer.cpp" />
     <ClCompile Include="TriangleHashGrid.cpp" />
     <ClCompile Include="VoronoiIntegrator.cpp" />
-    <ClCompile Include="VoronoiKDTree.cpp" />
     <ClCompile Include="VoronoiRenderer.cpp" />
     <ClCompile Include="VoronoiSeeder.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
@@ -302,7 +305,9 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\point_cloud.vert" />
     <None Include="shaders\surfel_debug.frag" />
     <None Include="shaders\surfel_debug.vert" />
+    <None Include="shaders\voronoi_candidates_intrinsic.slang" />
     <None Include="shaders\voronoi_surface.frag" />
+    <None Include="shaders\voronoi_surface.geom" />
     <None Include="shaders\voronoi_surface.vert" />
     <None Include="shaders\wireframe.frag" />
     <None Include="shaders\wireframe.vert" />
@@ -323,11 +328,15 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="HalfEdgeMesh.hpp" />
     <ClInclude Include="HashGrid.hpp" />
     <ClInclude Include="HashGridRenderer.hpp" />
+    <ClInclude Include="HeatRenderer.hpp" />
     <ClInclude Include="HDR.hpp" />
     <ClInclude Include="HeatReceiver.hpp" />
     <ClInclude Include="HeatSource.hpp" />
     <ClInclude Include="HeatSystem.hpp" />
+    <ClInclude Include="LightingSystem.hpp" />
+    <ClInclude Include="MaterialSystem.hpp" />
     <ClInclude Include="LloydCompute.hpp" />
+    <ClInclude Include="VoronoiCandidateCompute.hpp" />
     <ClInclude Include="VoronoiGeoCompute.hpp" />
     <ClInclude Include="InputManager.hpp" />
     <ClInclude Include="iODT.hpp" />
@@ -336,7 +345,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="predicates.h" />
     <ClInclude Include="TriangleHashGrid.hpp" />
     <ClInclude Include="VoronoiIntegrator.hpp" />
-    <ClInclude Include="VoronoiKDTree.hpp" />
     <ClInclude Include="VoronoiRenderer.hpp" />
     <ClInclude Include="VoronoiSeeder.hpp" />
     <ClInclude Include="VoxelGrid.hpp" />

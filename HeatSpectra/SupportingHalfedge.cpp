@@ -107,17 +107,24 @@ void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
     const auto& inputHalfedges = inputConn.getHalfEdges();
 
     for (uint32_t he : helist) {
-        if (he >= inputHalfedges.size()) continue;
+        if (he >= inputHalfedges.size()) {
+            continue;
+        }
 
         uint32_t te = inputHalfedges[he].face;
-        if (te >= supportingInfo.size()) continue;
+        if (te >= supportingInfo.size()) {
+            continue;
+        }
 
         if (supportingInfo[te].supportingHE == intrinsicHE) {
-
             uint32_t mate_h = intrinsicHalfedges[intrinsicHE].opposite;
-            if (mate_h == INVALID_INDEX) continue;
+            if (mate_h == INVALID_INDEX) {
+                continue;
+            }
             uint32_t new_ref = intrinsicHalfedges[mate_h].next;
-            if (new_ref == INVALID_INDEX) continue;
+            if (new_ref == INVALID_INDEX) {
+                continue;
+            }
 
             supportingInfo[te].supportingHE = new_ref;
 
@@ -362,7 +369,6 @@ void SupportingHalfedge::trackInsertedVertex(uint32_t vertexIdx, const GeodesicT
 
     loc.elementId = surfacePoint.elementId;
 
-    // Convert edge split to barycentric or use face barycoords
     if (surfacePoint.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
         double t = surfacePoint.split;
         loc.baryCoords = glm::vec3(1.0f - static_cast<float>(t), static_cast<float>(t), 0.0f);
@@ -376,12 +382,9 @@ void SupportingHalfedge::trackInsertedVertex(uint32_t vertexIdx, const GeodesicT
     }
 
     insertedVertexLocations[vertexIdx] = loc;
-
-    //std::cout << "[SupportingHalfedge] Tracked inserted vertex " << vertexIdx  << " at type=" << loc.locationType << " elem=" << loc.elementId << std::endl;
 }
 
 SupportingHalfedge::IntrinsicMesh SupportingHalfedge::buildIntrinsicMesh() const {
-    // Return cached mesh if valid
     if (intrinsicMeshCacheValid) {
         return cachedIntrinsicMesh;
     }

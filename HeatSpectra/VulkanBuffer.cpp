@@ -3,17 +3,8 @@
 #include <cstring>
 #include <iostream>
 
-void createStorageBuffer(
-    MemoryAllocator& allocator,
-    VulkanDevice& device,
-    const void* data,
-    VkDeviceSize size,
-    VkBuffer& outBuffer,
-    VkDeviceSize& outOffset,
-    void** outMappedPtr,
-    bool hostVisible,
-    VkBufferUsageFlags additionalUsage
-) {
+void createStorageBuffer(MemoryAllocator& allocator, VulkanDevice& device, const void* data, VkDeviceSize size, VkBuffer& outBuffer, VkDeviceSize& outOffset,
+    void** outMappedPtr, bool hostVisible, VkBufferUsageFlags additionalUsage) {
     if (size == 0) {
         throw std::runtime_error("[createStorageBuffer] Buffer size cannot be zero");
     }
@@ -35,7 +26,6 @@ void createStorageBuffer(
             throw std::runtime_error("[createStorageBuffer] Failed to map buffer memory");
         }
         
-        // Copy data if provided
         if (data) {
             memcpy(mappedPtr, data, size);
         }
@@ -50,18 +40,8 @@ void createStorageBuffer(
     }
 }
 
-void createTexelBuffer(
-    MemoryAllocator& allocator,
-    VulkanDevice& device,
-    const void* data,
-    VkDeviceSize size,
-    VkFormat format,
-    VkBuffer& outBuffer,
-    VkDeviceSize& outOffset,
-    VkBufferView& outBufferView,
-    VkBufferUsageFlags additionalUsage,
-    VkDeviceSize alignment
-) {
+void createTexelBuffer(MemoryAllocator& allocator, VulkanDevice& device, const void* data, VkDeviceSize size, VkFormat format, VkBuffer& outBuffer,
+    VkDeviceSize& outOffset, VkBufferView& outBufferView, VkBufferUsageFlags additionalUsage, VkDeviceSize alignment) {
     if (size == 0) {
         throw std::runtime_error("[createTexelBuffer] Buffer size cannot be zero");
     }
@@ -95,13 +75,7 @@ void createTexelBuffer(
     }
 }
 
-void createStagingBuffer(
-    MemoryAllocator& allocator,
-    VkDeviceSize size,
-    VkBuffer& outBuffer,
-    VkDeviceSize& outOffset,
-    void** outMappedPtr
-) {
+void createStagingBuffer(MemoryAllocator& allocator, VkDeviceSize size, VkBuffer& outBuffer, VkDeviceSize& outOffset, void** outMappedPtr) {
     if (size == 0) {
         throw std::runtime_error("[createStagingBuffer] Buffer size cannot be zero");
     }
@@ -123,14 +97,7 @@ void createStagingBuffer(
     }
 }
 
-void createUniformBuffer(
-    MemoryAllocator& allocator,
-    VulkanDevice& device,
-    VkDeviceSize size,
-    VkBuffer& outBuffer,
-    VkDeviceSize& outOffset,
-    void** outMappedPtr
-) {
+void createUniformBuffer(MemoryAllocator& allocator, VulkanDevice& device, VkDeviceSize size, VkBuffer& outBuffer, VkDeviceSize& outOffset, void** outMappedPtr) {
     if (size == 0) {
         throw std::runtime_error("[createUniformBuffer] Buffer size cannot be zero");
     }
@@ -154,13 +121,7 @@ void createUniformBuffer(
     }
 }
 
-void createVertexBuffer(
-    MemoryAllocator& allocator,
-    VkDeviceSize size,
-    VkBuffer& outBuffer,
-    VkDeviceSize& outOffset,
-    VkBufferUsageFlags additionalUsage
-) {
+void createVertexBuffer(MemoryAllocator& allocator, VkDeviceSize size, VkBuffer& outBuffer, VkDeviceSize& outOffset, VkBufferUsageFlags additionalUsage) {
     if (size == 0) {
         throw std::runtime_error("[createVertexBuffer] Buffer size cannot be zero");
     }
@@ -168,7 +129,6 @@ void createVertexBuffer(
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | additionalUsage;
     VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     
-    // 16-byte alignment is typical for vertex buffers
     VkDeviceSize alignment = 16;
 
     auto [buffer, offset] = allocator.allocate(size, usage, properties, alignment);

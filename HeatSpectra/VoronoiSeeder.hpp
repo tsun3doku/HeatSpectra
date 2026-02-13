@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <glm/glm.hpp>
-#include "CommonSubdivision.hpp"
+#include "SupportingHalfedge.hpp"
 #include "TriangleHashGrid.hpp"
 #include "VoxelGrid.hpp"
 #include "GeometryUtils.hpp"
@@ -27,7 +27,7 @@ public:
     VoronoiSeeder();
     ~VoronoiSeeder();
     
-    void generateSeeds(const std::vector<CommonSubdivision::IntrinsicTriangle>& intrinsicTriangles, const std::vector<Vertex>& commonVertices, const Model& volumeMesh, float targetCellSize);
+    void generateSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh, const Model& volumeMesh, float targetCellSize, VoxelGrid& voxelGrid, int voxelResolution);
     void exportSeedsToOBJ(const std::string& filename) const;
 
     const std::vector<Seed>& getSeeds() const { return seeds; }
@@ -44,8 +44,6 @@ public:
 
 private:
     TriangleHashGrid triHashGrid;
-    VoxelGrid voxelGrid;
-    bool voxelGridBuilt = false;
     std::vector<Seed> seeds;
     std::vector<float> sdfGrid;  
     glm::ivec3 sdfGridDim;   
@@ -56,8 +54,8 @@ private:
     glm::vec3 gridMax;
     float cellSize;
 
-    void generateSurfaceSeeds(const std::vector<Vertex>& commonVertices, const std::vector<CommonSubdivision::IntrinsicTriangle>& intrinsicTriangles);
-    void generateBlueNoiseSeeds(float maxDistFromSurface);
+    void generateSurfaceSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh);
+    void generateBlueNoiseSeeds(float maxDistFromSurface, const VoxelGrid* voxelGrid);
     
     size_t computeSpatialHash(const glm::vec3& pos, float hashCellSize) const;
     bool isTooCloseToExisting(const glm::vec3& candidatePos, float poissonRadius, float hashCellSize, 

@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec4 inColor;
 
-layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 color;
 
 void main() {
     // For triangle-based circles, we don't need gl_PointCoord
