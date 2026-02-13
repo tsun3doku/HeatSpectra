@@ -32,3 +32,6 @@
 # Linker/debug artifacts
 *.pdb
 *.ilk
+
+# Third party
+HeatSpectra/libs/glm/doc/
