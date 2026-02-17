@@ -4,13 +4,13 @@
 #include "VoxelGrid.hpp"
 #include <unordered_map>
 #include "iODT.hpp"
-#include "HashGrid.hpp"
 #include "VoronoiSeeder.hpp"
 
 constexpr float AMBIENT_TEMPERATURE = 1.0f;
 static constexpr int NUM_SUBSTEPS = 10;
 
 
+class Camera;
 class HeatSource;
 class HeatReceiver;
 class ResourceManager;
@@ -19,7 +19,6 @@ class VulkanDevice;
 class UniformBufferManager;
 class CommandPool;
 class SurfelRenderer;
-class HashGridRenderer;
 class VoronoiRenderer;
 class PointRenderer;
 class ContactLineRenderer;
@@ -36,7 +35,8 @@ public:
         UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool,
         VkExtent2D extent, VkRenderPass renderPass);
     ~HeatSystem();
-    void update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo);
+
+    void update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT);
     void recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass);
     void processResetRequest();
     void requestReset();
@@ -59,18 +59,17 @@ public:
 
     void buildVoronoiNeighborBuffer();
 
-    void createSurfaceDescriptorPool();
+    void createSurfaceDescriptorPool(uint32_t maxFramesInFlight);
     void createSurfaceDescriptorSetLayout();
     void createSurfacePipeline();
 
-    void createContactDescriptorPool();
+    void createContactDescriptorPool(uint32_t maxFramesInFlight);
     void createContactDescriptorSetLayout();
     void createContactPipeline();
 
-    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkQueryPool timingQueryPool = VK_NULL_HANDLE, uint32_t timingQueryBase = 0);
     
     void renderSurfels(VkCommandBuffer cmdBuffer, uint32_t frameIndex, const glm::mat4& heatSourceModel, int radius);
-    void renderHashGrids(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
@@ -99,13 +98,14 @@ public:
     bool getIsPaused() const { return isPaused; } 
     void setIsPaused(bool paused) { isPaused = paused; } 
     bool getIsVoronoiReady() const { return isVoronoiReady; }  
+    void setDebugEnabled(bool enabled) { debugEnable = enabled; }
+    bool getDebugEnabled() const { return debugEnable; }
+    bool hasDispatchableComputeWork() const { return isActive && !isPaused && isVoronoiReady; }
 
 private:    
     void initializeContactInterface();
-    void uploadCachedContactLines();
 
     void initializeSurfelRenderers(VkRenderPass renderPass, uint32_t maxFramesInFlight);
-    void initializeHashGridRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
@@ -121,8 +121,9 @@ private:
     CommandPool& renderCommandPool; 
     std::unique_ptr<HeatSource> heatSource;
     std::vector<std::unique_ptr<HeatReceiver>> receivers;
+	std::vector<std::vector<ContactPairGPU>> receiverContactPairs;
+    Camera* camera = nullptr;
     
-    std::unique_ptr<HashGridRenderer> hashGridRenderer;
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;
     std::unique_ptr<ContactLineRenderer> contactLineRenderer;
@@ -235,6 +236,7 @@ private:
 
     bool isActive = false;
     bool isPaused = false;
+    bool debugEnable = false;
     std::atomic<bool> needsReset{ 
         false 
     };

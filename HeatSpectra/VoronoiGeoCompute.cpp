@@ -85,7 +85,7 @@ void VoronoiGeoCompute::updateDescriptors(const Bindings& bindings) {
     vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
-void VoronoiGeoCompute::dispatch() {
+void VoronoiGeoCompute::dispatch(const PushConstants& pushConstants) {
     if (!initialized || nodeCount == 0 || descriptorSet == VK_NULL_HANDLE) {
         return;
     }
@@ -123,6 +123,7 @@ void VoronoiGeoCompute::dispatch() {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
         pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pushConstants);
     vkCmdDispatch(cmd, workGroupCount, 1, 1);
 
     VkMemoryBarrier memBarrier{};
@@ -255,10 +256,17 @@ void VoronoiGeoCompute::createPipeline() {
     computeShaderStageInfo.module = computeShaderModule;
     computeShaderStageInfo.pName = "main";
 
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(PushConstants);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create VoronoiGeoCompute pipeline layout");

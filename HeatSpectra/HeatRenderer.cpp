@@ -276,7 +276,10 @@ void HeatRenderer::createPipeline(VkRenderPass renderPass) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
 }
 
-void HeatRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, Model& model) const {
+void HeatRenderer::drawModel(
+    VkCommandBuffer commandBuffer,
+    VkDescriptorSet descriptorSet,
+    Model& model) const {
     vkCmdBindDescriptorSets(
         commandBuffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,

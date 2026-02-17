@@ -1,6 +1,5 @@
 #pragma once
 #include <glm/glm.hpp>
-
 #include <vector>
 #include <unordered_set>
 
@@ -12,11 +11,7 @@ class SignpostMesh {
 public:
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
 
-    struct Triangle2D {
-        glm::dvec2 vertices[3]          = { glm::dvec2(0,0), glm::dvec2(0,0), glm::dvec2(0,0) };
-        uint32_t indices[3]             = { 0,0,0 };
-        double edgeLengths[3]           = { 0,0,0 };
-    };
+    using Triangle2D = HalfEdgeMesh::Triangle2D;
 
     // Construction
     void buildFromModel(const Model& srcModel);
@@ -52,7 +47,6 @@ public:
     bool isEdgeOnBoundary(uint32_t heIdx) const;
 
     // Vertex operations
-    bool isBoundaryVertex(uint32_t vertexIdx) const;
     std::vector<uint32_t> getBoundaryVertices() const;
     uint32_t getVertexDegree(uint32_t vertexIdx) const;
 

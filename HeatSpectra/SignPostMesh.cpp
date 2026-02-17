@@ -79,53 +79,7 @@ void SignpostMesh::buildFromModel(const Model& src) {
 }
 
 SignpostMesh::Triangle2D SignpostMesh::layoutTriangle(uint32_t faceIdx) const {
-    Triangle2D result;
-
-    auto faceHEs = conn.getFaceHalfEdges(faceIdx);
-    if (faceHEs.size() != 3) {
-        // Return degenerate triangle
-        for (int i = 0; i < 3; i++) {
-            result.vertices[i] = glm::dvec2(0.0);
-            result.indices[i] = INVALID_INDEX;
-            result.edgeLengths[i] = 0.0;
-        }
-        return result;
-    }
-
-    // vertex indices
-    const auto& HEs = conn.getHalfEdges();
-    for (int i = 0; i < 3; ++i) result.indices[i] = HEs[faceHEs[i]].origin;
-
-    result.edgeLengths[0] = conn.getIntrinsicLengthFromHalfEdge(faceHEs[0]); // edge 0->1
-    result.edgeLengths[1] = conn.getIntrinsicLengthFromHalfEdge(faceHEs[1]); // edge 1->2
-    result.edgeLengths[2] = conn.getIntrinsicLengthFromHalfEdge(faceHEs[2]); // edge 2->0
-
-    // Law of cosines canonical layout 
-    double a = result.edgeLengths[0];
-    double b = result.edgeLengths[1];
-    double c = result.edgeLengths[2];
-
-    // validate
-    const double MIN_LENGTH = 1e-12;
-    if (a < MIN_LENGTH || b < MIN_LENGTH || c < MIN_LENGTH) {
-        //std::cout << "[layoutTriangle] Edge length: FAILED for face:" << faceIdx << "(a=" << a << ", b=" << b << ", c=" << c << ")" << std::endl;
-        return result;
-    }
-    const double EPS = 1e-12;
-    if (!(a + b > c + EPS && a + c > b + EPS && b + c > a + EPS)) {
-        //std::cout << "[layoutTriangle] Triangle inequality: FAILED for face:" << faceIdx << "(a=" << a << ", b=" << b << ", c=" << c << ")" << std::endl;
-        return result;
-    }
-
-    result.vertices[0] = glm::dvec2(0.0, 0.0);
-    result.vertices[1] = glm::dvec2(a, 0.0);
-
-    double x = (a * a + c * c - b * b) / (2.0 * a);
-    double y2 = c * c - x * x;
-    double y = (y2 > 0.0) ? std::sqrt(y2) : 0.0; // canonical +y fallback
-    result.vertices[2] = glm::dvec2(x, y);
-
-    return result;
+    return conn.layoutTriangle(faceIdx);
 }
 
 void SignpostMesh::updateAllSignposts() {
@@ -217,33 +171,6 @@ glm::dvec2 SignpostMesh::halfedgeVector(uint32_t heIdx) const {
     */
 
     return result;
-}
-
-bool SignpostMesh::isBoundaryVertex(uint32_t vertexIdx) const {
-    if (vertexIdx >= conn.getVertices().size()) return false;
-    
-    uint32_t firstHE = conn.getVertices()[vertexIdx].halfEdgeIdx;
-    if (firstHE == HalfEdgeMesh::INVALID_INDEX) return true;
-    
-    uint32_t currHE = firstHE;
-    const auto& HEs = conn.getHalfEdges();
-    
-    do {
-        if (HEs[currHE].opposite == HalfEdgeMesh::INVALID_INDEX) {
-            return true; // Found boundary edge
-        }
-        
-        // Traverse to next outgoing halfedge
-        uint32_t next1 = HEs[currHE].next;
-        if (next1 == HalfEdgeMesh::INVALID_INDEX) return true;
-        uint32_t next2 = HEs[next1].next;
-        if (next2 == HalfEdgeMesh::INVALID_INDEX) return true;
-        currHE = HEs[next2].opposite;
-        if (currHE == HalfEdgeMesh::INVALID_INDEX) return true;
-        
-    } while (currHE != firstHE);
-    
-    return false; // Complete loop without boundary
 }
 
 void SignpostMesh::buildHalfedgeVectorsInVertex() {
@@ -544,7 +471,7 @@ void SignpostMesh::updateAllCornerAngles(const std::unordered_set<uint32_t>& ski
 
 double SignpostMesh::standardizeAngleForVertex(uint32_t vertexIdx, double angleRad) const {
     // If boundary vertex, return angle unchanged
-    if (isBoundaryVertex(vertexIdx)) {
+    if (conn.isBoundaryVertex(vertexIdx)) {
         return angleRad;
     }
     double sum = getVertexAngleSum(vertexIdx); // your per-vertex angle sum (usually ~2π for interior)

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vulkan/vulkan.h>
+
 #include "iODT.hpp"
 #include "CommonSubdivision.hpp"
 #include <vector>
@@ -8,9 +10,9 @@
 
 class Model;
 class Grid;
+class TimingOverlay;
 class Camera;
 class HeatSource;
-class HashGrid;
 class SurfelRenderer;
 class UniformBufferManager;
 class MemoryAllocator;
@@ -23,7 +25,6 @@ class CommandPool;
 
 struct RemeshData {
     std::unique_ptr<iODT> remesher;
-    std::unique_ptr<HashGrid> hashGrid;
     std::unique_ptr<SurfelRenderer> surfel; 
     bool isRemeshed = false;
     
@@ -38,7 +39,8 @@ struct RemeshData {
 class ResourceManager {
 public:
 	ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, 
-		VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, 
+		VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight,
+        uint32_t overlaySubpass = 2,
 		CommandPool* asyncCommandPool = nullptr, CommandPool* renderCommandPool = nullptr);
 	~ResourceManager();
 
@@ -92,13 +94,14 @@ public:
 	bool isModelRemeshed(Model* model) const;
 	bool areRequiredModelsRemeshed() const; 
 	iODT* getRemesherForModel(Model* model);
-	HashGrid* getHashGridForModel(Model* model);
     SurfelRenderer* getSurfelPerModel(Model* model);
 
 	const std::unordered_map<Model*, RemeshData>& getModelRemeshData() const { return modelRemeshData; }
 	const std::vector<CommonSubdivision::IntrinsicTriangle>& getIntrinsicTriangles() const { return intrinsicTriangles; }
 	
 	glm::vec3 calculateMaxBoundingBoxSize() const;
+    void updateTimingOverlayText(const std::vector<std::string>& lines);
+    void renderTimingOverlay(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkExtent2D extent);
 
 private:
 	VulkanDevice& vulkanDevice;
@@ -107,6 +110,7 @@ private:
 	Camera& camera;
 
 	std::unique_ptr<Grid> grid;
+	std::unique_ptr<TimingOverlay> timingOverlay;
 	std::unique_ptr<Model> visModel;
 	std::unique_ptr<Model> commonSubdivision;
 	std::unique_ptr<Model> heatModel;

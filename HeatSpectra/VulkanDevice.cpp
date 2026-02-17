@@ -1,4 +1,3 @@
-
 #include "VulkanDevice.hpp"
 
 void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions,
@@ -53,12 +52,9 @@ void VulkanDevice::init(VkInstance instance, VkSurfaceKHR surface, const std::ve
     }
 
     createLogicalDevice(surface);
-    // Command pools are now created in App as uiCommandPool and renderCommandPool
 }
 
-void VulkanDevice::cleanup() {
-    // Command pools are now owned and destroyed by App (uiCommandPool, renderCommandPool)
-    
+void VulkanDevice::cleanup() {    
     if (device != VK_NULL_HANDLE) {
         vkDestroyDevice(device, nullptr);
         std::cout << "Destroyed logical device." << std::endl;
@@ -89,7 +85,6 @@ void VulkanDevice::pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     }
 }
 uint32_t VulkanDevice::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
-    std::cout << "Searching for memory type in physical device: " << physicalDevice << std::endl;
     if (physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("PhysicalDevice is not initialized");
     }
@@ -195,8 +190,8 @@ void VulkanDevice::createLogicalDevice(VkSurfaceKHR surface) {
     deviceFeatures.wideLines = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
     deviceFeatures.independentBlend = VK_TRUE;
-    deviceFeatures.geometryShader = VK_TRUE;  // Required for intrinsic_supporting_geom.spv
-    deviceFeatures.shaderFloat64 = VK_TRUE;   // Required for double precision
+    deviceFeatures.geometryShader = VK_TRUE;  
+    deviceFeatures.shaderFloat64 = VK_TRUE;  
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -252,8 +247,8 @@ bool VulkanDevice::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surfac
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
-
     bool swapChainAdequate = false;
+
     if (extensionsSupported) {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
         swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
@@ -313,5 +308,3 @@ QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device, VkSu
 
     return indices;
 }
-
-// Command pool creation removed - now handled by CommandPool class in App

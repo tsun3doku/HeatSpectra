@@ -25,8 +25,8 @@
 #include "HeatSystem.hpp"
 #include "ModelSelection.hpp"
 #include "Gizmo.hpp"
-#include "DeferredRenderer.hpp"
-#include "GBuffer.hpp"
+#include "FrameGraph.hpp"
+#include "SceneRenderer.hpp"
 #include "VulkanImage.hpp"
 #include "CommandBufferManager.hpp"
 #include "InputManager.hpp"
@@ -35,12 +35,15 @@
 
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <array>
@@ -63,6 +66,254 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
+namespace {
+
+void registerDefaultFrameGraphDesc(FrameGraph& frameGraph) {
+    frameGraph.clearGraphDesc();
+
+    auto addImageResource = [&](const char* name,
+        VkFormat format,
+        bool useSwapchainFormat,
+        VkSampleCountFlagBits samples,
+        VkImageUsageFlags usage,
+        VkImageAspectFlags aspect,
+        VkAttachmentLoadOp loadOp,
+        VkAttachmentStoreOp storeOp,
+        VkAttachmentLoadOp stencilLoadOp,
+        VkAttachmentStoreOp stencilStoreOp,
+        VkImageLayout initialLayout,
+        VkImageLayout finalLayout,
+        fg::ResourceLifetime lifetime = fg::ResourceLifetime::Transient) {
+        fg::ResourceDesc desc{};
+        desc.name = name;
+        desc.type = fg::ResourceType::Image2D;
+        desc.lifetime = lifetime;
+        desc.format = format;
+        desc.useSwapchainFormat = useSwapchainFormat;
+        desc.samples = samples;
+        desc.imageUsage = usage;
+        desc.viewAspect = aspect;
+        desc.loadOp = loadOp;
+        desc.storeOp = storeOp;
+        desc.stencilLoadOp = stencilLoadOp;
+        desc.stencilStoreOp = stencilStoreOp;
+        desc.initialLayout = initialLayout;
+        desc.finalLayout = finalLayout;
+        desc.finalOutput = (lifetime == fg::ResourceLifetime::External);
+        return frameGraph.addResourceDesc(std::move(desc));
+    };
+
+    const uint32_t resAlbedoMSAA = addImageResource("AlbedoMSAA", VK_FORMAT_R8G8B8A8_UNORM, false, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resNormalMSAA = addImageResource("NormalMSAA", VK_FORMAT_R16G16B16A16_SFLOAT, false, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resPositionMSAA = addImageResource("PositionMSAA", VK_FORMAT_R16G16B16A16_SFLOAT, false, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resDepthMSAA = addImageResource("DepthMSAA", VK_FORMAT_D32_SFLOAT_S8_UINT, false, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+    const uint32_t resAlbedoResolve = addImageResource("AlbedoResolve", VK_FORMAT_R8G8B8A8_UNORM, false, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    const uint32_t resNormalResolve = addImageResource("NormalResolve", VK_FORMAT_R16G16B16A16_SFLOAT, false, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    const uint32_t resPositionResolve = addImageResource("PositionResolve", VK_FORMAT_R16G16B16A16_SFLOAT, false, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    const uint32_t resDepthResolve = addImageResource("DepthResolve", VK_FORMAT_D32_SFLOAT_S8_UINT, false, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+    const uint32_t resLightingMSAA = addImageResource("LightingMSAA", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resLineMSAA = addImageResource("LineMSAA", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resLineResolve = addImageResource("LineResolve", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    const uint32_t resLightingResolve = addImageResource("LightingResolve", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    const uint32_t resSwapchain = addImageResource("Swapchain", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_1_BIT,
+        0,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        fg::ResourceLifetime::External);
+
+    const uint32_t resSurfaceMSAA = addImageResource("SurfaceMSAA", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_8_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    const uint32_t resSurfaceResolve = addImageResource("SurfaceResolve", VK_FORMAT_UNDEFINED, true, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    fg::PassDesc geometryPass{};
+    geometryPass.name = "GeometryPass";
+    geometryPass.colors = {
+        fg::AttachmentRef{resAlbedoMSAA},
+        fg::AttachmentRef{resNormalMSAA},
+        fg::AttachmentRef{resPositionMSAA},
+    };
+    geometryPass.resolves = {
+        fg::AttachmentRef{resAlbedoResolve},
+        fg::AttachmentRef{resNormalResolve},
+        fg::AttachmentRef{resPositionResolve},
+    };
+    geometryPass.depthStencil = fg::AttachmentRef{resDepthMSAA};
+    geometryPass.uses = {
+        {resAlbedoMSAA, fg::UsageType::ColorAttachment, true},
+        {resNormalMSAA, fg::UsageType::ColorAttachment, true},
+        {resPositionMSAA, fg::UsageType::ColorAttachment, true},
+        {resAlbedoResolve, fg::UsageType::ColorAttachment, true},
+        {resNormalResolve, fg::UsageType::ColorAttachment, true},
+        {resPositionResolve, fg::UsageType::ColorAttachment, true},
+        {resDepthMSAA, fg::UsageType::DepthStencilAttachment, true},
+    };
+    frameGraph.addPassDesc(std::move(geometryPass));
+
+    fg::PassDesc lightingPass{};
+    lightingPass.name = "LightingPass";
+    fg::AttachmentRef depthResolveInput{resDepthResolve};
+    depthResolveInput.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depthResolveInput.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    fg::AttachmentRef stencilInput{resDepthMSAA};
+    stencilInput.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    stencilInput.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    lightingPass.inputs = {
+        fg::AttachmentRef{resAlbedoResolve},
+        fg::AttachmentRef{resNormalResolve},
+        fg::AttachmentRef{resPositionResolve},
+        depthResolveInput,
+        stencilInput,
+    };
+    lightingPass.colors = { fg::AttachmentRef{resLightingMSAA} };
+    lightingPass.resolves = { fg::AttachmentRef{resLightingResolve} };
+    fg::AttachmentRef lightingDepth{resDepthMSAA};
+    lightingDepth.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    lightingDepth.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    lightingPass.depthStencil = lightingDepth;
+    lightingPass.depthReadOnly = true;
+    lightingPass.uses = {
+        {resAlbedoResolve, fg::UsageType::InputAttachment, false},
+        {resNormalResolve, fg::UsageType::InputAttachment, false},
+        {resPositionResolve, fg::UsageType::InputAttachment, false},
+        {resDepthResolve, fg::UsageType::InputAttachment, false},
+        {resDepthMSAA, fg::UsageType::DepthStencilAttachment, false},
+        {resLightingMSAA, fg::UsageType::ColorAttachment, true},
+        {resLightingResolve, fg::UsageType::ColorAttachment, true},
+    };
+    frameGraph.addPassDesc(std::move(lightingPass));
+
+    fg::PassDesc overlayPass{};
+    overlayPass.name = "OverlayPass";
+    overlayPass.colors = {
+        fg::AttachmentRef{resSurfaceMSAA},
+        fg::AttachmentRef{resLineMSAA},
+    };
+    overlayPass.resolves = {
+        fg::AttachmentRef{resSurfaceResolve},
+        fg::AttachmentRef{resLineResolve},
+    };
+    fg::AttachmentRef overlayDepth{resDepthMSAA};
+    overlayDepth.layout = VK_IMAGE_LAYOUT_GENERAL;
+    overlayPass.depthStencil = overlayDepth;
+    fg::AttachmentRef overlayDepthResolve{resDepthResolve};
+    overlayDepthResolve.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    overlayDepthResolve.layout = VK_IMAGE_LAYOUT_GENERAL;
+    overlayPass.depthResolve = overlayDepthResolve;
+    overlayPass.uses = {
+        {resDepthMSAA, fg::UsageType::DepthStencilAttachment, true},
+        {resDepthResolve, fg::UsageType::DepthStencilAttachment, true},
+        {resSurfaceMSAA, fg::UsageType::ColorAttachment, true},
+        {resLineMSAA, fg::UsageType::ColorAttachment, true},
+        {resSurfaceResolve, fg::UsageType::ColorAttachment, true},
+        {resLineResolve, fg::UsageType::ColorAttachment, true},
+    };
+    frameGraph.addPassDesc(std::move(overlayPass));
+
+    fg::PassDesc blendPass{};
+    blendPass.name = "BlendPass";
+    blendPass.inputs = {
+        fg::AttachmentRef{resSurfaceResolve},
+        fg::AttachmentRef{resLineResolve},
+        fg::AttachmentRef{resLightingResolve},
+        fg::AttachmentRef{resAlbedoResolve},
+    };
+    blendPass.colors = { fg::AttachmentRef{resSwapchain} };
+    blendPass.uses = {
+        {resSurfaceResolve, fg::UsageType::InputAttachment, false},
+        {resLineResolve, fg::UsageType::InputAttachment, false},
+        {resLightingResolve, fg::UsageType::InputAttachment, false},
+        {resAlbedoResolve, fg::UsageType::InputAttachment, false},
+        {resSwapchain, fg::UsageType::Present, true},
+    };
+    frameGraph.addPassDesc(std::move(blendPass));
+}
+
+} // namespace
+
 static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
     const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -81,7 +332,7 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-App::App() : intrinsicOverlayEnabled(false), heatOverlayEnabled(false), intrinsicNormalsEnabled(false), intrinsicVertexNormalsEnabled(false), hashGridEnabled(false), surfelsEnabled(false), voronoiEnabled(false), pointsEnabled(false), contactLinesEnabled(false), intrinsicNormalLength(0.05f),
+App::App() : intrinsicOverlayEnabled(false), heatOverlayEnabled(false), intrinsicNormalsEnabled(false), intrinsicVertexNormalsEnabled(false), surfelsEnabled(false), voronoiEnabled(false), pointsEnabled(false), contactLinesEnabled(false), gpuTimingOverlayEnabled(false), intrinsicNormalLength(0.05f),
              currentFrame(0), frameRate(240),
              isShuttingDown(false), isCameraUpdated(false), 
              edgeSelectionRequested(false), isOperating(false) {}
@@ -120,7 +371,6 @@ void App::toggleHeatSystem() {
         const bool isActive = heatSystem->getIsActive();
         const bool isPaused = heatSystem->getIsPaused();
 
-        // If currently paused, toggle acts as resume.
         if (isActive && isPaused) {
             heatSystem->setIsPaused(false);
             return;
@@ -144,13 +394,13 @@ void App::toggleHeatSystem() {
         heatSystem->setActive(newState);
         heatSystem->setIsPaused(false);
 
-        if (newState && gbuffer && resourceManager && uniformBufferManager) {
+        if (newState && sceneRenderer && resourceManager && uniformBufferManager) {
             Model* heatModel = &resourceManager->getHeatModel();
             iODT* remesher = resourceManager->getRemesherForModel(heatModel);
             if (remesher) {
-                gbuffer->updateDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
-                gbuffer->updateNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
-                gbuffer->updateVertexNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+                sceneRenderer->updateDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+                sceneRenderer->updateNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+                sceneRenderer->updateVertexNormalsDescriptorSetsForModel(heatModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
             }
         }
         
@@ -167,8 +417,8 @@ void App::toggleHeatSystem() {
 }
 
 void App::pauseHeatSystem() {
-    if (heatSystem && heatSystem->getIsActive()) {
-        heatSystem->setIsPaused(true);
+    if (heatSystem && heatSystem->getIsActive() && !heatSystem->getIsPaused()) {
+        heatSystem->setIsPaused(true); 
     }
 }
 
@@ -218,9 +468,9 @@ void App::performRemeshing(int iterations, double minAngleDegrees, double maxEdg
     // Update descriptor sets for each remeshed model
     iODT* remesher = resourceManager->getRemesherForModel(targetModel);
     if (remesher && uniformBufferManager) {
-        gbuffer->updateDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
-        gbuffer->updateNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
-        gbuffer->updateVertexNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+        sceneRenderer->updateDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+        sceneRenderer->updateNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
+        sceneRenderer->updateVertexNormalsDescriptorSetsForModel(targetModel, remesher, *uniformBufferManager, MAXFRAMESINFLIGHT);
     }
         
     // Recreate HeatSystem
@@ -237,7 +487,7 @@ void App::performRemeshing(int iterations, double minAngleDegrees, double maxEdg
             MAXFRAMESINFLIGHT,
             *renderCommandPool,
             swapChainExtent,
-            deferredRenderer->getRenderPass()
+            frameGraph->getRenderPass()
         );
         std::cout << "[App] HeatSystem recreated after remeshing" << std::endl;
     }
@@ -283,7 +533,7 @@ void App::loadModel(const std::string& modelPath) {
             MAXFRAMESINFLIGHT,
             *renderCommandPool,
             swapChainExtent,
-            deferredRenderer->getRenderPass()
+            frameGraph->getRenderPass()
         );
     }
     
@@ -321,15 +571,19 @@ void App::initSwapChain() {
 }
 
 void App::initRenderResources() {
-    // Create DeferredRenderer first since it owns render pass and image views
-    deferredRenderer = std::make_unique<DeferredRenderer>(
+    // Create frameGraph first since it owns render pass and image views
+    frameGraph = std::make_unique<FrameGraph>(
             vulkanDevice,
             swapChainImageFormat,
             swapChainExtent,
             MAXFRAMESINFLIGHT
         );
 
-        auto renderPass = deferredRenderer->getRenderPass();
+        registerDefaultFrameGraphDesc(*frameGraph);
+        frameGraph->createRenderPass(vulkanDevice, swapChainImageFormat);
+        frameGraph->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
+
+        auto renderPass = frameGraph->getRenderPass();
 
         // Create UniformBufferManager
         uniformBufferManager = std::make_unique<UniformBufferManager>(
@@ -353,6 +607,7 @@ void App::initRenderResources() {
             renderPass,
             camera,
             MAXFRAMESINFLIGHT,
+            frameGraph->getSubpassIndex("OverlayPass"),
             uiCommandPool.get(),      
             renderCommandPool.get()  
         );
@@ -360,7 +615,7 @@ void App::initRenderResources() {
         resourceManager->initialize();
         
         // Create ModelSelection for GPU based selection
-        modelSelection = std::make_unique<ModelSelection>(vulkanDevice, *deferredRenderer);
+        modelSelection = std::make_unique<ModelSelection>(vulkanDevice, *frameGraph);
 
         // Create heat system
         heatSystem = std::make_unique<HeatSystem>(
@@ -384,10 +639,10 @@ void App::initRenderResources() {
             *renderCommandPool  
         );
 
-        // Create GBuffer 
-        gbuffer = std::make_unique<GBuffer>(
+        // Create SceneRenderer 
+        sceneRenderer = std::make_unique<SceneRenderer>(
             vulkanDevice,
-            *deferredRenderer,
+            *frameGraph,
             *resourceManager,
             *uniformBufferManager,
             WIDTH, HEIGHT,
@@ -398,11 +653,13 @@ void App::initRenderResources() {
             *renderCommandPool,  
             false  // drawWireframe - unused, controlled by wireframeMode now
         );
+        createComputeTimingQueryPool();
+        frameGraph->createFramebuffers(swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
         
         // Create wireframe renderer
         wireframeRenderer = std::make_unique<WireframeRenderer>(
             vulkanDevice, 
-            gbuffer->getGbufferDescriptorSetLayout(),
+            sceneRenderer->getGbufferDescriptorSetLayout(),
             renderPass,
             2  // Overlay subpass (grid/points layer)
         );
@@ -427,6 +684,12 @@ void App::initRenderResources() {
         };
         inputManager->onIntrinsicOverlayToggled = [this]() { intrinsicOverlayEnabled = !intrinsicOverlayEnabled; };
         inputManager->onHeatOverlayToggled = [this]() { heatOverlayEnabled = !heatOverlayEnabled; };
+        inputManager->onTimingOverlayToggled = [this]() {
+            gpuTimingOverlayEnabled = !gpuTimingOverlayEnabled;
+            if (!gpuTimingOverlayEnabled && resourceManager) {
+                resourceManager->updateTimingOverlayText({});
+            }
+        };
         inputManager->onToggleHeatSystem = [this]() { toggleHeatSystem(); };
         inputManager->onPauseHeatSystem = [this]() { pauseHeatSystem(); };
         inputManager->onResetHeatSystem = [this]() { resetHeatSystem(); };  
@@ -517,10 +780,9 @@ void App::renderLoop() {
 void App::cleanupSwapChain() {
     vkDeviceWaitIdle(vulkanDevice.getDevice());
 
-    gbuffer->cleanupFramebuffers(MAXFRAMESINFLIGHT);
-    deferredRenderer->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);
+    frameGraph->cleanupImages(vulkanDevice, MAXFRAMESINFLIGHT);
 
-    gbuffer->freeCommandBuffers();
+    sceneRenderer->freeCommandBuffers();
 
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(vulkanDevice.getDevice(), imageView, nullptr);
@@ -568,16 +830,17 @@ void App::recreateSwapChain() {
         cleanupSwapChain();
         
         // Recreate command buffers
-        gbuffer->createCommandBuffers(MAXFRAMESINFLIGHT);
+        sceneRenderer->createCommandBuffers(MAXFRAMESINFLIGHT);
 
         createSwapChain();
         createImageViews();
 
-        heatSystem->recreateResources(MAXFRAMESINFLIGHT, swapChainExtent, deferredRenderer->getRenderPass());
+        heatSystem->recreateResources(MAXFRAMESINFLIGHT, swapChainExtent, frameGraph->getRenderPass());
 
-        deferredRenderer->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
-        gbuffer->updateDescriptorSets(MAXFRAMESINFLIGHT);
-        gbuffer->createFramebuffers(swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+        frameGraph->createImageViews(vulkanDevice, swapChainImageFormat, swapChainExtent, MAXFRAMESINFLIGHT);
+        frameGraph->createFramebuffers(swapChainImageViews, swapChainExtent, MAXFRAMESINFLIGHT);
+        sceneRenderer->updateDescriptorSets(MAXFRAMESINFLIGHT);
+        sceneRenderer->resize(swapChainExtent);
 
         createSyncObjects();
 
@@ -585,9 +848,10 @@ void App::recreateSwapChain() {
     }
 
 void App::cleanupRenderResources() {
+        destroyComputeTimingQueryPool();
         modelSelection->cleanup();
-        deferredRenderer->cleanup(vulkanDevice);
-        gbuffer->cleanup(MAXFRAMESINFLIGHT);
+        frameGraph->cleanup(vulkanDevice);
+        sceneRenderer->cleanup(MAXFRAMESINFLIGHT);
         uniformBufferManager->cleanup(MAXFRAMESINFLIGHT);      
         heatSystem->cleanupResources();
         heatSystem->cleanup();
@@ -836,6 +1100,68 @@ void App::createSyncObjects() {
         }
     }
 
+void App::createComputeTimingQueryPool() {
+        destroyComputeTimingQueryPool();
+
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(vulkanDevice.getPhysicalDevice(), &properties);
+        computeTimestampPeriod = properties.limits.timestampPeriod;
+        computeTimingValidFrames.assign(MAXFRAMESINFLIGHT, 0);
+
+        if (computeTimestampPeriod <= 0.0f || MAXFRAMESINFLIGHT == 0) {
+            return;
+        }
+
+        VkQueryPoolCreateInfo queryInfo{};
+        queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queryInfo.queryCount = MAXFRAMESINFLIGHT * 2;
+
+        if (vkCreateQueryPool(vulkanDevice.getDevice(), &queryInfo, nullptr, &computeTimingQueryPool) != VK_SUCCESS) {
+            computeTimingQueryPool = VK_NULL_HANDLE;
+            computeTimestampPeriod = 0.0f;
+            return;
+        }
+    }
+
+void App::destroyComputeTimingQueryPool() {
+        computeTimingValidFrames.clear();
+        computeTimestampPeriod = 0.0f;
+        if (computeTimingQueryPool != VK_NULL_HANDLE) {
+            vkDestroyQueryPool(vulkanDevice.getDevice(), computeTimingQueryPool, nullptr);
+            computeTimingQueryPool = VK_NULL_HANDLE;
+        }
+    }
+
+bool App::tryGetComputeGpuTimeMs(uint32_t frameIndex, float& outGpuMs) const {
+        outGpuMs = 0.0f;
+        if (computeTimingQueryPool == VK_NULL_HANDLE ||
+            computeTimestampPeriod <= 0.0f ||
+            frameIndex >= MAXFRAMESINFLIGHT ||
+            frameIndex >= computeTimingValidFrames.size() ||
+            computeTimingValidFrames[frameIndex] == 0) {
+            return false;
+        }
+
+        uint64_t timestamps[2] = {};
+        const VkResult result = vkGetQueryPoolResults(
+            vulkanDevice.getDevice(),
+            computeTimingQueryPool,
+            frameIndex * 2,
+            2,
+            sizeof(timestamps),
+            timestamps,
+            sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT);
+
+        if (result != VK_SUCCESS || timestamps[1] <= timestamps[0]) {
+            return false;
+        }
+
+        outGpuMs = static_cast<float>(timestamps[1] - timestamps[0]) * computeTimestampPeriod * 1e-6f;
+        return true;
+    }
+
 void App::drawFrame() {
         // Skip rendering if shutting down or operating
         if (isShuttingDown || isOperating.load(std::memory_order_acquire)) {
@@ -844,6 +1170,74 @@ void App::drawFrame() {
         
         // Wait for previous frame's fence
         vkWaitForFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        GpuTimingStats gpuTiming{};
+        const bool hasGraphicsGpuTiming = sceneRenderer && sceneRenderer->tryGetGpuTimingStats(currentFrame, gpuTiming);
+        float computeGpuMs = 0.0f;
+        const bool hasComputeGpuTiming = tryGetComputeGpuTimeMs(currentFrame, computeGpuMs);
+
+        const auto fpsNow = std::chrono::high_resolution_clock::now();
+        if (!overlayFpsInitialized) {
+            overlayFpsInitialized = true;
+            overlayFpsSampleStart = fpsNow;
+            overlayFpsFrameCount = 0;
+            overlayFps = 0.0f;
+        }
+        ++overlayFpsFrameCount;
+        const double fpsElapsed = std::chrono::duration<double>(fpsNow - overlayFpsSampleStart).count();
+        if (fpsElapsed >= 0.25) {
+            overlayFps = static_cast<float>(overlayFpsFrameCount / fpsElapsed);
+            overlayFpsFrameCount = 0;
+            overlayFpsSampleStart = fpsNow;
+        }
+
+        std::ostringstream fpsLine;
+        const float frameTimeMs = (overlayFps > 0.001f) ? (1000.0f / overlayFps) : 0.0f;
+        const uint32_t frameTimeMsRounded = static_cast<uint32_t>(frameTimeMs + 0.5f);
+        fpsLine << std::fixed << std::setprecision(1) << "FPS: " << overlayFps
+                << " (" << frameTimeMsRounded << " ms)";
+
+        std::ostringstream gpuTotalLine;
+        if (hasGraphicsGpuTiming && hasComputeGpuTiming) {
+            gpuTotalLine << std::fixed << std::setprecision(2) << "GPU TOTAL: " << (gpuTiming.totalMs + computeGpuMs) << " ms";
+        }
+        else if (hasGraphicsGpuTiming && !hasComputeGpuTiming) {
+            gpuTotalLine << std::fixed << std::setprecision(2) << "GPU TOTAL: " << gpuTiming.totalMs << " ms";
+        }
+        else {
+            gpuTotalLine << "GPU TOTAL: -- ms";
+        }
+
+        std::ostringstream gpuGraphicsLine;
+        if (hasGraphicsGpuTiming) {
+            gpuGraphicsLine << std::fixed << std::setprecision(2) << "GPU GRAPHICS: " << gpuTiming.totalMs << " ms";
+        }
+        else {
+            gpuGraphicsLine << "GPU GRAPHICS: -- ms";
+        }
+
+        std::ostringstream gpuComputeLine;
+        if (hasComputeGpuTiming) {
+            gpuComputeLine << std::fixed << std::setprecision(2) << "GPU COMPUTE: " << computeGpuMs << " ms";
+        }
+        else {
+            gpuComputeLine << "GPU COMPUTE: -- ms";
+        }
+
+        std::vector<std::string> timingLines;
+
+        if (hasGraphicsGpuTiming) {
+            for (const GpuPassTiming& passTiming : gpuTiming.passTimings) {
+                std::ostringstream passLine;
+                passLine << std::fixed << std::setprecision(2) << passTiming.name << ": " << passTiming.ms << " ms";
+                timingLines.push_back(passLine.str());
+            }
+        }
+
+        timingLines.push_back(gpuComputeLine.str());
+        timingLines.push_back(gpuGraphicsLine.str());
+        timingLines.push_back(gpuTotalLine.str());
+        timingLines.push_back(fpsLine.str());
 
         // Process pick results from previous frame 
         if (modelSelection) {
@@ -867,10 +1261,9 @@ void App::drawFrame() {
             throw std::runtime_error("Failed to acquire swap chain image");
         }
 
-        VkCommandBuffer commandBuffer = gbuffer->getCommandBuffers()[currentFrame];
+        VkCommandBuffer commandBuffer = sceneRenderer->getCommandBuffers()[currentFrame];
         vkResetCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
         vkResetFences(vulkanDevice.getDevice(), 1, &inFlightFences[currentFrame]);
-        vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
 
         // Update gizmo interaction
         if (inputManager) {
@@ -893,37 +1286,85 @@ void App::drawFrame() {
             materialSystem->update(currentFrame);
         }
 
-        VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
-        vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-
-        VkCommandBufferBeginInfo computeBeginInfo{};
-        computeBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        computeBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
         // Get arrow key state for heat source control
         bool upPressed = window->isKeyPressed(Qt::Key_Up);
         bool downPressed = window->isKeyPressed(Qt::Key_Down);
         bool leftPressed = window->isKeyPressed(Qt::Key_Left);
         bool rightPressed = window->isKeyPressed(Qt::Key_Right);
         
-        heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo);
-        heatSystem->recordComputeCommands(computeCommandBuffer, currentFrame);
+        heatSystem->processResetRequest();
+        heatSystem->update(upPressed, downPressed, leftPressed, rightPressed, ubo, WIDTH, HEIGHT);
+        const bool hasComputeWritesForGraphics = heatSystem->hasDispatchableComputeWork();
+        const bool queuesAreShared = vulkanDevice.getComputeQueue() == vulkanDevice.getGraphicsQueue();
+        bool computeSubmittedThisFrame = false;
+        if (hasComputeWritesForGraphics) {
+            if (currentFrame < computeTimingValidFrames.size()) {
+                computeTimingValidFrames[currentFrame] = 0;
+            }
+            VkCommandBuffer computeCommandBuffer = heatSystem->getComputeCommandBuffers()[currentFrame];
+            vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+            vkResetFences(vulkanDevice.getDevice(), 1, &computeInFlightFences[currentFrame]);
+            heatSystem->recordComputeCommands(
+                computeCommandBuffer,
+                currentFrame,
+                computeTimingQueryPool,
+                currentFrame * 2);
 
-        VkSubmitInfo computeSubmitInfo{};
-        computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        computeSubmitInfo.commandBufferCount = 1;
-        computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
-        computeSubmitInfo.signalSemaphoreCount = 1;
-        computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
+            VkSubmitInfo computeSubmitInfo{};
+            computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            computeSubmitInfo.commandBufferCount = 1;
+            computeSubmitInfo.pCommandBuffers = &computeCommandBuffer;
+            if (!queuesAreShared) {
+                computeSubmitInfo.signalSemaphoreCount = 1;
+                computeSubmitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
+            }
 
-        vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, computeInFlightFences[currentFrame]);
+            const VkResult computeSubmitResult = vkQueueSubmit(vulkanDevice.getComputeQueue(), 1, &computeSubmitInfo, computeInFlightFences[currentFrame]);
+            if (computeSubmitResult != VK_SUCCESS) {
+                std::cout << "[App::drawFrame] compute vkQueueSubmit FAILED with result=" << computeSubmitResult;
+                if (computeSubmitResult == VK_ERROR_DEVICE_LOST) {
+                    std::cout << " (VK_ERROR_DEVICE_LOST)";
+                }
+                std::cout << " - triggering swapchain recreation" << std::endl;
+                vkDeviceWaitIdle(vulkanDevice.getDevice());
+                recreateSwapChain();
+                return;
+            }
 
-        // Always wait for compute
-        std::vector<VkSemaphore> waitSemaphores = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
-        std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+            computeSubmittedThisFrame = true;
+            if (currentFrame < computeTimingValidFrames.size()) {
+                computeTimingValidFrames[currentFrame] = 1;
+            }
+        }
+
+        frameGraph->setComputeSyncEnabled(hasComputeWritesForGraphics);
+
+        std::vector<VkSemaphore> waitSemaphores;
+        std::vector<VkPipelineStageFlags> waitStages;
+        waitSemaphores.reserve(2);
+        waitStages.reserve(2);
+
+        const bool graphicsWaitsForCompute = computeSubmittedThisFrame && !queuesAreShared;
+        if (graphicsWaitsForCompute) {
+            waitSemaphores.push_back(computeFinishedSemaphores[currentFrame]);
+            waitStages.push_back(frameGraph->getComputeWaitDstStageMask());
+        }
+
+        waitSemaphores.push_back(imageAvailableSemaphores[currentFrame]);
+        waitStages.push_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+        if (gpuTimingOverlayEnabled) {
+            for (std::string& line : timingLines) {
+                std::transform(line.begin(), line.end(), line.begin(),
+                    [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+            }
+            resourceManager->updateTimingOverlayText(timingLines);
+        } else {
+            resourceManager->updateTimingOverlayText({});
+        }
 
         // Graphics pass 
-        gbuffer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, *wireframeRenderer, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, static_cast<int>(wireframeMode), intrinsicOverlayEnabled, heatOverlayEnabled, intrinsicNormalsEnabled, intrinsicVertexNormalsEnabled, intrinsicNormalLength, hashGridEnabled, surfelsEnabled, voronoiEnabled, pointsEnabled, contactLinesEnabled);
+        sceneRenderer->recordCommandBuffer(*resourceManager, *heatSystem, *modelSelection, *gizmo, *wireframeRenderer, swapChainImageViews, currentFrame, imageIndex, MAXFRAMESINFLIGHT, swapChainExtent, static_cast<int>(wireframeMode), intrinsicOverlayEnabled, heatOverlayEnabled, intrinsicNormalsEnabled, intrinsicVertexNormalsEnabled, intrinsicNormalLength, surfelsEnabled, voronoiEnabled, pointsEnabled, contactLinesEnabled);
 
         VkSubmitInfo graphicsSubmitInfo{};
         graphicsSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1092,3 +1533,4 @@ VKAPI_ATTR VkBool32 VKAPI_CALL App::debugCallback(VkDebugUtilsMessageSeverityFla
     std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
 }
+

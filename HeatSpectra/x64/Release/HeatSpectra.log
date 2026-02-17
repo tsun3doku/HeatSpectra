@@ -1,15 +1,12 @@
 ﻿   Qt/MSBuild: 3.4.1.0
   Reading Qt configuration (C:/Qt/6.9.3/msvc2022_64/bin/qmake)
    Qt: 6.9.3
-  moc MainQt.h
   App.cpp
-  MainQt.cpp
 C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\HeatSpectra\SupportingHalfedge.hpp(84,78): warning C4099: 'GeodesicTracer::SurfacePoint': type name first seen using 'struct' now seen using 'class'
-  moc_MainQt.cpp
   Generating code
-  30 of 12690 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
-    6 functions were new in current compilation
-    54 functions had inline decision re-evaluated but remain unchanged
+  98 of 14970 functions ( 0.7%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    88 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
   0 File(s) copied

@@ -15,14 +15,8 @@ class VoronoiIntegrator {
 public:
     VoronoiIntegrator() = default;
     
-    void extractNeighborIndices(
-        const std::vector<std::vector<uint32_t>>& neighborIndices,
-        const std::vector<glm::dvec3>& seedPositions,
-        int K
-    );
-    
-    void extractMeshTriangles(const Model& surfaceMesh);
-    
+    void extractNeighborIndices(const std::vector<std::vector<uint32_t>>& neighborIndices, const std::vector<glm::dvec3>& seedPositions, int K);
+    void extractMeshTriangles(const Model& surfaceMesh); 
     void computeNeighbors(const std::vector<glm::dvec3>& seedPositions,int K);  
     
     void computeSurfacePointMapping(

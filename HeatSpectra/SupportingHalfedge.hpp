@@ -13,8 +13,8 @@ class MemoryAllocator;
 // 
 //                          [ This DS enables GPU based rendering of intrinsic triangulations
 //                            Tracks for each input triangle:
-//                            - Which intrinsic halfedge currently supports it
-//                            - The angular offset between first input edge and support halfedge ]
+//                            - Which intrinsic HE currently supports it
+//                            - The angular offset between first input edge and support HE ]
 
 class SupportingHalfedge {
 public:
@@ -132,16 +132,16 @@ private:
     mutable IntrinsicMesh cachedIntrinsicMesh;
     mutable bool intrinsicMeshCacheValid = false;
 
-    VkBuffer bufferS = VK_NULL_HANDLE;              // Supporting halfedge buffer
-    VkBuffer bufferA = VK_NULL_HANDLE;              // Supporting angle buffer
-    VkBuffer bufferH = VK_NULL_HANDLE;              // Intrinsic halfedge data buffer
-    VkBuffer bufferE = VK_NULL_HANDLE;              // Intrinsic edge data buffer
-    VkBuffer bufferT = VK_NULL_HANDLE;              // Intrinsic triangle data buffer
-    VkBuffer bufferL = VK_NULL_HANDLE;              // Intrinsic edge length buffer
-    VkBuffer bufferH_input = VK_NULL_HANDLE;        // Input halfedge data buffer
-    VkBuffer bufferE_input = VK_NULL_HANDLE;        // Input edge data buffer
-    VkBuffer bufferT_input = VK_NULL_HANDLE;        // Input triangle data buffer
-    VkBuffer bufferL_input = VK_NULL_HANDLE;        // Input edge length buffer
+    VkBuffer bufferS = VK_NULL_HANDLE;                  // Supporting halfedge buffer
+    VkBuffer bufferA = VK_NULL_HANDLE;                  // Supporting angle buffer
+    VkBuffer bufferH = VK_NULL_HANDLE;                  // Intrinsic halfedge data buffer
+    VkBuffer bufferE = VK_NULL_HANDLE;                  // Intrinsic edge data buffer
+    VkBuffer bufferT = VK_NULL_HANDLE;                  // Intrinsic triangle data buffer
+    VkBuffer bufferL = VK_NULL_HANDLE;                  // Intrinsic edge length buffer
+    VkBuffer bufferH_input = VK_NULL_HANDLE;            // Input halfedge data buffer
+    VkBuffer bufferE_input = VK_NULL_HANDLE;            // Input edge data buffer
+    VkBuffer bufferT_input = VK_NULL_HANDLE;            // Input triangle data buffer
+    VkBuffer bufferL_input = VK_NULL_HANDLE;            // Input edge length buffer
     VkBuffer intrinsicTriangleBuffer = VK_NULL_HANDLE;
     VkBuffer intrinsicVertexBuffer = VK_NULL_HANDLE;  
 

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -45,7 +45,19 @@
     <ClCompile Include="VulkanImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GBuffer.cpp">
+    <ClCompile Include="SceneRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GeometryPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LightingPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="OverlayPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BlendPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Grid.cpp">
@@ -63,7 +75,10 @@
     <ClCompile Include="ResourceManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DeferredRenderer.cpp">
+    <ClCompile Include="FrameGraph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FrameGraphVk.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="iODT.cpp">
@@ -118,6 +133,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="GridLabel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TimingOverlay.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="InputManager.cpp">
@@ -260,6 +278,12 @@
     <None Include="shaders\surfel_debug.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\timing_overlay.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\timing_overlay.vert">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="shaders\grid_label.frag">
       <Filter>Shaders</Filter>
     </None>
@@ -325,7 +349,19 @@
     <ClInclude Include="VulkanImage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GBuffer.hpp">
+    <ClInclude Include="SceneRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GeometryPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LightingPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OverlayPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BlendPass.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Grid.hpp">
@@ -349,7 +385,13 @@
     <ClInclude Include="ResourceManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DeferredRenderer.hpp">
+    <ClInclude Include="FrameGraph.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameGraphVk.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FramePass.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="iODT.hpp">
@@ -395,6 +437,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GridLabel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TimingOverlay.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="InputManager.hpp">
@@ -458,3 +503,4 @@
     </QtMoc>
   </ItemGroup>
 </Project>
+

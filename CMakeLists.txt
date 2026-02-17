@@ -16,10 +16,6 @@ file(GLOB SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.cpp")
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.hpp" 
                   "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.h")
 
-# Exclude files that should be removed from the build
-list(FILTER SOURCES EXCLUDE REGEX ".*AABBTree\\.cpp$")
-list(FILTER HEADERS EXCLUDE REGEX ".*AABBTree\\.hpp$")
-
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Include dir
@@ -31,8 +27,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/nanoflann/include
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/tinyobjloader
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/tinyply/source
-    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/isotropicremesher/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/VulkanMemoryAllocator/include
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

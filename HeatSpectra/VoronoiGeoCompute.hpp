@@ -8,6 +8,10 @@ class CommandPool;
 
 class VoronoiGeoCompute {
 public:
+    struct PushConstants {
+        uint32_t debugEnable = 0;
+    };
+
     struct Bindings {
         VkBuffer voronoiNodeBuffer = VK_NULL_HANDLE;
         VkDeviceSize voronoiNodeBufferOffset = 0;
@@ -58,7 +62,7 @@ public:
 
     void initialize(uint32_t nodeCount);
     void updateDescriptors(const Bindings& bindings);
-    void dispatch();
+    void dispatch(const PushConstants& pushConstants);
 
     void cleanupResources();
     void cleanup();

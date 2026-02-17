@@ -6,9 +6,10 @@
 #include "Structs.hpp"
 #include <vector>
 #include <array>
-#include <functional>
 #include <unordered_map>
 #include <glm/glm.hpp>
+
+class iODT;
 
 class CommonSubdivision {
 public:
@@ -36,14 +37,12 @@ public:
         CommonVertex() : isCorner(0), corners{0, 0, 0}, baryCoords(0, 0, 0, 0) {}
     };
 
-    using TraceFn = std::function<std::vector<GeodesicTracer::SurfacePoint>(uint32_t halfedgeIdx)>;
-
     CommonSubdivision(
         const SignpostMesh& intrinsicMesh,
         const SignpostMesh& inputMesh,
         const GeodesicTracer& tracer,
         const std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint>& vertexLocations,
-        TraceFn traceFn
+        iODT& remesher
     );
 
     void build();
@@ -64,7 +63,7 @@ private:
     const SignpostMesh& inputMesh;
     const GeodesicTracer& tracer;
     const std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint>& vertexLocations;
-    TraceFn traceFn;
+    iODT* remesher;
     
     std::vector<IntrinsicTriangle> intrinsicTriangles;
     std::vector<Vertex> vertices;

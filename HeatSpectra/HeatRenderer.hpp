@@ -37,10 +37,7 @@ private:
     void createDescriptorSetLayout();
     void createDescriptorSets(uint32_t maxFramesInFlight);
     void createPipeline(VkRenderPass renderPass);
-    void drawModel(
-        VkCommandBuffer commandBuffer,
-        VkDescriptorSet descriptorSet,
-        Model& model) const;
+    void drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, Model& model) const;
     bool updateDescriptorSetVector(
         const std::array<VkBufferView, 11>& bufferViews,
         uint32_t maxFramesInFlight,

@@ -48,7 +48,6 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "onHeatOverlayToggled",
         "onIntrinsicNormalsToggled",
         "onIntrinsicVertexNormalsToggled",
-        "onHashGridToggled",
         "onSurfelsToggled",
         "onVoronoiToggled",
         "onPointsToggled",
@@ -86,44 +85,40 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         QtMocHelpers::SlotData<void(bool)>(9, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 6 },
         }}),
-        // Slot 'onHashGridToggled'
+        // Slot 'onSurfelsToggled'
         QtMocHelpers::SlotData<void(bool)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 6 },
         }}),
-        // Slot 'onSurfelsToggled'
+        // Slot 'onVoronoiToggled'
         QtMocHelpers::SlotData<void(bool)>(11, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 6 },
         }}),
-        // Slot 'onVoronoiToggled'
+        // Slot 'onPointsToggled'
         QtMocHelpers::SlotData<void(bool)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 6 },
         }}),
-        // Slot 'onPointsToggled'
+        // Slot 'onContactLinesToggled'
         QtMocHelpers::SlotData<void(bool)>(13, 2, QMC::AccessPrivate, QMetaType::Void, {{
             { QMetaType::Bool, 6 },
         }}),
-        // Slot 'onContactLinesToggled'
-        QtMocHelpers::SlotData<void(bool)>(14, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
-        }}),
         // Slot 'onNormalLengthChanged'
-        QtMocHelpers::SlotData<void(double)>(15, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Double, 16 },
+        QtMocHelpers::SlotData<void(double)>(14, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Double, 15 },
         }}),
         // Slot 'onPanSensitivityChanged'
-        QtMocHelpers::SlotData<void(double)>(17, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Double, 16 },
+        QtMocHelpers::SlotData<void(double)>(16, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Double, 15 },
         }}),
         // Slot 'onToggleHeatClicked'
-        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(17, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onPauseHeatClicked'
-        QtMocHelpers::SlotData<void()>(19, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onResetHeatClicked'
-        QtMocHelpers::SlotData<void()>(20, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(19, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onOpenModel'
-        QtMocHelpers::SlotData<void()>(21, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(20, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onExit'
-        QtMocHelpers::SlotData<void()>(22, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(21, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -153,18 +148,17 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 3: _t->onHeatOverlayToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 4: _t->onIntrinsicNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
         case 5: _t->onIntrinsicVertexNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 6: _t->onHashGridToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 7: _t->onSurfelsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 8: _t->onVoronoiToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 9: _t->onPointsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 10: _t->onContactLinesToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 11: _t->onNormalLengthChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 12: _t->onPanSensitivityChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 13: _t->onToggleHeatClicked(); break;
-        case 14: _t->onPauseHeatClicked(); break;
-        case 15: _t->onResetHeatClicked(); break;
-        case 16: _t->onOpenModel(); break;
-        case 17: _t->onExit(); break;
+        case 6: _t->onSurfelsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 7: _t->onVoronoiToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 8: _t->onPointsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 9: _t->onContactLinesToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 10: _t->onNormalLengthChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 11: _t->onPanSensitivityChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 12: _t->onToggleHeatClicked(); break;
+        case 13: _t->onPauseHeatClicked(); break;
+        case 14: _t->onResetHeatClicked(); break;
+        case 15: _t->onOpenModel(); break;
+        case 16: _t->onExit(); break;
         default: ;
         }
     }
@@ -189,14 +183,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 18)
+        if (_id < 17)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 18;
+        _id -= 17;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 18)
+        if (_id < 17)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 18;
+        _id -= 17;
     }
     return _id;
 }

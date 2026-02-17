@@ -1,6 +1,6 @@
 #include "ModelSelection.hpp"
 #include "VulkanDevice.hpp"
-#include "DeferredRenderer.hpp"
+#include "FrameGraph.hpp"
 #include "ResourceManager.hpp"
 #include "Model.hpp"
 #include <algorithm>
@@ -9,8 +9,8 @@
 #include <stdexcept>
 #include <iostream>
 
-ModelSelection::ModelSelection(VulkanDevice& device, DeferredRenderer& renderer)
-    : vulkanDevice(device), deferredRenderer(renderer), pickingCommandPool(VK_NULL_HANDLE),
+ModelSelection::ModelSelection(VulkanDevice& device, FrameGraph& frameGraph)
+    : vulkanDevice(device), frameGraph(frameGraph), pickingCommandPool(VK_NULL_HANDLE),
       stagingBuffer(VK_NULL_HANDLE), stagingBufferMemory(VK_NULL_HANDLE), stagingBufferMapped(nullptr) {
     createPickingCommandPool();
     createStagingBuffer();
@@ -187,8 +187,8 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
     
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
     
-    // Get the stencil image from DeferredRenderer
-    VkImage stencilImage = deferredRenderer.getDepthResolveImages()[currentFrame];
+    // Get the stencil image from frameGraph
+    VkImage stencilImage = frameGraph.getDepthResolveImages()[currentFrame];
     
     // Transition image to TRANSFER_SRC_OPTIMAL 
     VkImageMemoryBarrier barrier{};
@@ -299,3 +299,4 @@ void ModelSelection::cleanup() {
         pickingCommandPool = VK_NULL_HANDLE;
     }
 }
+

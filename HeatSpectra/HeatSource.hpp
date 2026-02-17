@@ -1,6 +1,5 @@
 #pragma once
 
-#include <functional>
 #include <string>
 #include <vector>
 #include <glm/glm.hpp>
@@ -21,9 +20,7 @@ public:
     HeatSource(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Model& heatModel, ResourceManager& resourceManager, CommandPool& renderCommandPool);
     ~HeatSource();
 
-
     void createSourceBuffer();
-
     void controller(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, float deltaTime);
 
     void cleanup();
@@ -67,11 +64,6 @@ public:
     }
    
 private:
-    static std::vector<float> calculateVertexAreas(
-        size_t vertexCount,
-        const std::vector<uint32_t>& indices,
-        const std::function<glm::vec3(uint32_t)>& getVertexPosition);
-    
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Model& heatModel;

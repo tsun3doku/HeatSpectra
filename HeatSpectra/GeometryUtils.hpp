@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include <cstdint>
 #include <cmath>
 #include <algorithm>
 
@@ -249,4 +250,29 @@ inline glm::vec3 closestPointOnTriangle(const glm::vec3& p, const glm::vec3& a, 
 	float v = vb * denom;
 	float w = vc * denom;
 	return a + ab * v + ac * w;
+}
+
+inline std::vector<float> computeVertexAreas(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices) {
+	std::vector<float> vertexAreas(positions.size(), 0.0f);
+	const size_t triangleCount = indices.size() / 3;
+
+	for (size_t t = 0; t < triangleCount; ++t) {
+		const uint32_t i0 = indices[t * 3 + 0];
+		const uint32_t i1 = indices[t * 3 + 1];
+		const uint32_t i2 = indices[t * 3 + 2];
+
+		const glm::vec3& v0 = positions[i0];
+		const glm::vec3& v1 = positions[i1];
+		const glm::vec3& v2 = positions[i2];
+
+		const glm::vec3 edge1 = v1 - v0;
+		const glm::vec3 edge2 = v2 - v0;
+		const float triArea = glm::length(glm::cross(edge1, edge2)) * 0.5f;
+
+		vertexAreas[i0] += triArea / 3.0f;
+		vertexAreas[i1] += triArea / 3.0f;
+		vertexAreas[i2] += triArea / 3.0f;
+	}
+
+	return vertexAreas;
 }

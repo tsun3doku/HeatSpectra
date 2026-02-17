@@ -2,12 +2,11 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
-#include <unordered_map>
 #include <vector>
 
 class VulkanDevice;
 class UniformBufferManager;
-class HeatReceiver;
+class Model;
 
 class VoronoiRenderer {
 public:
@@ -17,8 +16,8 @@ public:
     // Setup the pipeline (call once or on resize)
     void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     
-    // Connect receiver data (call when buffers change)
-    void updateDescriptors(const HeatReceiver* receiverKey, uint32_t frameIndex,
+    // Connect the data (call when buffers change)
+    void updateDescriptors(uint32_t frameIndex,
         uint32_t vertexCount, VkBuffer seedBuffer, VkDeviceSize seedOffset,
         VkBuffer neighborBuffer, VkDeviceSize neighborOffset,
         VkBufferView supportingHalfedgeView, VkBufferView supportingAngleView,
@@ -26,9 +25,8 @@ public:
         VkBufferView triangleView, VkBufferView lengthView,
         VkBuffer candidateBuffer, VkDeviceSize candidateOffset);
 
-    // Draw a specific receiver with its descriptor set.
-    void render(VkCommandBuffer cmd, const HeatReceiver* receiverKey,
-               VkBuffer vertexBuffer, VkDeviceSize vertexOffset,
+    // The draw call (pass model matrix for transformations)
+    void render(VkCommandBuffer cmd, VkBuffer vertexBuffer, VkDeviceSize vertexOffset,
                VkBuffer indexBuffer, VkDeviceSize indexOffset, uint32_t indexCount, 
                uint32_t frameIndex, const glm::mat4& modelMatrix);
 
@@ -37,8 +35,8 @@ public:
 private:
     void createDescriptorSetLayout();
     void createDescriptorPool(uint32_t maxFramesInFlight);
+    void createDescriptorSets(uint32_t maxFramesInFlight);
     void createPipeline(VkRenderPass renderPass);
-    bool ensureReceiverDescriptorSets(const HeatReceiver* receiverKey);
 
     VulkanDevice& vulkanDevice;
     UniformBufferManager& uniformBufferManager;
@@ -48,9 +46,11 @@ private:
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    std::unordered_map<const HeatReceiver*, std::vector<VkDescriptorSet>> receiverDescriptorSets;
-    std::unordered_map<const HeatReceiver*, VkBuffer> receiverCandidateBuffers;
+    std::vector<VkDescriptorSet> descriptorSets;
     
     bool initialized = false;
-    uint32_t maxFramesInFlight = 0;
+    
+    // Stored for descriptor updates
+    uint32_t currentVertexCount = 0;
+    VkBuffer currentCandidateBuffer = VK_NULL_HANDLE;
 };

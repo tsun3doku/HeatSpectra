@@ -3,7 +3,7 @@ static const uint P_MAX = 50;
 static const uint V_MAX = 50;
 static const uint END_OF_LIST = 255;
 
-static const uint DEBUG_MAX_TRIANGLES = 64;
+static const uint DEBUG_MAX_PLANE_AREAS = 50;
 static const uint DEBUG_DUMP_CELL_COUNT = 8;
 
 static const float CANONICAL_DOMAIN_SIZE = 1000.0f;
@@ -38,47 +38,31 @@ struct VoxelGridParams
     uint   totalCells;
 };
 
-struct VolumeChunkInfo
+struct DebugPlaneArea
 {
-    uint   triIndex;
-    uint   skipped;
-    uint   goOut;
-    float  triDet;
-    float  chunkVolume;
-    float  chunkDet;
-    float  cumulativeVolume;
-    float  padding;
+    uint   planeIndex;
+    uint   neighborCellID;
+    float  area;
+    float  _padding;
 };
 
 struct VoronoiDumpInfo
 {
     uint   cellID;
-    uint   isGhost;
+    uint   planeAreaCount;
     uint   _padding0;
-    uint   originOccupancy;
+    uint   _padding2;
 
     float4 seedPos;              
 
-    int4   cornerMin;           
-    int4   cornerMax;           
-
-    uint   inDomain;
-    uint   addVolume;
-    uint   cornerCount;
-    uint   _padding;             
-
-    int4   firstInsideCorner;   
-    int4   firstOutsideCorner;   
-
-    float4 origin;              
-
     float  unrestrictedVolume;
     float  restrictedVolume;
-    float  maxChunkDet;
-    float  totalRestrictedVolume;
+    float  totalMeshVolume;
+    uint   negativeVolumeCellCount;
+    float  negativeVolumeSumAbs;
+    float2 _padding1;
 
-    VolumeChunkInfo volumeChunks[DEBUG_MAX_TRIANGLES];
-    uint cornerOccupancy[1024];
+    DebugPlaneArea planeAreas[DEBUG_MAX_PLANE_AREAS];
 };
 
 struct DebugCellGeometry
@@ -111,6 +95,16 @@ static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 59903, 0, 0, 0, 0, 0
 
 [[vk::binding(15)]] StructuredBuffer<uint>          seedFlags;
 [[vk::binding(16)]] RWStructuredBuffer<VoronoiDumpInfo> dumpInfo;
+
+struct GeometryDebugPushConstants
+{
+    uint debugEnable;
+};
+
+[[vk::push_constant]] cbuffer GeometryDebugPushConstantsBuffer
+{
+    GeometryDebugPushConstants pushConstants;
+};
 
 static inline float det2x2(float a11, float a12, float a21, float a22)
 {
@@ -663,14 +657,21 @@ static inline void CCExportArea(
 
 static float computeRestrictedVolume(uint cellID, float3 seed)
 {
-    int debugSlot = getDebugSlot(cellID);
-    bool debugThisCell = (debugSlot >= 0);
+    int debugSlot = -1;
+    bool debugThisCell = false;
+    if (pushConstants.debugEnable != 0u)
+    {
+        debugSlot = getDebugSlot(cellID);
+        debugThisCell = (debugSlot >= 0);
+    }
 
     if (debugThisCell)
     {
         dumpInfo[debugSlot].cellID = cellID;
         dumpInfo[debugSlot].seedPos = float4(seed, 1.0f);
-        dumpInfo[debugSlot].maxChunkDet = 0.0f;
+        dumpInfo[debugSlot].planeAreaCount = 0u;
+        dumpInfo[debugSlot].unrestrictedVolume = 0.0f;
+        dumpInfo[debugSlot].restrictedVolume = 0.0f;
     }
 
     // Init convex cell as a cube in canonical/grid space, then work in world space
@@ -706,7 +707,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
     for (uint i = 0; i < 6; i++) planeNeighborIDs[i] = -1;
 
     uint baseIdx = cellID * K_MAX_NEIGHBORS;
-    uint neighborsProcessed = 0;
 
     for (uint i = 0; i < K_MAX_NEIGHBORS; i++)
     {
@@ -735,7 +735,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
         if (CCIsSecurityRadiusReached(cell, seedPositions[neigh], seed)) break;
 
-        neighborsProcessed++;
     }
 
     if (cell.planeCount >= P_MAX) return 0.0f;
@@ -759,16 +758,10 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
     voxelMin = max(voxelMin, int3(0, 0, 0));
     voxelMax = min(voxelMax, voxelParams.gridDim - int3(1, 1, 1));
 
-    uint cornerCount = 0;
-    uint insideCornerCount = 0;
-
     bool foundInside = false;
     bool foundOutside = false;
     float3 PtInside = float3(0.0f, 0.0f, 0.0f);
     float3 PtOutside = float3(0.0f, 0.0f, 0.0f);
-
-    int4 firstInsideCorner = int4(0, 0, 0, 0);
-    int4 firstOutsideCorner = int4(0, 0, 0, 0);
 
     int3 cornerMin = voxelMin;
     int3 cornerMax = min(voxelMax + int3(1, 1, 1), voxelParams.gridDim);
@@ -786,24 +779,14 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
                 if (occ > 2u) 
                 occ = 0u; 
 
-                if (debugThisCell && cornerCount < 1024)
-                {
-                    dumpInfo[debugSlot].cornerOccupancy[cornerCount] = occ;
-                }
-
-                cornerCount++;
-                if (occ == 2u) insideCornerCount++;
-
                 if (occ == 2u && !foundInside)
                 {
                     PtInside = worldFromCanonical(float3(c) * canonicalVox);
-                    firstInsideCorner = int4(c, 0);
                     foundInside = true;
                 }
                 else if (occ == 0u && !foundOutside)
                 {
                     PtOutside = worldFromCanonical(float3(c) * canonicalVox);
-                    firstOutsideCorner = int4(c, 0);
                     foundOutside = true;
                 }
             }
@@ -914,20 +897,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
     bool addVolume = (inDomain == 2u);
 
-    if (debugThisCell)
-    {
-        dumpInfo[debugSlot].cornerMin = int4(cornerMin, 0);
-        dumpInfo[debugSlot].cornerMax = int4(cornerMax, 0);
-        dumpInfo[debugSlot].inDomain = inDomain;
-        dumpInfo[debugSlot].originOccupancy = inDomain;
-        dumpInfo[debugSlot].addVolume = addVolume ? 1u : 0u;
-        dumpInfo[debugSlot]._padding0 = 0u;
-        dumpInfo[debugSlot].cornerCount = cornerCount;
-        dumpInfo[debugSlot].firstInsideCorner = firstInsideCorner;
-        dumpInfo[debugSlot].firstOutsideCorner = firstOutsideCorner;
-        dumpInfo[debugSlot].origin = float4(origin, 0.0f);
-    }
-
     uint flags = seedFlags[cellID];
     bool isGhost = (flags & 1u) != 0u;
 
@@ -945,7 +914,10 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
         
         CCExportArea(cell, seed, staticPlaneCount, planeAreas, 1.0f);
 
-        exportUnrestrictedCell(cellID, cell, unrestrictedVolume);
+        if (pushConstants.debugEnable != 0u)
+        {
+            exportUnrestrictedCell(cellID, cell, unrestrictedVolume);
+        }
     }
 
     const int MAX_TRI = 128;
@@ -975,7 +947,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
     if (debugThisCell)
     {
         dumpInfo[debugSlot].unrestrictedVolume = unrestrictedVolume;
-        dumpInfo[debugSlot].isGhost = isGhost ? 1u : 0u;
     }
 
     nodes[cellID].interfaceNeighborCount = 0;
@@ -1005,16 +976,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
         bool goOut = triDet > 0.0f;
 
-        if (debugThisCell && i < DEBUG_MAX_TRIANGLES)
-        {
-            dumpInfo[debugSlot].volumeChunks[i].triIndex = (uint)triIdx;
-            dumpInfo[debugSlot].volumeChunks[i].triDet = triDet;
-            dumpInfo[debugSlot].volumeChunks[i].goOut = goOut ? 1u : 0u;
-            dumpInfo[debugSlot].volumeChunks[i].skipped = 0u;
-            dumpInfo[debugSlot].volumeChunks[i].chunkVolume = 0.0f;
-            dumpInfo[debugSlot].volumeChunks[i].chunkDet = 0.0f;
-        }
-
         if (!goOut)
         {
             float3 tmp = v2;
@@ -1026,19 +987,19 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
         CCSetPlane(cell, cell.planeCount++, getPlaneFromPoints(origin, v0, v1));
         CCClipByPlane(cell, cell.planeCount - 1);
-        if (cell.vertexCount < 1) { if (debugThisCell && i < DEBUG_MAX_TRIANGLES) dumpInfo[debugSlot].volumeChunks[i].skipped = 1u; CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
+        if (cell.vertexCount < 1) { CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
 
         CCSetPlane(cell, cell.planeCount++, getPlaneFromPoints(origin, v2, v0));
         CCClipByPlane(cell, cell.planeCount - 1);
-        if (cell.vertexCount < 1) { if (debugThisCell && i < DEBUG_MAX_TRIANGLES) dumpInfo[debugSlot].volumeChunks[i].skipped = 2u; CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
+        if (cell.vertexCount < 1) { CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
 
         CCSetPlane(cell, cell.planeCount++, getPlaneFromPoints(origin, v1, v2));
         CCClipByPlane(cell, cell.planeCount - 1);
-        if (cell.vertexCount < 1) { if (debugThisCell && i < DEBUG_MAX_TRIANGLES) dumpInfo[debugSlot].volumeChunks[i].skipped = 3u; CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
+        if (cell.vertexCount < 1) { CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
 
         CCSetPlane(cell, cell.planeCount++, getPlaneFromPoints(v1, v2, v0));
         CCClipByPlane(cell, cell.planeCount - 1);
-        if (cell.vertexCount < 1) { if (debugThisCell && i < DEBUG_MAX_TRIANGLES) dumpInfo[debugSlot].volumeChunks[i].skipped = 4u; CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
+        if (cell.vertexCount < 1) { CCBURestore(backup, cell); cell.planeCount = staticPlaneCount; continue; }
 
         float factor = (inDomain == 2u) ? (goOut ? -1.0f : 1.0f) : (goOut ? 1.0f : -1.0f);
 
@@ -1046,15 +1007,6 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
         CCExportArea(cell, seed, staticPlaneCount, planeAreas, factor);
 
         volBary += chunkBary;
-
-        if (debugThisCell && i < DEBUG_MAX_TRIANGLES)
-        {
-            float chunkDet = abs(chunkBary.w);
-            dumpInfo[debugSlot].volumeChunks[i].chunkVolume = chunkBary.w;
-            dumpInfo[debugSlot].volumeChunks[i].chunkDet = chunkDet;
-            dumpInfo[debugSlot].volumeChunks[i].cumulativeVolume = volBary.w;
-            dumpInfo[debugSlot].maxChunkDet = max(dumpInfo[debugSlot].maxChunkDet, chunkDet);
-        }
 
         CCBURestore(backup, cell);
         cell.planeCount = staticPlaneCount;
@@ -1075,6 +1027,19 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
         continue;
 
         float area = planeAreas[p];
+
+        if (debugThisCell)
+        {
+            uint debugPlaneIdx = dumpInfo[debugSlot].planeAreaCount;
+            if (debugPlaneIdx < DEBUG_MAX_PLANE_AREAS)
+            {
+                dumpInfo[debugSlot].planeAreas[debugPlaneIdx].planeIndex = p;
+                dumpInfo[debugSlot].planeAreas[debugPlaneIdx].neighborCellID = (uint)globalNeigh;
+                dumpInfo[debugSlot].planeAreas[debugPlaneIdx].area = area;
+                dumpInfo[debugSlot].planeAreas[debugPlaneIdx]._padding = 0.0f;
+                dumpInfo[debugSlot].planeAreaCount = debugPlaneIdx + 1u;
+            }
+        }
          
         if (abs(area) < 1e-16f) 
         continue;
@@ -1095,6 +1060,13 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 void main(uint3 dtid : SV_DispatchThreadID)
 {
     uint nodeID = dtid.x;
+    uint seedCount = 0;
+    uint seedStride = 0;
+    seedPositions.GetDimensions(seedCount, seedStride);
+    if (nodeID >= seedCount)
+    {
+        return;
+    }
 
     float3 seed = seedPositions[nodeID].xyz;
     float vol = computeRestrictedVolume(nodeID, seed);

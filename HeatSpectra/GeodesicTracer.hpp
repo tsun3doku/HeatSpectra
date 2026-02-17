@@ -1,7 +1,5 @@
 #pragma once
 #include <glm/glm.hpp>
-#include <set>
-
 #include "SignPostMesh.hpp"
 
 class SignpostMesh;
@@ -9,7 +7,7 @@ class SignpostMesh;
 class GeodesicTracer {
 public:
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
-    static constexpr double BARY_SNAP_TOL = 1e-5;  // Tolerance for barycentric edge snapping - increased from 1e-9 for better trace detection
+    static constexpr double BARY_SNAP_TOL = 1e-5;
     GeodesicTracer(SignpostMesh& mesh);
 
     struct SurfacePoint {
@@ -19,15 +17,12 @@ public:
         glm::dvec3 baryCoords;                  // Barycentric coordinates
         double split;                           // Split fraction along edge
 
-        // Face constructor
         SurfacePoint(uint32_t faceId, glm::dvec3 const& bary)
             : type(Type::FACE), elementId(faceId), baryCoords(bary), split(0.0) {}
 
-        // Edge constructor
         SurfacePoint(uint32_t edgeId, double t)
             : type(Type::EDGE), elementId(edgeId), baryCoords(0), split(t) {}
 
-        // Vertex constructor
         SurfacePoint(uint32_t vertId)
             : type(Type::VERTEX), elementId(vertId), baryCoords(1, 0, 0), split(0.0) {}
 
@@ -71,19 +66,14 @@ public:
         bool includePath                        = false;
     };
 
-    GeodesicTraceResult traceFromVertex(uint32_t vertexIdx,
-        uint32_t refFace,
-        const glm::dvec2& dirInRefVertex,
-        double remaining,
-        GeodesicTraceResult& baseResult,
-        double totalLength) const;
+    GeodesicTraceResult traceFromVertex(uint32_t vertexIdx, const glm::dvec2& dirInRefVertex, double remaining, GeodesicTraceResult& baseResult, double totalLength) const;
     GeodesicTraceResult traceFromFace(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec2& cartesianDir, double length) const;
-    GeodesicTraceResult traceFromEdge(uint32_t startEdgeIdx, double startSplit, const glm::dvec2& cartesianDir, double length, uint32_t intrinsicHalfedgeIdx = INVALID_INDEX, uint32_t resolutionFace = INVALID_INDEX) const;
+    GeodesicTraceResult traceFromEdge(uint32_t startEdgeIdx, double startSplit, const glm::dvec2& cartesianDir, double length, uint32_t resolutionFace) const;
     FaceStepResult traceInFace(const SurfacePoint& startP, const glm::dvec2& dir2D, double length) const;
 
     glm::dvec3 evaluateSurfacePoint(const SurfacePoint& point) const;
     glm::dvec2 chartLocal2D(uint32_t oldFaceIdx, uint32_t newFaceIdx, const glm::dvec2& oldPoint2D) const;
-    glm::dvec2 rotateVectorAcrossEdge(uint32_t oldFace, uint32_t oldHe, uint32_t newFace, uint32_t newHe, const glm::dvec2& vecInOld) const;
+    glm::dvec2 rotateVectorAcrossEdge(uint32_t oldHe, uint32_t newHe, const glm::dvec2& vecInOld) const;
     bool solveRayEdge(const glm::dvec2& rayDir, const glm::dvec2& edgeVec, const glm::dvec2& b, double& out_t, double& out_u) const;
 
 private:

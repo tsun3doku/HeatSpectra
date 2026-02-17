@@ -1,4 +1,5 @@
 #include "CommonSubdivision.hpp"
+#include "iODT.hpp"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -10,13 +11,12 @@ CommonSubdivision::CommonSubdivision(
     const SignpostMesh& inputMesh,
     const GeodesicTracer& tracer,
     const std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint>& vertexLocations,
-    TraceFn traceFn)
+    iODT& remesher)
     : intrinsicMesh(intrinsicMesh)
     , inputMesh(inputMesh)
     , tracer(tracer)
     , vertexLocations(vertexLocations)
-    , traceFn(traceFn)
-{
+    , remesher(&remesher) { 
 }
 
 void CommonSubdivision::build() {
@@ -237,9 +237,9 @@ CommonSubdivision::IntrinsicTriangle CommonSubdivision::buildIntrinsicTriangle(u
     }
     
     // Trace each edge 
-    auto edge0Points = traceFn(faceHalfedges[0]);
-    auto edge1Points = traceFn(faceHalfedges[1]);
-    auto edge2Points = traceFn(faceHalfedges[2]);
+    auto edge0Points = remesher->traceIntrinsicHalfedgeAlongInput(faceHalfedges[0]).pathPoints;
+    auto edge1Points = remesher->traceIntrinsicHalfedgeAlongInput(faceHalfedges[1]).pathPoints;
+    auto edge2Points = remesher->traceIntrinsicHalfedgeAlongInput(faceHalfedges[2]).pathPoints;
     
     if (edge0Points.empty() || edge1Points.empty() || edge2Points.empty()) {
         return triangle;
@@ -336,7 +336,7 @@ std::vector<glm::vec3> CommonSubdivision::mergeNearbyPoints(const std::vector<gl
             outMapping[i] = newIdx;
         }
     }
-    
+
     return merged;
 }
 

@@ -8,6 +8,7 @@
 #include "SupportingHalfedge.hpp"
 #include "Structs.hpp"
 #include "HeatSource.hpp"
+#include "GeometryUtils.hpp"
 
 HeatSource::HeatSource(VulkanDevice& device, MemoryAllocator& allocator, Model& model, ResourceManager& resManager, CommandPool& cmdPool)
     : vulkanDevice(device), memoryAllocator(allocator), heatModel(model), resourceManager(resManager), renderCommandPool(cmdPool),
@@ -17,33 +18,6 @@ HeatSource::HeatSource(VulkanDevice& device, MemoryAllocator& allocator, Model& 
 }
 
 HeatSource::~HeatSource() {
-}
-
-std::vector<float> HeatSource::calculateVertexAreas(size_t vertexCount, const std::vector<uint32_t>& indices, const std::function<glm::vec3(uint32_t)>& getVertexPosition) {   
-    std::vector<float> vertexAreas(vertexCount, 0.0f);
-    size_t numTriangles = indices.size() / 3;
-    
-    for (size_t t = 0; t < numTriangles; t++) {
-        uint32_t i0 = indices[t * 3 + 0];
-        uint32_t i1 = indices[t * 3 + 1];
-        uint32_t i2 = indices[t * 3 + 2];
-        
-        glm::vec3 v0 = getVertexPosition(i0);
-        glm::vec3 v1 = getVertexPosition(i1);
-        glm::vec3 v2 = getVertexPosition(i2);
-        
-        // Calculate triangle area
-        glm::vec3 edge1 = v1 - v0;
-        glm::vec3 edge2 = v2 - v0;
-        float triArea = glm::length(glm::cross(edge1, edge2)) * 0.5f;
-        
-        // Distribute 1/3 to each vertex
-        vertexAreas[i0] += triArea / 3.0f;
-        vertexAreas[i1] += triArea / 3.0f;
-        vertexAreas[i2] += triArea / 3.0f;
-    }
-    
-    return vertexAreas;
 }
 
 void HeatSource::createSourceBuffer() {
@@ -63,11 +37,11 @@ void HeatSource::createSourceBuffer() {
             indices = intrinsicMesh.indices;
             
             // Calculate vertex areas
-            std::vector<float> vertexAreas = calculateVertexAreas(
-                intrinsicVertexCount,
-                indices,
-                [&intrinsicMesh](uint32_t idx) { return intrinsicMesh.vertices[idx].position; }
-            );
+            std::vector<glm::vec3> positions(intrinsicVertexCount);
+            for (size_t i = 0; i < intrinsicVertexCount; ++i) {
+                positions[i] = intrinsicMesh.vertices[i].position;
+            }
+            std::vector<float> vertexAreas = computeVertexAreas(positions, indices);
             
             // Initialize with intrinsic vertices
             surfacePoints.resize(intrinsicVertexCount);

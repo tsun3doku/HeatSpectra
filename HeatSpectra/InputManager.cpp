@@ -52,6 +52,9 @@ void InputManager::handleKeyInput(Qt::Key key, bool pressed) {
     else if (key == Qt::Key_V) {
         if (onHeatOverlayToggled) onHeatOverlayToggled();
     }
+    else if (key == Qt::Key_AsciiTilde) {
+        if (onTimingOverlayToggled) onTimingOverlayToggled();
+    }
     else if (key == Qt::Key_Space) {
         if (onToggleHeatSystem) onToggleHeatSystem();
     }

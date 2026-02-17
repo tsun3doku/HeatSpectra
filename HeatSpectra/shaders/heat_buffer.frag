@@ -11,7 +11,6 @@ layout(location = 5) in vec2 fragIntrinsicCoord;
 // GBuffer outputs
 layout(location = 0) out vec4 gAlbedo;
 layout(location = 1) out vec4 gNormal;
-layout(location = 2) out vec4 gPosition;
 
 // Texture buffers for supporting halfedge data 
 layout(set = 0, binding = 1) uniform isamplerBuffer S;  // Supporting halfedge per input triangle
@@ -235,5 +234,4 @@ void main() {
     // Write to GBuffer
     gAlbedo = vec4(heatColor, 1.0);
     gNormal = vec4(normalize(fragNormal), 0.0);
-    gPosition = vec4(fragPosition, 1.0);
 }

@@ -67,14 +67,6 @@ struct AllocatorStats {
     uint32_t allocationCount = 0;
 };
 
-struct HitResult {
-    bool hit;
-    float distance;
-    uint32_t vertexIndex;
-    uint32_t vertexIndices[3];
-    int edgeIndex = -1;
-};
-
 struct TimeUniform {
     float deltaTime;
     float totalTime;
@@ -128,7 +120,7 @@ struct IntrinsicVertexData {
     float padding;                 
 };   
 
-struct SurfelParams {              // Not used may remove soon
+struct SurfelParams {              
     float thermalConductance;  
     float contactPressure;     
     float frictionCoeff;      
@@ -191,52 +183,31 @@ struct DebugCellGeometry {
     glm::uvec4 triangles[96]; 
 };
 
-const uint32_t DEBUG_MAX_TRIANGLES = 64;
+const uint32_t DEBUG_MAX_PLANE_AREAS = 50;
 
-struct VolumeChunkInfo {
-    uint32_t triIndex;          // Triangle index
-    uint32_t skipped;           // 0=processed, 1=skip@plane0, 2=plane1, 3=plane2, 4=cap 
-    uint32_t goOut;             // 1 if go_out_triangle, 0 otherwise 
-    float triDet;               // Shadow cone determinant 
-    float chunkVolume;          // Volume contribution 
-    float chunkDet;             // Volume determinant for this chunk 
-    float cumulativeVolume;     // Running total after this chunk 
-    float padding;             
-};  
+struct DebugPlaneArea {
+    uint32_t planeIndex;       // Cell plane index in shader-side convex cell
+    uint32_t neighborCellID;   // Neighbor cell tied to this interface plane
+    float area;                // Signed interface area
+    float _padding;
+};
 
 struct VoronoiDumpInfo {
     uint32_t cellID;
-    uint32_t isGhost;
+    uint32_t planeAreaCount;
     uint32_t _padding0;
-    uint32_t originOccupancy;    // Domain status of origin (0=outside, 1=border, 2=inside)
+    uint32_t _padding2;
     
     glm::vec4 seedPos;           
     
-    // Voxel corner range 
-    glm::ivec4 cornerMin;
-    glm::ivec4 cornerMax;
-    
-    uint32_t inDomain;           // 0=outside, 1=border, 2=inside
-    uint32_t addVolume;          // 1 if volume added initially
-    uint32_t cornerCount;        // Corners checked
-    uint32_t _padding;           // Alignment to 16 bytes
-
-    glm::ivec4 firstInsideCorner; 
-    glm::ivec4 firstOutsideCorner; 
-    
-    // Origin of tetra
-    glm::vec4 origin;             
-    
     float unrestrictedVolume;
     float restrictedVolume;
-    float maxChunkDet;          
-    float totalRestrictedVolume;
-    
-    // Volume chunks breakdown (32 * 64 = 2048 bytes)
-    VolumeChunkInfo volumeChunks[DEBUG_MAX_TRIANGLES];
-    
-    // Voxel corner occupancy (4096 bytes)
-    uint32_t cornerOccupancy[1024];
+    float totalMeshVolume;
+    uint32_t negativeVolumeCellCount;
+    float negativeVolumeSumAbs;
+    glm::vec2 _padding1;
+
+    DebugPlaneArea planeAreas[DEBUG_MAX_PLANE_AREAS];
 };  
 
 // Number of cells to capture debug info for

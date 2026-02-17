@@ -96,7 +96,6 @@ public:
 	uint32_t insertVertexAlongEdge(uint32_t edgeIdx);
 	uint32_t connectVertices(uint32_t heA, uint32_t heB);
 	Split splitEdgeTopo(uint32_t edgeIdx, double t);
-	void removeVertex(uint32_t v);
 
 	std::vector<uint32_t> getVertexHalfEdges(uint32_t vertexIdx) const;
 	std::vector<uint32_t> getVertexFaces(uint32_t vertexIdx) const;
@@ -105,22 +104,13 @@ public:
 	std::vector<uint32_t> getNeighboringHalfEdges(uint32_t heIdx) const;
 	std::pair<uint32_t, uint32_t> getEdgeVertices(uint32_t edgeIdx) const;
 	uint32_t getEdgeFromHalfEdge(uint32_t heIdx) const;
+	double getIntrinsicLengthFromHalfEdge(uint32_t halfEdgeIdx) const;
 
-	uint32_t findEdge(uint32_t v1, uint32_t v2) const;
-	uint32_t findFace(uint32_t e1, uint32_t e2) const;
 	bool isBoundaryVertex(uint32_t vertexIdx) const;
 	bool isInteriorHalfEdge(uint32_t heIdx) const;
-	size_t countBoundaryEdges() const;
 
 	// Iterative traversal
-	uint32_t getNextAroundVertex(uint32_t halfEdgeIdx) const {
-		const HalfEdge& he = halfEdges[halfEdgeIdx];
-		return he.opposite != INVALID_INDEX ?
-			halfEdges[he.opposite].next : INVALID_INDEX;
-	}
-	uint32_t getNextAroundFace(uint32_t halfEdgeIdx) const {
-		return halfEdges[halfEdgeIdx].next;
-	}
+	uint32_t getNextAroundVertex(uint32_t halfEdgeIdx) const;
 	
 	// Getters
 	std::vector<HalfEdge>& getHalfEdges() {  
@@ -147,28 +137,11 @@ public:
 	std::vector<Face>& getFaces() {
 		return faces;
 	}
-
-	glm::vec3 getPositionFromHalfEdge(uint32_t heIdx) const {
-		return vertices[halfEdges[heIdx].origin].position;
-	}
-
-	double getIntrinsicLengthFromHalfEdge(uint32_t halfEdgeIdx) const {
-		uint32_t edgeIdx = getEdgeFromHalfEdge(halfEdgeIdx);
-		if (edgeIdx == INVALID_INDEX || edgeIdx >= edges.size()) {
-			return 0.0;
-		}
-		return edges[edgeIdx].intrinsicLength;
-	}
-
-	std::vector<glm::vec3> getVertexPositions() const;
-
-	// Setters
-	void setVertexPositions(const std::vector<glm::vec3>& newPositions);
-
-	// Debug
-	void debugPrintStats() const;
 	
 private:
+	double lawOfCosinesAngle(double a, double b, double opposite) const;
+	void addNeighboringHalfEdgesFromVertex(uint32_t vertexIdx, uint32_t excludedA, uint32_t excludedB, std::vector<uint32_t>& out) const;
+
 	std::vector<HalfEdge> halfEdges;
 	std::vector<Vertex> vertices;
 	std::vector<Edge> edges;

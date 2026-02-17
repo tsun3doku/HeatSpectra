@@ -5,6 +5,7 @@
 #include <chrono>
 #include <atomic>
 #include <memory>
+#include <cstdint>
 #include <glm/glm.hpp>
 
 class InputManager; 
@@ -18,8 +19,8 @@ class InputManager;
 class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
-class DeferredRenderer;
-class GBuffer;
+class FrameGraph;
+class SceneRenderer;
 class HeatSystem;
 class ModelSelection;
 class Gizmo;
@@ -52,11 +53,11 @@ public:
     bool heatOverlayEnabled;
     bool intrinsicNormalsEnabled;
     bool intrinsicVertexNormalsEnabled;
-    bool hashGridEnabled;
     bool surfelsEnabled;
     bool voronoiEnabled;
     bool pointsEnabled;
     bool contactLinesEnabled;
+    bool gpuTimingOverlayEnabled;
     float intrinsicNormalLength;
 
     std::unique_ptr<InputManager> inputManager;  
@@ -84,16 +85,23 @@ private:
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
     
-    std::unique_ptr<DeferredRenderer> deferredRenderer;
-    std::unique_ptr<GBuffer> gbuffer;
+    std::unique_ptr<FrameGraph> frameGraph;
+    std::unique_ptr<SceneRenderer> sceneRenderer;
     
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkSemaphore> computeFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> computeInFlightFences;
+    VkQueryPool computeTimingQueryPool = VK_NULL_HANDLE;
+    float computeTimestampPeriod = 0.0f;
+    std::vector<uint8_t> computeTimingValidFrames;
     uint32_t currentFrame;
     uint32_t frameRate;
+    float overlayFps = 0.0f;
+    uint32_t overlayFpsFrameCount = 0;
+    bool overlayFpsInitialized = false;
+    std::chrono::high_resolution_clock::time_point overlayFpsSampleStart;
     
     std::unique_ptr<HeatSystem> heatSystem;
     std::unique_ptr<ModelSelection> modelSelection;
@@ -130,6 +138,9 @@ private:
     void createSwapChain();
     void createImageViews();
     void createSyncObjects();
+    void createComputeTimingQueryPool();
+    void destroyComputeTimingQueryPool();
+    bool tryGetComputeGpuTimeMs(uint32_t frameIndex, float& outGpuMs) const;
     void drawFrame();
     
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);

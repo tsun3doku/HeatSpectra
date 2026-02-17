@@ -63,16 +63,11 @@ slangc heat_surface.slang -target spirv -o heat_surface_comp.spv
 
 slangc heat_contact.slang -target spirv -o heat_contact_comp.spv
 
-C:/VulkanSDK/1.3.283.0/Bin/glslc.exe --target-env=vulkan1.3 heat_source.comp -o heat_source_comp.spv
-
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe --target-env=vulkan1.3 heat_voronoi.comp -o heat_voronoi_comp.spv
 
 slangc heat_geometry.slang -target spirv -o heat_geometry_comp.spv
-
 slangc voronoi_candidates_intrinsic.slang -target spirv -o voronoi_candidates_comp.spv
-
 slangc lloyd_accumulate.slang -target spirv -o lloyd_accumulate_comp.spv
-
 slangc lloyd_update.slang -target spirv -o lloyd_update_comp.spv
 
 

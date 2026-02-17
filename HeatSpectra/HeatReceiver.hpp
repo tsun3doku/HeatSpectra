@@ -19,11 +19,9 @@ public:
     ~HeatReceiver();
 
     void createReceiverBuffers();
-
     void initializeReceiverBuffer();
 
     void stageVoronoiSurfaceMapping(const std::vector<uint32_t>& cellIndices);
-    void stageVoronoiTriangleMapping(const std::vector<uint32_t>& cellIndices);
 
     void updateDescriptors(
         VkDescriptorSetLayout surfaceLayout,
@@ -84,6 +82,7 @@ public:
 
     size_t getIntrinsicVertexCount() const { return intrinsicVertexCount; }
     size_t getIntrinsicTriangleCount() const { return intrinsicTriangleCount; }
+    const std::vector<glm::vec3>& getIntrinsicSurfacePositions() const { return intrinsicSurfacePositions; }
     
     VkDescriptorSet getSurfaceComputeSetA() const { return surfaceComputeSetA; }
     VkDescriptorSet getSurfaceComputeSetB() const { return surfaceComputeSetB; }
@@ -112,12 +111,10 @@ private:
     
     VkBuffer triangleIndicesBuffer = VK_NULL_HANDLE;
     VkDeviceSize triangleIndicesBufferOffset = 0;
-
-    VkBuffer triangleCentroidBuffer = VK_NULL_HANDLE;
-    VkDeviceSize triangleCentroidBufferOffset = 0;
     
     size_t intrinsicVertexCount = 0;
     size_t intrinsicTriangleCount = 0;
+    std::vector<glm::vec3> intrinsicSurfacePositions;
     
     VkDescriptorSet surfaceComputeSetA = VK_NULL_HANDLE;
     VkDescriptorSet surfaceComputeSetB = VK_NULL_HANDLE;
@@ -135,12 +132,6 @@ private:
     VkBuffer voronoiMappingStagingBuffer = VK_NULL_HANDLE;
     VkDeviceSize voronoiMappingStagingOffset = 0;
     VkDeviceSize voronoiMappingBufferSize = 0;
-
-    VkBuffer voronoiTriangleMappingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiTriangleMappingBufferOffset = 0;
-    VkBuffer voronoiTriangleMappingStagingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiTriangleMappingStagingOffset = 0;
-    VkDeviceSize voronoiTriangleMappingBufferSize = 0;
 
     VkBuffer voronoiCandidateBuffer = VK_NULL_HANDLE;
     VkDeviceSize voronoiCandidateBufferOffset = 0;

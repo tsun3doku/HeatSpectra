@@ -10,21 +10,23 @@
 #include "Camera.hpp"
 #include "HeatSource.hpp"
 #include "HeatSystem.hpp"
-#include "HashGrid.hpp"
 #include "SurfelRenderer.hpp"
 #include "UniformBufferManager.hpp"
 #include "MemoryAllocator.hpp"
 #include "VulkanDevice.hpp"
 #include "ResourceManager.hpp"
+#include "TimingOverlay.hpp"
 
 ResourceManager::ResourceManager(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, UniformBufferManager& uniformBufferManager, 
-    VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
+    VkRenderPass renderPass, Camera& camera, uint32_t maxFramesInFlight, uint32_t overlaySubpass, CommandPool* asyncCommandPool, CommandPool* renderCommandPool)
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), uniformBufferManager(uniformBufferManager), camera(camera) {
+    (void)asyncCommandPool;
 
     visModel            = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
     commonSubdivision   = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
     heatModel           = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, *renderCommandPool);
     grid                = std::make_unique<Grid>(vulkanDevice, memoryAllocator, uniformBufferManager, maxFramesInFlight, renderPass, *renderCommandPool);
+    timingOverlay       = std::make_unique<TimingOverlay>(vulkanDevice, maxFramesInFlight, renderPass, overlaySubpass, *renderCommandPool);
 }
 
 ResourceManager::~ResourceManager() {
@@ -38,6 +40,8 @@ void ResourceManager::initialize() {
 
 void ResourceManager::performRemeshing(Model* targetModel, int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize,
                                       CommandPool& cmdPool, uint32_t maxFramesInFlight) {
+    (void)cmdPool;
+    (void)maxFramesInFlight;
     if (!targetModel) {
         std::cerr << "[ResourceManager] Cannot remesh null model" << std::endl;
         return;
@@ -57,21 +61,9 @@ void ResourceManager::performRemeshing(Model* targetModel, int iterations, doubl
     
     remeshData.isRemeshed = true;
     
-    // Create hash grid for spatial acceleration
+    // Create surfel renderer for this remeshed model
     auto* supportingHalfedge = remeshData.remesher->getSupportingHalfedge();
     if (supportingHalfedge) {
-        auto intrinsicMesh = supportingHalfedge->buildIntrinsicMesh();
-        glm::vec3 minBounds(FLT_MAX), maxBounds(-FLT_MAX);
-        for (const auto& v : intrinsicMesh.vertices) {
-            minBounds = glm::min(minBounds, v.position);
-            maxBounds = glm::max(maxBounds, v.position);
-        }
-        glm::vec3 padding(0.01f);
-        remeshData.hashGrid = std::make_unique<HashGrid>(vulkanDevice, memoryAllocator, cmdPool, maxFramesInFlight);
-        remeshData.hashGrid->initialize(minBounds - padding, maxBounds + padding, 0.003f, 32);
-        std::cout << "[ResourceManager] Created hash grid for model" << std::endl;
-        
-        // Create surfel renderer for this model
         remeshData.surfel = std::make_unique<SurfelRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
         std::cout << "[ResourceManager] Created surfel renderer for model" << std::endl;
     }
@@ -103,16 +95,6 @@ iODT* ResourceManager::getRemesherForModel(Model* model) {
     auto it = modelRemeshData.find(model);
     if (it != modelRemeshData.end()) {
         return it->second.remesher.get();
-    }
-    return nullptr;
-}
-
-HashGrid* ResourceManager::getHashGridForModel(Model* model) {
-    if (!model) return nullptr;
-    
-    auto it = modelRemeshData.find(model);
-    if (it != modelRemeshData.end()) {
-        return it->second.hashGrid.get();
     }
     return nullptr;
 }
@@ -192,6 +174,9 @@ void ResourceManager::cleanup() {
     
     // Cleanup grid
     grid->cleanup(vulkanDevice);
+    if (timingOverlay) {
+        timingOverlay->cleanup();
+    }
     
     // Cleanup all remeshers
     for (auto& [model, remeshData] : modelRemeshData) {
@@ -200,6 +185,18 @@ void ResourceManager::cleanup() {
         }
     }
     modelRemeshData.clear();
+}
+
+void ResourceManager::updateTimingOverlayText(const std::vector<std::string>& lines) {
+    if (timingOverlay) {
+        timingOverlay->setLines(lines);
+    }
+}
+
+void ResourceManager::renderTimingOverlay(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkExtent2D extent) {
+    if (timingOverlay) {
+        timingOverlay->render(commandBuffer, currentFrame, extent);
+    }
 }
 
 glm::vec3 ResourceManager::calculateMaxBoundingBoxSize() const {

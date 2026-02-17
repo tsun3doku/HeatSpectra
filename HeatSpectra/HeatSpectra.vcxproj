@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -209,12 +209,18 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="CommonSubdivision.cpp" />
     <ClCompile Include="ContactInterface.cpp" />
     <ClCompile Include="ContactLineRenderer.cpp" />
-    <ClCompile Include="DeferredRenderer.cpp" />
-    <ClCompile Include="GBuffer.cpp" />
+    <ClCompile Include="FrameGraph.cpp" />
+    <ClCompile Include="FrameGraphVk.cpp" />
+    <ClCompile Include="SceneRenderer.cpp" />
+    <ClCompile Include="GeometryPass.cpp" />
+    <ClCompile Include="LightingPass.cpp" />
+    <ClCompile Include="OverlayPass.cpp" />
+    <ClCompile Include="BlendPass.cpp" />
     <ClCompile Include="GeodesicTracer.cpp" />
     <ClCompile Include="Gizmo.cpp" />
     <ClCompile Include="Grid.cpp" />
     <ClCompile Include="GridLabel.cpp" />
+    <ClCompile Include="TimingOverlay.cpp" />
     <ClCompile Include="HalfEdgeMesh.cpp" />
     <ClCompile Include="HashGrid.cpp" />
     <ClCompile Include="HashGridRenderer.cpp" />
@@ -305,6 +311,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\point_cloud.vert" />
     <None Include="shaders\surfel_debug.frag" />
     <None Include="shaders\surfel_debug.vert" />
+    <None Include="shaders\timing_overlay.frag" />
+    <None Include="shaders\timing_overlay.vert" />
     <None Include="shaders\voronoi_candidates_intrinsic.slang" />
     <None Include="shaders\voronoi_surface.frag" />
     <None Include="shaders\voronoi_surface.geom" />
@@ -318,13 +326,20 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="CommonSubdivision.hpp" />
     <ClInclude Include="ContactInterface.hpp" />
     <ClInclude Include="ContactLineRenderer.hpp" />
-    <ClInclude Include="DeferredRenderer.hpp" />
-    <ClInclude Include="GBuffer.hpp" />
+    <ClInclude Include="FrameGraph.hpp" />
+    <ClInclude Include="FrameGraphVk.hpp" />
+    <ClInclude Include="FramePass.hpp" />
+    <ClInclude Include="SceneRenderer.hpp" />
+    <ClInclude Include="GeometryPass.hpp" />
+    <ClInclude Include="LightingPass.hpp" />
+    <ClInclude Include="OverlayPass.hpp" />
+    <ClInclude Include="BlendPass.hpp" />
     <ClInclude Include="GeodesicTracer.hpp" />
     <ClInclude Include="GeometryUtils.hpp" />
     <ClInclude Include="Gizmo.hpp" />
     <ClInclude Include="Grid.hpp" />
     <ClInclude Include="GridLabel.hpp" />
+    <ClInclude Include="TimingOverlay.hpp" />
     <ClInclude Include="HalfEdgeMesh.hpp" />
     <ClInclude Include="HashGrid.hpp" />
     <ClInclude Include="HashGridRenderer.hpp" />
@@ -371,3 +386,4 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
+

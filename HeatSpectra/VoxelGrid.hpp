@@ -42,19 +42,12 @@ private:
     static constexpr float CANONICAL_DOMAIN_SIZE = 1000.0f;
     static constexpr float CANONICAL_SCALE = 990.222f;
     static constexpr float CANONICAL_BIAS = 4.998f;
-    static constexpr int NUM_RANDOM_DIRS = 7;
-    static const glm::vec3 RANDOM_DIRS[NUM_RANDOM_DIRS];
-
     glm::vec3 toCanonical(const glm::vec3& worldPos) const;
     glm::vec3 toWorld(const glm::vec3& canonicalPos) const;
     static int clampInt(int v, int lo, int hi) { return std::max(lo, std::min(v, hi)); }
     
-    // Intersection tests
     static bool triBoxOverlap(const float boxcenter[3], const float boxhalfsize[3], const float triverts[3][3]);
-    bool isInsideMonteCarlo(const glm::vec3& point, const Model& mesh, int numRays = 5) const;
-    bool rayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& t) const;
     float distanceToNearestTriangle(const glm::vec3& point, const Model& mesh, const TriangleHashGrid& triangleGrid) const;
-    float pointToTriangleDistance(const glm::vec3& p, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) const;
 
     size_t getCornerIndex(int x, int y, int z) const;
 

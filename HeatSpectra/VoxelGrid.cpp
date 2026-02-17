@@ -1,24 +1,17 @@
 #include "VoxelGrid.hpp"
 #include "Model.hpp"
 #include "TriangleHashGrid.hpp"
+#include "GeometryUtils.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cmath>
 #include <cfloat>
+#include <climits>
 #include <set>
 #include <unordered_set>
+#include <unordered_map>
 #include <fstream>
 #include <omp.h>
-
-const glm::vec3 VoxelGrid::RANDOM_DIRS[NUM_RANDOM_DIRS] = {
-    glm::normalize(glm::vec3(0.267f, 0.534f, 0.802f)),
-    glm::normalize(glm::vec3(-0.577f, 0.577f, 0.577f)),
-    glm::normalize(glm::vec3(0.707f, -0.707f, 0.0f)),
-    glm::normalize(glm::vec3(-0.333f, -0.667f, 0.667f)),
-    glm::normalize(glm::vec3(0.0f, 0.894f, -0.447f)),
-    glm::normalize(glm::vec3(0.816f, 0.408f, -0.408f)),
-    glm::normalize(glm::vec3(-0.447f, 0.0f, 0.894f)),
-};
 
 glm::vec3 VoxelGrid::toCanonical(const glm::vec3& worldPos) const {
     return (worldPos - params.gridMin) * params.cellSize;
@@ -310,31 +303,138 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     }
 
     std::cout << " Complete: " << borderCount << " border corners" << std::endl;
-    std::cout << " Ray casting " << (numCorners - borderCount) << " non-border corners..." << std::endl;
+    std::cout << " Classifying " << (numCorners - borderCount) << " non-border corners..." << std::endl;
 
-    int insideCount = 0, outsideCount = 0;
+    const auto& meshIndices = mesh.getIndices();
+    const size_t triCount = meshIndices.size() / 3;
+    const glm::vec3 rayDir(1.0f, 0.0f, 0.0f);
+    const float duplicateHitEpsilon = worldVoxelSize * 1e-3f;
 
-    // Ray cast non-border corners
-    #pragma omp parallel for reduction(+:insideCount, outsideCount)
-    for (int z = 0; z <= dimZ; z++) {
-        for (int y = 0; y <= dimY; y++) {
-            for (int x = 0; x <= dimX; x++) {
-                size_t idx = getCornerIndex(x, y, z);
+    std::vector<glm::vec3> triV0;
+    std::vector<glm::vec3> triV1;
+    std::vector<glm::vec3> triV2;
+    triV0.reserve(triCount);
+    triV1.reserve(triCount);
+    triV2.reserve(triCount);
+    for (size_t t = 0; t < triCount; t++) {
+        const size_t base = t * 3;
+        triV0.push_back(vertices[meshIndices[base + 0]].pos);
+        triV1.push_back(vertices[meshIndices[base + 1]].pos);
+        triV2.push_back(vertices[meshIndices[base + 2]].pos);
+    }
 
-                // Skip border corners
-                if (occupancy[idx] == 1) 
+    int insideCount = 0;
+    int outsideCount = 0;
+
+    // Classify each (y,z) corner column once 
+    #pragma omp parallel reduction(+:insideCount, outsideCount)
+    {
+        std::vector<int32_t> candidateTriangles;
+        candidateTriangles.reserve(512);
+        std::vector<int32_t> triStamp(triCount, -1);
+        int stamp = 0;
+        std::vector<float> hitX;
+        std::vector<float> uniqueHitX;
+
+        #pragma omp for collapse(2) schedule(dynamic, 1)
+        for (int z = 0; z <= dimZ; z++) {
+            for (int y = 0; y <= dimY; y++) {
+                stamp++;
+                if (stamp == INT_MAX) {
+                    std::fill(triStamp.begin(), triStamp.end(), -1);
+                    stamp = 1;
+                }
+
+                candidateTriangles.clear();
+
+                // Corner lies on voxel boundaries in y/z
+                const int yCells[2] = { clampInt(y - 1, 0, dimY - 1), clampInt(y, 0, dimY - 1) };
+                const int zCells[2] = { clampInt(z - 1, 0, dimZ - 1), clampInt(z, 0, dimZ - 1) };
+
+                for (int xCell = 0; xCell < dimX; xCell++) {
+                    for (int yi = 0; yi < 2; yi++) {
+                        for (int zi = 0; zi < 2; zi++) {
+                            const int voxelIdx = xCell + yCells[yi] * dimX + zCells[zi] * dimX * dimY;
+                            const int begin = offsets[voxelIdx];
+                            const int end = offsets[voxelIdx + 1];
+                            for (int it = begin; it < end; it++) {
+                                const int32_t triId = trianglesList[it];
+                                if (triId < 0 || static_cast<size_t>(triId) >= triCount) {
+                                    continue;
+                                }
+                                if (triStamp[static_cast<size_t>(triId)] == stamp) {
+                                    continue;
+                                }
+                                triStamp[static_cast<size_t>(triId)] = stamp;
+                                candidateTriangles.push_back(triId);
+                            }
+                        }
+                    }
+                }
+
+                // If no candidates for this column, everything here is outside except borders
+                if (candidateTriangles.empty()) {
+                    for (int x = 0; x <= dimX; x++) {
+                        const size_t idx = getCornerIndex(x, y, z);
+                        if (occupancy[idx] == 1) {
+                            continue;
+                        }
+                        occupancy[idx] = 0;
+                        outsideCount++;
+                    }
                     continue;
+                }
 
-                glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
-                glm::vec3 cornerPos = toWorld(canonicalCornerPos);
-                bool isInside = isInsideMonteCarlo(cornerPos, mesh, 7); 
+                const glm::vec3 canonicalCol = glm::vec3(0.0f, static_cast<float>(y), static_cast<float>(z)) * canonicalVoxelSize;
+                glm::vec3 columnBase = toWorld(canonicalCol);
+                columnBase.x = params.gridMin.x - worldVoxelSize;
 
-                if (isInside) {
-                    occupancy[idx] = 2;  // Inside
-                    insideCount++;
-                } else {
-                    occupancy[idx] = 0;  // Outside
-                    outsideCount++;
+                hitX.clear();
+                hitX.reserve(candidateTriangles.size());
+
+                for (int32_t triId : candidateTriangles) {
+                    const size_t triIdx = static_cast<size_t>(triId);
+
+                    float tHit = 0.0f;
+                    float uDummy = 0.0f;
+                    float vDummy = 0.0f;
+                    if (intersectRayTriangle(columnBase, rayDir, triV0[triIdx], triV1[triIdx], triV2[triIdx], tHit, uDummy, vDummy)) {
+                        hitX.push_back(columnBase.x + tHit);
+                    }
+                }
+
+                std::sort(hitX.begin(), hitX.end());
+
+                // Collapse nearly identical hits 
+                uniqueHitX.clear();
+                uniqueHitX.reserve(hitX.size());
+                for (float xHit : hitX) {
+                    if (uniqueHitX.empty() || std::abs(xHit - uniqueHitX.back()) > duplicateHitEpsilon) {
+                        uniqueHitX.push_back(xHit);
+                    }
+                }
+
+                size_t hitPtr = 0;
+                float cornerX = params.gridMin.x;
+                for (int x = 0; x <= dimX; x++, cornerX += worldVoxelSize) {
+                    const size_t idx = getCornerIndex(x, y, z);
+                    if (occupancy[idx] == 1) {
+                        continue;
+                    }
+
+                    while (hitPtr < uniqueHitX.size() && uniqueHitX[hitPtr] <= cornerX) {
+                        hitPtr++;
+                    }
+                    const int numHitsToLeft = static_cast<int>(hitPtr);
+                    const bool isInside = (numHitsToLeft & 1) == 1;
+
+                    if (isInside) {
+                        occupancy[idx] = 2;
+                        insideCount++;
+                    } else {
+                        occupancy[idx] = 0;
+                        outsideCount++;
+                    }
                 }
             }
         }
@@ -344,135 +444,6 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
               << borderCount << " border, " << outsideCount << " outside" << std::endl;
 
     std::cout << "[VoxelGrid] Build complete" << std::endl;
-}
-
-bool VoxelGrid::rayTriangleIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& t) const {
-    const float EPSILON = 1e-8f;
-
-    glm::vec3 edge1 = v1 - v0;
-    glm::vec3 edge2 = v2 - v0;
-    glm::vec3 h = glm::cross(rayDir, edge2);
-    float a = glm::dot(edge1, h);
-
-    // Ray parallel to triangle
-    if (a > -EPSILON && a < EPSILON) 
-        return false; 
-    
-    float f = 1.0f / a;
-    glm::vec3 s = rayOrigin - v0;
-    float u = f * glm::dot(s, h);
-    
-    if (u < 0.0f || u > 1.0f) 
-        return false;
-    
-    glm::vec3 q = glm::cross(s, edge1);
-    float v = f * glm::dot(rayDir, q);
-    
-    if (v < 0.0f || u + v > 1.0f) 
-        return false;
-    
-    // Only count forward intersections
-    t = f * glm::dot(edge2, q);
-    return t > EPSILON;  
-}
-
-bool VoxelGrid::isInsideMonteCarlo(const glm::vec3& point, const Model& mesh, int numRays) const {
-    const auto& vertices = mesh.getVertices();
-    const auto& indices = mesh.getIndices();
-    
-    int insideVotes = 0;
-    int outsideVotes = 0;
-    numRays = std::min(numRays, NUM_RANDOM_DIRS);
-    int majority = (numRays / 2) + 1;
-    
-    for (int rayIdx = 0; rayIdx < numRays; rayIdx++) {
-        glm::vec3 rayDir = RANDOM_DIRS[rayIdx];
-        int intersectionCount = 0;
-        
-        // Test ray against all triangles
-        for (size_t i = 0; i < indices.size(); i += 3) {
-            const glm::vec3& v0 = vertices[indices[i]].pos;
-            const glm::vec3& v1 = vertices[indices[i + 1]].pos;
-            const glm::vec3& v2 = vertices[indices[i + 2]].pos;
-            
-            float t;
-            if (rayTriangleIntersect(point, rayDir, v0, v1, v2, t)) {
-                intersectionCount++;
-            }
-        }
-        
-        // Odd intersection count = inside
-        if (intersectionCount % 2 == 1) {
-            insideVotes++;
-            if (insideVotes >= majority) 
-                return true;  // Majority inside
-        } else {
-            outsideVotes++;
-            if (outsideVotes >= majority) 
-                return false;  // Majority outside
-        }
-    }
-    
-    return insideVotes > outsideVotes;
-}
-
-float VoxelGrid::pointToTriangleDistance(const glm::vec3& p, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) const {
-    // Edge vectors
-    glm::vec3 e0 = v1 - v0;
-    glm::vec3 e1 = v2 - v0;
-    glm::vec3 diff = v0 - p;
-    
-    float a = glm::dot(e0, e0);
-    float b = glm::dot(e0, e1);
-    float c = glm::dot(e1, e1);
-    float d = glm::dot(e0, diff);
-    float e = glm::dot(e1, diff);
-    
-    float det = a * c - b * b;
-    float s = b * e - c * d;
-    float t = b * d - a * e;
-    
-    if (s + t <= det) {
-        if (s < 0.0f) {
-            if (t < 0.0f) {
-                // Region 4
-                s = glm::clamp(-d / a, 0.0f, 1.0f);
-                t = 0.0f;
-            } else {
-                // Region 3
-                s = 0.0f;
-                t = glm::clamp(-e / c, 0.0f, 1.0f);
-            }
-        } else if (t < 0.0f) {
-            // Region 5
-            s = glm::clamp(-d / a, 0.0f, 1.0f);
-            t = 0.0f;
-        } else {
-            // Region 0 (inside triangle)
-            float invDet = 1.0f / det;
-            s *= invDet;
-            t *= invDet;
-        }
-    } else {
-        if (s < 0.0f) {
-            // Region 2
-            s = 0.0f;
-            t = glm::clamp(-e / c, 0.0f, 1.0f);
-        } else if (t < 0.0f) {
-            // Region 6
-            s = glm::clamp(-d / a, 0.0f, 1.0f);
-            t = 0.0f;
-        } else {
-            // Region 1
-            float numer = c + e - b - d;
-            float denom = a - 2.0f * b + c;
-            s = glm::clamp(numer / denom, 0.0f, 1.0f);
-            t = 1.0f - s;
-        }
-    }
-    
-    glm::vec3 closest = v0 + s * e0 + t * e1;
-    return glm::length(p - closest);
 }
 
 float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& mesh, const TriangleHashGrid& triangleGrid) const {
@@ -492,7 +463,8 @@ float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& 
         const glm::vec3& v1 = vertices[indices[triIdx + 1]].pos;
         const glm::vec3& v2 = vertices[indices[triIdx + 2]].pos;
         
-        float dist = pointToTriangleDistance(point, v0, v1, v2);
+        glm::vec3 closest = closestPointOnTriangle(point, v0, v1, v2);
+        float dist = glm::length(point - closest);
         minDist = std::min(minDist, dist);
     }
     
@@ -524,66 +496,84 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
     float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(gridSize);
 
     std::vector<std::vector<int32_t>> voxelTriangles(static_cast<size_t>(numVoxels));
+    std::vector<std::unordered_map<int, std::vector<int32_t>>> threadLocalVoxelTriangles;
 
     const auto& meshVertices = mesh.getVertices();
     const auto& meshIndices = mesh.getIndices();
     size_t triCount = meshIndices.size() / 3;
 
-    #pragma omp parallel for
-    for (int t = 0; t < static_cast<int>(triCount); t++) {
-        uint32_t i0 = meshIndices[3 * t + 0];
-        uint32_t i1 = meshIndices[3 * t + 1];
-        uint32_t i2 = meshIndices[3 * t + 2];
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            threadLocalVoxelTriangles.resize(static_cast<size_t>(omp_get_num_threads()));
+        }
 
-        glm::vec3 w0 = meshVertices[i0].pos;
-        glm::vec3 w1 = meshVertices[i1].pos;
-        glm::vec3 w2 = meshVertices[i2].pos;
+        const int threadId = omp_get_thread_num();
+        auto& localVoxelTriangles = threadLocalVoxelTriangles[static_cast<size_t>(threadId)];
 
-        glm::vec3 c0 = toCanonical(w0);
-        glm::vec3 c1 = toCanonical(w1);
-        glm::vec3 c2 = toCanonical(w2);
+        #pragma omp for schedule(static)
+        for (int t = 0; t < static_cast<int>(triCount); t++) {
+            uint32_t i0 = meshIndices[3 * t + 0];
+            uint32_t i1 = meshIndices[3 * t + 1];
+            uint32_t i2 = meshIndices[3 * t + 2];
 
-        glm::vec3 bbMin(FLT_MAX), bbMax(-FLT_MAX);
-        bbMin = glm::min(bbMin, c0); bbMax = glm::max(bbMax, c0);
-        bbMin = glm::min(bbMin, c1); bbMax = glm::max(bbMax, c1);
-        bbMin = glm::min(bbMin, c2); bbMax = glm::max(bbMax, c2);
+            glm::vec3 w0 = meshVertices[i0].pos;
+            glm::vec3 w1 = meshVertices[i1].pos;
+            glm::vec3 w2 = meshVertices[i2].pos;
 
-        int vx0 = clampInt(static_cast<int>(std::floor(bbMin.x / canonicalVoxelSize)), 0, gridSize - 1);
-        int vy0 = clampInt(static_cast<int>(std::floor(bbMin.y / canonicalVoxelSize)), 0, gridSize - 1);
-        int vz0 = clampInt(static_cast<int>(std::floor(bbMin.z / canonicalVoxelSize)), 0, gridSize - 1);
-        int vx1 = clampInt(static_cast<int>(std::ceil (bbMax.x / canonicalVoxelSize)), 0, gridSize - 1);
-        int vy1 = clampInt(static_cast<int>(std::ceil (bbMax.y / canonicalVoxelSize)), 0, gridSize - 1);
-        int vz1 = clampInt(static_cast<int>(std::ceil (bbMax.z / canonicalVoxelSize)), 0, gridSize - 1);
+            glm::vec3 c0 = toCanonical(w0);
+            glm::vec3 c1 = toCanonical(w1);
+            glm::vec3 c2 = toCanonical(w2);
 
-        float triverts[3][3] = {
-            { c0.x, c0.y, c0.z },
-            { c1.x, c1.y, c1.z },
-            { c2.x, c2.y, c2.z },
-        };
+            glm::vec3 bbMin(FLT_MAX), bbMax(-FLT_MAX);
+            bbMin = glm::min(bbMin, c0); bbMax = glm::max(bbMax, c0);
+            bbMin = glm::min(bbMin, c1); bbMax = glm::max(bbMax, c1);
+            bbMin = glm::min(bbMin, c2); bbMax = glm::max(bbMax, c2);
 
-        for (int z = vz0; z <= vz1; z++) {
-            for (int y = vy0; y <= vy1; y++) {
-                for (int x = vx0; x <= vx1; x++) {
-                    float boxcenter[3] = {
-                        (x + 0.5f) * canonicalVoxelSize,
-                        (y + 0.5f) * canonicalVoxelSize,
-                        (z + 0.5f) * canonicalVoxelSize,
-                    };
-                    float boxhalfsize[3] = {
-                        0.5f * canonicalVoxelSize,
-                        0.5f * canonicalVoxelSize,
-                        0.5f * canonicalVoxelSize,
-                    };
+            int vx0 = clampInt(static_cast<int>(std::floor(bbMin.x / canonicalVoxelSize)), 0, gridSize - 1);
+            int vy0 = clampInt(static_cast<int>(std::floor(bbMin.y / canonicalVoxelSize)), 0, gridSize - 1);
+            int vz0 = clampInt(static_cast<int>(std::floor(bbMin.z / canonicalVoxelSize)), 0, gridSize - 1);
+            int vx1 = clampInt(static_cast<int>(std::ceil (bbMax.x / canonicalVoxelSize)), 0, gridSize - 1);
+            int vy1 = clampInt(static_cast<int>(std::ceil (bbMax.y / canonicalVoxelSize)), 0, gridSize - 1);
+            int vz1 = clampInt(static_cast<int>(std::ceil (bbMax.z / canonicalVoxelSize)), 0, gridSize - 1);
 
-                    if (!triBoxOverlap(boxcenter, boxhalfsize, triverts)) {
-                        continue;
+            float triverts[3][3] = {
+                { c0.x, c0.y, c0.z },
+                { c1.x, c1.y, c1.z },
+                { c2.x, c2.y, c2.z },
+            };
+
+            for (int z = vz0; z <= vz1; z++) {
+                for (int y = vy0; y <= vy1; y++) {
+                    for (int x = vx0; x <= vx1; x++) {
+                        float boxcenter[3] = {
+                            (x + 0.5f) * canonicalVoxelSize,
+                            (y + 0.5f) * canonicalVoxelSize,
+                            (z + 0.5f) * canonicalVoxelSize,
+                        };
+                        float boxhalfsize[3] = {
+                            0.5f * canonicalVoxelSize,
+                            0.5f * canonicalVoxelSize,
+                            0.5f * canonicalVoxelSize,
+                        };
+
+                        if (!triBoxOverlap(boxcenter, boxhalfsize, triverts)) {
+                            continue;
+                        }
+
+                        int voxelIdx = x + y * gridSize + z * gridSize * gridSize;
+                        localVoxelTriangles[voxelIdx].push_back(static_cast<int32_t>(t));
                     }
-
-                    int voxelIdx = x + y * gridSize + z * gridSize * gridSize;
-                    #pragma omp critical
-                    voxelTriangles[static_cast<size_t>(voxelIdx)].push_back(static_cast<int32_t>(t));
                 }
             }
+        }
+    }
+
+    for (const auto& localVoxelTriangles : threadLocalVoxelTriangles) {
+        for (const auto& [voxelIdx, triIds] : localVoxelTriangles) {
+            auto& dst = voxelTriangles[static_cast<size_t>(voxelIdx)];
+            dst.insert(dst.end(), triIds.begin(), triIds.end());
         }
     }
 

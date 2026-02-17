@@ -33,6 +33,7 @@ public:
     std::function<void()> onWireframeToggled;
     std::function<void()> onIntrinsicOverlayToggled;
     std::function<void()> onHeatOverlayToggled;
+    std::function<void()> onTimingOverlayToggled;
     std::function<void()> onToggleHeatSystem;
     std::function<void()> onPauseHeatSystem;
     std::function<void()> onResetHeatSystem;

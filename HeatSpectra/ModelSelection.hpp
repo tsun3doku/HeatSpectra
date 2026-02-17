@@ -11,7 +11,7 @@
 class Camera;
 class Model;
 class VulkanDevice;
-class DeferredRenderer;
+class FrameGraph;
 
 enum class PickedType {
     None = 0,
@@ -55,7 +55,7 @@ struct PickingRequest {
 
 class ModelSelection {
 public:
-    ModelSelection(VulkanDevice& device, DeferredRenderer& renderer);
+    ModelSelection(VulkanDevice& device, FrameGraph& frameGraph);
     ~ModelSelection();
     
     void queuePickRequest(int x, int y, bool shiftPressed, float mouseX, float mouseY);
@@ -96,7 +96,7 @@ public:
 
 private:   
     VulkanDevice& vulkanDevice;
-    DeferredRenderer& deferredRenderer;
+    FrameGraph& frameGraph;
     VkCommandPool pickingCommandPool;
     
     VkBuffer stagingBuffer;
@@ -113,3 +113,4 @@ private:
     float outlineThickness = 1.0f;
     glm::vec3 outlineColor = glm::vec3(pow(0.964705f, 2.2), pow(0.647058f, 2.2), pow(0.235294f, 2.2));
 };
+

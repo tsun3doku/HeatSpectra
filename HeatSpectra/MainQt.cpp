@@ -39,9 +39,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     
     createMenuBar();
     createDockWidget();
+
+    QTimer* heatButtonSyncTimer = new QTimer(this);
+    heatButtonSyncTimer->setInterval(100);
+    connect(heatButtonSyncTimer, &QTimer::timeout, this, &MainWindow::syncHeatSystemButtons);
+    heatButtonSyncTimer->start();
 }
 
 MainWindow::~MainWindow() {
+}
+
+void MainWindow::setApp(App* application) {
+    app = application;
+    syncHeatSystemButtons();
 }
 
 void MainWindow::createMenuBar() {
@@ -224,10 +234,6 @@ void MainWindow::createDockWidget() {
 
     layout->addSpacing(10);
     
-    hashGridCheck = new QCheckBox("Show Hash Grid");
-    connect(hashGridCheck, &QCheckBox::toggled, this, &MainWindow::onHashGridToggled);
-    layout->addWidget(hashGridCheck);
-    
     surfelsCheck = new QCheckBox("Show Surfels");
     connect(surfelsCheck, &QCheckBox::toggled, this, &MainWindow::onSurfelsToggled);
     layout->addWidget(surfelsCheck);
@@ -256,7 +262,7 @@ void MainWindow::createDockWidget() {
     connect(pauseHeatBtn, &QPushButton::clicked, this, &MainWindow::onPauseHeatClicked);
     layout->addWidget(pauseHeatBtn);
     
-    resetHeatBtn = new QPushButton("Reset (Ctrl+R)");
+    resetHeatBtn = new QPushButton("Reset (R)");
     connect(resetHeatBtn, &QPushButton::clicked, this, &MainWindow::onResetHeatClicked);
     layout->addWidget(resetHeatBtn);
     
@@ -266,12 +272,37 @@ void MainWindow::createDockWidget() {
     dock->setWidget(dockWidget);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    syncHeatButtonState();
+    syncHeatSystemButtons();
+}
 
-    QTimer* heatUiSyncTimer = new QTimer(this);
-    heatUiSyncTimer->setInterval(100);
-    connect(heatUiSyncTimer, &QTimer::timeout, this, &MainWindow::syncHeatButtonState);
-    heatUiSyncTimer->start();
+void MainWindow::syncHeatSystemButtons() {
+    if (!toggleHeatBtn || !pauseHeatBtn || !resetHeatBtn) {
+        return;
+    }
+
+    const bool hasApp = (app != nullptr);
+    const bool isActive = hasApp && app->isHeatSystemActive();
+    const bool isPaused = hasApp && app->isHeatSystemPaused();
+
+    if (!hasApp || !isActive) {
+        toggleHeatBtn->setText("Start Simulation (Space)");
+        pauseHeatBtn->setText("Pause (P)");
+        pauseHeatBtn->setEnabled(false);
+        resetHeatBtn->setEnabled(hasApp);
+        return;
+    }
+
+    if (isPaused) {
+        toggleHeatBtn->setText("Resume Simulation (Space)");
+        pauseHeatBtn->setText("Paused (P)");
+        pauseHeatBtn->setEnabled(false);
+    } else {
+        toggleHeatBtn->setText("Stop Simulation (Space)");
+        pauseHeatBtn->setText("Pause (P)");
+        pauseHeatBtn->setEnabled(true);
+    }
+
+    resetHeatBtn->setEnabled(true);
 }
 
 void MainWindow::onRemeshClicked() {
@@ -330,15 +361,6 @@ void MainWindow::onIntrinsicVertexNormalsToggled(bool checked) {
     }
 }
 
-void MainWindow::onHashGridToggled(bool checked) {
-    if (app) {
-        app->hashGridEnabled = checked;
-    }
-    if (hashGridCheck && hashGridCheck->isChecked() != checked) {
-        hashGridCheck->setChecked(checked);
-    }
-}
-
 void MainWindow::onSurfelsToggled(bool checked) {
     if (app) {
         app->surfelsEnabled = checked;
@@ -387,54 +409,25 @@ void MainWindow::onPanSensitivityChanged(double value) {
     }
 }
 
-void MainWindow::syncHeatButtonState() {
-    if (!toggleHeatBtn || !pauseHeatBtn) {
-        return;
-    }
-
-    if (!app) {
-        toggleHeatBtn->setText("Start Simulation (Space)");
-        pauseHeatBtn->setEnabled(false);
-        return;
-    }
-
-    const bool isActive = app->isHeatSystemActive();
-    const bool isPaused = app->isHeatSystemPaused();
-
-    if (!isActive) {
-        toggleHeatBtn->setText("Start Simulation (Space)");
-        pauseHeatBtn->setEnabled(false);
-        return;
-    }
-
-    if (isPaused) {
-        toggleHeatBtn->setText("Resume Simulation (Space)");
-        pauseHeatBtn->setEnabled(false);
-    } else {
-        toggleHeatBtn->setText("Stop Simulation (Space)");
-        pauseHeatBtn->setEnabled(true);
-    }
-}
-
 void MainWindow::onToggleHeatClicked() {
     if (app) {
         app->toggleHeatSystem();
+        syncHeatSystemButtons();
     }
-    syncHeatButtonState();
 }
 
 void MainWindow::onPauseHeatClicked() {
     if (app) {
         app->pauseHeatSystem();
+        syncHeatSystemButtons();
     }
-    syncHeatButtonState();
 }
 
 void MainWindow::onResetHeatClicked() {
     if (app) {
         app->resetHeatSystem();
+        syncHeatSystemButtons();
     }
-    syncHeatButtonState();
 }
 
 void MainWindow::onOpenModel() {
@@ -448,7 +441,7 @@ void MainWindow::onOpenModel() {
         try {
             std::string modelPath = filename.toStdString();
             app->loadModel(modelPath);
-            syncHeatButtonState();
+            syncHeatSystemButtons();
             
             QMessageBox::information(this, "Success", QString("Model loaded: %1").arg(filename));
         }

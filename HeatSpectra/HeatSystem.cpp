@@ -10,12 +10,12 @@
 #include "VulkanBuffer.hpp"
 #include "CommandBufferManager.hpp"
 #include "UniformBufferManager.hpp"
+#include "Camera.hpp"
 #include "Model.hpp"
 #include "predicates.h"
 #include "HeatSource.hpp"
 #include "HeatReceiver.hpp"
 #include "SurfelRenderer.hpp"
-#include "HashGridRenderer.hpp"
 #include "VoronoiRenderer.hpp"
 #include "PointRenderer.hpp"
 #include "ContactLineRenderer.hpp"
@@ -25,7 +25,6 @@
 #include "VoronoiGeoCompute.hpp"
 #include "VoronoiCandidateCompute.hpp"
 #include "VoronoiIntegrator.hpp"
-#include "TriangleHashGrid.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -50,18 +49,17 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
     
     voronoiSeeder = std::make_unique<VoronoiSeeder>();
     createTimeBuffer();
-    createSurfaceDescriptorPool();
+    createSurfaceDescriptorPool(maxFramesInFlight);
     createSurfaceDescriptorSetLayout();
     createSurfacePipeline();
 
-    createContactDescriptorPool();
+    createContactDescriptorPool(maxFramesInFlight);
     createContactDescriptorSetLayout();
     createContactPipeline();
 
     heatRenderer = std::make_unique<HeatRenderer>(vulkanDevice, uniformBufferManager);
     heatRenderer->initialize(renderPass, maxFramesInFlight);
     initializeSurfelRenderers(renderPass, maxFramesInFlight);
-    initializeHashGridRenderer(renderPass, maxFramesInFlight);
     initializeVoronoiRenderer(renderPass, maxFramesInFlight);
     initializePointRenderer(renderPass, maxFramesInFlight);
     initializeContactLineRenderer(renderPass, maxFramesInFlight);
@@ -74,15 +72,15 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
     createComputeCommandBuffers(maxFramesInFlight);
 }
 
-void HeatSystem::createContactDescriptorPool() {
+void HeatSystem::createContactDescriptorPool(uint32_t maxFramesInFlight) {
     const uint32_t MAX_RECEIVERS = 10;
     const uint32_t totalSets = MAX_RECEIVERS * 2;
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 11;
+    poolSizes[0].descriptorCount = totalSets * 9;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[1].descriptorCount = totalSets * 2;
+    poolSizes[1].descriptorCount = totalSets * 1;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -103,14 +101,11 @@ void HeatSystem::createContactDescriptorSetLayout() {
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {8, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -185,23 +180,6 @@ void HeatSystem::initializeSurfelRenderers(VkRenderPass renderPass, uint32_t max
     }
 }
 
-void HeatSystem::initializeHashGridRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-    hashGridRenderer = std::make_unique<HashGridRenderer>(vulkanDevice, uniformBufferManager);
-    hashGridRenderer->initialize(renderPass, 2, maxFramesInFlight);  // Subpass 2 = Grid subpass
-    
-    Model* heatModelPtr = &resourceManager.getHeatModel();
-    if (auto* heatGrid = resourceManager.getHashGridForModel(heatModelPtr)) {
-        hashGridRenderer->allocateDescriptorSetsForModel(heatModelPtr, maxFramesInFlight);
-        hashGridRenderer->updateDescriptorSetsForModel(heatModelPtr, heatGrid, maxFramesInFlight);
-    }
-    
-    Model* visModelPtr = &resourceManager.getVisModel();
-    if (auto* visGrid = resourceManager.getHashGridForModel(visModelPtr)) {
-        hashGridRenderer->allocateDescriptorSetsForModel(visModelPtr, maxFramesInFlight);
-        hashGridRenderer->updateDescriptorSetsForModel(visModelPtr, visGrid, maxFramesInFlight);
-    }
-}
-
 void HeatSystem::initializeVoronoiGeoCompute() {
     voronoiGeoCompute = std::make_unique<VoronoiGeoCompute>(vulkanDevice, renderCommandPool);
 }
@@ -211,11 +189,8 @@ void HeatSystem::initializeVoronoiCandidateCompute() {
     voronoiCandidateCompute->initialize();
 }
 
-void HeatSystem::update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo) {
-    processResetRequest();
-
-    if (!isActive || isPaused) {
-        (void)ubo;
+void HeatSystem::update(bool upPressed, bool downPressed, bool leftPressed, bool rightPressed, UniformBufferObject& ubo, uint32_t WIDTH, uint32_t HEIGHT) {
+    if (isPaused) {
         return;
     }
 
@@ -241,7 +216,10 @@ void HeatSystem::update(bool upPressed, bool downPressed, bool leftPressed, bool
 
     glm::mat4 heatSourceModelMatrix = resourceManager.getHeatModel().getModelMatrix();
     heatSource->setHeatSourcePushConstant(heatSourceModelMatrix);
+
     (void)ubo;
+    (void)WIDTH;
+    (void)HEIGHT;
 }
 
 void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass) {
@@ -312,7 +290,32 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
 		contactLineRenderer.reset();
 	}
 	initializeContactLineRenderer(renderPass, maxFramesInFlight);
-    uploadCachedContactLines();
+	if (contactLineRenderer && contactInterface) {
+		const auto& cachedOutlines = contactInterface->getCachedOutlineVertices();
+		if (!cachedOutlines.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> outlineVerts;
+			outlineVerts.reserve(cachedOutlines.size());
+			for (size_t i = 0; i < cachedOutlines.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedOutlines[i].position;
+				v.color = cachedOutlines[i].color;
+				outlineVerts.push_back(v);
+			}
+			contactLineRenderer->uploadOutlines(outlineVerts);
+		}
+		const auto& cachedCorrespondences = contactInterface->getCachedCorrespondenceVertices();
+		if (!cachedCorrespondences.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> corrVerts;
+			corrVerts.reserve(cachedCorrespondences.size());
+			for (size_t i = 0; i < cachedCorrespondences.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedCorrespondences[i].position;
+				v.color = cachedCorrespondences[i].color;
+				corrVerts.push_back(v);
+			}
+			contactLineRenderer->uploadCorrespondences(corrVerts);
+		}
+	}
 
     createComputeCommandBuffers(maxFramesInFlight);
 }
@@ -325,7 +328,14 @@ void HeatSystem::processResetRequest() {
 }
 
 void HeatSystem::setActive(bool active) {
-    const bool wasActive = isActive;
+    if (active && !isActive) {
+        vkDeviceWaitIdle(vulkanDevice.getDevice());
+    }
+
+	if (active && isVoronoiSeederReady && !isPaused) {
+		initializeContactInterface();
+		executeBufferTransfers();
+	}
 
 	if (active && !isVoronoiSeederReady) {
 		iODT* remesher = resourceManager.getRemesherForModel(&resourceManager.getVisModel());
@@ -344,11 +354,13 @@ void HeatSystem::setActive(bool active) {
 			128
 		);
 		voronoiVoxelGridBuilt = (voronoiVoxelGrid.getGridSize() > 0);
-		if (voronoiVoxelGridBuilt) {
+		if (debugEnable && voronoiVoxelGridBuilt) {
 			voronoiVoxelGrid.exportOccupancyVisualization("voxel_occupancy.ply");
 		}
 
-		voronoiSeeder->exportSeedsToOBJ("voronoi_seeds.obj");
+		if (debugEnable) {
+			voronoiSeeder->exportSeedsToOBJ("voronoi_seeds.obj");
+		}
 		isVoronoiSeederReady = true;
 
 		std::cout << "[HeatSystem] Using Voronoi VEM" << std::endl;
@@ -360,48 +372,16 @@ void HeatSystem::setActive(bool active) {
 				addReceiver(model);
 
 				if (!receivers.empty() && voronoiIntegrator) {
-					auto* iodt = resourceManager.getRemesherForModel(&receivers.back()->getModel());
-					if (iodt) {
-						auto* sh = iodt->getSupportingHalfedge();
-						if (sh) {
-							auto intrinsicMesh = sh->buildIntrinsicMesh();
-							std::vector<glm::vec3> surfacePoints;
-							surfacePoints.reserve(intrinsicMesh.vertices.size());
-							for (size_t vi = 0; vi < intrinsicMesh.vertices.size(); ++vi) {
-								surfacePoints.push_back(intrinsicMesh.vertices[vi].position);
-							}
-
-							std::vector<uint32_t> cellIndices;
-							voronoiIntegrator->computeSurfacePointMapping(
-								surfacePoints,
-								voronoiSeedFlags,
-								K_NEIGHBORS,
-								cellIndices
-							);
-							receivers.back()->stageVoronoiSurfaceMapping(cellIndices);
-
-							std::vector<glm::vec3> triCentroids;
-							size_t triCount = intrinsicMesh.indices.size() / 3;
-							triCentroids.reserve(triCount);
-							for (size_t t = 0; t < triCount; ++t) {
-								uint32_t i0 = intrinsicMesh.indices[t * 3 + 0];
-								uint32_t i1 = intrinsicMesh.indices[t * 3 + 1];
-								uint32_t i2 = intrinsicMesh.indices[t * 3 + 2];
-								const glm::vec3& v0 = intrinsicMesh.vertices[i0].position;
-								const glm::vec3& v1 = intrinsicMesh.vertices[i1].position;
-								const glm::vec3& v2 = intrinsicMesh.vertices[i2].position;
-								triCentroids.push_back((v0 + v1 + v2) / 3.0f);
-							}
-
-							std::vector<uint32_t> triCellIndices;
-							voronoiIntegrator->computeSurfacePointMapping(
-								triCentroids,
-								voronoiSeedFlags,
-								K_NEIGHBORS,
-								triCellIndices
-							);
-							receivers.back()->stageVoronoiTriangleMapping(triCellIndices);
-						}
+					const auto& surfacePoints = receivers.back()->getIntrinsicSurfacePositions();
+					if (!surfacePoints.empty()) {
+						std::vector<uint32_t> cellIndices;
+						voronoiIntegrator->computeSurfacePointMapping(
+							surfacePoints,
+							voronoiSeedFlags,
+							K_NEIGHBORS,
+							cellIndices
+						);
+						receivers.back()->stageVoronoiSurfaceMapping(cellIndices);
 					}
 				}
 			}
@@ -411,11 +391,6 @@ void HeatSystem::setActive(bool active) {
 		executeBufferTransfers();
 		isVoronoiReady = true;
 	}
-    else if (active && !wasActive && isVoronoiSeederReady && isVoronoiReady) {
-        // Restart path: rebuild contact mapping/descriptors from current transforms.
-        initializeContactInterface();
-        executeBufferTransfers();
-    }
 	isActive = active;
 }
 
@@ -424,7 +399,6 @@ void HeatSystem::initializeContactInterface() {
 		contactInterface = std::make_unique<ContactInterface>(resourceManager);
 	}
 
-    std::vector<std::vector<ContactPairGPU>> receiverContactPairs;
 	ContactInterface::Settings settings{};
 	contactInterface->mapSurfacePoints(
 		resourceManager.getHeatModel(),
@@ -433,39 +407,32 @@ void HeatSystem::initializeContactInterface() {
         settings
 	);
 
-    uploadCachedContactLines();
-}
-
-void HeatSystem::uploadCachedContactLines() {
-    if (!contactLineRenderer || !contactInterface) {
-        return;
-    }
-
-    const auto& cachedOutlines = contactInterface->getCachedOutlineVertices();
-    if (!cachedOutlines.empty()) {
-        std::vector<ContactLineRenderer::LineVertex> outlineVerts;
-        outlineVerts.reserve(cachedOutlines.size());
-        for (size_t i = 0; i < cachedOutlines.size(); ++i) {
-            ContactLineRenderer::LineVertex v{};
-            v.position = cachedOutlines[i].position;
-            v.color = cachedOutlines[i].color;
-            outlineVerts.push_back(v);
-        }
-        contactLineRenderer->uploadOutlines(outlineVerts);
-    }
-
-    const auto& cachedCorrespondences = contactInterface->getCachedCorrespondenceVertices();
-    if (!cachedCorrespondences.empty()) {
-        std::vector<ContactLineRenderer::LineVertex> corrVerts;
-        corrVerts.reserve(cachedCorrespondences.size());
-        for (size_t i = 0; i < cachedCorrespondences.size(); ++i) {
-            ContactLineRenderer::LineVertex v{};
-            v.position = cachedCorrespondences[i].position;
-            v.color = cachedCorrespondences[i].color;
-            corrVerts.push_back(v);
-        }
-        contactLineRenderer->uploadCorrespondences(corrVerts);
-    }
+	if (contactLineRenderer) {
+		const auto& cachedOutlines = contactInterface->getCachedOutlineVertices();
+		if (!cachedOutlines.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> outlineVerts;
+			outlineVerts.reserve(cachedOutlines.size());
+			for (size_t i = 0; i < cachedOutlines.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedOutlines[i].position;
+				v.color = cachedOutlines[i].color;
+				outlineVerts.push_back(v);
+			}
+			contactLineRenderer->uploadOutlines(outlineVerts);
+		}
+		const auto& cachedCorrespondences = contactInterface->getCachedCorrespondenceVertices();
+		if (!cachedCorrespondences.empty()) {
+			std::vector<ContactLineRenderer::LineVertex> corrVerts;
+			corrVerts.reserve(cachedCorrespondences.size());
+			for (size_t i = 0; i < cachedCorrespondences.size(); ++i) {
+				ContactLineRenderer::LineVertex v{};
+				v.position = cachedCorrespondences[i].position;
+				v.color = cachedCorrespondences[i].color;
+				corrVerts.push_back(v);
+			}
+			contactLineRenderer->uploadCorrespondences(corrVerts);
+		}
+	}
 }
 
 void HeatSystem::initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
@@ -513,7 +480,7 @@ void HeatSystem::createTimeBuffer() {
 	);
 }
 
-void HeatSystem::createSurfaceDescriptorPool() {
+void HeatSystem::createSurfaceDescriptorPool(uint32_t maxFramesInFlight) {
 	const uint32_t MAX_HEAT_MODELS = 10;
 	const uint32_t totalSets = (MAX_HEAT_MODELS * 2);
 
@@ -688,9 +655,12 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
     std::cout << "  Interface neighbor IDs buffer: " << interfaceDataSize << " elements ("
               << (bufferSize / 1024.0) << " KB)" << std::endl;
     
-    // Binding 20: Debug cell geometry 
-    const uint32_t NUM_DEBUG_CELLS = voronoiNodeCount;  // Export all cells
-    std::vector<DebugCellGeometry> debugCells(NUM_DEBUG_CELLS);
+    // Binding 20: Debug cell geometry
+    uint32_t numDebugCells = 1u;
+    if (debugEnable) {
+        numDebugCells = voronoiNodeCount;
+    }
+    std::vector<DebugCellGeometry> debugCells(numDebugCells);
     for (auto& cell : debugCells) {
         cell.cellID = 0;
         cell.vertexCount = 0;
@@ -698,27 +668,27 @@ void HeatSystem::createVoronoiGeometryBuffers(const VoronoiIntegrator& integrato
         cell.volume = 0.0f;
     }
     
-    bufferSize = sizeof(DebugCellGeometry) * NUM_DEBUG_CELLS;
+    bufferSize = sizeof(DebugCellGeometry) * numDebugCells;
     createStorageBuffer(
         memoryAllocator, vulkanDevice,
         debugCells.data(), bufferSize,
         debugCellGeometryBuffer, debugCellGeometryBufferOffset_, &mappedDebugCellGeometryData
     );
-    std::cout << "  Debug cell geometry buffer: " << NUM_DEBUG_CELLS << " cells ("
-              << (bufferSize / (1024.0 * 1024.0)) << " MB)" << std::endl;
 
     // Binding 22: VoronoiDumpInfo debug buffer
-    std::vector<VoronoiDumpInfo> dumpInfos(DEBUG_DUMP_CELL_COUNT);
-    memset(dumpInfos.data(), 0, sizeof(VoronoiDumpInfo) * DEBUG_DUMP_CELL_COUNT);
+    uint32_t dumpCount = 1u;
+    if (debugEnable) {
+        dumpCount = DEBUG_DUMP_CELL_COUNT;
+    }
+    std::vector<VoronoiDumpInfo> dumpInfos(dumpCount);
+    memset(dumpInfos.data(), 0, sizeof(VoronoiDumpInfo) * dumpCount);
     
-    bufferSize = sizeof(VoronoiDumpInfo) * DEBUG_DUMP_CELL_COUNT;
+    bufferSize = sizeof(VoronoiDumpInfo) * dumpCount;
     createStorageBuffer(
         memoryAllocator, vulkanDevice,
         dumpInfos.data(), bufferSize,
         voronoiDumpBuffer, voronoiDumpBufferOffset_, &mappedVoronoiDumpData
     );
-    std::cout << "  VoronoiDumpInfo buffer: " << DEBUG_DUMP_CELL_COUNT << " slots ("
-              << (bufferSize / 1024.0) << " KB)" << std::endl;
 
     // Binding 6: Mesh triangles
     auto meshTris = integrator.getMeshTriangles();
@@ -863,8 +833,8 @@ void HeatSystem::generateVoronoiDiagram() {
     
     voronoiNodeCount = static_cast<uint32_t>(seedPositions.size());
     
-    // Export cell index to seed position mapping
-    {
+    // Export cell index to seed position mapping (debug only)
+    if (debugEnable) {
         std::ofstream seedMapFile("cell_seed_positions.txt");
         seedMapFile << "# Cell Index -> Seed Position\n";
         seedMapFile << "# Seed positions (cells.size() = " << seedPositions.size() << ")\n";
@@ -951,11 +921,15 @@ void HeatSystem::generateVoronoiDiagram() {
     }
 
     if (voronoiGeoCompute) {
-        voronoiGeoCompute->dispatch();
+        VoronoiGeoCompute::PushConstants geoPushConstants{};
+        geoPushConstants.debugEnable = debugEnable ? 1u : 0u;
+        voronoiGeoCompute->dispatch(geoPushConstants);
     }
-    exportDebugCellsToOBJ();
-    exportCellVolumes();
-    exportVoronoiDumpInfo();
+    if (debugEnable) {
+        exportDebugCellsToOBJ();
+        exportCellVolumes();
+        exportVoronoiDumpInfo();
+    }
     buildVoronoiNeighborBuffer();
 
     // Create ping pong temperature buffers before creating descriptor sets
@@ -1005,6 +979,10 @@ void HeatSystem::generateVoronoiDiagram() {
 }
 
 void HeatSystem::exportDebugCellsToOBJ() {    
+    if (!debugEnable) {
+        return;
+    }
+
     if (!mappedDebugCellGeometryData) 
         return;
     DebugCellGeometry* cells = static_cast<DebugCellGeometry*>(mappedDebugCellGeometryData);
@@ -1046,6 +1024,10 @@ void HeatSystem::exportDebugCellsToOBJ() {
 }
 
 void HeatSystem::exportCellVolumes() {
+    if (!debugEnable) {
+        return;
+    }
+
     std::cout << "[HeatSystem] Exporting cell volumes..." << std::endl;
     
     if (!mappedVoronoiNodeData) {
@@ -1068,6 +1050,10 @@ void HeatSystem::exportCellVolumes() {
 }
 
 void HeatSystem::exportVoronoiDumpInfo() {
+    if (!debugEnable) {
+        return;
+    }
+
     std::cout << "[HeatSystem] Exporting Voronoi debug dump..." << std::endl;
     
     if (!mappedVoronoiDumpData) {
@@ -1098,10 +1084,12 @@ void HeatSystem::exportVoronoiDumpInfo() {
         }
     }
 
-    // Store global sum into each dump slot
+    // Store global aggregates into each dump slot for easy GPU->CPU inspection
     for (uint32_t slot = 0; slot < DEBUG_DUMP_CELL_COUNT; slot++)
     {
-        dumpInfos[slot].totalRestrictedVolume = (float)totalRestrictedVolumePos;
+        dumpInfos[slot].totalMeshVolume = static_cast<float>(totalRestrictedVolumePos);
+        dumpInfos[slot].negativeVolumeCellCount = negativeVolumeCount;
+        dumpInfos[slot].negativeVolumeSumAbs = static_cast<float>(totalRestrictedVolumeNegAbs);
     }
 
     std::ofstream dumpFile("voronoi_debug_dump.txt");
@@ -1110,8 +1098,6 @@ void HeatSystem::exportVoronoiDumpInfo() {
     dumpFile << "Total Mesh Volume: " << totalRestrictedVolumePos << "\n";
     dumpFile << "Negative volume cells: " << negativeVolumeCount << " Sum =" << totalRestrictedVolumeNegAbs << ")\n";
     dumpFile << "\n";
-    
-    uint32_t debugCellIDs[] = {59903};  
     
     for (uint32_t slot = 0; slot < DEBUG_DUMP_CELL_COUNT; slot++) {
         const VoronoiDumpInfo& info = dumpInfos[slot];
@@ -1122,66 +1108,15 @@ void HeatSystem::exportVoronoiDumpInfo() {
         
         dumpFile << "CELL " << info.cellID << " (Slot " << slot << ")\n";
         dumpFile << "Seed: (" << info.seedPos.x << ", " << info.seedPos.y << ", " << info.seedPos.z << ")\n";
-        dumpFile << "Flags: isGhost=" << info.isGhost << "\n";
-        dumpFile << "inDomain: " << info.inDomain << " (addVolume=" << info.addVolume << ")\n";
-        dumpFile << "Origin: (" << info.origin.x << ", " << info.origin.y << ", " << info.origin.z << ") status=" << info.originOccupancy << "\n";
-        dumpFile << "FirstInsideCorner: (" << info.firstInsideCorner.x << "," << info.firstInsideCorner.y << "," << info.firstInsideCorner.z << ")\n";
-        dumpFile << "FirstOutsideCorner: (" << info.firstOutsideCorner.x << "," << info.firstOutsideCorner.y << "," << info.firstOutsideCorner.z << ")\n\n";
-        
         dumpFile << "Volumes:\n";
         dumpFile << "  Unrestricted: " << info.unrestrictedVolume << "\n";
         dumpFile << "  Restricted:   " << info.restrictedVolume << "\n";
-        dumpFile << "Volume Chunks:\n";
-        
-        for (uint32_t i = 0; i < DEBUG_MAX_TRIANGLES; i++) {
-            const VolumeChunkInfo& chunk = info.volumeChunks[i];
-            
-            // Skip empty/unprocessed chunks
-            if (chunk.triIndex == 0 && chunk.triDet == 0.0f && chunk.chunkVolume == 0.0f)
-                continue;
-            
-            dumpFile << "  [" << i << "] triId=" << chunk.triIndex;
-            dumpFile << " triDet=" << chunk.triDet << ", goOut=" << chunk.goOut;
-            
-            if (chunk.skipped > 0) {
-                const char* skipReasons[] = {"", "plane0", "plane1", "plane2", "cap"};
-                if (chunk.skipped < (sizeof(skipReasons) / sizeof(skipReasons[0]))) {
-                    dumpFile << " SKIPPED@" << skipReasons[chunk.skipped] << "\n";
-                } else {
-                    dumpFile << " SKIPPED@unknown(" << chunk.skipped << ")\n";
-                }
-            } else {
-                dumpFile << " chunkVol=" << chunk.chunkVolume;
-                dumpFile << " chunkDet=" << chunk.chunkDet;
-                dumpFile << " cumulative=" << chunk.cumulativeVolume << "\n";
-            }
-        }
-        
-        // Corner occupancy
-        dumpFile << "Corner Occupancy (" << info.cornerCount << " total):\n";
-        dumpFile << "Range: (" << info.cornerMin.x << "," << info.cornerMin.y << "," << info.cornerMin.z << ") -> ("
-                 << info.cornerMax.x << "," << info.cornerMax.y << "," << info.cornerMax.z << ")\n";
-        
-        uint32_t cIdx = 0;
-        const char* domainLabels[] = {"Outside", "Border ", "Inside "};
-        
-        bool doneCorners = false;
-        for (int z = info.cornerMin.z; z <= info.cornerMax.z && !doneCorners; z++) {
-            for (int y = info.cornerMin.y; y <= info.cornerMax.y && !doneCorners; y++) {
-                for (int x = info.cornerMin.x; x <= info.cornerMax.x; x++) {
-                    if (cIdx >= info.cornerCount || cIdx >= 1024)
-                    {
-                        doneCorners = true;
-                        break;
-                    }
-                    
-                    uint32_t status = info.cornerOccupancy[cIdx];
-                    const char* label = (status <= 2) ? domainLabels[status] : "Unknown";
-                    
-                    dumpFile << "  Corner(" << x << "," << y << "," << z << "): " << label << " (" << status << ")\n";
-                    cIdx++;
-                }
-            }
+        dumpFile << "Plane Areas (" << info.planeAreaCount << "):\n";
+        for (uint32_t i = 0; i < info.planeAreaCount && i < DEBUG_MAX_PLANE_AREAS; ++i) {
+            const DebugPlaneArea& planeArea = info.planeAreas[i];
+            dumpFile << "  Plane " << planeArea.planeIndex
+                     << " -> Neighbor " << planeArea.neighborCellID
+                     << ", Area: " << planeArea.area << "\n";
         }
         dumpFile << "\n";
     }
@@ -1448,7 +1383,11 @@ void HeatSystem::createVoronoiPipeline() {
     vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);    
 }
 
-void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
+void HeatSystem::recordComputeCommands(
+    VkCommandBuffer commandBuffer,
+    uint32_t currentFrame,
+    VkQueryPool timingQueryPool,
+    uint32_t timingQueryBase) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1457,17 +1396,23 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         throw std::runtime_error("Failed to begin recording compute command buffer");
     }
 
-    if (!isActive) {
-        vkEndCommandBuffer(commandBuffer);
-        return;
+    if (timingQueryPool != VK_NULL_HANDLE) {
+        vkCmdResetQueryPool(commandBuffer, timingQueryPool, timingQueryBase, 2);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timingQueryPool, timingQueryBase);
     }
 
-    if (isPaused) {
+    if (!isActive || isPaused) {
+        if (timingQueryPool != VK_NULL_HANDLE) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timingQueryPool, timingQueryBase + 1);
+        }
         vkEndCommandBuffer(commandBuffer);
         return;
     }
     
     if (!isVoronoiReady) {
+        if (timingQueryPool != VK_NULL_HANDLE) {
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timingQueryPool, timingQueryBase + 1);
+        }
         vkEndCommandBuffer(commandBuffer);
         return;
     }
@@ -1477,226 +1422,164 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         std::cout << "[HeatSystem] recordComputeCommands called, isActive=" << isActive << std::endl;
     }
     recordCallCount++;
-    
-    // Update hash grid descriptors 
-    Model* heatModelPtr = &resourceManager.getHeatModel();
-    if (auto* heatGrid = resourceManager.getHashGridForModel(heatModelPtr)) {
-        heatGrid->updateBuildDescriptors(
-            heatSource->getTriangleCentroidBuffer(),
-            heatSource->getTriangleCentroidBufferOffset(),
-            currentFrame
-        );
-    }
-    
-    // Build heat source hash grid 
-    if (auto* heatGrid = resourceManager.getHashGridForModel(heatModelPtr)) {
-        heatGrid->buildGrid(
-            commandBuffer,
-            heatSource->getTriangleCentroidBuffer(),
-            heatSource->getTriangleCount(),
-            heatSource->getTriangleCentroidBufferOffset(),
-            heatModelPtr->getModelMatrix(),
-            currentFrame
-        );
-    }
-        
-        // Memory barrier after hash grid builds
-        VkMemoryBarrier memBarrier{};
-        memBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        memBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-        
-        vkCmdPipelineBarrier(commandBuffer,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                           0, 1, &memBarrier, 0, nullptr, 0, nullptr);
-        
-        uint32_t nodeCount = voronoiNodeCount;
-        uint32_t workGroupSize = 256;
-        uint32_t workGroupCount = (nodeCount + workGroupSize - 1) / workGroupSize;
-            
-        // Build push constant
-        HeatSourcePushConstant pushConstant = heatSource->getHeatSourcePushConstant();
-        pushConstant.heatSourceModelMatrix = heatModelPtr->getModelMatrix();
-        pushConstant.inverseHeatSourceModelMatrix = glm::inverse(pushConstant.heatSourceModelMatrix);
-        pushConstant.maxNodeNeighbors = K_NEIGHBORS;
 
-        static int frameCount = 0;
-        if (frameCount == 0) {
-            std::cout << "[HeatSystem] Frame 0: Starting heat simulation (" << NUM_SUBSTEPS << " substeps, " << workGroupCount << " workgroups)" << std::endl;
+    Model* heatModelPtr = &resourceManager.getHeatModel();
+    uint32_t nodeCount = voronoiNodeCount;
+    uint32_t workGroupSize = 256;
+    uint32_t workGroupCount = (nodeCount + workGroupSize - 1) / workGroupSize;
+        
+    // Build push constant
+    HeatSourcePushConstant pushConstant = heatSource->getHeatSourcePushConstant();
+    pushConstant.heatSourceModelMatrix = heatModelPtr->getModelMatrix();
+    pushConstant.inverseHeatSourceModelMatrix = glm::inverse(pushConstant.heatSourceModelMatrix);
+    pushConstant.maxNodeNeighbors = K_NEIGHBORS;
+
+    static int frameCount = 0;
+    if (frameCount == 0) {
+        std::cout << "[HeatSystem] Frame 0: Starting heat simulation (" << NUM_SUBSTEPS << " substeps, " << workGroupCount << " workgroups)" << std::endl;
+    }
+
+    // Substeps
+    for (int i = 0; i < NUM_SUBSTEPS; i++) {
+        pushConstant.substepIndex = i;
+        
+        bool isEven = (i % 2 == 0);
+        VkDescriptorSet voronoiSet = isEven ? voronoiDescriptorSets[currentFrame] : voronoiDescriptorSetsB[currentFrame];
+        
+        // Decide buffer layout for the current substep
+        VkBuffer writeBuffer = isEven ? tempBufferB : tempBufferA;
+        VkDeviceSize writeOffset = isEven ? tempBufferBOffset_ : tempBufferAOffset_;
+        
+        if (frameCount == 0 && i < 2) {
+            std::cout << "  Substep " << i << ": isEven=" << isEven << ", using Set" << (isEven ? "A" : "B") << std::endl;
+        }
+        
+        // INJECTION: receiver triangle centroids -> source triangles -> Voronoi cells (3-cell weighted)
+        for (auto& receiver : receivers) {
+            uint32_t triCount = static_cast<uint32_t>(receiver->getIntrinsicTriangleCount());
+            if (triCount == 0) {
+                continue;
+            }
+
+            uint32_t groupSize = 256;
+            uint32_t groupCount = (triCount + groupSize - 1) / groupSize;
+
+            VkDescriptorSet contactSet = isEven ? receiver->getContactComputeSetA() : receiver->getContactComputeSetB();
+            if (contactSet == VK_NULL_HANDLE) {
+                continue;
+            }
+
+            pushConstant.visModelMatrix = receiver->getModel().getModelMatrix();
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, contactPipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, contactPipelineLayout,
+                                   0, 1, &contactSet, 0, nullptr);
+            vkCmdPushConstants(commandBuffer, contactPipelineLayout,
+                             VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HeatSourcePushConstant), &pushConstant);
+            vkCmdDispatch(commandBuffer, groupCount, 1, 1);
         }
 
-        // Substeps
-        for (int i = 0; i < NUM_SUBSTEPS; i++) {
-            pushConstant.substepIndex = i;
-            
-            bool isEven = (i % 2 == 0);
-            VkDescriptorSet voronoiSet = isEven ? voronoiDescriptorSets[currentFrame] : voronoiDescriptorSetsB[currentFrame];
-            
-            // Decide buffer layout for the current substep
-            VkBuffer writeBuffer = isEven ? tempBufferB : tempBufferA;
-            VkDeviceSize writeOffset = isEven ? tempBufferBOffset_ : tempBufferAOffset_;
-            
-            if (frameCount == 0 && i < 2) {
-                std::cout << "  Substep " << i << ": isEven=" << isEven << ", using Set" << (isEven ? "A" : "B") << std::endl;
-            }
-            
-            // INJECTION: receiver triangle centroids -> source triangles -> Voronoi cells (3-cell weighted)
-            for (auto& receiver : receivers) {
-                uint32_t triCount = static_cast<uint32_t>(receiver->getIntrinsicTriangleCount());
-                if (triCount == 0) {
-                    continue;
-                }
+        VkBufferMemoryBarrier injectionBarriers[2]{};
+        injectionBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        injectionBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        injectionBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        injectionBarriers[0].buffer = injectionKBuffer;
+        injectionBarriers[0].offset = injectionKBufferOffset_;
+        injectionBarriers[0].size = VK_WHOLE_SIZE;
 
-                uint32_t groupSize = 256;
-                uint32_t groupCount = (triCount + groupSize - 1) / groupSize;
+        injectionBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        injectionBarriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        injectionBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        injectionBarriers[1].buffer = injectionKTBuffer;
+        injectionBarriers[1].offset = injectionKTBufferOffset_;
+        injectionBarriers[1].size = VK_WHOLE_SIZE;
 
-                VkDescriptorSet contactSet = isEven ? receiver->getContactComputeSetA() : receiver->getContactComputeSetB();
-                if (contactSet == VK_NULL_HANDLE) {
-                    continue;
-                }
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                           0, nullptr, 2, injectionBarriers, 0, nullptr);
 
-                pushConstant.visModelMatrix = receiver->getModel().getModelMatrix();
-
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, contactPipeline);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, contactPipelineLayout,
-                                       0, 1, &contactSet, 0, nullptr);
-                vkCmdPushConstants(commandBuffer, contactPipelineLayout,
-                                 VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HeatSourcePushConstant), &pushConstant);
-                vkCmdDispatch(commandBuffer, groupCount, 1, 1);
-            }
-
-            VkBufferMemoryBarrier injectionBarriers[2]{};
-            injectionBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            injectionBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            injectionBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            injectionBarriers[0].buffer = injectionKBuffer;
-            injectionBarriers[0].offset = injectionKBufferOffset_;
-            injectionBarriers[0].size = VK_WHOLE_SIZE;
-
-            injectionBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            injectionBarriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            injectionBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            injectionBarriers[1].buffer = injectionKTBuffer;
-            injectionBarriers[1].offset = injectionKTBufferOffset_;
-            injectionBarriers[1].size = VK_WHOLE_SIZE;
+        // DIFFUSION: Voronoi cell heat diffusion
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, voronoiPipeline);
+        vkCmdPushConstants(commandBuffer, voronoiPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                         0, sizeof(HeatSourcePushConstant), &pushConstant);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                voronoiPipelineLayout, 0, 1, &voronoiSet, 0, nullptr);
+        vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
+        
+        if (i < NUM_SUBSTEPS - 1) {
+            VkBufferMemoryBarrier barrier2{};
+            barrier2.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier2.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            barrier2.buffer = writeBuffer;
+            barrier2.offset = writeOffset;
+            barrier2.size = VK_WHOLE_SIZE;
 
             vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-                               0, nullptr, 2, injectionBarriers, 0, nullptr);
-
-            // DIFFUSION: Voronoi cell heat diffusion
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, voronoiPipeline);
-            vkCmdPushConstants(commandBuffer, voronoiPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
-                             0, sizeof(HeatSourcePushConstant), &pushConstant);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                    voronoiPipelineLayout, 0, 1, &voronoiSet, 0, nullptr);
-            vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
-            
-            if (i < NUM_SUBSTEPS - 1) {
-                VkBufferMemoryBarrier barrier2{};
-                barrier2.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-                barrier2.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-                barrier2.buffer = writeBuffer;
-                barrier2.offset = writeOffset;
-                barrier2.size = VK_WHOLE_SIZE;
-
-                vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                                   VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-                                   0, nullptr, 1, &barrier2, 0, nullptr);
-            }
+                               0, nullptr, 1, &barrier2, 0, nullptr);
         }
+    }
 
-        {
-            bool finalIsEven = ((NUM_SUBSTEPS - 1) % 2 == 0);
-            VkBuffer finalTempBuffer = finalIsEven ? tempBufferB : tempBufferA;
-            VkDeviceSize finalTempOffset = finalIsEven ? tempBufferBOffset_ : tempBufferAOffset_;
+    {
+        bool finalIsEven = ((NUM_SUBSTEPS - 1) % 2 == 0);
+        VkBuffer finalTempBuffer = finalIsEven ? tempBufferB : tempBufferA;
+        VkDeviceSize finalTempOffset = finalIsEven ? tempBufferBOffset_ : tempBufferAOffset_;
 
-            VkBufferMemoryBarrier finalTempBarrier{};
-            finalTempBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            finalTempBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            finalTempBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            finalTempBarrier.buffer = finalTempBuffer;
-            finalTempBarrier.offset = finalTempOffset;
-            finalTempBarrier.size = VK_WHOLE_SIZE;
+        VkBufferMemoryBarrier finalTempBarrier{};
+        finalTempBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        finalTempBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        finalTempBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        finalTempBarrier.buffer = finalTempBuffer;
+        finalTempBarrier.offset = finalTempOffset;
+        finalTempBarrier.size = VK_WHOLE_SIZE;
 
-            vkCmdPipelineBarrier(commandBuffer,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0,
-                0, nullptr,
-                1, &finalTempBarrier,
-                0, nullptr);
-        }
-
-        // Viz: update receiver surface temps from final ping pong buffer
-        {
-            bool finalIsEven = ((NUM_SUBSTEPS - 1) % 2 == 0);
-            for (auto& receiver : receivers) {
-                uint32_t vertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
-                if (vertexCount == 0) {
-                    continue;
-                }
-
-                uint32_t groupSize = 256;
-                uint32_t groupCount = (vertexCount + groupSize - 1) / groupSize;
-
-                VkDescriptorSet surfaceSet = finalIsEven ? receiver->getSurfaceComputeSetB() : receiver->getSurfaceComputeSetA();
-                if (surfaceSet == VK_NULL_HANDLE) {
-                    continue;
-                }
-
-                HeatSourcePushConstant visPC = pushConstant;
-                visPC.substepIndex = 0;
-                visPC.visModelMatrix = receiver->getModel().getModelMatrix();
-
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipeline);
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipelineLayout,
-                                       0, 1, &surfaceSet, 0, nullptr);
-                vkCmdPushConstants(commandBuffer, surfacePipelineLayout,
-                                 VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HeatSourcePushConstant), &visPC);
-                vkCmdDispatch(commandBuffer, groupCount, 1, 1);
-            }
-        }
-        
-        frameCount++;
-    
-        // Barrier for hash grid buffers 
-        VkMemoryBarrier gridMemBarrier{};
-        gridMemBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        gridMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        gridMemBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-        
         vkCmdPipelineBarrier(commandBuffer,
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                           VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                           0, 1, &gridMemBarrier, 0, nullptr, 0, nullptr);
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr,
+            1, &finalTempBarrier,
+            0, nullptr);
+    }
+
+    // Viz: update receiver surface temps from final ping pong buffer
+    {
+        bool finalIsEven = ((NUM_SUBSTEPS - 1) % 2 == 0);
+        for (auto& receiver : receivers) {
+            uint32_t vertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
+            if (vertexCount == 0) {
+                continue;
+            }
+
+            uint32_t groupSize = 256;
+            uint32_t groupCount = (vertexCount + groupSize - 1) / groupSize;
+
+            VkDescriptorSet surfaceSet = finalIsEven ? receiver->getSurfaceComputeSetB() : receiver->getSurfaceComputeSetA();
+            if (surfaceSet == VK_NULL_HANDLE) {
+                continue;
+            }
+
+            HeatSourcePushConstant visPC = pushConstant;
+            visPC.substepIndex = 0;
+            visPC.visModelMatrix = receiver->getModel().getModelMatrix();
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipeline);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, surfacePipelineLayout,
+                                   0, 1, &surfaceSet, 0, nullptr);
+            vkCmdPushConstants(commandBuffer, surfacePipelineLayout,
+                             VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HeatSourcePushConstant), &visPC);
+            vkCmdDispatch(commandBuffer, groupCount, 1, 1);
+        }
+    }
+    
+    frameCount++;
+    
+    if (timingQueryPool != VK_NULL_HANDLE) {
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timingQueryPool, timingQueryBase + 1);
+    }
 
     vkEndCommandBuffer(commandBuffer);
-}
-
-void HeatSystem::renderHashGrids(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
-    if (!hashGridRenderer) 
-        return;
-    
-    // Render hash grid for heat source model
-    Model* heatModelPtr = &resourceManager.getHeatModel();
-    if (auto* heatGrid = resourceManager.getHashGridForModel(heatModelPtr)) {
-        glm::vec3 gridColor = glm::vec3(1.0f, 0.0f, 0.0f);  // Red for heat source
-        hashGridRenderer->render(cmdBuffer, heatModelPtr, heatGrid, frameIndex, 
-                                heatModelPtr->getModelMatrix(), gridColor);
-    }
-    
-    // Render hash grid for receiver models
-    for (const auto& receiver : receivers) {
-        Model* receiverModelPtr = &receiver->getModel();
-        if (auto* receiverGrid = resourceManager.getHashGridForModel(receiverModelPtr)) {
-            glm::vec3 gridColor = glm::vec3(0.0f, 0.5f, 1.0f);  // Blue for receivers
-            hashGridRenderer->render(cmdBuffer, receiverModelPtr, receiverGrid, frameIndex, 
-                                    receiverModelPtr->getModelMatrix(), gridColor);
-        }
-    }
 }
 
 void HeatSystem::initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
@@ -1705,11 +1588,11 @@ void HeatSystem::initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t max
 }
 
 void HeatSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
-    if (!voronoiRenderer || !isActive) {
+    if (!voronoiRenderer || !isActive) 
+
         return;
-    }
     
-    // Render Voronoi surface for all receivers
+    // Render Voronoi surface visualization for all receivers
     for (const auto& receiver : receivers) {
         Model& model = receiver->getModel();
         uint32_t vertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
@@ -1719,7 +1602,6 @@ void HeatSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameI
         if (candidateBuffer != VK_NULL_HANDLE && vertexCount > 0) {
             voronoiRenderer->render(
                 cmdBuffer, 
-                receiver.get(),
                 model.getVertexBuffer(), 
                 model.getVertexBufferOffset(),
                 model.getIndexBuffer(), 
@@ -1733,26 +1615,32 @@ void HeatSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameI
 }
 
 void HeatSystem::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
-    if (!heatRenderer || !isActive) {
+    if (!heatRenderer || (!isActive && !isPaused)) {
         return;
     }
 
-    heatRenderer->render(cmdBuffer, frameIndex,resourceManager.getHeatModel(), receivers);
+    heatRenderer->render(
+        cmdBuffer,
+        frameIndex,
+        resourceManager.getHeatModel(),
+        receivers);
 }
 
 void HeatSystem::initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-    pointRenderer = std::make_unique<PointRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
+    pointRenderer = std::make_unique<PointRenderer>(
+        vulkanDevice, 
+        memoryAllocator,
+        uniformBufferManager
+    );
     pointRenderer->initialize(renderPass, 2, maxFramesInFlight);  // Subpass 2 = Grid subpass
 }
 
-void HeatSystem::uploadOccupancyPoints(const VoxelGrid& voxelGrid) {
-    std::cout << "[HeatSystem] Uploading occupancy points for visualization..." << std::endl;
-    
+void HeatSystem::uploadOccupancyPoints(const VoxelGrid& voxelGrid) {    
     const auto& occupancy = voxelGrid.getOccupancyData();
     const auto& params = voxelGrid.getParams();
     
     std::vector<PointRenderer::PointVertex> points;
-    points.reserve(occupancy.size() / 4);  // Estimate: ~25% will be inside/border
+    points.reserve(occupancy.size() / 4); 
     
     int dimX = params.gridDim.x;
     int dimY = params.gridDim.y;
@@ -1788,9 +1676,8 @@ void HeatSystem::uploadOccupancyPoints(const VoxelGrid& voxelGrid) {
 }
 
 void HeatSystem::renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
-    if (!pointRenderer || !isActive) {
+    if (!pointRenderer || !isActive) 
         return;
-    }
     
     glm::mat4 modelMatrix = resourceManager.getVisModel().getModelMatrix();
     pointRenderer->render(cmdBuffer, frameIndex, modelMatrix, extent);
@@ -1842,15 +1729,6 @@ void HeatSystem::renderSurfels(VkCommandBuffer cmdBuffer, uint32_t frameIndex, c
 }
 
 void HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
-    if (!computeCommandBuffers.empty()) {
-        vkFreeCommandBuffers(
-            vulkanDevice.getDevice(),
-            renderCommandPool.getHandle(),
-            static_cast<uint32_t>(computeCommandBuffers.size()),
-            computeCommandBuffers.data());
-        computeCommandBuffers.clear();
-    }
-
     computeCommandBuffers.resize(maxFramesInFlight);
 
     VkCommandBufferAllocateInfo allocInfo{};
@@ -1865,9 +1743,8 @@ void HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
 }
 
 void HeatSystem::addReceiver(Model* model) {
-    if (!model) {
+    if (!model) 
         return;
-    }
     
     auto receiver = std::make_unique<HeatReceiver>(vulkanDevice, memoryAllocator, *model, resourceManager, renderCommandPool);
     
@@ -1898,8 +1775,8 @@ void HeatSystem::executeBufferTransfers() {
             }
 
             VoronoiCandidateCompute::Bindings bindings{};
-            bindings.vertexBuffer = receiver->getSurfaceVertexBuffer();
-            bindings.vertexBufferOffset = receiver->getSurfaceVertexBufferOffset();
+            bindings.vertexBuffer = receiver->getSurfaceBuffer();
+            bindings.vertexBufferOffset = receiver->getSurfaceBufferOffset();
             bindings.faceIndexBuffer = receiver->getTriangleIndicesBuffer();
             bindings.faceIndexBufferOffset = receiver->getTriangleIndicesBufferOffset();
             bindings.seedPositionBuffer = seedPositionBuffer;
@@ -1970,7 +1847,6 @@ void HeatSystem::executeBufferTransfers() {
 
             for (uint32_t frameIndex = 0; frameIndex < maxFramesInFlight; ++frameIndex) {
                 voronoiRenderer->updateDescriptors(
-                    receiver.get(),
                     frameIndex,
                     vertexCount,
                     getSeedPositionBuffer(),
@@ -2033,10 +1909,6 @@ void HeatSystem::cleanupResources() {
         heatRenderer->cleanup();
     }
 
-    if (hashGridRenderer) {
-        hashGridRenderer->cleanup();
-    }
-
     if (voronoiRenderer) {
         voronoiRenderer->cleanup();
         voronoiRenderer.reset();
@@ -2073,57 +1945,17 @@ void HeatSystem::cleanupResources() {
         voronoiGeoCompute->cleanupResources();
     }
 
-    if (!computeCommandBuffers.empty()) {
-        vkFreeCommandBuffers(
-            vulkanDevice.getDevice(),
-            renderCommandPool.getHandle(),
-            static_cast<uint32_t>(computeCommandBuffers.size()),
-            computeCommandBuffers.data());
-        computeCommandBuffers.clear();
+    if (voronoiCandidateCompute) {
+        voronoiCandidateCompute->cleanupResources();
     }
 }
 
 void HeatSystem::cleanup() {
-    auto freeBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset) {
-        if (buffer != VK_NULL_HANDLE) {
-            memoryAllocator.free(buffer, offset);
-            buffer = VK_NULL_HANDLE;
-            offset = 0;
-        }
-    };
-
-    freeBuffer(voronoiNodeBuffer, voronoiNodeBufferOffset_);
-    mappedVoronoiNodeData = nullptr;
-
-    freeBuffer(voronoiNeighborBuffer, voronoiNeighborBufferOffset_);
-    freeBuffer(neighborIndicesBuffer, neighborIndicesBufferOffset_);
-
-    freeBuffer(interfaceAreasBuffer, interfaceAreasBufferOffset_);
-    mappedInterfaceAreasData = nullptr;
-
-    freeBuffer(interfaceNeighborIdsBuffer, interfaceNeighborIdsBufferOffset_);
-    mappedInterfaceNeighborIdsData = nullptr;
-
-    freeBuffer(debugCellGeometryBuffer, debugCellGeometryBufferOffset_);
-    mappedDebugCellGeometryData = nullptr;
-
-    freeBuffer(voronoiDumpBuffer, voronoiDumpBufferOffset_);
-    mappedVoronoiDumpData = nullptr;
-
-    freeBuffer(meshTriangleBuffer, meshTriangleBufferOffset_);
-
-    freeBuffer(seedPositionBuffer, seedPositionBufferOffset_);
-    mappedSeedPositionData = nullptr;
-
-    freeBuffer(seedFlagsBuffer, seedFlagsBufferOffset_);
-
-    freeBuffer(voxelGridParamsBuffer, voxelGridParamsBufferOffset_);
-    freeBuffer(voxelOccupancyBuffer, voxelOccupancyBufferOffset_);
-    freeBuffer(voxelTrianglesListBuffer, voxelTrianglesListBufferOffset_);
-    freeBuffer(voxelOffsetsBuffer, voxelOffsetsBufferOffset_);
-
-    freeBuffer(timeBuffer, timeBufferOffset_);
-    mappedTimeData = nullptr;
+    if (timeBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(timeBuffer, timeBufferOffset_);
+        timeBuffer = VK_NULL_HANDLE;
+        mappedTimeData = nullptr;
+    }
 
     if (tempBufferA != VK_NULL_HANDLE) {
         memoryAllocator.free(tempBufferA, tempBufferAOffset_);
@@ -2145,6 +1977,86 @@ void HeatSystem::cleanup() {
         memoryAllocator.free(injectionKTBuffer, injectionKTBufferOffset_);
         injectionKTBuffer = VK_NULL_HANDLE;
         mappedInjectionKTBuffer = nullptr;
+    }
+
+    if (voronoiNodeBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiNodeBuffer, voronoiNodeBufferOffset_);
+        voronoiNodeBuffer = VK_NULL_HANDLE;
+        mappedVoronoiNodeData = nullptr;
+    }
+    if (voronoiNeighborBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiNeighborBuffer, voronoiNeighborBufferOffset_);
+        voronoiNeighborBuffer = VK_NULL_HANDLE;
+        voronoiNeighborBufferOffset_ = 0;
+    }
+    if (neighborIndicesBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(neighborIndicesBuffer, neighborIndicesBufferOffset_);
+        neighborIndicesBuffer = VK_NULL_HANDLE;
+        neighborIndicesBufferOffset_ = 0;
+    }
+
+    if (interfaceAreasBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(interfaceAreasBuffer, interfaceAreasBufferOffset_);
+        interfaceAreasBuffer = VK_NULL_HANDLE;
+        interfaceAreasBufferOffset_ = 0;
+        mappedInterfaceAreasData = nullptr;
+    }
+    if (interfaceNeighborIdsBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(interfaceNeighborIdsBuffer, interfaceNeighborIdsBufferOffset_);
+        interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
+        interfaceNeighborIdsBufferOffset_ = 0;
+        mappedInterfaceNeighborIdsData = nullptr;
+    }
+
+    if (meshTriangleBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(meshTriangleBuffer, meshTriangleBufferOffset_);
+        meshTriangleBuffer = VK_NULL_HANDLE;
+        meshTriangleBufferOffset_ = 0;
+    }
+    if (seedPositionBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(seedPositionBuffer, seedPositionBufferOffset_);
+        seedPositionBuffer = VK_NULL_HANDLE;
+        seedPositionBufferOffset_ = 0;
+        mappedSeedPositionData = nullptr;
+    }
+    if (seedFlagsBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(seedFlagsBuffer, seedFlagsBufferOffset_);
+        seedFlagsBuffer = VK_NULL_HANDLE;
+        seedFlagsBufferOffset_ = 0;
+    }
+
+    if (debugCellGeometryBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(debugCellGeometryBuffer, debugCellGeometryBufferOffset_);
+        debugCellGeometryBuffer = VK_NULL_HANDLE;
+        debugCellGeometryBufferOffset_ = 0;
+        mappedDebugCellGeometryData = nullptr;
+    }
+    if (voronoiDumpBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voronoiDumpBuffer, voronoiDumpBufferOffset_);
+        voronoiDumpBuffer = VK_NULL_HANDLE;
+        voronoiDumpBufferOffset_ = 0;
+        mappedVoronoiDumpData = nullptr;
+    }
+
+    if (voxelGridParamsBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voxelGridParamsBuffer, voxelGridParamsBufferOffset_);
+        voxelGridParamsBuffer = VK_NULL_HANDLE;
+        voxelGridParamsBufferOffset_ = 0;
+    }
+    if (voxelOccupancyBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voxelOccupancyBuffer, voxelOccupancyBufferOffset_);
+        voxelOccupancyBuffer = VK_NULL_HANDLE;
+        voxelOccupancyBufferOffset_ = 0;
+    }
+    if (voxelTrianglesListBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voxelTrianglesListBuffer, voxelTrianglesListBufferOffset_);
+        voxelTrianglesListBuffer = VK_NULL_HANDLE;
+        voxelTrianglesListBufferOffset_ = 0;
+    }
+    if (voxelOffsetsBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(voxelOffsetsBuffer, voxelOffsetsBufferOffset_);
+        voxelOffsetsBuffer = VK_NULL_HANDLE;
+        voxelOffsetsBufferOffset_ = 0;
     }
 
     for (auto& receiver : receivers) {

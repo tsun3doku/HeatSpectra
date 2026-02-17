@@ -18,7 +18,7 @@ public:
     ~MainWindow();
     
     VulkanWindow* getVulkanWindow() { return vulkanWindow; }
-    void setApp(App* application) { app = application; syncHeatButtonState(); }
+    void setApp(App* application);
 
 private slots:
     void onRemeshClicked();
@@ -27,7 +27,6 @@ private slots:
     void onHeatOverlayToggled(bool checked);
     void onIntrinsicNormalsToggled(bool checked);
     void onIntrinsicVertexNormalsToggled(bool checked);
-    void onHashGridToggled(bool checked);
     void onSurfelsToggled(bool checked);
     void onVoronoiToggled(bool checked);
     void onPointsToggled(bool checked);
@@ -46,17 +45,16 @@ protected:
 private:
     void createMenuBar();
     void createDockWidget();
-    void syncHeatButtonState();
+    void syncHeatSystemButtons();
     
     VulkanWindow* vulkanWindow;
-    App* app;
+    App* app = nullptr;
     
     class QComboBox* wireframeModeCombo;
     QCheckBox* intrinsicCheck;
     QCheckBox* heatOverlayCheck;
     QCheckBox* intrinsicNormalsCheck;
     QCheckBox* intrinsicVertexNormalsCheck;
-    QCheckBox* hashGridCheck;
     QCheckBox* surfelsCheck;
     QCheckBox* voronoiCheck;
     QCheckBox* pointsCheck;
