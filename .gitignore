@@ -16,6 +16,8 @@
 /CTestTestfile.cmake
 /Makefile
 /cmake-build-*/
+/CMakePresets.json
+/CMakeUserPresets.json
 
 # IDE/editor settings
 .vs/
