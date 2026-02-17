@@ -336,9 +336,14 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
         std::vector<float> hitX;
         std::vector<float> uniqueHitX;
 
-        #pragma omp for collapse(2) schedule(dynamic, 1)
-        for (int z = 0; z <= dimZ; z++) {
-            for (int y = 0; y <= dimY; y++) {
+        const int yCount = dimY + 1;
+        const int zCount = dimZ + 1;
+        const int yzCount = yCount * zCount;
+
+        #pragma omp for schedule(dynamic, 1)
+        for (int yz = 0; yz < yzCount; yz++) {
+                const int y = yz % yCount;
+                const int z = yz / yCount;
                 stamp++;
                 if (stamp == INT_MAX) {
                     std::fill(triStamp.begin(), triStamp.end(), -1);
@@ -436,7 +441,6 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
                         outsideCount++;
                     }
                 }
-            }
         }
     }
 

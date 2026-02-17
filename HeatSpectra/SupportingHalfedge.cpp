@@ -841,6 +841,8 @@ double SupportingHalfedge::getIntrinsicCornerAngle(uint32_t intrinsicHE) const {
     if (storedAngle > 0.0) {
         return storedAngle;
     }
+
+    return 0.0;
 }
 
 void SupportingHalfedge::cleanup() {
