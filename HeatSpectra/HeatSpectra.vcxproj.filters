@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -21,166 +21,334 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="file_utils.cpp">
+    <ClCompile Include="util\file_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="UniformBufferManager.cpp">
+    <ClCompile Include="vulkan\UniformBufferManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VulkanDevice.cpp">
+    <ClCompile Include="vulkan\VulkanDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Camera.cpp">
+    <ClCompile Include="scene\Camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Model.cpp">
+    <ClCompile Include="scene\CameraController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CommandBufferManager.cpp">
+    <ClCompile Include="scene\MousePicker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HDR.cpp">
+    <ClCompile Include="scene\Model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VulkanImage.cpp">
+    <ClCompile Include="scene\ModelUploader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SceneRenderer.cpp">
+    <ClCompile Include="vulkan\CommandBufferManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GeometryPass.cpp">
+    <ClCompile Include="util\ComputeTiming.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LightingPass.cpp">
+    <ClCompile Include="framegraph\FrameController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="OverlayPass.cpp">
+    <ClCompile Include="framegraph\FrameUpdateStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BlendPass.cpp">
+    <ClCompile Include="framegraph\FrameComputeStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Grid.cpp">
+    <ClCompile Include="framegraph\FrameGraphicsStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HeatSystem.cpp">
+    <ClCompile Include="render\RenderTargetStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HeatSource.cpp">
+    <ClCompile Include="render\RenderRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MemoryAllocator.cpp">
+    <ClCompile Include="runtime\RuntimeHost.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ResourceManager.cpp">
+    <ClCompile Include="runtime\VulkanCoreContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="FrameGraph.cpp">
+    <ClCompile Include="runtime\SceneContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="FrameGraphVk.cpp">
+    <ClCompile Include="runtime\RenderContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="iODT.cpp">
+    <ClCompile Include="runtime\RuntimeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HalfEdgeMesh.cpp">
+    <ClCompile Include="runtime\RenderSettingsManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GeodesicTracer.cpp">
+    <ClCompile Include="runtime\RenderSettingsController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="App.cpp">
+    <ClCompile Include="runtime\RuntimeInputController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VulkanWindow.cpp">
+    <ClCompile Include="runtime\RuntimeRenderController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MainQt.cpp">
+    <ClCompile Include="runtime\RuntimeSimulationController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ModelSelection.cpp">
+    <ClCompile Include="runtime\RuntimeExecutionController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Gizmo.cpp">
+    <ClCompile Include="runtime\RuntimeSystems.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SignPostMesh.cpp">
+    <ClCompile Include="scene\SceneController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CommonSubdivision.cpp">
+    <ClCompile Include="scene\ModelRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SupportingHalfedge.cpp">
+    <ClCompile Include="framegraph\FrameStats.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VulkanBuffer.cpp">
+    <ClCompile Include="render\RenderTargetManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HashGrid.cpp">
+    <ClCompile Include="vulkan\VulkanInstanceContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HeatReceiver.cpp">
+    <ClCompile Include="util\HDR.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SurfelRenderer.cpp">
+    <ClCompile Include="vulkan\VulkanImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HashGridRenderer.cpp">
+    <ClCompile Include="render\SceneRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WireframeRenderer.cpp">
+    <ClCompile Include="render\GeometryPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GridLabel.cpp">
+    <ClCompile Include="render\LightingPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TimingOverlay.cpp">
+    <ClCompile Include="render\OverlayPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="InputManager.cpp">
+    <ClCompile Include="render\BlendPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiSeeder.cpp">
+    <ClCompile Include="spatial\Grid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TriangleHashGrid.cpp">
+    <ClCompile Include="heat\HeatSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiIntegrator.cpp">
+    <ClCompile Include="heat\HeatSystemRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoxelGrid.cpp">
+    <ClCompile Include="heat\HeatSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiRenderer.cpp">
+    <ClCompile Include="heat\HeatSystemController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PointRenderer.cpp">
+    <ClCompile Include="vulkan\MemoryAllocator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LloydCompute.cpp">
+    <ClCompile Include="vulkan\ResourceManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiGeoCompute.cpp">
+    <ClCompile Include="mesh\\remesher\\Remesher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ContactInterface.cpp">
+    <ClCompile Include="framegraph\FrameGraph.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ContactLineRenderer.cpp">
+    <ClCompile Include="framegraph\FrameGraphCompile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VoronoiCandidateCompute.cpp">
+    <ClCompile Include="framegraph\VkFrameGraphRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LightingSystem.cpp">
+    <ClCompile Include="framegraph\VkFrameGraphBackend.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MaterialSystem.cpp">
+    <ClCompile Include="render\MainRenderGraph.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="HeatRenderer.cpp">
+    <ClCompile Include="mesh\\remesher\\iODT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\\remesher\\HalfEdgeMesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\\remesher\\GeodesicTracer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="app\App.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="app\MainQt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\ModelSelection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\GizmoController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\GizmoRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\\remesher\\SignPostMesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\\remesher\\SupportingHalfedge.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vulkan\VulkanBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spatial\HashGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\HeatReceiver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\SurfelRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\HashGridRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\WireframeRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spatial\GridLabel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\TimingRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\InputController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiSeeder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spatial\TriangleHashGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiIntegrator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spatial\VoxelGrid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\VoronoiRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\PointRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\LloydCompute.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiGeoCompute.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\ContactInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\ContactLineRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="framegraph\FrameSync.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiCandidateCompute.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\LightingSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\MaterialSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mesh\MeshModifiers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\HeatRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util\GlyphText.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphBridge.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphDocument.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphDock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphDataTypes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphDebugStore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphKernels.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeSolverController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeRemesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeHeatReceiver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeHeatSource.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeHeatSolve.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeInspectorDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphScene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphTypes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphValidator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="app\VulkanViewportWidget.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -322,185 +490,391 @@
     <None Include="shaders\voronoi_candidates_intrinsic.slang" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="file_utils.h">
+    <ClInclude Include="util\file_utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Camera.hpp">
+    <ClInclude Include="scene\Camera.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="UniformBufferManager.hpp">
+    <ClInclude Include="scene\CameraController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Structs.hpp">
+    <ClInclude Include="scene\MousePicker.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VulkanDevice.hpp">
+    <ClInclude Include="vulkan\UniformBufferManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Model.hpp">
+    <ClInclude Include="util\Structs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CommandBufferManager.hpp">
+    <ClInclude Include="util\UiTheme.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HDR.hpp">
+    <ClInclude Include="vulkan\VulkanDevice.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VulkanImage.hpp">
+    <ClInclude Include="scene\Model.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SceneRenderer.hpp">
+    <ClInclude Include="scene\ModelUploader.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GeometryPass.hpp">
+    <ClInclude Include="vulkan\CommandBufferManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LightingPass.hpp">
+    <ClInclude Include="util\ComputeTiming.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="OverlayPass.hpp">
+    <ClInclude Include="framegraph\FrameController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BlendPass.hpp">
+    <ClInclude Include="framegraph\FrameSimulation.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Grid.hpp">
+    <ClInclude Include="framegraph\FrameTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HeatSystem.hpp">
+    <ClInclude Include="framegraph\FrameUpdateStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LloydCompute.hpp">
+    <ClInclude Include="framegraph\FrameComputeStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiGeoCompute.hpp">
+    <ClInclude Include="framegraph\FrameGraphicsStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HeatSource.hpp">
+    <ClInclude Include="render\RenderTargetStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MemoryAllocator.hpp">
+    <ClInclude Include="render\RenderRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ResourceManager.hpp">
+    <ClInclude Include="runtime\RuntimeHost.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FrameGraph.hpp">
+    <ClInclude Include="runtime\VulkanCoreContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FrameGraphVk.hpp">
+    <ClInclude Include="runtime\SceneContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FramePass.hpp">
+    <ClInclude Include="runtime\RenderContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="iODT.hpp">
+    <ClInclude Include="runtime\RuntimeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HalfEdgeMesh.hpp">
+    <ClInclude Include="runtime\RenderSettingsManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SignPostMesh.hpp">
+    <ClInclude Include="runtime\RenderSettingsController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GeodesicTracer.hpp">
+    <ClInclude Include="runtime\RuntimeInputController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="App.h">
+    <ClInclude Include="runtime\RuntimeRenderController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ModelSelection.hpp">
+    <ClInclude Include="runtime\RuntimeSimulationController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Gizmo.hpp">
+    <ClInclude Include="runtime\RuntimeExecutionController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CommonSubdivision.hpp">
+    <ClInclude Include="runtime\RuntimeSystems.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SupportingHalfedge.hpp">
+    <ClInclude Include="runtime\RuntimeInterfaces.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HashGrid.hpp">
+    <ClInclude Include="scene\SceneController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HeatReceiver.hpp">
+    <ClInclude Include="scene\ModelRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SurfelRenderer.hpp">
+    <ClInclude Include="framegraph\FrameStats.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HashGridRenderer.hpp">
+    <ClInclude Include="render\RenderConfig.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WireframeRenderer.hpp">
+    <ClInclude Include="render\RenderSettings.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GridLabel.hpp">
+    <ClInclude Include="render\RenderTargetManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TimingOverlay.hpp">
+    <ClInclude Include="vulkan\VulkanInstanceContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="InputManager.hpp">
+    <ClInclude Include="util\HDR.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiSeeder.hpp">
+    <ClInclude Include="vulkan\VulkanImage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TriangleHashGrid.hpp">
+    <ClInclude Include="render\SceneRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="predicates.h">
+    <ClInclude Include="render\GeometryPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\LightingPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\OverlayPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\BlendPass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spatial\Grid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatSystemRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatSystemController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\LloydCompute.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiGeoCompute.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatSource.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\MemoryAllocator.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\ResourceManager.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\Remesher.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\FrameGraph.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\FrameGraphPasses.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\FrameGraphTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\FrameGraphResources.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\VkFrameGraphRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\VkFrameGraphBackend.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\MainRenderGraph.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="framegraph\FramePass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\SceneView.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\iODT.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\HalfEdgeMesh.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\SignPostMesh.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\GeodesicTracer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="app\App.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="app\AppTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\ModelSelection.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\GizmoController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\GizmoRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh\\remesher\\SupportingHalfedge.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spatial\HashGrid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatReceiver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\SurfelRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\HashGridRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\WireframeRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spatial\GridLabel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\TimingRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\InputController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiSeeder.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spatial\TriangleHashGrid.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util\predicates.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp">
       <Filter>Libs</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiIntegrator.hpp">
+    <ClInclude Include="voronoi\VoronoiIntegrator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VoxelGrid.hpp">
+    <ClInclude Include="spatial\VoxelGrid.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiRenderer.hpp">
+    <ClInclude Include="renderers\VoronoiRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PointRenderer.hpp">
+    <ClInclude Include="renderers\PointRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ContactInterface.hpp">
+    <ClInclude Include="renderers\ContactLineRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ContactLineRenderer.hpp">
+    <ClInclude Include="heat\ContactInterface.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GeometryUtils.hpp">
+    <ClInclude Include="framegraph\FrameSync.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VoronoiCandidateCompute.hpp">
+    <ClInclude Include="util\GeometryUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LightingSystem.hpp">
+    <ClInclude Include="voronoi\VoronoiCandidateCompute.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MaterialSystem.hpp">
+    <ClInclude Include="scene\LightingSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HeatRenderer.hpp">
+    <ClInclude Include="scene\MaterialSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VulkanBuffer.hpp">
+    <ClInclude Include="mesh\MeshModifiers.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\HeatRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\VulkanBuffer.hpp">
       <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="util\GlyphText.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphBridge.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphDocument.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphDock.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphDebugStore.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphKernels.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeSolverController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeModel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeRemesh.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeHeatReceiver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeHeatSource.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeHeatSolve.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeInspectorDialog.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphScene.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphValidator.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphNodeRectItem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\SceneColorSpace.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\WindowRuntimeState.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="MainQt.h">
+    <QtMoc Include="app\MainQt.h">
       <Filter>Header Files</Filter>
     </QtMoc>
-    <QtMoc Include="VulkanWindow.h">
+    <QtMoc Include="app\VulkanViewportWidget.hpp">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
 </Project>
-

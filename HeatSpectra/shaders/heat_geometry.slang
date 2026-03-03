@@ -704,7 +704,7 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
     cell.planeCount = 6;
 
     int planeNeighborIDs[P_MAX];
-    for (uint i = 0; i < 6; i++) planeNeighborIDs[i] = -1;
+    for (uint i = 0; i < P_MAX; i++) planeNeighborIDs[i] = -1;
 
     uint baseIdx = cellID * K_MAX_NEIGHBORS;
 

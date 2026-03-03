@@ -16,6 +16,7 @@ layout(set = 0, binding = 0) uniform ViewUniforms {
     vec3 cameraPos;
     vec3 gridSize;
 } viewUniforms;
+layout(set = 0, binding = 1) uniform sampler2D fontAtlas;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out float outAlpha;
@@ -65,7 +66,8 @@ void main() {
     // Calculate world height and width based on character aspect ratio
     float quadHeightWorld = instanceScale;
     
-    float quadWidthWorld = quadHeightWorld * (instanceCharUV.z / instanceCharUV.w) * (856.0 / 64.0);
+    vec2 atlasSize = vec2(textureSize(fontAtlas, 0));
+    float quadWidthWorld = quadHeightWorld * (instanceCharUV.z / instanceCharUV.w) * (atlasSize.x / atlasSize.y);
     
     vec3 worldPos = currentPos + 
                     (right * inPosition.x * quadWidthWorld) +

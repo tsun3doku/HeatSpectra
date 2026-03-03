@@ -16,11 +16,61 @@ file(GLOB SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.cpp")
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.hpp" 
                   "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/*.h")
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+file(GLOB NODEGRAPH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/nodegraph/*.cpp")
+file(GLOB NODEGRAPH_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/nodegraph/*.hpp")
+
+file(GLOB FRAMEGRAPH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/framegraph/*.cpp")
+file(GLOB FRAMEGRAPH_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/framegraph/*.hpp")
+
+file(GLOB VULKAN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/vulkan/*.cpp")
+file(GLOB VULKAN_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/vulkan/*.hpp")
+
+file(GLOB HEAT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/heat/*.cpp")
+file(GLOB HEAT_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/heat/*.hpp")
+
+file(GLOB REMESHER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh/remesher/*.cpp")
+file(GLOB REMESHER_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh/remesher/*.hpp")
+
+file(GLOB RENDER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/render/*.cpp")
+file(GLOB RENDER_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/render/*.hpp")
+file(GLOB RENDERERS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/renderers/*.cpp")
+file(GLOB RENDERERS_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/renderers/*.hpp")
+file(GLOB SCENE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/scene/*.cpp")
+file(GLOB SCENE_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/scene/*.hpp")
+file(GLOB VORONOI_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/voronoi/*.cpp")
+file(GLOB VORONOI_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/voronoi/*.hpp")
+file(GLOB SPATIAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/spatial/*.cpp")
+file(GLOB SPATIAL_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/spatial/*.hpp")
+file(GLOB UTIL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/util/*.cpp")
+file(GLOB UTIL_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/util/*.hpp")
+file(GLOB UTIL_HEADERS_H "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/util/*.h")
+file(GLOB MESH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh/*.cpp")
+file(GLOB MESH_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh/*.hpp")
+file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/app/*.cpp")
+file(GLOB APP_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/app/*.hpp")
+file(GLOB APP_HEADERS_H "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/app/*.h")
+file(GLOB RUNTIME_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/runtime/*.cpp")
+file(GLOB RUNTIME_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/runtime/*.hpp")
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${NODEGRAPH_SOURCES} ${NODEGRAPH_HEADERS} ${FRAMEGRAPH_SOURCES} ${FRAMEGRAPH_HEADERS} ${VULKAN_SOURCES} ${VULKAN_HEADERS} ${HEAT_SOURCES} ${HEAT_HEADERS} ${REMESHER_SOURCES} ${REMESHER_HEADERS} ${RENDER_SOURCES} ${RENDER_HEADERS} ${RENDERERS_SOURCES} ${RENDERERS_HEADERS} ${SCENE_SOURCES} ${SCENE_HEADERS} ${VORONOI_SOURCES} ${VORONOI_HEADERS} ${SPATIAL_SOURCES} ${SPATIAL_HEADERS} ${UTIL_SOURCES} ${UTIL_HEADERS} ${UTIL_HEADERS_H} ${MESH_SOURCES} ${MESH_HEADERS} ${APP_SOURCES} ${APP_HEADERS} ${APP_HEADERS_H} ${RUNTIME_SOURCES} ${RUNTIME_HEADERS})
 
 # Include dir
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/nodegraph
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/framegraph
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/vulkan
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/heat
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh/remesher
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/render
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/renderers
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/scene
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/voronoi
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/spatial
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/util
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/mesh
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/app
+    ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/runtime
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/glm
     ${CMAKE_CURRENT_SOURCE_DIR}/HeatSpectra/libs/stb
@@ -33,6 +83,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::GuiPrivate
     Vulkan::Vulkan
     OpenMP::OpenMP_CXX
 )

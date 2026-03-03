@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -133,7 +133,7 @@
       <PreprocessorDefinitions>
       </PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/nanoflann;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/nanoflann;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -170,7 +170,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindowsd.dll" "$(OutDir)
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <OpenMPSupport>true</OpenMPSupport>
@@ -204,54 +204,108 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="CommandBufferManager.cpp" />
-    <ClCompile Include="CommonSubdivision.cpp" />
-    <ClCompile Include="ContactInterface.cpp" />
-    <ClCompile Include="ContactLineRenderer.cpp" />
-    <ClCompile Include="FrameGraph.cpp" />
-    <ClCompile Include="FrameGraphVk.cpp" />
-    <ClCompile Include="SceneRenderer.cpp" />
-    <ClCompile Include="GeometryPass.cpp" />
-    <ClCompile Include="LightingPass.cpp" />
-    <ClCompile Include="OverlayPass.cpp" />
-    <ClCompile Include="BlendPass.cpp" />
-    <ClCompile Include="GeodesicTracer.cpp" />
-    <ClCompile Include="Gizmo.cpp" />
-    <ClCompile Include="Grid.cpp" />
-    <ClCompile Include="GridLabel.cpp" />
-    <ClCompile Include="TimingOverlay.cpp" />
-    <ClCompile Include="HalfEdgeMesh.cpp" />
-    <ClCompile Include="HashGrid.cpp" />
-    <ClCompile Include="HashGridRenderer.cpp" />
-    <ClCompile Include="HeatRenderer.cpp" />
-    <ClCompile Include="HDR.cpp" />
-    <ClCompile Include="HeatReceiver.cpp" />
-    <ClCompile Include="HeatSource.cpp" />
-    <ClCompile Include="HeatSystem.cpp" />
-    <ClCompile Include="LightingSystem.cpp" />
-    <ClCompile Include="MaterialSystem.cpp" />
-    <ClCompile Include="LloydCompute.cpp" />
-    <ClCompile Include="VoronoiCandidateCompute.cpp" />
-    <ClCompile Include="VoronoiGeoCompute.cpp" />
-    <ClCompile Include="InputManager.cpp" />
-    <ClCompile Include="iODT.cpp" />
-    <ClCompile Include="App.cpp">
+    <ClCompile Include="scene\Camera.cpp" />
+    <ClCompile Include="scene\CameraController.cpp" />
+    <ClCompile Include="scene\MousePicker.cpp" />
+    <ClCompile Include="vulkan\CommandBufferManager.cpp" />
+    <ClCompile Include="util\ComputeTiming.cpp" />
+    <ClCompile Include="framegraph\FrameController.cpp" />
+    <ClCompile Include="framegraph\FrameUpdateStage.cpp" />
+    <ClCompile Include="framegraph\FrameComputeStage.cpp" />
+    <ClCompile Include="framegraph\FrameGraphicsStage.cpp" />
+    <ClCompile Include="render\RenderTargetStage.cpp" />
+    <ClCompile Include="framegraph\FrameStats.cpp" />
+    <ClCompile Include="render\RenderRuntime.cpp" />
+    <ClCompile Include="runtime\RuntimeHost.cpp" />
+    <ClCompile Include="runtime\VulkanCoreContext.cpp" />
+    <ClCompile Include="runtime\SceneContext.cpp" />
+    <ClCompile Include="runtime\RenderContext.cpp" />
+    <ClCompile Include="runtime\RuntimeController.cpp" />
+    <ClCompile Include="runtime\RenderSettingsManager.cpp" />
+    <ClCompile Include="runtime\RenderSettingsController.cpp" />
+    <ClCompile Include="runtime\RuntimeInputController.cpp" />
+    <ClCompile Include="runtime\RuntimeRenderController.cpp" />
+    <ClCompile Include="runtime\RuntimeSimulationController.cpp" />
+    <ClCompile Include="runtime\RuntimeExecutionController.cpp" />
+    <ClCompile Include="runtime\RuntimeSystems.cpp" />
+    <ClCompile Include="scene\SceneController.cpp" />
+    <ClCompile Include="scene\ModelRegistry.cpp" />
+    <ClCompile Include="render\RenderTargetManager.cpp" />
+    <ClCompile Include="vulkan\VulkanInstanceContext.cpp" />
+    <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp" />
+    <ClCompile Include="heat\ContactInterface.cpp" />
+    <ClCompile Include="renderers\ContactLineRenderer.cpp" />
+    <ClCompile Include="framegraph\FrameSync.cpp" />
+    <ClCompile Include="framegraph\FrameGraph.cpp" />
+    <ClCompile Include="framegraph\FrameGraphCompile.cpp" />
+    <ClCompile Include="framegraph\VkFrameGraphRuntime.cpp" />
+    <ClCompile Include="framegraph\VkFrameGraphBackend.cpp" />
+    <ClCompile Include="util\GlyphText.cpp" />
+    <ClCompile Include="render\SceneRenderer.cpp" />
+    <ClCompile Include="render\GeometryPass.cpp" />
+    <ClCompile Include="render\LightingPass.cpp" />
+    <ClCompile Include="render\OverlayPass.cpp" />
+    <ClCompile Include="render\BlendPass.cpp" />
+    <ClCompile Include="mesh\\remesher\\GeodesicTracer.cpp" />
+    <ClCompile Include="scene\GizmoController.cpp" />
+    <ClCompile Include="renderers\GizmoRenderer.cpp" />
+    <ClCompile Include="spatial\Grid.cpp" />
+    <ClCompile Include="spatial\GridLabel.cpp" />
+    <ClCompile Include="renderers\TimingRenderer.cpp" />
+    <ClCompile Include="mesh\\remesher\\HalfEdgeMesh.cpp" />
+    <ClCompile Include="spatial\HashGrid.cpp" />
+    <ClCompile Include="renderers\HashGridRenderer.cpp" />
+    <ClCompile Include="renderers\HeatRenderer.cpp" />
+    <ClCompile Include="util\HDR.cpp" />
+    <ClCompile Include="heat\HeatReceiver.cpp" />
+    <ClCompile Include="heat\HeatSource.cpp" />
+    <ClCompile Include="heat\HeatSystemController.cpp" />
+    <ClCompile Include="heat\HeatSystem.cpp" />
+    <ClCompile Include="heat\HeatSystemRuntime.cpp" />
+    <ClCompile Include="scene\LightingSystem.cpp" />
+    <ClCompile Include="scene\MaterialSystem.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphBridge.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphController.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphDocument.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphDock.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphDataTypes.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphRuntime.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphKernels.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphDebugStore.cpp" />
+    <ClCompile Include="nodegraph\NodeSolverController.cpp" />
+    <ClCompile Include="nodegraph\NodeModel.cpp" />
+    <ClCompile Include="nodegraph\NodeRemesh.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatReceiver.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatSource.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatSolve.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp" />
+    <ClCompile Include="nodegraph\NodeInspectorDialog.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphScene.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphTypes.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphValidator.cpp" />
+    <ClCompile Include="mesh\MeshModifiers.cpp" />
+    <ClCompile Include="voronoi\LloydCompute.cpp" />
+    <ClCompile Include="voronoi\VoronoiCandidateCompute.cpp" />
+    <ClCompile Include="voronoi\VoronoiGeoCompute.cpp" />
+    <ClCompile Include="scene\InputController.cpp" />
+    <ClCompile Include="mesh\\remesher\\iODT.cpp" />
+    <ClCompile Include="app\App.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="ModelSelection.cpp" />
-    <ClCompile Include="PointRenderer.cpp" />
-    <ClCompile Include="SupportingHalfedge.cpp" />
-    <ClCompile Include="SurfelRenderer.cpp" />
-    <ClCompile Include="TriangleHashGrid.cpp" />
-    <ClCompile Include="VoronoiIntegrator.cpp" />
-    <ClCompile Include="VoronoiRenderer.cpp" />
-    <ClCompile Include="VoronoiSeeder.cpp" />
-    <ClCompile Include="VoxelGrid.cpp" />
-    <ClCompile Include="VulkanBuffer.cpp" />
-    <ClCompile Include="VulkanWindow.cpp" />
-    <ClCompile Include="MainQt.cpp">
+    <ClCompile Include="scene\ModelSelection.cpp" />
+    <ClCompile Include="renderers\PointRenderer.cpp" />
+    <ClCompile Include="mesh\\remesher\\SupportingHalfedge.cpp" />
+    <ClCompile Include="renderers\SurfelRenderer.cpp" />
+    <ClCompile Include="spatial\TriangleHashGrid.cpp" />
+    <ClCompile Include="voronoi\VoronoiIntegrator.cpp" />
+    <ClCompile Include="renderers\VoronoiRenderer.cpp" />
+    <ClCompile Include="voronoi\VoronoiSeeder.cpp" />
+    <ClCompile Include="spatial\VoxelGrid.cpp" />
+    <ClCompile Include="vulkan\VulkanBuffer.cpp" />
+    <ClCompile Include="app\VulkanViewportWidget.cpp" />
+    <ClCompile Include="render\MainRenderGraph.cpp" />
+    <ClCompile Include="app\MainQt.cpp">
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">%(Filename).moc</QtMocFileName>
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">input</DynamicSource>
@@ -261,15 +315,17 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Release|x64'">input</DynamicSource>
       <QtMocFileName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Filename).moc</QtMocFileName>
     </ClCompile>
-    <ClCompile Include="MemoryAllocator.cpp" />
-    <ClCompile Include="Model.cpp" />
-    <ClCompile Include="ResourceManager.cpp" />
-    <ClCompile Include="SignPostMesh.cpp" />
-    <ClCompile Include="VulkanDevice.cpp" />
-    <ClCompile Include="file_utils.cpp" />
-    <ClCompile Include="UniformBufferManager.cpp" />
-    <ClCompile Include="VulkanImage.cpp" />
-    <ClCompile Include="WireframeRenderer.cpp" />
+    <ClCompile Include="vulkan\MemoryAllocator.cpp" />
+    <ClCompile Include="scene\Model.cpp" />
+    <ClCompile Include="scene\ModelUploader.cpp" />
+    <ClCompile Include="vulkan\ResourceManager.cpp" />
+    <ClCompile Include="mesh\\remesher\\Remesher.cpp" />
+    <ClCompile Include="mesh\\remesher\\SignPostMesh.cpp" />
+    <ClCompile Include="vulkan\VulkanDevice.cpp" />
+    <ClCompile Include="util\file_utils.cpp" />
+    <ClCompile Include="vulkan\UniformBufferManager.cpp" />
+    <ClCompile Include="vulkan\VulkanImage.cpp" />
+    <ClCompile Include="renderers\WireframeRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\blend.frag" />
@@ -321,69 +377,137 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\wireframe.vert" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="App.h" />
-    <ClInclude Include="CommandBufferManager.hpp" />
-    <ClInclude Include="CommonSubdivision.hpp" />
-    <ClInclude Include="ContactInterface.hpp" />
-    <ClInclude Include="ContactLineRenderer.hpp" />
-    <ClInclude Include="FrameGraph.hpp" />
-    <ClInclude Include="FrameGraphVk.hpp" />
-    <ClInclude Include="FramePass.hpp" />
-    <ClInclude Include="SceneRenderer.hpp" />
-    <ClInclude Include="GeometryPass.hpp" />
-    <ClInclude Include="LightingPass.hpp" />
-    <ClInclude Include="OverlayPass.hpp" />
-    <ClInclude Include="BlendPass.hpp" />
-    <ClInclude Include="GeodesicTracer.hpp" />
-    <ClInclude Include="GeometryUtils.hpp" />
-    <ClInclude Include="Gizmo.hpp" />
-    <ClInclude Include="Grid.hpp" />
-    <ClInclude Include="GridLabel.hpp" />
-    <ClInclude Include="TimingOverlay.hpp" />
-    <ClInclude Include="HalfEdgeMesh.hpp" />
-    <ClInclude Include="HashGrid.hpp" />
-    <ClInclude Include="HashGridRenderer.hpp" />
-    <ClInclude Include="HeatRenderer.hpp" />
-    <ClInclude Include="HDR.hpp" />
-    <ClInclude Include="HeatReceiver.hpp" />
-    <ClInclude Include="HeatSource.hpp" />
-    <ClInclude Include="HeatSystem.hpp" />
-    <ClInclude Include="LightingSystem.hpp" />
-    <ClInclude Include="MaterialSystem.hpp" />
-    <ClInclude Include="LloydCompute.hpp" />
-    <ClInclude Include="VoronoiCandidateCompute.hpp" />
-    <ClInclude Include="VoronoiGeoCompute.hpp" />
-    <ClInclude Include="InputManager.hpp" />
-    <ClInclude Include="iODT.hpp" />
+    <ClInclude Include="app\App.h" />
+    <ClInclude Include="app\AppTypes.hpp" />
+    <ClInclude Include="vulkan\CommandBufferManager.hpp" />
+    <ClInclude Include="util\ComputeTiming.hpp" />
+    <ClInclude Include="framegraph\FrameController.hpp" />
+    <ClInclude Include="framegraph\FrameSimulation.hpp" />
+    <ClInclude Include="framegraph\FrameTypes.hpp" />
+    <ClInclude Include="framegraph\FrameUpdateStage.hpp" />
+    <ClInclude Include="framegraph\FrameComputeStage.hpp" />
+    <ClInclude Include="framegraph\FrameGraphicsStage.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphNodeRectItem.hpp" />
+    <ClInclude Include="render\RenderTargetStage.hpp" />
+    <ClInclude Include="framegraph\FrameStats.hpp" />
+    <ClInclude Include="render\RenderConfig.hpp" />
+    <ClInclude Include="render\RenderSettings.hpp" />
+    <ClInclude Include="render\RenderRuntime.hpp" />
+    <ClInclude Include="runtime\RuntimeHost.hpp" />
+    <ClInclude Include="runtime\VulkanCoreContext.hpp" />
+    <ClInclude Include="runtime\SceneContext.hpp" />
+    <ClInclude Include="runtime\RenderContext.hpp" />
+    <ClInclude Include="runtime\RuntimeController.hpp" />
+    <ClInclude Include="runtime\RenderSettingsManager.hpp" />
+    <ClInclude Include="runtime\RenderSettingsController.hpp" />
+    <ClInclude Include="runtime\RuntimeInputController.hpp" />
+    <ClInclude Include="runtime\RuntimeRenderController.hpp" />
+    <ClInclude Include="runtime\RuntimeSimulationController.hpp" />
+    <ClInclude Include="runtime\RuntimeExecutionController.hpp" />
+    <ClInclude Include="runtime\RuntimeSystems.hpp" />
+    <ClInclude Include="runtime\RuntimeInterfaces.hpp" />
+    <ClInclude Include="render\SceneColorSpace.hpp" />
+    <ClInclude Include="render\WindowRuntimeState.hpp" />
+    <ClInclude Include="scene\SceneController.hpp" />
+    <ClInclude Include="scene\ModelRegistry.hpp" />
+    <ClInclude Include="render\RenderTargetManager.hpp" />
+    <ClInclude Include="vulkan\VulkanInstanceContext.hpp" />
+    <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp" />
+    <ClInclude Include="heat\ContactInterface.hpp" />
+    <ClInclude Include="renderers\ContactLineRenderer.hpp" />
+    <ClInclude Include="framegraph\FrameSync.hpp" />
+    <ClInclude Include="framegraph\FrameGraph.hpp" />
+    <ClInclude Include="framegraph\FrameGraphPasses.hpp" />
+    <ClInclude Include="framegraph\FrameGraphTypes.hpp" />
+    <ClInclude Include="framegraph\FrameGraphResources.hpp" />
+    <ClInclude Include="framegraph\VkFrameGraphRuntime.hpp" />
+    <ClInclude Include="framegraph\VkFrameGraphBackend.hpp" />
+    <ClInclude Include="render\MainRenderGraph.hpp" />
+    <ClInclude Include="framegraph\FramePass.hpp" />
+    <ClInclude Include="scene\SceneView.hpp" />
+    <ClInclude Include="util\GlyphText.hpp" />
+    <ClInclude Include="render\SceneRenderer.hpp" />
+    <ClInclude Include="render\GeometryPass.hpp" />
+    <ClInclude Include="render\LightingPass.hpp" />
+    <ClInclude Include="render\OverlayPass.hpp" />
+    <ClInclude Include="render\BlendPass.hpp" />
+    <ClInclude Include="mesh\\remesher\\GeodesicTracer.hpp" />
+    <ClInclude Include="util\GeometryUtils.hpp" />
+    <ClInclude Include="scene\GizmoController.hpp" />
+    <ClInclude Include="renderers\GizmoRenderer.hpp" />
+    <ClInclude Include="spatial\Grid.hpp" />
+    <ClInclude Include="spatial\GridLabel.hpp" />
+    <ClInclude Include="renderers\TimingRenderer.hpp" />
+    <ClInclude Include="mesh\\remesher\\HalfEdgeMesh.hpp" />
+    <ClInclude Include="spatial\HashGrid.hpp" />
+    <ClInclude Include="renderers\HashGridRenderer.hpp" />
+    <ClInclude Include="renderers\HeatRenderer.hpp" />
+    <ClInclude Include="util\HDR.hpp" />
+    <ClInclude Include="heat\HeatReceiver.hpp" />
+    <ClInclude Include="heat\HeatSource.hpp" />
+    <ClInclude Include="heat\HeatSystemController.hpp" />
+    <ClInclude Include="heat\HeatSystem.hpp" />
+    <ClInclude Include="heat\HeatSystemRuntime.hpp" />
+    <ClInclude Include="scene\LightingSystem.hpp" />
+    <ClInclude Include="scene\MaterialSystem.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphBridge.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphController.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphDocument.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphDock.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphRuntime.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphDebugStore.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphKernels.hpp" />
+    <ClInclude Include="nodegraph\NodeSolverController.hpp" />
+    <ClInclude Include="nodegraph\NodeModel.hpp" />
+    <ClInclude Include="nodegraph\NodeRemesh.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatReceiver.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatSource.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatSolve.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp" />
+    <ClInclude Include="nodegraph\NodeInspectorDialog.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphScene.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphTypes.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphValidator.hpp" />
+    <ClInclude Include="mesh\MeshModifiers.hpp" />
+    <ClInclude Include="voronoi\LloydCompute.hpp" />
+    <ClInclude Include="voronoi\VoronoiCandidateCompute.hpp" />
+    <ClInclude Include="voronoi\VoronoiGeoCompute.hpp" />
+    <ClInclude Include="scene\InputController.hpp" />
+    <ClInclude Include="mesh\\remesher\\iODT.hpp" />
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp" />
-    <ClInclude Include="PointRenderer.hpp" />
-    <ClInclude Include="predicates.h" />
-    <ClInclude Include="TriangleHashGrid.hpp" />
-    <ClInclude Include="VoronoiIntegrator.hpp" />
-    <ClInclude Include="VoronoiRenderer.hpp" />
-    <ClInclude Include="VoronoiSeeder.hpp" />
-    <ClInclude Include="VoxelGrid.hpp" />
-    <ClInclude Include="WireframeRenderer.hpp" />
-    <QtMoc Include="MainQt.h" />
-    <ClInclude Include="MemoryAllocator.hpp" />
-    <ClInclude Include="Model.hpp" />
-    <ClInclude Include="ModelSelection.hpp" />
-    <ClInclude Include="ResourceManager.hpp" />
-    <ClInclude Include="SignPostMesh.hpp" />
-    <ClInclude Include="SupportingHalfedge.hpp" />
-    <ClInclude Include="SurfelRenderer.hpp" />
-    <ClInclude Include="VulkanBuffer.hpp" />
-    <ClInclude Include="VulkanDevice.hpp" />
-    <ClInclude Include="Camera.hpp" />
-    <ClInclude Include="file_utils.h" />
-    <ClInclude Include="Structs.hpp" />
-    <ClInclude Include="UniformBufferManager.hpp" />
-    <ClInclude Include="VulkanImage.hpp" />
-    <QtMoc Include="VulkanWindow.h" />
+    <ClInclude Include="renderers\PointRenderer.hpp" />
+    <ClInclude Include="util\predicates.h" />
+    <ClInclude Include="spatial\TriangleHashGrid.hpp" />
+    <ClInclude Include="voronoi\VoronoiIntegrator.hpp" />
+    <ClInclude Include="renderers\VoronoiRenderer.hpp" />
+    <ClInclude Include="voronoi\VoronoiSeeder.hpp" />
+    <ClInclude Include="spatial\VoxelGrid.hpp" />
+    <QtMoc Include="app\VulkanViewportWidget.hpp" />
+    <ClInclude Include="renderers\WireframeRenderer.hpp" />
+    <QtMoc Include="app\MainQt.h" />
+    <ClInclude Include="vulkan\MemoryAllocator.hpp" />
+    <ClInclude Include="scene\Model.hpp" />
+    <ClInclude Include="scene\ModelUploader.hpp" />
+    <ClInclude Include="scene\ModelSelection.hpp" />
+    <ClInclude Include="vulkan\ResourceManager.hpp" />
+    <ClInclude Include="mesh\\remesher\\Remesher.hpp" />
+    <ClInclude Include="mesh\\remesher\\SignPostMesh.hpp" />
+    <ClInclude Include="mesh\\remesher\\SupportingHalfedge.hpp" />
+    <ClInclude Include="renderers\SurfelRenderer.hpp" />
+    <ClInclude Include="vulkan\VulkanBuffer.hpp" />
+    <ClInclude Include="vulkan\VulkanDevice.hpp" />
+    <ClInclude Include="scene\Camera.hpp" />
+    <ClInclude Include="scene\CameraController.hpp" />
+    <ClInclude Include="scene\MousePicker.hpp" />
+    <ClInclude Include="util\file_utils.h" />
+    <ClInclude Include="util\Structs.hpp" />
+    <ClInclude Include="util\UiTheme.hpp" />
+    <ClInclude Include="vulkan\UniformBufferManager.hpp" />
+    <ClInclude Include="vulkan\VulkanImage.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="$(QtMsBuild)\qt.targets" Condition="Exists('$(QtMsBuild)\qt.targets')" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
-

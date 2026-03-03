@@ -1,0 +1,26 @@
+﻿#pragma once
+
+#include <cstdint>
+#include <vector>
+
+class HeatSystemController;
+class ModelRegistry;
+
+class NodeSolverController {
+public:
+    NodeSolverController(ModelRegistry& modelRegistry, HeatSystemController& heatSystemController);
+
+    void setHeatSolveModelRoles(
+        const std::vector<uint32_t>& sourceNodeModelIds,
+        const std::vector<uint32_t>& receiverNodeModelIds);
+
+    bool isHeatSolveActive() const;
+    bool isHeatSolvePaused() const;
+    bool deactivateHeatSolveIfActive();
+    bool ensureHeatSolveRunningState(bool wantsPaused);
+    void resetHeatSolve();
+
+private:
+    ModelRegistry& modelRegistry;
+    HeatSystemController& heatSystemController;
+};

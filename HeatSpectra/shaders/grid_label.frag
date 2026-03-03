@@ -16,10 +16,10 @@ void main() {
     // Pixel range used when generating the SDF and must match distanceRange in JSON
     float pxRange = 8.0;
     
-    vec2 textureSize = vec2(856.0, 64.0);
+    vec2 atlasSize = vec2(textureSize(fontAtlas, 0));
     
     // How far in UV space to go from min to max SDF value
-    vec2 unitRange = vec2(pxRange) / textureSize;
+    vec2 unitRange = vec2(pxRange) / atlasSize;
     
     // Texture size in screen pixels
     vec2 screenTexSize = vec2(1.0) / fwidth(fragTexCoord);

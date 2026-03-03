@@ -6,7 +6,7 @@
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
 
-#include "../../../../MainQt.h"
+#include "../../../../app/MainQt.h"
 #include <QtCore/qmetatype.h>
 
 #include <QtCore/qtmochelpers.h>
@@ -39,9 +39,8 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
         "MainWindow",
-        "onRemeshClicked",
-        "",
         "onWireframeModeChanged",
+        "",
         "index",
         "onIntrinsicToggled",
         "checked",
@@ -55,70 +54,59 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "onNormalLengthChanged",
         "value",
         "onPanSensitivityChanged",
-        "onToggleHeatClicked",
-        "onPauseHeatClicked",
-        "onResetHeatClicked",
         "onOpenModel",
         "onExit"
     };
 
     QtMocHelpers::UintData qt_methods {
-        // Slot 'onRemeshClicked'
-        QtMocHelpers::SlotData<void()>(1, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onWireframeModeChanged'
-        QtMocHelpers::SlotData<void(int)>(3, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 4 },
+        QtMocHelpers::SlotData<void(int)>(1, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 3 },
         }}),
         // Slot 'onIntrinsicToggled'
-        QtMocHelpers::SlotData<void(bool)>(5, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(4, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onHeatOverlayToggled'
-        QtMocHelpers::SlotData<void(bool)>(7, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(6, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onIntrinsicNormalsToggled'
-        QtMocHelpers::SlotData<void(bool)>(8, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(7, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onIntrinsicVertexNormalsToggled'
-        QtMocHelpers::SlotData<void(bool)>(9, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(8, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onSurfelsToggled'
-        QtMocHelpers::SlotData<void(bool)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(9, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onVoronoiToggled'
-        QtMocHelpers::SlotData<void(bool)>(11, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onPointsToggled'
-        QtMocHelpers::SlotData<void(bool)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(11, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onContactLinesToggled'
-        QtMocHelpers::SlotData<void(bool)>(13, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 6 },
+        QtMocHelpers::SlotData<void(bool)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 5 },
         }}),
         // Slot 'onNormalLengthChanged'
-        QtMocHelpers::SlotData<void(double)>(14, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Double, 15 },
+        QtMocHelpers::SlotData<void(double)>(13, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Double, 14 },
         }}),
         // Slot 'onPanSensitivityChanged'
-        QtMocHelpers::SlotData<void(double)>(16, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Double, 15 },
+        QtMocHelpers::SlotData<void(double)>(15, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Double, 14 },
         }}),
-        // Slot 'onToggleHeatClicked'
-        QtMocHelpers::SlotData<void()>(17, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onPauseHeatClicked'
-        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onResetHeatClicked'
-        QtMocHelpers::SlotData<void()>(19, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onOpenModel'
-        QtMocHelpers::SlotData<void()>(20, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(16, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onExit'
-        QtMocHelpers::SlotData<void()>(21, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(17, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -142,23 +130,19 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
     auto *_t = static_cast<MainWindow *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
-        case 0: _t->onRemeshClicked(); break;
-        case 1: _t->onWireframeModeChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
-        case 2: _t->onIntrinsicToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 3: _t->onHeatOverlayToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 4: _t->onIntrinsicNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 5: _t->onIntrinsicVertexNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 6: _t->onSurfelsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 7: _t->onVoronoiToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 8: _t->onPointsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 9: _t->onContactLinesToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
-        case 10: _t->onNormalLengthChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 11: _t->onPanSensitivityChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
-        case 12: _t->onToggleHeatClicked(); break;
-        case 13: _t->onPauseHeatClicked(); break;
-        case 14: _t->onResetHeatClicked(); break;
-        case 15: _t->onOpenModel(); break;
-        case 16: _t->onExit(); break;
+        case 0: _t->onWireframeModeChanged((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 1: _t->onIntrinsicToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 2: _t->onHeatOverlayToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 3: _t->onIntrinsicNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 4: _t->onIntrinsicVertexNormalsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 5: _t->onSurfelsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 6: _t->onVoronoiToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 7: _t->onPointsToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 8: _t->onContactLinesToggled((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 9: _t->onNormalLengthChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 10: _t->onPanSensitivityChanged((*reinterpret_cast< std::add_pointer_t<double>>(_a[1]))); break;
+        case 11: _t->onOpenModel(); break;
+        case 12: _t->onExit(); break;
         default: ;
         }
     }
@@ -183,14 +167,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 17)
+        if (_id < 13)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 17;
+        _id -= 13;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 17)
+        if (_id < 13)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 17;
+        _id -= 13;
     }
     return _id;
 }

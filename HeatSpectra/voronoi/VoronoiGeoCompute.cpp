@@ -1,0 +1,330 @@
+﻿#include "VoronoiGeoCompute.hpp"
+
+#include "vulkan/VulkanDevice.hpp"
+#include "vulkan/CommandBufferManager.hpp"
+#include "vulkan/VulkanImage.hpp"
+#include "util/file_utils.h"
+
+#include <array>
+#include <vector>
+#include <iostream>
+
+VoronoiGeoCompute::VoronoiGeoCompute(VulkanDevice& device, CommandPool& cmdPool)
+    : vulkanDevice(device), commandPool(cmdPool) {
+}
+
+VoronoiGeoCompute::~VoronoiGeoCompute() {
+    cleanup();
+}
+
+void VoronoiGeoCompute::initialize(uint32_t newNodeCount) {
+    nodeCount = newNodeCount;
+
+    if (initialized) {
+        return;
+    }
+
+    if (!createDescriptorSetLayout() ||
+        !createDescriptorPool() ||
+        !createDescriptorSet() ||
+        !createPipeline()) {
+        cleanupResources();
+        return;
+    }
+
+    initialized = true;
+}
+
+void VoronoiGeoCompute::updateDescriptors(const Bindings& bindings) {
+    currentBindings = bindings;
+
+    if (!initialized || descriptorSet == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkDeviceSize nodeRange = currentBindings.voronoiNodeBufferRange;
+    if (nodeRange == 0) {
+        nodeRange = VK_WHOLE_SIZE;
+    }
+
+    VkDeviceSize voxelParamsRange = currentBindings.voxelGridParamsBufferRange;
+    if (voxelParamsRange == 0) {
+        voxelParamsRange = VK_WHOLE_SIZE;
+    }
+
+    struct BindingWrite {
+        uint32_t binding;
+        VkDescriptorType type;
+        VkDescriptorBufferInfo info;
+    };
+
+    std::array<BindingWrite, 13> bindingWrites = {
+        BindingWrite{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voronoiNodeBuffer, currentBindings.voronoiNodeBufferOffset, nodeRange}},
+        BindingWrite{1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.meshTriangleBuffer, currentBindings.meshTriangleBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.seedPositionBuffer, currentBindings.seedPositionBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelGridParamsBuffer, currentBindings.voxelGridParamsBufferOffset, voxelParamsRange}},
+        BindingWrite{6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelOccupancyBuffer, currentBindings.voxelOccupancyBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelTrianglesListBuffer, currentBindings.voxelTrianglesListBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voxelOffsetsBuffer, currentBindings.voxelOffsetsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.neighborIndicesBuffer, currentBindings.neighborIndicesBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.interfaceAreasBuffer, currentBindings.interfaceAreasBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{13, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.interfaceNeighborIdsBuffer, currentBindings.interfaceNeighborIdsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{14, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.debugCellGeometryBuffer, currentBindings.debugCellGeometryBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{15, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.seedFlagsBuffer, currentBindings.seedFlagsBufferOffset, VK_WHOLE_SIZE}},
+        BindingWrite{16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VkDescriptorBufferInfo{currentBindings.voronoiDumpBuffer, currentBindings.voronoiDumpBufferOffset, VK_WHOLE_SIZE}},
+    };
+
+    std::array<VkWriteDescriptorSet, 13> writes{};
+    for (size_t i = 0; i < bindingWrites.size(); i++) {
+        writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[i].dstSet = descriptorSet;
+        writes[i].dstBinding = bindingWrites[i].binding;
+        writes[i].dstArrayElement = 0;
+        writes[i].descriptorCount = 1;
+        writes[i].descriptorType = bindingWrites[i].type;
+        writes[i].pBufferInfo = &bindingWrites[i].info;
+    }
+
+    vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+}
+
+void VoronoiGeoCompute::dispatch(const PushConstants& pushConstants) {
+    if (!initialized || nodeCount == 0 || descriptorSet == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool.getHandle();
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+    if (vkAllocateCommandBuffers(vulkanDevice.getDevice(), &allocInfo, &cmd) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to allocate command buffer" << std::endl;
+        return;
+    }
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to begin command buffer" << std::endl;
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool.getHandle(), 1, &cmd);
+        return;
+    }
+
+    VkMemoryBarrier uploadBarrier{};
+    uploadBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    uploadBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    uploadBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 1, &uploadBarrier, 0, nullptr, 0, nullptr);
+
+    uint32_t workGroupSize = 32;
+    uint32_t workGroupCount = (nodeCount + workGroupSize - 1) / workGroupSize;
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+        pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pushConstants);
+    vkCmdDispatch(cmd, workGroupCount, 1, 1);
+
+    VkMemoryBarrier memBarrier{};
+    memBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    memBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 1, &memBarrier, 0, nullptr, 0, nullptr);
+
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to end command buffer" << std::endl;
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool.getHandle(), 1, &cmd);
+        return;
+    }
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmd;
+
+    VkFence fence;
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+    if (vkCreateFence(vulkanDevice.getDevice(), &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool.getHandle(), 1, &cmd);
+        std::cerr << "VoronoiGeoCompute: Failed to create fence" << std::endl;
+        return;
+    }
+
+    VkQueue computeQueue = vulkanDevice.getComputeQueue();
+    if (vkQueueSubmit(computeQueue, 1, &submitInfo, fence) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to submit compute work" << std::endl;
+        vkDestroyFence(vulkanDevice.getDevice(), fence, nullptr);
+        vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool.getHandle(), 1, &cmd);
+        return;
+    }
+    if (vkWaitForFences(vulkanDevice.getDevice(), 1, &fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed while waiting for fence" << std::endl;
+    }
+
+    vkDestroyFence(vulkanDevice.getDevice(), fence, nullptr);
+    vkFreeCommandBuffers(vulkanDevice.getDevice(), commandPool.getHandle(), 1, &cmd);
+}
+
+void VoronoiGeoCompute::cleanupResources() {
+    if (pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(vulkanDevice.getDevice(), pipeline, nullptr);
+        pipeline = VK_NULL_HANDLE;
+    }
+    if (pipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), pipelineLayout, nullptr);
+        pipelineLayout = VK_NULL_HANDLE;
+    }
+
+    if (descriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(vulkanDevice.getDevice(), descriptorPool, nullptr);
+        descriptorPool = VK_NULL_HANDLE;
+    }
+    if (descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), descriptorSetLayout, nullptr);
+        descriptorSetLayout = VK_NULL_HANDLE;
+    }
+
+    descriptorSet = VK_NULL_HANDLE;
+    initialized = false;
+}
+
+void VoronoiGeoCompute::cleanup() {
+    cleanupResources();
+}
+
+bool VoronoiGeoCompute::createDescriptorSetLayout() {
+    std::vector<VkDescriptorSetLayoutBinding> bindings = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {5, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {13, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {14, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {15, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+    };
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vulkanDevice.getDevice(), &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to create descriptor set layout" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool VoronoiGeoCompute::createDescriptorPool() {
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[0].descriptorCount = 12;
+
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[1].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = 1;
+
+    if (vkCreateDescriptorPool(vulkanDevice.getDevice(), &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to create descriptor pool" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool VoronoiGeoCompute::createDescriptorSet() {
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &descriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, &descriptorSet) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to allocate descriptor set" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool VoronoiGeoCompute::createPipeline() {
+    std::vector<char> computeShaderCode;
+    if (!readFile("shaders/heat_geometry_comp.spv", computeShaderCode)) {
+        std::cerr << "VoronoiGeoCompute: Failed to read shader file" << std::endl;
+        return false;
+    }
+
+    VkShaderModule computeShaderModule = VK_NULL_HANDLE;
+    if (createShaderModule(vulkanDevice, computeShaderCode, computeShaderModule) != VK_SUCCESS) {
+        std::cerr << "VoronoiGeoCompute: Failed to create shader module" << std::endl;
+        return false;
+    }
+
+    VkPipelineShaderStageCreateInfo computeShaderStageInfo{};
+    computeShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    computeShaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    computeShaderStageInfo.module = computeShaderModule;
+    computeShaderStageInfo.pName = "main";
+
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(PushConstants);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+    if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+        vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
+        std::cerr << "VoronoiGeoCompute: Failed to create pipeline layout" << std::endl;
+        return false;
+    }
+
+    VkComputePipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    pipelineInfo.stage = computeShaderStageInfo;
+    pipelineInfo.layout = pipelineLayout;
+
+    if (vkCreateComputePipelines(vulkanDevice.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
+        vkDestroyPipelineLayout(vulkanDevice.getDevice(), pipelineLayout, nullptr);
+        pipelineLayout = VK_NULL_HANDLE;
+        vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
+        std::cerr << "VoronoiGeoCompute: Failed to create compute pipeline" << std::endl;
+        return false;
+    }
+
+    vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
+    return true;
+}

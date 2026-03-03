@@ -1,0 +1,96 @@
+﻿#pragma once
+
+#include <vulkan/vulkan.h>
+
+#include <atomic>
+#include <functional>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "FrameComputeStage.hpp"
+#include "FrameGraphicsStage.hpp"
+#include "FrameTypes.hpp"
+#include "FrameUpdateStage.hpp"
+#include "render/RenderTargetStage.hpp"
+
+struct WindowRuntimeState;
+class VulkanDevice;
+class RenderTargetManager;
+class FrameGraph;
+class SceneRenderer;
+class FrameSync;
+class ComputeTiming;
+class FrameStats;
+class CameraController;
+class ResourceManager;
+class MeshModifiers;
+class UniformBufferManager;
+class FrameSimulation;
+class ModelSelection;
+class GizmoController;
+class WireframeRenderer;
+class VkFrameGraphBackend;
+class InputController;
+class LightingSystem;
+class MaterialSystem;
+
+struct FrameControllerServices {
+    ResourceManager& resourceManager;
+    MeshModifiers& meshModifiers;
+    UniformBufferManager& uniformBufferManager;
+    FrameSimulation* simulation = nullptr;
+    ModelSelection& modelSelection;
+    GizmoController& gizmoController;
+    WireframeRenderer& wireframeRenderer;
+    InputController& inputController;
+    LightingSystem& lightingSystem;
+    MaterialSystem& materialSystem;
+};
+
+class FrameController {
+public:
+    FrameController(
+        const WindowRuntimeState& windowState,
+        VulkanDevice& vulkanDevice,
+        RenderTargetManager& renderTargetManager,
+        FrameGraph& frameGraph,
+        VkFrameGraphBackend& frameGraphBackend,
+        SceneRenderer& sceneRenderer,
+        FrameSync& frameSync,
+        ComputeTiming& computeTiming,
+        FrameStats& frameStats,
+        CameraController& cameraController,
+        FrameControllerServices services,
+        std::atomic<bool>& isOperating,
+        std::atomic<bool>& isShuttingDown);
+
+    bool initializeSyncObjects();
+    void shutdownSyncObjects();
+    void cleanupSwapChain();
+    bool recreateSwapChain();
+    void setSimulation(FrameSimulation* simulation);
+    void drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve);
+
+private:
+    const WindowRuntimeState& windowState;
+    RenderTargetManager& renderTargetManager;
+    SceneRenderer& sceneRenderer;
+    FrameSync& frameSync;
+    ComputeTiming& computeTiming;
+    FrameStats& frameStats;
+    CameraController& cameraController;
+    FrameSimulation* simulation = nullptr;
+    std::atomic<bool>& isOperating;
+    std::atomic<bool>& isShuttingDown;
+
+    RenderTargetStage renderTargetStage;
+    FrameUpdateStage frameUpdateStage;
+    FrameComputeStage frameComputeStage;
+    FrameGraphicsStage frameGraphicsStage;
+
+    std::vector<std::string> buildFrameTimingLines(uint32_t frameIndex);
+    void updateTimingOverlay(std::vector<std::string>& timingLines, const render::RenderFlags& flags);
+    bool handleStageResult(FrameStageResult result);
+};
+

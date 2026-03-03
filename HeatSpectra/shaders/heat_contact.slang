@@ -47,37 +47,19 @@ struct ContactPairGPU
     float _pad2;
 };
 
-struct PushConstants
-{
-    float4x4 heatSourceModelMatrix;
-    float4x4 visModelMatrix;
-    float4x4 inverseHeatSourceModelMatrix;
-    uint maxNodeNeighbors;
-    uint substepIndex;
-    uint _pad0;
-    uint _pad1;
-};
-
 [[vk::binding(0)]] StructuredBuffer<uint> nodeTemperatureReadBuffer;
-[[vk::binding(1)]] StructuredBuffer<uint> _unusedBinding1;
-[[vk::binding(2)]] StructuredBuffer<uint> receiverTriangleIndexBuffer;
-[[vk::binding(3)]] StructuredBuffer<SurfacePoint> heatSourceBuffer;
-[[vk::binding(4)]] StructuredBuffer<HeatSourceTriangle> heatSourceTriangleBuffer;
-[[vk::binding(5)]] cbuffer SurfelParamsBuffer
+[[vk::binding(1)]] StructuredBuffer<uint> receiverTriangleIndexBuffer;
+[[vk::binding(2)]] StructuredBuffer<SurfacePoint> heatSourceBuffer;
+[[vk::binding(3)]] StructuredBuffer<HeatSourceTriangle> heatSourceTriangleBuffer;
+[[vk::binding(4)]] cbuffer SurfelParamsBuffer
 {
     SurfelParams surfelParams;
 };
 
-[[vk::binding(6)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
-[[vk::binding(7)]] RWStructuredBuffer<uint> injectionKBuffer;
-[[vk::binding(8)]] RWStructuredBuffer<uint> injectionKTBuffer;
-
-[[vk::binding(9)]] StructuredBuffer<ContactPairGPU> contactPairBuffer;
-
-[[vk::push_constant]] cbuffer PushConstantsBuffer
-{
-    PushConstants pushConstants;
-};
+[[vk::binding(5)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
+[[vk::binding(6)]] RWStructuredBuffer<uint> injectionKBuffer;
+[[vk::binding(7)]] RWStructuredBuffer<uint> injectionKTBuffer;
+[[vk::binding(8)]] StructuredBuffer<ContactPairGPU> contactPairBuffer;
 
 void atomicAddFloatK(uint idx, float addVal)
 {
