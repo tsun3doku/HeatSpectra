@@ -213,7 +213,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="framegraph\FrameUpdateStage.cpp" />
     <ClCompile Include="framegraph\FrameComputeStage.cpp" />
     <ClCompile Include="framegraph\FrameGraphicsStage.cpp" />
-    <ClCompile Include="render\RenderTargetStage.cpp" />
     <ClCompile Include="framegraph\FrameStats.cpp" />
     <ClCompile Include="render\RenderRuntime.cpp" />
     <ClCompile Include="runtime\RuntimeHost.cpp" />
@@ -230,7 +229,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="runtime\RuntimeSystems.cpp" />
     <ClCompile Include="scene\SceneController.cpp" />
     <ClCompile Include="scene\ModelRegistry.cpp" />
-    <ClCompile Include="render\RenderTargetManager.cpp" />
     <ClCompile Include="vulkan\VulkanInstanceContext.cpp" />
     <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp" />
     <ClCompile Include="heat\ContactInterface.cpp" />
@@ -258,10 +256,17 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="renderers\HeatRenderer.cpp" />
     <ClCompile Include="util\HDR.cpp" />
     <ClCompile Include="heat\HeatReceiver.cpp" />
+    <ClCompile Include="heat\HeatSystemPresets.cpp" />
     <ClCompile Include="heat\HeatSource.cpp" />
     <ClCompile Include="heat\HeatSystemController.cpp" />
     <ClCompile Include="heat\HeatSystem.cpp" />
     <ClCompile Include="heat\HeatSystemRuntime.cpp" />
+    <ClCompile Include="heat\HeatSystemResources.cpp" />
+    <ClCompile Include="heat\HeatSystemVoronoiStage.cpp" />
+    <ClCompile Include="heat\HeatSystemContactStage.cpp" />
+    <ClCompile Include="heat\HeatSystemSurfaceStage.cpp" />
+    <ClCompile Include="heat\HeatSystemDebugStage.cpp" />
+    <ClCompile Include="heat\HeatSystemRenderStage.cpp" />
     <ClCompile Include="scene\LightingSystem.cpp" />
     <ClCompile Include="scene\MaterialSystem.cpp" />
     <ClCompile Include="nodegraph\NodeGraphBridge.cpp" />
@@ -274,10 +279,17 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="nodegraph\NodeGraphDebugStore.cpp" />
     <ClCompile Include="nodegraph\NodeSolverController.cpp" />
     <ClCompile Include="nodegraph\NodeModel.cpp" />
+    <ClCompile Include="nodegraph\NodeModelPanel.cpp" />
+    <ClCompile Include="nodegraph\NodeGroup.cpp" />
+    <ClCompile Include="nodegraph\NodeGroupPanel.cpp" />
     <ClCompile Include="nodegraph\NodeRemesh.cpp" />
+    <ClCompile Include="nodegraph\NodeRemeshPanel.cpp" />
     <ClCompile Include="nodegraph\NodeHeatReceiver.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSource.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp" />
+    <ClCompile Include="nodegraph\NodePanelUtils.cpp" />
     <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp" />
     <ClCompile Include="nodegraph\NodeInspectorDialog.cpp" />
     <ClCompile Include="nodegraph\NodeGraphScene.cpp" />
@@ -303,7 +315,9 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="voronoi\VoronoiSeeder.cpp" />
     <ClCompile Include="spatial\VoxelGrid.cpp" />
     <ClCompile Include="vulkan\VulkanBuffer.cpp" />
-    <ClCompile Include="app\VulkanViewportWidget.cpp" />
+    <ClCompile Include="app\SwapchainStage.cpp" />
+    <ClCompile Include="app\SwapchainManager.cpp" />
+    <ClCompile Include="app\VulkanWindow.cpp" />
     <ClCompile Include="render\MainRenderGraph.cpp" />
     <ClCompile Include="app\MainQt.cpp">
       <DynamicSource Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">input</DynamicSource>
@@ -379,6 +393,9 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
   <ItemGroup>
     <ClInclude Include="app\App.h" />
     <ClInclude Include="app\AppTypes.hpp" />
+    <ClInclude Include="app\SwapchainStage.hpp" />
+    <ClInclude Include="app\SwapchainManager.hpp" />
+    <ClInclude Include="app\VulkanWindow.hpp" />
     <ClInclude Include="vulkan\CommandBufferManager.hpp" />
     <ClInclude Include="util\ComputeTiming.hpp" />
     <ClInclude Include="framegraph\FrameController.hpp" />
@@ -388,7 +405,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="framegraph\FrameComputeStage.hpp" />
     <ClInclude Include="framegraph\FrameGraphicsStage.hpp" />
     <ClInclude Include="nodegraph\NodeGraphNodeRectItem.hpp" />
-    <ClInclude Include="render\RenderTargetStage.hpp" />
     <ClInclude Include="framegraph\FrameStats.hpp" />
     <ClInclude Include="render\RenderConfig.hpp" />
     <ClInclude Include="render\RenderSettings.hpp" />
@@ -410,7 +426,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="render\WindowRuntimeState.hpp" />
     <ClInclude Include="scene\SceneController.hpp" />
     <ClInclude Include="scene\ModelRegistry.hpp" />
-    <ClInclude Include="render\RenderTargetManager.hpp" />
     <ClInclude Include="vulkan\VulkanInstanceContext.hpp" />
     <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp" />
     <ClInclude Include="heat\ContactInterface.hpp" />
@@ -444,10 +459,18 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="renderers\HeatRenderer.hpp" />
     <ClInclude Include="util\HDR.hpp" />
     <ClInclude Include="heat\HeatReceiver.hpp" />
+    <ClInclude Include="heat\HeatSystemPresets.hpp" />
     <ClInclude Include="heat\HeatSource.hpp" />
     <ClInclude Include="heat\HeatSystemController.hpp" />
     <ClInclude Include="heat\HeatSystem.hpp" />
     <ClInclude Include="heat\HeatSystemRuntime.hpp" />
+    <ClInclude Include="heat\HeatSystemResources.hpp" />
+    <ClInclude Include="heat\HeatSystemStageContext.hpp" />
+    <ClInclude Include="heat\HeatSystemVoronoiStage.hpp" />
+    <ClInclude Include="heat\HeatSystemContactStage.hpp" />
+    <ClInclude Include="heat\HeatSystemSurfaceStage.hpp" />
+    <ClInclude Include="heat\HeatSystemDebugStage.hpp" />
+    <ClInclude Include="heat\HeatSystemRenderStage.hpp" />
     <ClInclude Include="scene\LightingSystem.hpp" />
     <ClInclude Include="scene\MaterialSystem.hpp" />
     <ClInclude Include="nodegraph\NodeGraphBridge.hpp" />
@@ -460,10 +483,17 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="nodegraph\NodeGraphKernels.hpp" />
     <ClInclude Include="nodegraph\NodeSolverController.hpp" />
     <ClInclude Include="nodegraph\NodeModel.hpp" />
+    <ClInclude Include="nodegraph\NodeModelPanel.hpp" />
+    <ClInclude Include="nodegraph\NodeGroup.hpp" />
+    <ClInclude Include="nodegraph\NodeGroupPanel.hpp" />
     <ClInclude Include="nodegraph\NodeRemesh.hpp" />
+    <ClInclude Include="nodegraph\NodeRemeshPanel.hpp" />
     <ClInclude Include="nodegraph\NodeHeatReceiver.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSource.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp" />
+    <ClInclude Include="nodegraph\NodePanelUtils.hpp" />
     <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp" />
     <ClInclude Include="nodegraph\NodeInspectorDialog.hpp" />
     <ClInclude Include="nodegraph\NodeGraphScene.hpp" />
@@ -483,7 +513,6 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="renderers\VoronoiRenderer.hpp" />
     <ClInclude Include="voronoi\VoronoiSeeder.hpp" />
     <ClInclude Include="spatial\VoxelGrid.hpp" />
-    <QtMoc Include="app\VulkanViewportWidget.hpp" />
     <ClInclude Include="renderers\WireframeRenderer.hpp" />
     <QtMoc Include="app\MainQt.h" />
     <ClInclude Include="vulkan\MemoryAllocator.hpp" />

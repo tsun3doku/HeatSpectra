@@ -56,7 +56,16 @@ void main(uint3 dtid : SV_DispatchThreadID)
     // Update display temperature in first substep
     if (pushConstants.substepIndex != 0u) return;
 
+    uint nodeCount = 0;
+    uint nodeStride = 0;
+    nodeTemperatureReadBuffer.GetDimensions(nodeCount, nodeStride);
+
     uint cellIndex = voronoiMappingBuffer[vertexID].cellIndex;
+    if (cellIndex == 0xFFFFFFFFu || cellIndex >= nodeCount)
+    {
+        return;
+    }
+
     float displayTemp = asfloat(nodeTemperatureReadBuffer[cellIndex]);
 
     SurfacePoint p = surfaceBuffer[vertexID];

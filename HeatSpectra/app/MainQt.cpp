@@ -3,7 +3,7 @@
 #include "nodegraph/NodeGraphDock.hpp"
 #include "runtime/RenderSettingsController.hpp"
 #include "util/UiTheme.hpp"
-#include "VulkanViewportWidget.hpp"
+#include "VulkanWindow.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -19,12 +19,18 @@
 #include <QMessageBox>
 #include <QSizePolicy>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QString>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("HeatSpectra");
@@ -44,6 +50,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     ui::configureSplitter(*mainSplitter);
     mainSplitter->setOpaqueResize(true);
     mainSplitter->setChildrenCollapsible(false);
+    mainSplitter->setAttribute(Qt::WA_NativeWindow, true);
     hostLayout->addWidget(mainSplitter);
 
     if (nodeGraphDock) {
@@ -56,9 +63,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     QVBoxLayout* viewportLayout = new QVBoxLayout(viewportHost);
     viewportLayout->setContentsMargins(0, 0, 0, 0);
     viewportLayout->setSpacing(0);
-    viewportWidget = new VulkanViewportWidget(viewportHost);
-    viewportWidget->setMinimumSize(320, 240);
-    viewportLayout->addWidget(viewportWidget);
+    viewportWindow = new VulkanWindow();
+    viewportContainer = QWidget::createWindowContainer(viewportWindow, viewportHost);
+    viewportContainer->setFocusPolicy(Qt::StrongFocus);
+    viewportContainer->setMinimumSize(320, 240);
+    viewportLayout->addWidget(viewportContainer);
     viewportHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     mainSplitter->addWidget(viewportHost);
 
@@ -74,11 +83,27 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     mainSplitter->setSizes({320, 880, 220});
 
     setCentralWidget(centralHost);
+    connect(mainSplitter, &QSplitter::splitterMoved, this, [this](int, int) {
+        raiseNativeSplitterHandles();
+    });
 
     QTimer* uiSyncTimer = new QTimer(this);
     uiSyncTimer->setInterval(100);
     connect(uiSyncTimer, &QTimer::timeout, this, &MainWindow::syncNodeGraphBridge);
     uiSyncTimer->start();
+    
+    QTimer::singleShot(0, this, [this]() {
+        raiseNativeSplitterHandles();        
+#ifdef Q_OS_WIN
+        if (viewportWindow) {
+            const HWND vulkanHwnd = reinterpret_cast<HWND>(viewportWindow->winId());
+            if (vulkanHwnd) {
+                LONG_PTR exStyle = GetWindowLongPtr(vulkanHwnd, GWL_EXSTYLE);
+                SetWindowLongPtr(vulkanHwnd, GWL_EXSTYLE, exStyle | WS_EX_NOREDIRECTIONBITMAP);
+            }
+        }
+#endif
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -86,8 +111,8 @@ MainWindow::~MainWindow() {
 
 void MainWindow::setApp(App* application) {
     app = application;
-    if (viewportWidget) {
-        viewportWidget->setApp(app);
+    if (viewportWindow) {
+        viewportWindow->setApp(app);
     }
     settingsController = app ? app->getSettingsController() : nullptr;
     if (nodeGraphDock) {
@@ -95,6 +120,36 @@ void MainWindow::setApp(App* application) {
         nodeGraphDock->setRuntimeQuery(boundRuntimeQuery);
     }
     syncNodeGraphBridge();
+}
+
+void MainWindow::raiseNativeSplitterHandles() {
+#ifdef Q_OS_WIN
+    if (!mainSplitter) {
+        return;
+    }
+
+    for (int i = 1; i < mainSplitter->count(); ++i) {
+        QSplitterHandle* handle = mainSplitter->handle(i);
+        if (!handle) {
+            continue;
+        }
+
+        handle->setAttribute(Qt::WA_NativeWindow, true);
+        const WId handleId = handle->winId();
+        if (!handleId) {
+            continue;
+        }
+
+        SetWindowPos(
+            reinterpret_cast<HWND>(handleId),
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+#endif
 }
 
 void MainWindow::createMenuBar() {
@@ -233,6 +288,16 @@ void MainWindow::createNodeGraphDock() {
 }
 
 void MainWindow::syncNodeGraphBridge() {
+    if (app) {
+        const auto errors = app->consumeSimulationErrors();
+        for (const auto& error : errors) {
+            QMessageBox::critical(
+                this,
+                "Simulation Validation Failed",
+                QString::fromStdString(error.message));
+        }
+    }
+
     if (!nodeGraphDock) {
         return;
     }

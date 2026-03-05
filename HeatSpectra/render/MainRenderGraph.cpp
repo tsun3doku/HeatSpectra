@@ -78,9 +78,9 @@ static framegraph::ResourceId addSwapchainOutput(FrameGraph& frameGraph, std::st
         framegraph::ImageFormat::Undefined,
         true,
         framegraph::SampleCount::Count1,
-        framegraph::ImageUsage::ColorAttachment | framegraph::ImageUsage::Sampled,
+        framegraph::ImageUsage::ColorAttachment,
         makeAttachmentOps(framegraph::AttachmentLoadOp::Clear, framegraph::AttachmentStoreOp::Store),
-        framegraph::ResourceLayout::ShaderReadOnly,
+        framegraph::ResourceLayout::PresentSrc,
         framegraph::ResourceLifetime::External);
 }
 

@@ -12,7 +12,7 @@
 #include "WindowRuntimeState.hpp"
 
 class VulkanDevice;
-class RenderTargetManager;
+class SwapchainManager;
 class CommandPool;
 class FrameSync;
 class CameraController;
@@ -48,7 +48,7 @@ public:
     RenderRuntime(
         const WindowRuntimeState& windowState,
         VulkanDevice& vulkanDevice,
-        RenderTargetManager& renderTargetManager,
+        SwapchainManager& swapchainManager,
         CommandPool& renderCommandPool,
         FrameSync& frameSync,
         CameraController& cameraController,
@@ -80,7 +80,7 @@ public:
 private:
     const WindowRuntimeState& windowState;
     VulkanDevice& vulkanDevice;
-    RenderTargetManager& renderTargetManager;
+    SwapchainManager& swapchainManager;
     CommandPool& renderCommandPool;
     FrameSync& frameSync;
     CameraController& cameraController;

@@ -28,7 +28,8 @@ NodeGraphController::NodeGraphController(
     : bridge(bridge),
       runtimeServices(services),
       runtime(bridge, services) {
-    plan.canExecuteHeatSolve = true;
+    plan.canExecuteHeatSolve = false;
+    applyPendingChanges();
 }
 
 void NodeGraphController::applyPendingChanges() {

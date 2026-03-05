@@ -17,11 +17,19 @@ struct GeometryAttribute {
     std::vector<uint8_t> boolValues;
 };
 
+struct GeometryGroup {
+    uint32_t id = 0;
+    std::string name;
+    std::string source;
+};
+
 struct GeometryData {
     std::string sourceModelPath;
     uint32_t modelId = 0;
     std::vector<float> pointPositions;
     std::vector<uint32_t> triangleIndices;
+    std::vector<uint32_t> triangleGroupIds;
+    std::vector<GeometryGroup> groups;
     std::vector<GeometryAttribute> attributes;
 };
 
@@ -38,6 +46,11 @@ struct NodeDataBlock {
 const char* nodeDataTypeToString(NodeDataType dataType);
 void setDetailBoolAttribute(GeometryData& geometry, const std::string& name, bool value);
 void setPointFloatAttributeConstant(GeometryData& geometry, const std::string& name, float value);
+void setPrimitiveIntAttributeFromUInt32(
+    GeometryData& geometry,
+    const std::string& name,
+    const std::vector<uint32_t>& values);
+void ensureGeometryGroups(GeometryData& geometry);
 void refreshNodeDataBlockMetadata(NodeDataBlock& dataBlock);
 void seedOutputDataBlocksFromInputs(
     const NodeGraphNode& node,

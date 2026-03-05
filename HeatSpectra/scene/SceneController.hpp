@@ -9,14 +9,14 @@ class HeatSystemController;
 class MeshModifiers;
 class RenderRuntime;
 class ResourceManager;
-class RenderTargetManager;
+class SwapchainManager;
 class VulkanDevice;
 
 class SceneController {
 public:
     SceneController(
         VulkanDevice& vulkanDevice,
-        RenderTargetManager& renderTargetManager,
+        SwapchainManager& swapchainManager,
         ResourceManager& resourceManager,
         MeshModifiers& meshModifiers,
         RenderRuntime& renderRuntime,
@@ -40,7 +40,7 @@ private:
     };
 
     VulkanDevice& vulkanDevice;
-    RenderTargetManager& renderTargetManager;
+    SwapchainManager& swapchainManager;
     ResourceManager& resourceManager;
     MeshModifiers& meshModifiers;
     RenderRuntime& renderRuntime;

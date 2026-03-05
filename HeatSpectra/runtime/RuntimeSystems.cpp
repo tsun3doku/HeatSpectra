@@ -17,7 +17,6 @@ bool RuntimeSystems::initialize(WindowRuntimeState& runtimeState, const AppVulka
     runtimeBusy.store(false, std::memory_order_release);
     renderPaused.store(false, std::memory_order_release);
     frameCounter = 0;
-    viewportOutput = {};
 
     if (!core.initialize(vulkanContext)) {
         cleanup();
@@ -53,9 +52,6 @@ void RuntimeSystems::tickFrame(float deltaTime) {
     }
 
     runtimeController.tick(deltaTime, frameCounter);
-    if (runtimeController.hasLastFrameSlot()) {
-        updateViewportOutput(runtimeController.lastFrameSlot());
-    }
 }
 
 void RuntimeSystems::shutdown() {
@@ -74,12 +70,16 @@ bool RuntimeSystems::isInitialized() const {
     return initialized;
 }
 
-AppViewportOutput RuntimeSystems::getViewportOutput() const {
-    return viewportOutput;
-}
-
 const RuntimeQuery* RuntimeSystems::runtimeQuery() const {
     return runtimeController.runtimeQuery();
+}
+
+std::vector<SimulationError> RuntimeSystems::consumeSimulationErrors() {
+    RuntimeSimulationController* simulation = runtimeController.simulationController();
+    if (!simulation) {
+        return {};
+    }
+    return simulation->consumeSimulationErrors();
 }
 
 uint32_t RuntimeSystems::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
@@ -117,27 +117,10 @@ const NodeGraphBridge* RuntimeSystems::getNodeGraphBridge() const {
     return render.nodeGraphBridge();
 }
 
-void RuntimeSystems::updateViewportOutput(uint32_t frameIndex) {
-    const auto& images = render.targetManager().getImages();
-    const VkExtent2D extent = render.targetManager().getExtent();
-    if (frameIndex >= images.size() || extent.width == 0 || extent.height == 0) {
-        viewportOutput = {};
-        return;
-    }
-
-    viewportOutput.imageHandle = reinterpret_cast<uint64_t>(images[frameIndex]);
-    viewportOutput.width = extent.width;
-    viewportOutput.height = extent.height;
-    viewportOutput.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    viewportOutput.generation = render.targetManager().getGeneration();
-    viewportOutput.valid = true;
-}
-
 void RuntimeSystems::cleanup() {
     runtimeController.shutdown();
     render.shutdown();
     scene.shutdown();
     core.shutdown();
     windowRuntimeState = nullptr;
-    viewportOutput = {};
 }

@@ -1,13 +1,13 @@
 ﻿#include "SceneController.hpp"
 
 #include "CameraController.hpp"
+#include "app/SwapchainManager.hpp"
 #include "heat/HeatSystemController.hpp"
 #include "mesh/MeshModifiers.hpp"
 #include "Model.hpp"
 #include "render/RenderRuntime.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "render/SceneRenderer.hpp"
-#include "render/RenderTargetManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
@@ -15,7 +15,7 @@
 
 SceneController::SceneController(
     VulkanDevice& vulkanDevice,
-    RenderTargetManager& renderTargetManager,
+    SwapchainManager& swapchainManager,
     ResourceManager& resourceManager,
     MeshModifiers& meshModifiers,
     RenderRuntime& renderRuntime,
@@ -23,7 +23,7 @@ SceneController::SceneController(
     CameraController& cameraController,
     std::atomic<bool>& isOperating)
     : vulkanDevice(vulkanDevice),
-      renderTargetManager(renderTargetManager),
+      swapchainManager(swapchainManager),
       resourceManager(resourceManager),
       meshModifiers(meshModifiers),
       renderRuntime(renderRuntime),
@@ -78,7 +78,7 @@ void SceneController::performRemeshing(int iterations, double minAngleDegrees, d
     auto* currentSimulation = heatSystemController.getHeatSystem();
     if (currentSimulation) {
         heatSystemController.recreateHeatSystem(
-            renderTargetManager.getExtent(),
+            swapchainManager.getExtent(),
             renderRuntime.getFrameGraphRuntime().getRenderPass());
         currentSimulation = heatSystemController.getHeatSystem();
         renderRuntime.setSimulation(currentSimulation);

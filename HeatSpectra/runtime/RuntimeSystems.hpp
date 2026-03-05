@@ -3,13 +3,14 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "app/AppTypes.hpp"
-
 #include "RenderSettingsController.hpp"
 #include "RenderSettingsManager.hpp"
 #include "RenderContext.hpp"
 #include "RuntimeController.hpp"
+#include "SimulationError.hpp"
 #include "SceneContext.hpp"
 #include "VulkanCoreContext.hpp"
 
@@ -26,9 +27,9 @@ public:
     void tickFrame(float deltaTime);
     void shutdown();
     bool isInitialized() const;
-    AppViewportOutput getViewportOutput() const;
 
     const RuntimeQuery* runtimeQuery() const;
+    std::vector<SimulationError> consumeSimulationErrors();
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     void setPanSensitivity(float sensitivity);
     void setRenderPaused(bool paused);
@@ -38,7 +39,6 @@ public:
     const NodeGraphBridge* getNodeGraphBridge() const;
 
 private:
-    void updateViewportOutput(uint32_t frameIndex);
     void cleanup();
 
     WindowRuntimeState* windowRuntimeState = nullptr;
@@ -47,7 +47,6 @@ private:
     std::atomic<bool> runtimeBusy{false};
     std::atomic<bool> isShuttingDown{false};
     uint32_t frameCounter = 0;
-    AppViewportOutput viewportOutput{};
 
     VulkanCoreContext core;
     SceneContext scene;
@@ -57,4 +56,3 @@ private:
     RenderSettingsManager settingsManager;
     RenderSettingsController settingsController{&settingsManager};
 };
-

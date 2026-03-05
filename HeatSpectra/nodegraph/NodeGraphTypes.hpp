@@ -104,6 +104,7 @@ using NodeTypeId = std::string;
 
 namespace nodegraphtypes {
 inline constexpr const char* Model = "model";
+inline constexpr const char* Group = "group";
 inline constexpr const char* Remesh = "remesh";
 inline constexpr const char* HeatReceiver = "heat_receiver";
 inline constexpr const char* HeatSource = "heat_source";
@@ -165,6 +166,20 @@ constexpr uint32_t Path = 1;
 constexpr uint32_t ApplyRequested = 2;
 }
 
+namespace group {
+constexpr uint32_t Enabled = 1;
+constexpr uint32_t SourceName = 2;
+constexpr uint32_t TargetName = 3;
+constexpr uint32_t SourceType = 4;
+
+namespace sourcetype {
+constexpr int64_t Vertex = 0;
+constexpr int64_t Object = 1;
+constexpr int64_t Material = 2;
+constexpr int64_t Smooth = 3;
+}
+}
+
 namespace remesh {
 constexpr uint32_t Iterations = 1;
 constexpr uint32_t MinAngleDegrees = 2;
@@ -177,6 +192,7 @@ namespace heatsolve {
 constexpr uint32_t Enabled = 1;
 constexpr uint32_t Paused = 2;
 constexpr uint32_t ResetRequested = 3;
+constexpr uint32_t MaterialBindings = 4;
 }
 }
 

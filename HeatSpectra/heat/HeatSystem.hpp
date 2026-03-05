@@ -2,14 +2,15 @@
 
 #include "util/Structs.hpp"
 #include "HeatSystemRuntime.hpp"
-#include "spatial/VoxelGrid.hpp"
-#include "mesh/remesher/iODT.hpp"
-#include "voronoi/VoronoiSeeder.hpp"
+#include "HeatSystemPresets.hpp"
+#include "HeatSystemResources.hpp"
+#include "HeatSystemVoronoiStage.hpp"
 #include "framegraph/FrameSimulation.hpp"
+
+#include <unordered_map>
 
 constexpr float AMBIENT_TEMPERATURE = 1.0f;
 static constexpr int NUM_SUBSTEPS = 8;
-
 
 class Model;
 class HeatSource;
@@ -27,8 +28,11 @@ class HeatRenderer;
 class ContactInterface;
 class VoronoiGeoCompute;
 class VoronoiCandidateCompute;
-class VoronoiIntegrator;
 class Remesher;
+class HeatSystemContactStage;
+class HeatSystemSurfaceStage;
+class HeatSystemDebugStage;
+class HeatSystemRenderStage;
 
 class HeatSystem : public FrameSimulation {
 public:
@@ -59,8 +63,6 @@ public:
     bool createVoronoiDescriptorSets(uint32_t maxFramesInFlight);
     bool createVoronoiPipeline();
 
-    bool buildVoronoiNeighborBuffer();
-
     bool createSurfaceDescriptorPool(uint32_t maxFramesInFlight);
     bool createSurfaceDescriptorSetLayout();
     bool createSurfacePipeline();
@@ -77,13 +79,13 @@ public:
     void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) override;
     void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) override;
     
-    VkBuffer getSeedPositionBuffer() const { return seedPositionBuffer; }
-    VkDeviceSize getSeedPositionBufferOffset() const { return seedPositionBufferOffset_; }
-    VkBuffer getVoronoiNodeBuffer() const { return voronoiNodeBuffer; }
-    VkDeviceSize getVoronoiNodeBufferOffset() const  { return voronoiNodeBufferOffset_; }
-    VkBuffer getVoronoiNeighborBuffer() const { return neighborIndicesBuffer; } 
-    VkDeviceSize getVoronoiNeighborBufferOffset() const { return neighborIndicesBufferOffset_; }
-    uint32_t getVoronoiNodeCount() const { return voronoiNodeCount; }
+    VkBuffer getSeedPositionBuffer() const { return resources.seedPositionBuffer; }
+    VkDeviceSize getSeedPositionBufferOffset() const { return resources.seedPositionBufferOffset_; }
+    VkBuffer getVoronoiNodeBuffer() const { return resources.voronoiNodeBuffer; }
+    VkDeviceSize getVoronoiNodeBufferOffset() const  { return resources.voronoiNodeBufferOffset_; }
+    VkBuffer getVoronoiNeighborBuffer() const { return resources.neighborIndicesBuffer; } 
+    VkDeviceSize getVoronoiNeighborBufferOffset() const { return resources.neighborIndicesBufferOffset_; }
+    uint32_t getVoronoiNodeCount() const { return resources.voronoiNodeCount; }
 
     bool createComputeCommandBuffers(uint32_t maxFramesInFlight);
 
@@ -93,7 +95,7 @@ public:
     const std::vector<std::unique_ptr<HeatReceiver>>& getReceivers() const { return receivers; }
     std::vector<std::unique_ptr<HeatReceiver>>& getReceivers() { return receivers; }
 
-    const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const override { return computeCommandBuffers; }
+    const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const override { return resources.computeCommandBuffers; }
 
     bool getIsActive() const { return isActive; }
     bool getIsPaused() const { return isPaused; } 
@@ -106,11 +108,16 @@ public:
     bool simulationPaused() const override { return isPaused; }
     bool voronoiReady() const override { return isVoronoiReady; }
     void setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds);
+    void setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings);
 
 private:    
     using SourceCoupling = HeatSystemRuntime::SourceCoupling;
     using ContactCoupling = HeatSystemRuntime::ContactCoupling;
 
+    void failInitialization(const char* stage);
+    const HeatSystemVoronoiDomain* findReceiverDomain(const HeatReceiver* receiver) const;
+    const HeatSystemVoronoiDomain* findReceiverDomainByModelId(uint32_t receiverModelId) const;
+    void clearReceiverDomains();
     void updateCouplingDescriptors(ContactCoupling& coupling, uint32_t nodeCount);
     void initializeHeatModelBindings();
 
@@ -122,8 +129,6 @@ private:
     void initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiGeoCompute();
     void initializeVoronoiCandidateCompute();
-    bool createVoronoiGeometryBuffers(const VoronoiIntegrator& integrator, const std::vector<uint32_t>& seedFlags);
-    void uploadOccupancyPoints(const VoxelGrid& voxelGrid);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
@@ -138,6 +143,8 @@ private:
     std::vector<uint32_t>& receiverModelIds;
     std::vector<uint32_t> activeSourceModelIds;
     std::vector<uint32_t> activeReceiverModelIds;
+    std::vector<HeatSystemVoronoiDomain> receiverVoronoiDomains;
+    std::unordered_map<uint32_t, HeatMaterialPresetId> receiverMaterialPresetByModelId;
     
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;
@@ -146,108 +153,18 @@ private:
 	std::unique_ptr<ContactInterface> contactInterface;
     std::unique_ptr<VoronoiGeoCompute> voronoiGeoCompute;
     std::unique_ptr<class VoronoiCandidateCompute> voronoiCandidateCompute;
+    std::unique_ptr<HeatSystemVoronoiStage> voronoiStage;
+    std::unique_ptr<HeatSystemContactStage> contactStage;
+    std::unique_ptr<HeatSystemSurfaceStage> surfaceStage;
+    std::unique_ptr<HeatSystemDebugStage> debugStage;
+    std::unique_ptr<HeatSystemRenderStage> renderStage;
+    HeatSystemResources resources;
     
     uint32_t maxFramesInFlight;
  
-    std::unique_ptr<VoronoiSeeder> voronoiSeeder;
-    std::unique_ptr<class VoronoiIntegrator> voronoiIntegrator; 
-    std::vector<uint32_t> voronoiSeedFlags;
     bool isVoronoiSeederReady = false;
     bool isVoronoiReady = false; 
-    VoxelGrid voronoiVoxelGrid;
-    bool voronoiVoxelGridBuilt = false;
-    
-    uint32_t voronoiNodeCount = 0; 
-    
-    VkBuffer voronoiNodeBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiNodeBufferOffset_ = 0;
-    void* mappedVoronoiNodeData = nullptr;
-    
-    VkBuffer voronoiNeighborBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiNeighborBufferOffset_ = 0;
-    
-    VkDescriptorPool voronoiDescriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout voronoiDescriptorSetLayout = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> voronoiDescriptorSets;
-    std::vector<VkDescriptorSet> voronoiDescriptorSetsB;  
-    
-    VkPipelineLayout voronoiPipelineLayout = VK_NULL_HANDLE;
-    VkPipeline voronoiPipeline = VK_NULL_HANDLE;
-
-    VkBuffer debugCellGeometryBuffer = VK_NULL_HANDLE;
-    VkDeviceSize debugCellGeometryBufferOffset_ = 0;
-    void* mappedDebugCellGeometryData = nullptr;
-    
-    VkBuffer voronoiDumpBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiDumpBufferOffset_ = 0;
-    void* mappedVoronoiDumpData = nullptr;
-
-    VkBuffer neighborIndicesBuffer = VK_NULL_HANDLE;
-    VkDeviceSize neighborIndicesBufferOffset_ = 0;
     static constexpr int K_NEIGHBORS = 50;  
-    
-    VkBuffer interfaceAreasBuffer = VK_NULL_HANDLE;
-    VkDeviceSize interfaceAreasBufferOffset_ = 0;
-    void* mappedInterfaceAreasData = nullptr;
-    
-    VkBuffer interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
-    VkDeviceSize interfaceNeighborIdsBufferOffset_ = 0;
-    void* mappedInterfaceNeighborIdsData = nullptr;
-    
-    VkBuffer meshTriangleBuffer = VK_NULL_HANDLE;
-    VkDeviceSize meshTriangleBufferOffset_ = 0;
-    
-    VkBuffer seedPositionBuffer = VK_NULL_HANDLE;
-    VkDeviceSize seedPositionBufferOffset_ = 0;
-    VkBuffer seedFlagsBuffer = VK_NULL_HANDLE;
-    VkDeviceSize seedFlagsBufferOffset_ = 0;
-    void* mappedSeedPositionData = nullptr;
-    
-    VkBuffer voxelGridParamsBuffer = VK_NULL_HANDLE;           
-    VkDeviceSize voxelGridParamsBufferOffset_ = 0;
-    
-    VkBuffer voxelOccupancyBuffer = VK_NULL_HANDLE;            
-    VkDeviceSize voxelOccupancyBufferOffset_ = 0;
-    
-    VkBuffer voxelTrianglesListBuffer = VK_NULL_HANDLE;       
-    VkDeviceSize voxelTrianglesListBufferOffset_ = 0;
-    
-    VkBuffer voxelOffsetsBuffer = VK_NULL_HANDLE;              
-    VkDeviceSize voxelOffsetsBufferOffset_ = 0;
-    
-    std::vector<VkCommandBuffer> computeCommandBuffers;
-    
-    VkBuffer tempBufferA = VK_NULL_HANDLE;
-    VkDeviceSize tempBufferAOffset_ = 0;
-    void* mappedTempBufferA = nullptr;
-    
-    VkBuffer tempBufferB = VK_NULL_HANDLE;
-    VkDeviceSize tempBufferBOffset_ = 0;
-    void* mappedTempBufferB = nullptr;
-
-    VkBuffer injectionKBuffer = VK_NULL_HANDLE;
-    VkDeviceSize injectionKBufferOffset_ = 0;
-    void* mappedInjectionKBuffer = nullptr;
-
-    VkBuffer injectionKTBuffer = VK_NULL_HANDLE;
-    VkDeviceSize injectionKTBufferOffset_ = 0;
-    void* mappedInjectionKTBuffer = nullptr;
-
-    VkBuffer timeBuffer = VK_NULL_HANDLE;
-    VkDeviceSize timeBufferOffset_ = 0;
-    void* mappedTimeData = nullptr;
-
-    VkDescriptorPool surfaceDescriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout surfaceDescriptorSetLayout = VK_NULL_HANDLE;
-
-    VkPipelineLayout surfacePipelineLayout = VK_NULL_HANDLE;
-    VkPipeline surfacePipeline = VK_NULL_HANDLE;
-
-    VkDescriptorPool contactDescriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout contactDescriptorSetLayout = VK_NULL_HANDLE;
-
-    VkPipelineLayout contactPipelineLayout = VK_NULL_HANDLE;
-    VkPipeline contactPipeline = VK_NULL_HANDLE;
 
     bool isActive = false;
     bool isPaused = false;

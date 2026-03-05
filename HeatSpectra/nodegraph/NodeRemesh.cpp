@@ -231,6 +231,11 @@ bool NodeRemesh::tryBuildRemeshedGeometryForModel(
     }
     outGeometry.pointPositions = std::move(pointPositions);
     outGeometry.triangleIndices = std::move(triangleIndices);
+    if (upstreamGeometryValue &&
+        upstreamGeometryValue->geometry.triangleGroupIds.size() == (outGeometry.triangleIndices.size() / 3)) {
+        outGeometry.triangleGroupIds = upstreamGeometryValue->geometry.triangleGroupIds;
+        outGeometry.groups = upstreamGeometryValue->geometry.groups;
+    }
 
     GeometryAttribute positionAttribute{};
     positionAttribute.name = "P";
@@ -239,5 +244,6 @@ bool NodeRemesh::tryBuildRemeshedGeometryForModel(
     positionAttribute.tupleSize = 3;
     positionAttribute.floatValues = outGeometry.pointPositions;
     outGeometry.attributes.push_back(std::move(positionAttribute));
+    ensureGeometryGroups(outGeometry);
     return true;
 }

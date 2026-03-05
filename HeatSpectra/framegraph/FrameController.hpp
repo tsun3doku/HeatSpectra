@@ -12,11 +12,11 @@
 #include "FrameGraphicsStage.hpp"
 #include "FrameTypes.hpp"
 #include "FrameUpdateStage.hpp"
-#include "render/RenderTargetStage.hpp"
+#include "app/SwapchainStage.hpp"
 
 struct WindowRuntimeState;
 class VulkanDevice;
-class RenderTargetManager;
+class SwapchainManager;
 class FrameGraph;
 class SceneRenderer;
 class FrameSync;
@@ -53,7 +53,7 @@ public:
     FrameController(
         const WindowRuntimeState& windowState,
         VulkanDevice& vulkanDevice,
-        RenderTargetManager& renderTargetManager,
+        SwapchainManager& swapchainManager,
         FrameGraph& frameGraph,
         VkFrameGraphBackend& frameGraphBackend,
         SceneRenderer& sceneRenderer,
@@ -74,7 +74,7 @@ public:
 
 private:
     const WindowRuntimeState& windowState;
-    RenderTargetManager& renderTargetManager;
+    SwapchainManager& swapchainManager;
     SceneRenderer& sceneRenderer;
     FrameSync& frameSync;
     ComputeTiming& computeTiming;
@@ -84,7 +84,7 @@ private:
     std::atomic<bool>& isOperating;
     std::atomic<bool>& isShuttingDown;
 
-    RenderTargetStage renderTargetStage;
+    SwapchainStage swapchainStage;
     FrameUpdateStage frameUpdateStage;
     FrameComputeStage frameComputeStage;
     FrameGraphicsStage frameGraphicsStage;

@@ -20,7 +20,8 @@ bool VulkanCoreContext::initialize(const AppVulkanContext& vulkanContext) {
         vulkanContext.physicalDevice,
         vulkanContext.device,
         vulkanContext.graphicsQueue,
-        vulkanContext.queueFamilyIndex);
+        vulkanContext.queueFamilyIndex,
+        vulkanContext.surface);
 
     memoryAllocator = std::make_unique<MemoryAllocator>(vulkanDevice);
     renderCommandPool = std::make_unique<CommandPool>(vulkanDevice, "Render Command Pool");

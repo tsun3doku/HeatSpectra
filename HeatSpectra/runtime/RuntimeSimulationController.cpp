@@ -7,7 +7,6 @@
 #include "nodegraph/NodeGraphTypes.hpp"
 #include "scene/SceneController.hpp"
 
-#include <iostream>
 #include <utility>
 
 RuntimeSimulationController::RuntimeSimulationController(
@@ -27,7 +26,7 @@ bool RuntimeSimulationController::canExecuteHeatSolve() const {
     return nodeGraphController.canExecuteHeatSolve();
 }
 
-bool RuntimeSimulationController::canStartHeatSolve(std::string& reason) const {
+bool RuntimeSimulationController::canStartHeatSolve(std::string& reason, SimulationErrorCode& errorCode) const {
     const NodeGraphState graphState = nodeGraphBridge.state();
     bool hasEnabledHeatNode = false;
     for (const NodeGraphNode& node : graphState.nodes) {
@@ -42,21 +41,31 @@ bool RuntimeSimulationController::canStartHeatSolve(std::string& reason) const {
 
     if (!hasEnabledHeatNode) {
         reason = "No enabled Heat Solver node exists";
+        errorCode = SimulationErrorCode::NoEnabledHeatSolveNode;
         return false;
     }
 
     std::string blockReason;
     if (!nodeGraphBridge.canExecuteHeatSolve(blockReason)) {
         reason = blockReason.empty() ? std::string("Heat Solver graph is blocked") : std::move(blockReason);
+        errorCode = SimulationErrorCode::HeatSolveGraphBlocked;
         return false;
     }
 
     reason.clear();
+    errorCode = SimulationErrorCode::Unknown;
     return true;
 }
 
 uint32_t RuntimeSimulationController::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
     return sceneController.loadModel(modelPath, preferredModelId);
+}
+
+std::vector<SimulationError> RuntimeSimulationController::consumeSimulationErrors() {
+    std::lock_guard<std::mutex> lock(simulationErrorMutex);
+    std::vector<SimulationError> errors;
+    errors.swap(pendingSimulationErrors);
+    return errors;
 }
 
 bool RuntimeSimulationController::isSimulationActive() const {
@@ -70,17 +79,23 @@ bool RuntimeSimulationController::isSimulationPaused() const {
 void RuntimeSimulationController::toggleSimulation() {
     if (!heatSystemController.isHeatSystemActive()) {
         std::string blockReason;
-        if (!canStartHeatSolve(blockReason)) {
-            std::cerr << "[NodeGraph] Cannot start Heat Solve";
+        SimulationErrorCode errorCode = SimulationErrorCode::Unknown;
+        if (!canStartHeatSolve(blockReason, errorCode)) {
+            std::string errorMessage = "Cannot start Heat Solve";
             if (!blockReason.empty()) {
-                std::cerr << ": " << blockReason;
+                errorMessage += ": " + blockReason;
             }
-            std::cerr << std::endl;
+            pushSimulationError(errorCode, std::move(errorMessage));
             return;
         }
     }
 
     heatSystemController.toggleHeatSystem();
+}
+
+void RuntimeSimulationController::pushSimulationError(SimulationErrorCode code, std::string message) {
+    std::lock_guard<std::mutex> lock(simulationErrorMutex);
+    pendingSimulationErrors.push_back({code, std::move(message)});
 }
 
 void RuntimeSimulationController::pauseSimulation() {

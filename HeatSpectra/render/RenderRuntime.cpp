@@ -18,7 +18,7 @@
 #include "RenderConfig.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "SceneRenderer.hpp"
-#include "RenderTargetManager.hpp"
+#include "app/SwapchainManager.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -28,7 +28,7 @@
 RenderRuntime::RenderRuntime(
     const WindowRuntimeState& windowState,
     VulkanDevice& vulkanDevice,
-    RenderTargetManager& renderTargetManager,
+    SwapchainManager& swapchainManager,
     CommandPool& renderCommandPool,
     FrameSync& frameSync,
     CameraController& cameraController,
@@ -36,7 +36,7 @@ RenderRuntime::RenderRuntime(
     std::atomic<bool>& isShuttingDown)
     : windowState(windowState),
       vulkanDevice(vulkanDevice),
-      renderTargetManager(renderTargetManager),
+      swapchainManager(swapchainManager),
       renderCommandPool(renderCommandPool),
       frameSync(frameSync),
       cameraController(cameraController),
@@ -65,7 +65,7 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
     if (!frameGraphBackend) {
         return false;
     }
-    if (!frameGraphBackend->rebuild(frameGraph->getFrameGraphResult(), renderTargetManager.getImageViews(), extent, renderconfig::MaxFramesInFlight)) {
+    if (!frameGraphBackend->rebuild(frameGraph->getFrameGraphResult(), swapchainManager.getImageViews(), extent, renderconfig::MaxFramesInFlight)) {
         return false;
     }
 
@@ -135,7 +135,7 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
     frameController = std::make_unique<FrameController>(
         windowState,
         vulkanDevice,
-        renderTargetManager,
+        swapchainManager,
         *frameGraph,
         *frameGraphBackend,
         *sceneRenderer,
@@ -192,7 +192,7 @@ void RenderRuntime::cleanupSwapChain() {
     if (sceneRenderer) {
         sceneRenderer->freeCommandBuffers();
     }
-    renderTargetManager.cleanup();
+    swapchainManager.cleanup();
 }
 
 void RenderRuntime::cleanup() {

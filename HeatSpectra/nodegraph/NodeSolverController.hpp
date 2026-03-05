@@ -1,4 +1,7 @@
-﻿#pragma once
+#pragma once
+
+#include "NodeGraphDataTypes.hpp"
+#include "heat/HeatSystemPresets.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -13,6 +16,9 @@ public:
     void setHeatSolveModelRoles(
         const std::vector<uint32_t>& sourceNodeModelIds,
         const std::vector<uint32_t>& receiverNodeModelIds);
+    void setHeatSolveMaterialBindings(
+        const std::vector<GeometryData>& receiverGeometryInputs,
+        const std::vector<HeatMaterialBindingEntry>& materialBindings);
 
     bool isHeatSolveActive() const;
     bool isHeatSolvePaused() const;

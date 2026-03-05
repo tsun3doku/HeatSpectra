@@ -99,6 +99,9 @@ static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 59903, 0, 0, 0, 0, 0
 struct GeometryDebugPushConstants
 {
     uint debugEnable;
+    uint nodeOffset;
+    uint nodeCount;
+    uint _padding;
 };
 
 [[vk::push_constant]] cbuffer GeometryDebugPushConstantsBuffer
@@ -1059,14 +1062,12 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 [numthreads(32, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID)
 {
-    uint nodeID = dtid.x;
-    uint seedCount = 0;
-    uint seedStride = 0;
-    seedPositions.GetDimensions(seedCount, seedStride);
-    if (nodeID >= seedCount)
+    uint localNodeID = dtid.x;
+    if (localNodeID >= pushConstants.nodeCount)
     {
         return;
     }
+    uint nodeID = pushConstants.nodeOffset + localNodeID;
 
     float3 seed = seedPositions[nodeID].xyz;
     float vol = computeRestrictedVolume(nodeID, seed);

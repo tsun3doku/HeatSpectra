@@ -9,7 +9,6 @@
 namespace {
 
 NodeGraphDebugStore gStore;
-constexpr std::size_t maxDebugAttributeSamples = 128;
 
 const char* domainName(GeometryAttributeDomain domain) {
     switch (domain) {
@@ -108,6 +107,9 @@ bool NodeGraphDebugStore::tryGetLatestNodeDebugInfo(NodeGraphNodeId nodeId, Node
 void NodeGraphDebugStore::setState(const NodeGraphState& graphState) {
     std::lock_guard<std::mutex> lock(mutex);
     state = graphState;
+    revision = graphState.revision;
+    srcByInput.clear();
+    outBySocket.clear();
 }
 
 void NodeGraphDebugStore::publish(
@@ -201,9 +203,8 @@ NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphS
             attr.tupleSize = attribute.tupleSize;
             const std::size_t count = elemCount(attribute);
             attr.elementCount = static_cast<uint32_t>(count);
-            const std::size_t sampleCount = std::min(count, maxDebugAttributeSamples);
-            attr.sampleValues.reserve(sampleCount);
-            for (std::size_t i = 0; i < sampleCount; ++i) {
+            attr.sampleValues.reserve(count);
+            for (std::size_t i = 0; i < count; ++i) {
                 attr.sampleValues.push_back(elemValue(attribute, i));
             }
             info.attributes.push_back(std::move(attr));

@@ -13,8 +13,8 @@ struct PushConstants
 {
     uint faceCount;
     uint seedCount;
+    uint seedOffset;
     uint _pad0;
-    uint _pad1;
 };
 
 [[vk::push_constant]]
@@ -74,7 +74,8 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     for (uint s = 0; s < pc.seedCount; ++s)
     {
-        float3 sp = seedPositions[s].xyz;
+        uint globalSeedIndex = pc.seedOffset + s;
+        float3 sp = seedPositions[globalSeedIndex].xyz;
         float d0 = dot(p0 - sp, p0 - sp);
         float d1 = dot(p1 - sp, p1 - sp);
         float d2 = dot(p2 - sp, p2 - sp);
@@ -95,7 +96,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         }
 
         bestDist[insertPos] = distSq;
-        bestId[insertPos] = s;
+        bestId[insertPos] = globalSeedIndex;
     }
 
     uint base = faceId * K_CANDIDATES;

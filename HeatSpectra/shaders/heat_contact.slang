@@ -97,8 +97,13 @@ void atomicAddFloatKT(uint idx, float addVal)
     }
 }
 
-void addWeightedInjection(uint cellIndex, float w, float effectiveTemp, float contactStrength, float area)
+void addWeightedInjection(uint cellIndex, uint nodeCount, float w, float effectiveTemp, float contactStrength, float area)
 {
+    if (cellIndex == 0xFFFFFFFFu || cellIndex >= nodeCount)
+    {
+        return;
+    }
+
     if (w <= 0.0f)
     {
         return;
@@ -163,6 +168,10 @@ void main(uint3 dtid : SV_DispatchThreadID)
     uint c1 = voronoiMappingBuffer[v1].cellIndex;
     uint c2 = voronoiMappingBuffer[v2].cellIndex;
 
+    uint nodeCount = 0;
+    uint nodeStride = 0;
+    nodeTemperatureReadBuffer.GetDimensions(nodeCount, nodeStride);
+
     static const float3 recvBary[7] = {
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f),
         float3(0.0597158717f, 0.4701420641f, 0.4701420641f),
@@ -198,8 +207,8 @@ void main(uint3 dtid : SV_DispatchThreadID)
         float area = s.wArea;
         float3 bw = recvBary[si];
 
-        addWeightedInjection(c0, bw.x, effectiveTemp, contactStrength, area);
-        addWeightedInjection(c1, bw.y, effectiveTemp, contactStrength, area);
-        addWeightedInjection(c2, bw.z, effectiveTemp, contactStrength, area);
+        addWeightedInjection(c0, nodeCount, bw.x, effectiveTemp, contactStrength, area);
+        addWeightedInjection(c1, nodeCount, bw.y, effectiveTemp, contactStrength, area);
+        addWeightedInjection(c2, nodeCount, bw.z, effectiveTemp, contactStrength, area);
     }
 }

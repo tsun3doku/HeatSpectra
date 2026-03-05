@@ -13,8 +13,8 @@ namespace {
 struct CandidatePushConstants {
     uint32_t faceCount;
     uint32_t seedCount;
+    uint32_t seedOffset;
     uint32_t _pad0;
-    uint32_t _pad1;
 };
 }
 
@@ -69,7 +69,7 @@ void VoronoiCandidateCompute::updateDescriptors(const Bindings& bindings) {
     vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
-void VoronoiCandidateCompute::dispatch(uint32_t faceCount, uint32_t seedCount) {
+void VoronoiCandidateCompute::dispatch(uint32_t faceCount, uint32_t seedCount, uint32_t seedOffset) {
     if (!initialized || descriptorSet == VK_NULL_HANDLE || faceCount == 0 || seedCount == 0) {
         return;
     }
@@ -112,6 +112,7 @@ void VoronoiCandidateCompute::dispatch(uint32_t faceCount, uint32_t seedCount) {
     CandidatePushConstants pc{};
     pc.faceCount = faceCount;
     pc.seedCount = seedCount;
+    pc.seedOffset = seedOffset;
     vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CandidatePushConstants), &pc);
 
     uint32_t workGroupSize = 256;

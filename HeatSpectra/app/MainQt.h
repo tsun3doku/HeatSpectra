@@ -12,7 +12,7 @@ class RenderSettingsController;
 class RuntimeQuery;
 class QCloseEvent;
 class QWidget;
-class VulkanViewportWidget;
+class VulkanWindow;
 class QSplitter;
 
 class MainWindow : public QMainWindow {
@@ -48,6 +48,7 @@ private:
     void createNodeGraphDock();
     void syncNodeGraphBridge();
     void setNodeGraphVisible(bool visible);
+    void raiseNativeSplitterHandles();
 
     App* app = nullptr;
     
@@ -65,7 +66,8 @@ private:
     
     QAction* remeshOverlayAction = nullptr;
     QAction* nodeGraphAction = nullptr;
-    VulkanViewportWidget* viewportWidget = nullptr;
+    VulkanWindow* viewportWindow = nullptr;
+    QWidget* viewportContainer = nullptr;
     QWidget* controlsPanel = nullptr;
     NodeGraphDock* nodeGraphDock = nullptr;
     NodeGraphBridge* boundNodeGraphBridge = nullptr;

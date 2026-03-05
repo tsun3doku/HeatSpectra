@@ -11,7 +11,7 @@ class Camera;
 class GizmoController;
 class ModelSelection;
 class ResourceManager;
-class RenderTargetManager;
+class SwapchainManager;
 
 class InputController {
 public:
@@ -19,7 +19,7 @@ public:
         GizmoController& gizmoController,
         ModelSelection& modelSelection,
         ResourceManager& resourceManager,
-        const RenderTargetManager& renderTargetManager,
+        const SwapchainManager& swapchainManager,
         InputActionHandler& actionHandler);
     ~InputController() = default;
 
@@ -39,7 +39,7 @@ private:
     GizmoController& gizmoController;
     ModelSelection& modelSelection;
     ResourceManager& resourceManager;
-    const RenderTargetManager& renderTargetManager;
+    const SwapchainManager& swapchainManager;
     InputActionHandler& actionHandler;
 
     glm::vec3 modelStartPosition{0.0f};

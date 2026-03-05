@@ -3,6 +3,7 @@
 #include "NodeHeatReceiver.hpp"
 #include "NodeHeatSolve.hpp"
 #include "NodeHeatSource.hpp"
+#include "NodeGroup.hpp"
 #include "NodeModel.hpp"
 #include "NodeRemesh.hpp"
 
@@ -41,6 +42,7 @@ bool NodeGraphKernels::executeNode(
 
 void NodeGraphKernels::registerDefaultKernels() {
     registerKernel(std::make_unique<NodeModel>());
+    registerKernel(std::make_unique<NodeGroup>());
     registerKernel(std::make_unique<NodeRemesh>());
     registerKernel(std::make_unique<NodeHeatReceiver>());
     registerKernel(std::make_unique<NodeHeatSource>());

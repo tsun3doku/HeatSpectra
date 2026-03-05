@@ -62,11 +62,44 @@ const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitionsStorage() {
                             GeometryAttributeDomain::Point,
                             GeometryAttributeDataType::Float,
                             3),
+                        makeAttributeContract(
+                            "group.id",
+                            GeometryAttributeDomain::Primitive,
+                            GeometryAttributeDataType::Int),
                     }),
             },
             {
                 {nodegraphparams::model::Path, "Model Path", NodeGraphParamType::String, 0.0, 0, false, "", false},
                 {nodegraphparams::model::ApplyRequested, "Apply Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
+            },
+        },
+        {
+            nodegraphtypes::Group,
+            "Group",
+            NodeGraphNodeCategory::Meshing,
+            {
+                makeInputSocket("Mesh", NodeGraphValueType::Mesh, {NodeDataType::Geometry}),
+                makeOutputSocket(
+                    "Mesh",
+                    NodeGraphValueType::Mesh,
+                    NodeDataType::Geometry,
+                    {
+                        makeAttributeContract(
+                            "P",
+                            GeometryAttributeDomain::Point,
+                            GeometryAttributeDataType::Float,
+                            3),
+                        makeAttributeContract(
+                            "group.id",
+                            GeometryAttributeDomain::Primitive,
+                            GeometryAttributeDataType::Int),
+                    }),
+            },
+            {
+                {nodegraphparams::group::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, true, "", false},
+                {nodegraphparams::group::SourceType, "Source Type", NodeGraphParamType::Int, 0.0, nodegraphparams::group::sourcetype::Vertex, false, "", false},
+                {nodegraphparams::group::SourceName, "Source Name", NodeGraphParamType::String, 0.0, 0, false, "", false},
+                {nodegraphparams::group::TargetName, "Target Group Name", NodeGraphParamType::String, 0.0, 0, false, "", false},
             },
         },
         {
@@ -85,6 +118,10 @@ const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitionsStorage() {
                             GeometryAttributeDomain::Point,
                             GeometryAttributeDataType::Float,
                             3),
+                        makeAttributeContract(
+                            "group.id",
+                            GeometryAttributeDomain::Primitive,
+                            GeometryAttributeDataType::Int),
                     }),
             },
             {
@@ -166,11 +203,16 @@ const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitionsStorage() {
                             GeometryAttributeDomain::Point,
                             GeometryAttributeDataType::Float),
                     }),
+                makeInputSocket(
+                    "Group",
+                    NodeGraphValueType::Mesh,
+                    {NodeDataType::Geometry}),
             },
             {
                 {nodegraphparams::heatsolve::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
                 {nodegraphparams::heatsolve::Paused, "Paused", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
                 {nodegraphparams::heatsolve::ResetRequested, "Reset Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
+                {nodegraphparams::heatsolve::MaterialBindings, "Material Bindings", NodeGraphParamType::String, 0.0, 0, false, "", false},
             },
         },
         {

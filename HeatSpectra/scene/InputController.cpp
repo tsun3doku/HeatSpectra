@@ -4,19 +4,19 @@
 #include "GizmoController.hpp"
 #include "Model.hpp"
 #include "ModelSelection.hpp"
+#include "app/SwapchainManager.hpp"
 #include "vulkan/ResourceManager.hpp"
-#include "render/RenderTargetManager.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 InputController::InputController(Camera& camera, GizmoController& gizmoController, ModelSelection& modelSelection, ResourceManager& resourceManager,
-    const RenderTargetManager& renderTargetManager, InputActionHandler& actionHandler)
+    const SwapchainManager& swapchainManager, InputActionHandler& actionHandler)
     : camera(camera),
       gizmoController(gizmoController),
       modelSelection(modelSelection),
       resourceManager(resourceManager),
-      renderTargetManager(renderTargetManager),
+      swapchainManager(swapchainManager),
       actionHandler(actionHandler) {
 }
 
@@ -68,7 +68,7 @@ void InputController::handleKeyInput(Qt::Key key, bool pressed) {
 }
 
 void InputController::handleMouseMove(float mouseX, float mouseY) {
-    const VkExtent2D swapChainExtent = renderTargetManager.getExtent();
+    const VkExtent2D swapChainExtent = swapchainManager.getExtent();
 
     if (isDraggingGizmo) {
         const glm::vec3 rayOrigin = camera.getPosition();
@@ -107,7 +107,7 @@ void InputController::handleMouseButton(int button, float mouseX, float mouseY, 
         return;
     }
 
-    const VkExtent2D swapChainExtent = renderTargetManager.getExtent();
+    const VkExtent2D swapChainExtent = swapchainManager.getExtent();
     int x = static_cast<int>(mouseX);
     int y = static_cast<int>(mouseY);
 
@@ -123,7 +123,7 @@ void InputController::processInput(bool shiftPressed, bool middleButtonPressed, 
 }
 
 void InputController::updateGizmo() {
-    const VkExtent2D swapChainExtent = renderTargetManager.getExtent();
+    const VkExtent2D swapChainExtent = swapchainManager.getExtent();
 
     if (!isDraggingGizmo) {
         const PickedResult lastPick = modelSelection.getLastPickedResult();

@@ -175,9 +175,11 @@ VkResult FrameSync::submitGraphics(VkQueue graphicsQueue, VkCommandBuffer comman
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    std::array<VkSemaphore, 1> waitSemaphores{};
-    std::array<VkPipelineStageFlags, 1> waitStages{};
-    uint32_t waitCount = 0;
+    std::array<VkSemaphore, 2> waitSemaphores{};
+    std::array<VkPipelineStageFlags, 2> waitStages{};
+    uint32_t waitCount = 1;
+    waitSemaphores[0] = imageAvailableSemaphores[currentFrame];
+    waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
     if (waitForCompute) {
         waitSemaphores[waitCount] = computeFinishedSemaphores[currentFrame];

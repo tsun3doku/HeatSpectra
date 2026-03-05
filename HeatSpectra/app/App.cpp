@@ -33,18 +33,18 @@ bool App::isInitialized() const {
     return runtimeHost && runtimeHost->isInitialized();
 }
 
-AppViewportOutput App::getViewportOutput() const {
-    if (runtimeHost) {
-        return runtimeHost->getViewportOutput();
-    }
-    return {};
-}
-
 const RuntimeQuery* App::runtimeQuery() const {
     if (runtimeHost) {
         return runtimeHost->runtimeQuery();
     }
     return nullptr;
+}
+
+std::vector<SimulationError> App::consumeSimulationErrors() {
+    if (runtimeHost) {
+        return runtimeHost->consumeSimulationErrors();
+    }
+    return {};
 }
 
 void App::setPanSensitivity(float sensitivity) {

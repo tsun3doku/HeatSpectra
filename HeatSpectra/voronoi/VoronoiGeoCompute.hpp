@@ -10,6 +10,9 @@ class VoronoiGeoCompute {
 public:
     struct PushConstants {
         uint32_t debugEnable = 0;
+        uint32_t nodeOffset = 0;
+        uint32_t nodeCount = 0;
+        uint32_t _padding = 0;
     };
 
     struct Bindings {

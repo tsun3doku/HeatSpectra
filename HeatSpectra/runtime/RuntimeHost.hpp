@@ -2,9 +2,11 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "app/AppTypes.hpp"
 #include "RuntimeSystems.hpp"
+#include "SimulationError.hpp"
 
 class NodeGraphBridge;
 class RenderSettingsController;
@@ -22,12 +24,12 @@ public:
     bool isInitialized() const;
 
     const RuntimeQuery* runtimeQuery() const;
+    std::vector<SimulationError> consumeSimulationErrors();
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
 
     void setPanSensitivity(float sensitivity);
     void setRenderPaused(bool paused);
 
-    AppViewportOutput getViewportOutput() const;
     RenderSettingsController* getSettingsController();
     const RenderSettingsController* getSettingsController() const;
     NodeGraphBridge* getNodeGraphBridge();

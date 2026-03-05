@@ -9,7 +9,7 @@
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
 #include "nodegraph/NodeSolverController.hpp"
-#include "render/RenderTargetManager.hpp"
+#include "app/SwapchainManager.hpp"
 #include "render/RenderRuntime.hpp"
 #include "scene/InputController.hpp"
 #include "scene/SceneController.hpp"
@@ -35,8 +35,8 @@ public:
     void shutdown();
     bool isInitialized() const;
 
-    RenderTargetManager& targetManager();
-    const RenderTargetManager& targetManager() const;
+    SwapchainManager& swapchain();
+    const SwapchainManager& swapchain() const;
     FrameSync& sync();
     RenderRuntime* runtime();
     const RenderRuntime* runtime() const;
@@ -49,7 +49,7 @@ public:
     InputController* inputController();
 
 private:
-    RenderTargetManager renderTargetManager;
+    SwapchainManager swapchainManager;
     std::unique_ptr<RenderRuntime> renderRuntime;
     FrameSync frameSync;
     std::unique_ptr<HeatSystem> heatSystemState;

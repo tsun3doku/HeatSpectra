@@ -3,18 +3,13 @@
 #include "NodeGraphTypes.hpp"
 
 #include <QWidget>
-#include <string>
 
 class NodeGraphBridge;
 class RuntimeQuery;
 class QLabel;
 class QPushButton;
-class QSpinBox;
-class QDoubleSpinBox;
 class QStackedWidget;
-class QTimer;
 class QHideEvent;
-class QLineEdit;
 class QTextEdit;
 class QTabWidget;
 class QComboBox;
@@ -22,6 +17,10 @@ class QTableWidget;
 class QTableView;
 class QAbstractTableModel;
 class QString;
+class NodeGroupPanel;
+class NodeHeatSolverPanel;
+class NodeModelPanel;
+class NodeRemeshPanel;
 
 class NodeInspectorDialog : public QWidget {
 public:
@@ -35,14 +34,7 @@ protected:
 
 private:
     void buildUi();
-    void browseModelFile();
-    void applyModelSettings();
-    void applyRemeshSettings();
-    void executeRemesh();
-    void toggleHeatSystem();
-    void pauseHeatSystem();
-    void resetHeatSystem();
-    void updateHeatStatus();
+
     void refreshRuntimeDebugViews();
     void updateDataflowView();
     void updateSpreadsheetView();
@@ -60,27 +52,16 @@ private:
     QStackedWidget* pageStack = nullptr;
     QWidget* genericPage = nullptr;
     QWidget* modelPage = nullptr;
+    QWidget* groupPage = nullptr;
     QWidget* remeshPage = nullptr;
     QWidget* heatPage = nullptr;
 
-    QLineEdit* modelPathLineEdit = nullptr;
-    QPushButton* modelBrowseButton = nullptr;
-    QPushButton* modelApplyButton = nullptr;
+    NodeModelPanel* modelPanel = nullptr;
+    NodeGroupPanel* groupPanel = nullptr;
+    NodeRemeshPanel* remeshPanel = nullptr;
+    NodeHeatSolverPanel* heatSolverPanel = nullptr;
 
-    QSpinBox* iterationsSpinBox = nullptr;
-    QDoubleSpinBox* minAngleSpinBox = nullptr;
-    QDoubleSpinBox* maxEdgeLengthSpinBox = nullptr;
-    QDoubleSpinBox* stepSizeSpinBox = nullptr;
-    QPushButton* remeshApplyButton = nullptr;
-    QPushButton* remeshRunButton = nullptr;
-
-    QLabel* heatStatusValueLabel = nullptr;
-    QPushButton* heatToggleButton = nullptr;
-    QPushButton* heatPauseButton = nullptr;
-    QPushButton* heatResetButton = nullptr;
-    QTimer* heatStatusTimer = nullptr;
-
-    QTabWidget* dataTabWidget = nullptr;
+    QTabWidget* mainTabWidget = nullptr;
     QTextEdit* dataflowTextEdit = nullptr;
     QPushButton* dataflowRefreshButton = nullptr;
     QComboBox* spreadsheetSocketComboBox = nullptr;

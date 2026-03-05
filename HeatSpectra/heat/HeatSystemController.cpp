@@ -1,6 +1,7 @@
 ﻿#include "HeatSystemController.hpp"
 
 #include "vulkan/CommandBufferManager.hpp"
+#include "app/SwapchainManager.hpp"
 #include "framegraph/FrameSync.hpp"
 #include "HeatSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
@@ -10,7 +11,6 @@
 #include "render/RenderConfig.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "render/SceneRenderer.hpp"
-#include "render/RenderTargetManager.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -22,7 +22,7 @@
 
 HeatSystemController::HeatSystemController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
     MeshModifiers& meshModifiers, ModelUploader& modelUploader, UniformBufferManager& uniformBufferManager, SceneRenderer& sceneRenderer,
-    RenderTargetManager& renderTargetManager, VkFrameGraphRuntime& frameGraphRuntime, CommandPool& renderCommandPool, FrameSync& frameSync,
+    SwapchainManager& swapchainManager, VkFrameGraphRuntime& frameGraphRuntime, CommandPool& renderCommandPool, FrameSync& frameSync,
     std::unique_ptr<HeatSystem>& heatSystem, std::atomic<bool>& isOperating, uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
@@ -31,7 +31,7 @@ HeatSystemController::HeatSystemController(VulkanDevice& vulkanDevice, MemoryAll
       modelUploader(modelUploader),
       uniformBufferManager(uniformBufferManager),
       sceneRenderer(sceneRenderer),
-      renderTargetManager(renderTargetManager),
+      swapchainManager(swapchainManager),
       frameGraphRuntime(frameGraphRuntime),
       renderCommandPool(renderCommandPool),
       frameSync(frameSync),
@@ -68,6 +68,7 @@ std::unique_ptr<HeatSystem> HeatSystemController::buildHeatSystem(VkExtent2D ext
         return nullptr;
     }
     system->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds);
+    system->setMaterialBindings(configuredMaterialBindings);
     return system;
 }
 
@@ -83,6 +84,13 @@ void HeatSystemController::setActiveModels(
     configuredReceiverModelIds = receiverModelIds;
     if (heatSystem) {
         heatSystem->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds);
+    }
+}
+
+void HeatSystemController::setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings) {
+    configuredMaterialBindings = bindings;
+    if (heatSystem) {
+        heatSystem->setMaterialBindings(configuredMaterialBindings);
     }
 }
 
@@ -240,7 +248,7 @@ uint32_t HeatSystemController::loadModel(const std::string& modelPath, uint32_t 
     const uint32_t modelId = modelUploader.addModel(resourceManager, modelPath, preferredModelId);
 
     if (heatSystem) {
-        recreateHeatSystem(renderTargetManager.getExtent(), frameGraphRuntime.getRenderPass());
+        recreateHeatSystem(swapchainManager.getExtent(), frameGraphRuntime.getRenderPass());
     }
 
     std::cout << "[HeatSystemController] Added model with runtime ID: " << modelId << std::endl;
@@ -264,7 +272,7 @@ bool HeatSystemController::removeModelByID(uint32_t modelId) {
 
     const bool removed = resourceManager.removeModelByID(modelId);
     if (removed && heatSystem) {
-        recreateHeatSystem(renderTargetManager.getExtent(), frameGraphRuntime.getRenderPass());
+        recreateHeatSystem(swapchainManager.getExtent(), frameGraphRuntime.getRenderPass());
     }
 
     if (removed) {

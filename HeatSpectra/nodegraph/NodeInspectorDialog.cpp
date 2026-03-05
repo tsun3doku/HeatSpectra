@@ -2,31 +2,29 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"
+#include "NodeGroupPanel.hpp"
+#include "NodeHeatSolverPanel.hpp"
+#include "NodeModelPanel.hpp"
+#include "NodeRemeshPanel.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
 
 #include <QAbstractScrollArea>
 #include <QAbstractItemView>
 #include <QAbstractTableModel>
 #include <QComboBox>
-#include <QDir>
-#include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSpinBox>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QTableView>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextEdit>
-#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -173,90 +171,6 @@ QString nodeTypeDisplayName(const NodeTypeId& typeId) {
     return QString::fromStdString(typeId.empty() ? std::string("Unknown") : typeId);
 }
 
-bool readBoolParam(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue = false) {
-    bool value = defaultValue;
-    if (tryGetNodeParamBool(node, parameterId, value)) {
-        return value;
-    }
-
-    return defaultValue;
-}
-
-double readFloatParam(const NodeGraphNode& node, uint32_t parameterId, double defaultValue) {
-    double value = defaultValue;
-    if (tryGetNodeParamFloat(node, parameterId, value)) {
-        return value;
-    }
-
-    return defaultValue;
-}
-
-int readIntParam(const NodeGraphNode& node, uint32_t parameterId, int defaultValue) {
-    int64_t value = defaultValue;
-    if (tryGetNodeParamInt(node, parameterId, value)) {
-        return static_cast<int>(value);
-    }
-
-    return defaultValue;
-}
-
-std::string readStringParam(const NodeGraphNode& node, uint32_t parameterId) {
-    std::string value;
-    if (tryGetNodeParamString(node, parameterId, value)) {
-        return value;
-    }
-
-    return {};
-}
-
-bool writeBoolParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, bool value) {
-    if (!nodeGraphBridge) {
-        return false;
-    }
-
-    NodeGraphParamValue parameter{};
-    parameter.id = parameterId;
-    parameter.type = NodeGraphParamType::Bool;
-    parameter.boolValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
-}
-
-bool writeFloatParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, double value) {
-    if (!nodeGraphBridge) {
-        return false;
-    }
-
-    NodeGraphParamValue parameter{};
-    parameter.id = parameterId;
-    parameter.type = NodeGraphParamType::Float;
-    parameter.floatValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
-}
-
-bool writeIntParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, int64_t value) {
-    if (!nodeGraphBridge) {
-        return false;
-    }
-
-    NodeGraphParamValue parameter{};
-    parameter.id = parameterId;
-    parameter.type = NodeGraphParamType::Int;
-    parameter.intValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
-}
-
-bool writeStringParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, const std::string& value) {
-    if (!nodeGraphBridge) {
-        return false;
-    }
-
-    NodeGraphParamValue parameter{};
-    parameter.id = parameterId;
-    parameter.type = NodeGraphParamType::String;
-    parameter.stringValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
-}
-
 std::string formatLineagePath(const std::vector<NodeGraphNodeId>& lineageNodeIds) {
     if (lineageNodeIds.empty()) {
         return std::string("none");
@@ -316,6 +230,18 @@ NodeInspectorDialog::NodeInspectorDialog(QWidget* parent)
 void NodeInspectorDialog::bind(NodeGraphBridge* nodeGraphBridgePtr, const RuntimeQuery* runtimeQueryPtr) {
     nodeGraphBridge = nodeGraphBridgePtr;
     runtimeQuery = runtimeQueryPtr;
+    if (groupPanel) {
+        groupPanel->bind(nodeGraphBridgePtr);
+    }
+    if (modelPanel) {
+        modelPanel->bind(nodeGraphBridgePtr);
+    }
+    if (remeshPanel) {
+        remeshPanel->bind(nodeGraphBridgePtr);
+    }
+    if (heatSolverPanel) {
+        heatSolverPanel->bind(nodeGraphBridgePtr, runtimeQueryPtr);
+    }
 
     if (isVisible() && currentNodeId.isValid()) {
         setNode(currentNodeId);
@@ -341,26 +267,35 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
 
     if (currentNodeTypeId == nodegraphtypes::Model) {
         pageStack->setCurrentWidget(modelPage);
-        modelPathLineEdit->setText(QString::fromStdString(readStringParam(node, nodegraphparams::model::Path)));
-        heatStatusTimer->stop();
+        if (modelPanel) {
+            modelPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
+    } else if (currentNodeTypeId == nodegraphtypes::Group) {
+        pageStack->setCurrentWidget(groupPage);
+        if (groupPanel) {
+            groupPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     } else if (currentNodeTypeId == nodegraphtypes::Remesh) {
         pageStack->setCurrentWidget(remeshPage);
-        iterationsSpinBox->setValue(readIntParam(node, nodegraphparams::remesh::Iterations, 1));
-        minAngleSpinBox->setValue(readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, 30.0));
-        maxEdgeLengthSpinBox->setValue(readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, 0.1));
-        stepSizeSpinBox->setValue(readFloatParam(node, nodegraphparams::remesh::StepSize, 0.25));
-        heatStatusTimer->stop();
+        if (remeshPanel) {
+            remeshPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     } else if (currentNodeTypeId == nodegraphtypes::HeatSolve) {
         pageStack->setCurrentWidget(heatPage);
-        updateHeatStatus();
-        if (runtimeQuery) {
-            heatStatusTimer->start(125);
-        } else {
-            heatStatusTimer->stop();
+        if (heatSolverPanel) {
+            heatSolverPanel->setNode(currentNodeId);
+            if (runtimeQuery) {
+                heatSolverPanel->startStatusTimer();
+            } else {
+                heatSolverPanel->stopStatusTimer();
+            }
         }
     } else {
         pageStack->setCurrentWidget(genericPage);
-        heatStatusTimer->stop();
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     }
 
     refreshRuntimeDebugViews();
@@ -369,8 +304,8 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
 }
 
 void NodeInspectorDialog::hideEvent(QHideEvent* event) {
-    if (heatStatusTimer) {
-        heatStatusTimer->stop();
+    if (heatSolverPanel) {
+        heatSolverPanel->stopStatusTimer();
     }
 
     QWidget::hideEvent(event);
@@ -418,126 +353,66 @@ void NodeInspectorDialog::buildUi() {
     modelPage = new QWidget(inspectorContent);
     {
         QVBoxLayout* layout = new QVBoxLayout(modelPage);
-
-        QLabel* pathLabel = new QLabel("Model File:", modelPage);
-        layout->addWidget(pathLabel);
-
-        QHBoxLayout* pathRow = new QHBoxLayout();
-        modelPathLineEdit = new QLineEdit(modelPage);
-        modelPathLineEdit->setReadOnly(true);
-        modelPathLineEdit->setPlaceholderText("models/teapot.obj");
-        pathRow->addWidget(modelPathLineEdit, 1);
-
-        modelBrowseButton = new QPushButton("Browse...", modelPage);
-        pathRow->addWidget(modelBrowseButton);
-        layout->addLayout(pathRow);
-
-        modelApplyButton = new QPushButton("Apply Selected Model", modelPage);
-        layout->addWidget(modelApplyButton);
-
-        QLabel* hintLabel = new QLabel("Model nodes are independent. Their downstream graph wiring determines how runtime consumes this mesh.", modelPage);
-        hintLabel->setWordWrap(true);
-        layout->addWidget(hintLabel);
-        layout->addStretch();
+        modelPanel = new NodeModelPanel(modelPage);
+        modelPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(modelPanel);
     }
     pageStack->addWidget(modelPage);
+
+    groupPage = new QWidget(inspectorContent);
+    {
+        QVBoxLayout* layout = new QVBoxLayout(groupPage);
+        groupPanel = new NodeGroupPanel(groupPage);
+        groupPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(groupPanel);
+    }
+    pageStack->addWidget(groupPage);
 
     remeshPage = new QWidget(inspectorContent);
     {
         QVBoxLayout* layout = new QVBoxLayout(remeshPage);
-
-        QHBoxLayout* iterationsRow = new QHBoxLayout();
-        iterationsRow->addWidget(new QLabel("Iterations:", remeshPage));
-        iterationsSpinBox = new QSpinBox(remeshPage);
-        iterationsSpinBox->setMinimum(1);
-        iterationsSpinBox->setMaximum(1000);
-        iterationsSpinBox->setValue(1);
-        iterationsRow->addWidget(iterationsSpinBox, 1);
-        layout->addLayout(iterationsRow);
-
-        QHBoxLayout* minAngleRow = new QHBoxLayout();
-        minAngleRow->addWidget(new QLabel("Min Angle:", remeshPage));
-        minAngleSpinBox = new QDoubleSpinBox(remeshPage);
-        minAngleSpinBox->setMinimum(0.0);
-        minAngleSpinBox->setMaximum(60.0);
-        minAngleSpinBox->setSingleStep(1.0);
-        minAngleSpinBox->setValue(30.0);
-        minAngleRow->addWidget(minAngleSpinBox, 1);
-        layout->addLayout(minAngleRow);
-
-        QHBoxLayout* maxEdgeRow = new QHBoxLayout();
-        maxEdgeRow->addWidget(new QLabel("Max Edge Length:", remeshPage));
-        maxEdgeLengthSpinBox = new QDoubleSpinBox(remeshPage);
-        maxEdgeLengthSpinBox->setMinimum(0.001);
-        maxEdgeLengthSpinBox->setMaximum(10.0);
-        maxEdgeLengthSpinBox->setDecimals(4);
-        maxEdgeLengthSpinBox->setSingleStep(0.01);
-        maxEdgeLengthSpinBox->setValue(0.1);
-        maxEdgeRow->addWidget(maxEdgeLengthSpinBox, 1);
-        layout->addLayout(maxEdgeRow);
-
-        QHBoxLayout* stepRow = new QHBoxLayout();
-        stepRow->addWidget(new QLabel("Step Size:", remeshPage));
-        stepSizeSpinBox = new QDoubleSpinBox(remeshPage);
-        stepSizeSpinBox->setMinimum(0.01);
-        stepSizeSpinBox->setMaximum(1.0);
-        stepSizeSpinBox->setSingleStep(0.05);
-        stepSizeSpinBox->setDecimals(2);
-        stepSizeSpinBox->setValue(0.25);
-        stepRow->addWidget(stepSizeSpinBox, 1);
-        layout->addLayout(stepRow);
-
-        QHBoxLayout* actionRow = new QHBoxLayout();
-        remeshApplyButton = new QPushButton("Apply", remeshPage);
-        remeshRunButton = new QPushButton("Run Remesh", remeshPage);
-        actionRow->addWidget(remeshApplyButton);
-        actionRow->addWidget(remeshRunButton);
-        layout->addLayout(actionRow);
-        layout->addStretch();
+        remeshPanel = new NodeRemeshPanel(remeshPage);
+        remeshPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(remeshPanel);
     }
     pageStack->addWidget(remeshPage);
 
     heatPage = new QWidget(inspectorContent);
     {
         QVBoxLayout* layout = new QVBoxLayout(heatPage);
-
-        QHBoxLayout* statusRow = new QHBoxLayout();
-        statusRow->addWidget(new QLabel("Status:", heatPage));
-        heatStatusValueLabel = new QLabel("Unknown", heatPage);
-        statusRow->addWidget(heatStatusValueLabel, 1);
-        layout->addLayout(statusRow);
-
-        heatToggleButton = new QPushButton("Start", heatPage);
-        heatPauseButton = new QPushButton("Pause", heatPage);
-        heatResetButton = new QPushButton("Reset", heatPage);
-        layout->addWidget(heatToggleButton);
-        layout->addWidget(heatPauseButton);
-        layout->addWidget(heatResetButton);
-        layout->addStretch();
+        heatSolverPanel = new NodeHeatSolverPanel(heatPage);
+        heatSolverPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(heatSolverPanel);
     }
     pageStack->addWidget(heatPage);
 
-    contentLayout->addWidget(pageStack, 1);
+    mainTabWidget = new QTabWidget(inspectorContent);
 
-    QLabel* runtimeDataHeader = new QLabel("Runtime Data:", inspectorContent);
-    contentLayout->addWidget(runtimeDataHeader);
-
-    dataTabWidget = new QTabWidget(inspectorContent);
     {
-        QWidget* dataflowTab = new QWidget(dataTabWidget);
-        QVBoxLayout* dataflowLayout = new QVBoxLayout(dataflowTab);
-        dataflowRefreshButton = new QPushButton("Refresh Dataflow", dataflowTab);
-        dataflowLayout->addWidget(dataflowRefreshButton);
-
-        dataflowTextEdit = new QTextEdit(dataflowTab);
-        dataflowTextEdit->setReadOnly(true);
-        dataflowTextEdit->setMinimumHeight(140);
-        dataflowTextEdit->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
-        dataflowLayout->addWidget(dataflowTextEdit, 1);
-        dataTabWidget->addTab(dataflowTab, "Dataflow");
+        QWidget* nodeTab = new QWidget(mainTabWidget);
+        QVBoxLayout* nodeLayout = new QVBoxLayout(nodeTab);
+        nodeLayout->setContentsMargins(0, 0, 0, 0);
+        nodeLayout->addWidget(pageStack, 1);
+        mainTabWidget->addTab(nodeTab, "Node");
     }
     {
-        QWidget* spreadsheetTab = new QWidget(dataTabWidget);
+        QWidget* spreadsheetTab = new QWidget(mainTabWidget);
         QVBoxLayout* spreadsheetLayout = new QVBoxLayout(spreadsheetTab);
 
         QHBoxLayout* topRow = new QHBoxLayout();
@@ -578,43 +453,28 @@ void NodeInspectorDialog::buildUi() {
         spreadsheetSamplesTable->setMinimumHeight(130);
         spreadsheetLayout->addWidget(spreadsheetSamplesTable, 1);
 
-        dataTabWidget->addTab(spreadsheetTab, "Spreadsheet");
+        mainTabWidget->addTab(spreadsheetTab, "Spreadsheet");
     }
-    contentLayout->addWidget(dataTabWidget, 1);
+    {
+        QWidget* dataflowTab = new QWidget(mainTabWidget);
+        QVBoxLayout* dataflowLayout = new QVBoxLayout(dataflowTab);
+        dataflowRefreshButton = new QPushButton("Refresh Dataflow", dataflowTab);
+        dataflowLayout->addWidget(dataflowRefreshButton);
+
+        dataflowTextEdit = new QTextEdit(dataflowTab);
+        dataflowTextEdit->setReadOnly(true);
+        dataflowTextEdit->setMinimumHeight(140);
+        dataflowTextEdit->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+        dataflowLayout->addWidget(dataflowTextEdit, 1);
+        mainTabWidget->addTab(dataflowTab, "Dataflow");
+    }
+    contentLayout->addWidget(mainTabWidget, 1);
 
     statusLabel = new QLabel(inspectorContent);
     statusLabel->setWordWrap(true);
     contentLayout->addWidget(statusLabel);
     contentLayout->addStretch();
 
-    heatStatusTimer = new QTimer(this);
-    heatStatusTimer->setInterval(125);
-
-    connect(remeshApplyButton, &QPushButton::clicked, this, [this]() {
-        applyRemeshSettings();
-    });
-    connect(modelApplyButton, &QPushButton::clicked, this, [this]() {
-        applyModelSettings();
-    });
-    connect(modelBrowseButton, &QPushButton::clicked, this, [this]() {
-        browseModelFile();
-    });
-    connect(remeshRunButton, &QPushButton::clicked, this, [this]() {
-        executeRemesh();
-    });
-
-    connect(heatToggleButton, &QPushButton::clicked, this, [this]() {
-        toggleHeatSystem();
-    });
-    connect(heatPauseButton, &QPushButton::clicked, this, [this]() {
-        pauseHeatSystem();
-    });
-    connect(heatResetButton, &QPushButton::clicked, this, [this]() {
-        resetHeatSystem();
-    });
-    connect(heatStatusTimer, &QTimer::timeout, this, [this]() {
-        updateHeatStatus();
-    });
     connect(dataflowRefreshButton, &QPushButton::clicked, this, [this]() {
         refreshRuntimeDebugViews();
     });
@@ -626,148 +486,13 @@ void NodeInspectorDialog::buildUi() {
     });
 }
 
-void NodeInspectorDialog::browseModelFile() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::Model || !modelPathLineEdit) {
-        statusLabel->setText("Cannot browse model file for this node.");
-        return;
-    }
-
-    QString initialPath = modelPathLineEdit->text().trimmed();
-    if (initialPath.isEmpty()) {
-        initialPath = QDir::currentPath();
-    }
-
-    const QString selectedFilePath = QFileDialog::getOpenFileName(
-        this,
-        "Select Model File",
-        initialPath,
-        "OBJ Files (*.obj);;All Files (*.*)");
-    if (selectedFilePath.isEmpty()) {
-        return;
-    }
-
-    const QString normalizedPath = QDir::fromNativeSeparators(selectedFilePath);
-    modelPathLineEdit->setText(normalizedPath);
-    applyModelSettings();
-}
-
-void NodeInspectorDialog::applyModelSettings() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::Model || !modelPathLineEdit) {
-        statusLabel->setText("Cannot apply model settings for this node.");
-        return;
-    }
-
-    const std::string modelPath = modelPathLineEdit->text().trimmed().toStdString();
-    if (modelPath.empty()) {
-        statusLabel->setText("Model path cannot be empty.");
-        return;
-    }
-
-    if (!writeStringParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::Path, modelPath) ||
-        !writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::ApplyRequested, true)) {
-        statusLabel->setText("Failed to update model settings.");
-        return;
-    }
-
-    statusLabel->setText("Model path applied.");
-}
-
-void NodeInspectorDialog::applyRemeshSettings() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::Remesh) {
-        statusLabel->setText("Cannot apply settings for this node.");
-        return;
-    }
-
-    if (!writeIntParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::Iterations, iterationsSpinBox->value()) ||
-        !writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::MinAngleDegrees, minAngleSpinBox->value()) ||
-        !writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::MaxEdgeLength, maxEdgeLengthSpinBox->value()) ||
-        !writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::StepSize, stepSizeSpinBox->value())) {
-        statusLabel->setText("Failed to update remesh settings.");
-        return;
-    }
-
-    statusLabel->setText("Remesh settings updated.");
-}
-
-void NodeInspectorDialog::executeRemesh() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::Remesh) {
-        statusLabel->setText("Cannot run remesh for this node.");
-        return;
-    }
-
-    applyRemeshSettings();
-    if (!writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::RunRequested, true)) {
-        statusLabel->setText("Failed to request remesh.");
-        return;
-    }
-
-    statusLabel->setText("Remesh requested through node graph.");
-}
-
-void NodeInspectorDialog::toggleHeatSystem() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::HeatSolve) {
-        statusLabel->setText("Cannot control heat system for this node.");
-        return;
-    }
-
-    NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
-        statusLabel->setText("Failed to read node state.");
-        return;
-    }
-
-    const bool enable = !readBoolParam(node, nodegraphparams::heatsolve::Enabled, false);
-    if (!writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Enabled, enable)) {
-        statusLabel->setText("Failed to update heat node state.");
-        return;
-    }
-    if (!enable) {
-        writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, false);
-    }
-
-    updateHeatStatus();
-    statusLabel->setText(enable ? "Heat solve enabled through node graph." : "Heat solve disabled through node graph.");
-}
-
-void NodeInspectorDialog::pauseHeatSystem() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::HeatSolve) {
-        statusLabel->setText("Cannot control heat system for this node.");
-        return;
-    }
-
-    NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
-        statusLabel->setText("Failed to read node state.");
-        return;
-    }
-
-    const bool pause = !readBoolParam(node, nodegraphparams::heatsolve::Paused, false);
-    if (!writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, pause)) {
-        statusLabel->setText("Failed to update heat pause state.");
-        return;
-    }
-
-    updateHeatStatus();
-    statusLabel->setText(pause ? "Heat solve pause requested." : "Heat solve resume requested.");
-}
-
-void NodeInspectorDialog::resetHeatSystem() {
-    if (!nodeGraphBridge || currentNodeTypeId != nodegraphtypes::HeatSolve) {
-        statusLabel->setText("Cannot control heat system for this node.");
-        return;
-    }
-
-    if (!writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, false) ||
-        !writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::ResetRequested, true)) {
-        statusLabel->setText("Failed to request heat reset.");
-        return;
-    }
-
-    updateHeatStatus();
-    statusLabel->setText("Heat solve reset requested.");
-}
-
 void NodeInspectorDialog::refreshRuntimeDebugViews() {
+    if (currentNodeTypeId == nodegraphtypes::Group && groupPanel) {
+        groupPanel->refreshSourceOptions();
+    }
+    if (currentNodeTypeId == nodegraphtypes::HeatSolve && heatSolverPanel) {
+        heatSolverPanel->refreshBindingGroupOptions();
+    }
     updateDataflowView();
     updateSpreadsheetView();
 }
@@ -911,60 +636,4 @@ void NodeInspectorDialog::clearSpreadsheetView(const QString& message) {
     if (AttributeSamplesTableModel* sampleModel = dynamic_cast<AttributeSamplesTableModel*>(spreadsheetSamplesModel)) {
         sampleModel->clear();
     }
-}
-
-void NodeInspectorDialog::updateHeatStatus() {
-    if (!heatStatusValueLabel || !heatToggleButton || !heatPauseButton) {
-        return;
-    }
-
-    NodeGraphNode node{};
-    const bool hasNodeState = nodeGraphBridge && currentNodeId.isValid() && nodeGraphBridge->getNode(currentNodeId, node);
-    if (!hasNodeState || canonicalNodeTypeId(node.typeId) != nodegraphtypes::HeatSolve) {
-        heatStatusValueLabel->setText("Unavailable");
-        heatToggleButton->setEnabled(false);
-        heatPauseButton->setEnabled(false);
-        heatResetButton->setEnabled(false);
-        return;
-    }
-
-    const bool desiredEnabled = readBoolParam(node, nodegraphparams::heatsolve::Enabled, false);
-    const bool desiredPaused = readBoolParam(node, nodegraphparams::heatsolve::Paused, false);
-
-    heatToggleButton->setEnabled(true);
-    heatToggleButton->setText(desiredEnabled ? "Stop" : "Start");
-    heatPauseButton->setEnabled(desiredEnabled);
-    heatPauseButton->setText(desiredPaused ? "Resume" : "Pause");
-    heatResetButton->setEnabled(true);
-
-    if (!runtimeQuery) {
-        heatStatusValueLabel->setText(desiredEnabled ? (desiredPaused ? "Queued Paused" : "Queued") : "Stopped");
-        return;
-    }
-
-    const bool active = runtimeQuery->isSimulationActive();
-    const bool paused = runtimeQuery->isSimulationPaused();
-
-    if (!active) {
-        if (desiredEnabled) {
-            std::string reason;
-            if (nodeGraphBridge && !nodeGraphBridge->canExecuteHeatSolve(reason)) {
-                heatStatusValueLabel->setText("Blocked");
-                return;
-            }
-
-            heatStatusValueLabel->setText(desiredPaused ? "Pending Pause" : "Pending Start");
-            return;
-        }
-
-        heatStatusValueLabel->setText("Stopped");
-        return;
-    }
-
-    if (paused) {
-        heatStatusValueLabel->setText("Paused");
-        return;
-    }
-
-    heatStatusValueLabel->setText("Running");
 }

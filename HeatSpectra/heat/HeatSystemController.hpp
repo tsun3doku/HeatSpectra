@@ -8,12 +8,14 @@
 #include <string>
 #include <vector>
 
+#include "HeatSystemPresets.hpp"
+
 class VulkanDevice;
 class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
 class SceneRenderer;
-class RenderTargetManager;
+class SwapchainManager;
 class CommandPool;
 class FrameSync;
 class FrameSimulation;
@@ -32,7 +34,7 @@ public:
         ModelUploader& modelUploader,
         UniformBufferManager& uniformBufferManager,
         SceneRenderer& sceneRenderer,
-        RenderTargetManager& renderTargetManager,
+        SwapchainManager& swapchainManager,
         VkFrameGraphRuntime& frameGraphRuntime,
         CommandPool& renderCommandPool,
         FrameSync& frameSync,
@@ -42,7 +44,6 @@ public:
 
     bool isHeatSystemActive() const;
     bool isHeatSystemPaused() const;
-    FrameSimulation* getHeatSystem() const;
 
     void toggleHeatSystem();
     void pauseHeatSystem();
@@ -50,9 +51,12 @@ public:
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     bool removeModelByID(uint32_t modelId);
     void setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds);
+    void setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings);
 
     void createHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
     void recreateHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
+
+    FrameSimulation* getHeatSystem() const;
 
 private:
     std::unique_ptr<HeatSystem> buildHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
@@ -66,7 +70,7 @@ private:
     ModelUploader& modelUploader;
     SceneRenderer& sceneRenderer;
 
-    RenderTargetManager& renderTargetManager;
+    SwapchainManager& swapchainManager;
     VkFrameGraphRuntime& frameGraphRuntime;
     CommandPool& renderCommandPool;
     FrameSync& frameSync;
@@ -74,6 +78,7 @@ private:
     std::unique_ptr<HeatSystem>& heatSystem;
     std::vector<uint32_t> configuredSourceModelIds;
     std::vector<uint32_t> configuredReceiverModelIds;
+    std::vector<HeatModelMaterialBindings> configuredMaterialBindings;
 
     std::atomic<bool>& isOperating;
     const uint32_t maxFramesInFlight;

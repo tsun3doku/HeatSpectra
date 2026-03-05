@@ -3,6 +3,7 @@
 #include "SceneContext.hpp"
 #include "VulkanCoreContext.hpp"
 #include "RuntimeSimulationController.hpp"
+#include "app/SwapchainManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemController.hpp"
@@ -37,18 +38,18 @@ bool RenderContext::initialize(
         return false;
     }
 
-    renderTargetManager.initialize(core.device(), windowState);
-    if (!renderTargetManager.create()) {
+    swapchainManager.initialize(core.device(), windowState);
+    if (!swapchainManager.create()) {
         return false;
     }
 
-    const VkFormat swapChainImageFormat = renderTargetManager.getImageFormat();
-    const VkExtent2D swapChainExtent = renderTargetManager.getExtent();
+    const VkFormat swapChainImageFormat = swapchainManager.getImageFormat();
+    const VkExtent2D swapChainExtent = swapchainManager.getExtent();
 
     renderRuntime = std::make_unique<RenderRuntime>(
         windowState,
         core.device(),
-        renderTargetManager,
+        swapchainManager,
         *commandPool,
         frameSync,
         scene.cameraController(),
@@ -75,7 +76,7 @@ bool RenderContext::initialize(
         *modelUploader,
         *uniformBufferManager,
         renderRuntime->getSceneRenderer(),
-        renderTargetManager,
+        swapchainManager,
         renderRuntime->getFrameGraphRuntime(),
         *commandPool,
         frameSync,
@@ -86,7 +87,7 @@ bool RenderContext::initialize(
 
     sceneControllerState = std::make_unique<SceneController>(
         core.device(),
-        renderTargetManager,
+        swapchainManager,
         *resourceManager,
         *meshModifiers,
         *renderRuntime,
@@ -136,7 +137,7 @@ bool RenderContext::initializeInputPipeline(SceneContext& scene, RuntimeSimulati
         renderRuntime->getGizmoController(),
         renderRuntime->getModelSelection(),
         *resourceManager,
-        renderTargetManager,
+        swapchainManager,
         simulationController);
 
     RenderRuntimeServices renderRuntimeServices{
@@ -183,7 +184,7 @@ void RenderContext::shutdown() {
         frameSync.shutdown();
     }
     renderRuntime.reset();
-    renderTargetManager.cleanup();
+    swapchainManager.cleanup();
 
     if (heatSystemState) {
         heatSystemState->cleanupResources();
@@ -200,12 +201,12 @@ bool RenderContext::isInitialized() const {
     return initialized;
 }
 
-RenderTargetManager& RenderContext::targetManager() {
-    return renderTargetManager;
+SwapchainManager& RenderContext::swapchain() {
+    return swapchainManager;
 }
 
-const RenderTargetManager& RenderContext::targetManager() const {
-    return renderTargetManager;
+const SwapchainManager& RenderContext::swapchain() const {
+    return swapchainManager;
 }
 
 FrameSync& RenderContext::sync() {

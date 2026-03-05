@@ -5,7 +5,7 @@
 #include "FrameStats.hpp"
 #include "FrameSync.hpp"
 #include "render/SceneRenderer.hpp"
-#include "render/RenderTargetManager.hpp"
+#include "app/SwapchainManager.hpp"
 #include "VkFrameGraphBackend.hpp"
 #include "FrameSimulation.hpp"
 #include "render/RenderConfig.hpp"
@@ -17,7 +17,7 @@
 FrameController::FrameController(
     const WindowRuntimeState& windowState,
     VulkanDevice& vulkanDevice,
-    RenderTargetManager& renderTargetManager,
+    SwapchainManager& swapchainManager,
     FrameGraph& frameGraph,
     VkFrameGraphBackend& frameGraphBackend,
     SceneRenderer& sceneRenderer,
@@ -29,7 +29,7 @@ FrameController::FrameController(
     std::atomic<bool>& isOperating,
     std::atomic<bool>& isShuttingDown)
     : windowState(windowState),
-      renderTargetManager(renderTargetManager),
+      swapchainManager(swapchainManager),
       sceneRenderer(sceneRenderer),
       frameSync(frameSync),
       computeTiming(computeTiming),
@@ -38,10 +38,10 @@ FrameController::FrameController(
       simulation(services.simulation),
       isOperating(isOperating),
       isShuttingDown(isShuttingDown),
-      renderTargetStage(
+      swapchainStage(
           windowState,
           vulkanDevice,
-          renderTargetManager,
+          swapchainManager,
           frameGraph,
           frameGraphBackend,
           sceneRenderer,
@@ -72,24 +72,24 @@ FrameController::FrameController(
 }
 
 bool FrameController::initializeSyncObjects() {
-    return renderTargetStage.initializeSyncObjects();
+    return swapchainStage.initializeSyncObjects();
 }
 
 void FrameController::shutdownSyncObjects() {
-    renderTargetStage.shutdownSyncObjects();
+    swapchainStage.shutdownSyncObjects();
 }
 
 void FrameController::cleanupSwapChain() {
-    renderTargetStage.cleanupSwapChain();
+    swapchainStage.cleanupSwapChain();
 }
 
 bool FrameController::recreateSwapChain() {
-    return renderTargetStage.recreateSwapChain();
+    return swapchainStage.recreateSwapChain();
 }
 
 void FrameController::setSimulation(FrameSimulation* updatedSimulation) {
     simulation = updatedSimulation;
-    renderTargetStage.setSimulation(updatedSimulation);
+    swapchainStage.setSimulation(updatedSimulation);
 }
 
 void FrameController::drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve) {
@@ -97,7 +97,7 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
         return;
     }
 
-    const VkExtent2D extent = renderTargetManager.getExtent();
+    const VkExtent2D extent = swapchainManager.getExtent();
     const uint32_t targetWidth = windowState.width.load(std::memory_order_acquire);
     const uint32_t targetHeight = windowState.height.load(std::memory_order_acquire);
     if (targetWidth >= static_cast<uint32_t>(renderconfig::MinSwapchainExtent) &&
@@ -110,16 +110,21 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
 
     FrameState frameState{};
     frameState.frameIndex = frameSync.beginFrame();
-    if (frameState.frameIndex >= renderTargetManager.getImages().size()) {
+    uint32_t imageIndex = 0;
+    const FrameStageResult acquireResult = swapchainStage.acquireFrameImage(imageIndex);
+    if (acquireResult == FrameStageResult::RecreateSwapchain) {
         (void)recreateSwapChain();
+        return;
+    }
+    if (acquireResult != FrameStageResult::Continue) {
         return;
     }
 
     std::vector<std::string> timingLines = buildFrameTimingLines(frameState.frameIndex);
     frameUpdateStage.processPicking(frameState.frameIndex);
 
-    frameState.extent = renderTargetManager.getExtent();
-    frameState.imageIndex = frameState.frameIndex;
+    frameState.extent = swapchainManager.getExtent();
+    frameState.imageIndex = imageIndex;
     frameState.sceneView = cameraController.buildSceneView(frameState.extent);
     frameState.flags = flags;
     frameState.overlay = overlay;
@@ -133,6 +138,15 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
     updateTimingOverlay(timingLines, frameState.flags);
 
     if (!handleStageResult(frameGraphicsStage.execute(frameState, simulation, syncState, allowHeatSolve))) {
+        return;
+    }
+
+    const FrameStageResult presentResult = swapchainStage.presentFrame(frameState.imageIndex);
+    if (presentResult == FrameStageResult::RecreateSwapchain) {
+        (void)recreateSwapChain();
+        return;
+    }
+    if (presentResult != FrameStageResult::Continue) {
         return;
     }
 
@@ -167,7 +181,8 @@ bool FrameController::handleStageResult(FrameStageResult result) {
     case FrameStageResult::SkipFrame:
         return false;
     case FrameStageResult::RecreateSwapchain:
-        return recreateSwapChain();
+        (void)recreateSwapChain();
+        return false;
     case FrameStageResult::Fatal:
         return false;
     }

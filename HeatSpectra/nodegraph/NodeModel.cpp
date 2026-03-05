@@ -1,7 +1,7 @@
-﻿#include "NodeModel.hpp"
+#include "NodeModel.hpp"
 
-#include "scene/ModelRegistry.hpp"
 #include "NodeGraphBridge.hpp"
+#include "scene/ModelRegistry.hpp"
 
 #include <tiny_obj_loader.h>
 
@@ -96,7 +96,9 @@ bool NodeModel::setBoolParameter(NodeGraphBridge& bridge, NodeGraphNodeId nodeId
     return bridge.setNodeParameter(nodeId, parameter);
 }
 
-bool NodeModel::parseObjGeometry(const std::string& modelPath, std::vector<float>& pointPositions, std::vector<uint32_t>& triangleIndices) {
+bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geometry) {
+    geometry = {};
+
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -111,20 +113,78 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, std::vector<float
         return false;
     }
 
-    pointPositions = attrib.vertices;
-    triangleIndices.clear();
+    geometry.pointPositions = attrib.vertices;
+    geometry.triangleIndices.clear();
+    geometry.triangleGroupIds.clear();
+    geometry.groups.clear();
 
-    const std::size_t pointCount = pointPositions.size() / 3;
+    const std::size_t pointCount = geometry.pointPositions.size() / 3;
+    std::unordered_map<std::string, uint32_t> groupIdByKey;
+
+    const auto getGroupIdForFace = [&](const std::string& shapeName, int materialId) -> uint32_t {
+        std::string materialName;
+        if (materialId >= 0 && static_cast<std::size_t>(materialId) < materials.size()) {
+            materialName = materials[static_cast<std::size_t>(materialId)].name;
+        }
+
+        std::string key;
+        std::string name;
+        std::string source;
+        if (!shapeName.empty()) {
+            key = "shape:" + shapeName;
+            name = shapeName;
+            source = "obj.shape";
+        }
+
+        if (!materialName.empty()) {
+            if (key.empty()) {
+                key = "material:" + materialName;
+                name = materialName;
+                source = "obj.material";
+            } else {
+                key += "|material:" + materialName;
+                name += " [" + materialName + "]";
+                source = "obj.shape_material";
+            }
+        }
+
+        if (key.empty()) {
+            key = "default";
+            name = "Default";
+            source = "generated";
+        }
+
+        const auto existingIt = groupIdByKey.find(key);
+        if (existingIt != groupIdByKey.end()) {
+            return existingIt->second;
+        }
+
+        const uint32_t groupId = static_cast<uint32_t>(geometry.groups.size());
+        GeometryGroup group{};
+        group.id = groupId;
+        group.name = name;
+        group.source = source;
+        geometry.groups.push_back(std::move(group));
+        groupIdByKey.emplace(key, groupId);
+        return groupId;
+    };
+
     for (const tinyobj::shape_t& shape : shapes) {
         std::size_t indexOffset = 0;
+        std::size_t faceIndex = 0;
         for (unsigned char faceVertexCount : shape.mesh.num_face_vertices) {
             const std::size_t faceVertexCountSize = static_cast<std::size_t>(faceVertexCount);
             if (indexOffset + faceVertexCountSize > shape.mesh.indices.size()) {
                 break;
             }
 
+            const int materialId =
+                (faceIndex < shape.mesh.material_ids.size()) ? shape.mesh.material_ids[faceIndex] : -1;
+            const uint32_t groupId = getGroupIdForFace(shape.name, materialId);
+
             if (faceVertexCount < 3) {
                 indexOffset += faceVertexCount;
+                ++faceIndex;
                 continue;
             }
 
@@ -132,6 +192,7 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, std::vector<float
             if (firstCorner.vertex_index < 0 ||
                 static_cast<std::size_t>(firstCorner.vertex_index) >= pointCount) {
                 indexOffset += faceVertexCount;
+                ++faceIndex;
                 continue;
             }
 
@@ -148,16 +209,23 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, std::vector<float
                     continue;
                 }
 
-                triangleIndices.push_back(static_cast<uint32_t>(firstCorner.vertex_index));
-                triangleIndices.push_back(static_cast<uint32_t>(secondCorner.vertex_index));
-                triangleIndices.push_back(static_cast<uint32_t>(thirdCorner.vertex_index));
+                geometry.triangleIndices.push_back(static_cast<uint32_t>(firstCorner.vertex_index));
+                geometry.triangleIndices.push_back(static_cast<uint32_t>(secondCorner.vertex_index));
+                geometry.triangleIndices.push_back(static_cast<uint32_t>(thirdCorner.vertex_index));
+                geometry.triangleGroupIds.push_back(groupId);
             }
 
             indexOffset += faceVertexCountSize;
+            ++faceIndex;
         }
     }
 
-    return !triangleIndices.empty();
+    if (geometry.triangleIndices.empty()) {
+        return false;
+    }
+
+    ensureGeometryGroups(geometry);
+    return true;
 }
 
 bool NodeModel::tryResolveLoadableModelPath(const std::string& modelPath, std::string& outResolvedPath) {
@@ -171,9 +239,8 @@ bool NodeModel::tryResolveLoadableModelPath(const std::string& modelPath, std::s
             continue;
         }
 
-        std::vector<float> pointPositions;
-        std::vector<uint32_t> triangleIndices;
-        if (!parseObjGeometry(candidatePath, pointPositions, triangleIndices)) {
+        GeometryData geometry;
+        if (!parseObjGeometry(candidatePath, geometry)) {
             continue;
         }
 
@@ -185,14 +252,19 @@ bool NodeModel::tryResolveLoadableModelPath(const std::string& modelPath, std::s
 }
 
 bool NodeModel::populateGeometryFromModelPath(const std::string& modelPath, GeometryData& geometry) {
-    std::vector<float> pointPositions;
-    std::vector<uint32_t> triangleIndices;
-    if (!loadGeometryFromModelPath(modelPath, pointPositions, triangleIndices)) {
+    GeometryData loadedGeometry;
+    if (!loadGeometryFromModelPath(modelPath, loadedGeometry)) {
         return false;
     }
 
-    geometry.pointPositions = std::move(pointPositions);
-    geometry.triangleIndices = std::move(triangleIndices);
+    const std::string sourceModelPath = geometry.sourceModelPath;
+    const uint32_t modelId = geometry.modelId;
+
+    geometry = std::move(loadedGeometry);
+    geometry.sourceModelPath = sourceModelPath;
+    geometry.modelId = modelId;
+
+    geometry.attributes.clear();
 
     GeometryAttribute positionAttribute{};
     positionAttribute.name = "P";
@@ -201,19 +273,19 @@ bool NodeModel::populateGeometryFromModelPath(const std::string& modelPath, Geom
     positionAttribute.tupleSize = 3;
     positionAttribute.floatValues = geometry.pointPositions;
     geometry.attributes.push_back(std::move(positionAttribute));
+
+    ensureGeometryGroups(geometry);
     return true;
 }
 
-bool NodeModel::loadGeometryFromModelPath(const std::string& modelPath, std::vector<float>& pointPositions,std::vector<uint32_t>& triangleIndices) {
-    static std::unordered_map<std::string, std::pair<std::vector<float>, std::vector<uint32_t>>> cachedGeometryByPath;
+bool NodeModel::loadGeometryFromModelPath(const std::string& modelPath, GeometryData& geometry) {
+    static std::unordered_map<std::string, GeometryData> cachedGeometryByPath;
     static std::unordered_set<std::string> failedGeometryByPath;
 
-    const std::vector<std::string> candidatePaths = resolveCandidateModelPaths(modelPath);
-    for (const std::string& candidatePath : candidatePaths) {
+    for (const std::string& candidatePath : resolveCandidateModelPaths(modelPath)) {
         if (const auto cacheIt = cachedGeometryByPath.find(candidatePath);
             cacheIt != cachedGeometryByPath.end()) {
-            pointPositions = cacheIt->second.first;
-            triangleIndices = cacheIt->second.second;
+            geometry = cacheIt->second;
             return true;
         }
 
@@ -221,23 +293,18 @@ bool NodeModel::loadGeometryFromModelPath(const std::string& modelPath, std::vec
             continue;
         }
 
-        std::vector<float> candidatePositions;
-        std::vector<uint32_t> candidateTriangles;
-        if (!parseObjGeometry(candidatePath, candidatePositions, candidateTriangles)) {
+        GeometryData candidateGeometry;
+        if (!parseObjGeometry(candidatePath, candidateGeometry)) {
             failedGeometryByPath.insert(candidatePath);
             continue;
         }
 
-        pointPositions = candidatePositions;
-        triangleIndices = candidateTriangles;
-        cachedGeometryByPath.emplace(
-            candidatePath,
-            std::make_pair(std::move(candidatePositions), std::move(candidateTriangles)));
+        geometry = candidateGeometry;
+        cachedGeometryByPath.emplace(candidatePath, std::move(candidateGeometry));
         return true;
     }
 
-    pointPositions.clear();
-    triangleIndices.clear();
+    geometry = {};
     return false;
 }
 

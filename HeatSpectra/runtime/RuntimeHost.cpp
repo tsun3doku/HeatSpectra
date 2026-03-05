@@ -30,18 +30,18 @@ bool RuntimeHost::isInitialized() const {
     return systems && systems->isInitialized();
 }
 
-AppViewportOutput RuntimeHost::getViewportOutput() const {
-    if (systems) {
-        return systems->getViewportOutput();
-    }
-    return {};
-}
-
 const RuntimeQuery* RuntimeHost::runtimeQuery() const {
     if (systems) {
         return systems->runtimeQuery();
     }
     return nullptr;
+}
+
+std::vector<SimulationError> RuntimeHost::consumeSimulationErrors() {
+    if (systems) {
+        return systems->consumeSimulationErrors();
+    }
+    return {};
 }
 
 uint32_t RuntimeHost::loadModel(const std::string& modelPath, uint32_t preferredModelId) {

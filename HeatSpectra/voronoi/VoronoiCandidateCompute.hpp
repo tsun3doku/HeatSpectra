@@ -27,7 +27,7 @@ public:
 
     void initialize();
     void updateDescriptors(const Bindings& bindings);
-    void dispatch(uint32_t faceCount, uint32_t seedCount);
+    void dispatch(uint32_t faceCount, uint32_t seedCount, uint32_t seedOffset);
 
     void cleanupResources();
     void cleanup();

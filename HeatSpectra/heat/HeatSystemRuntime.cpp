@@ -68,12 +68,8 @@ void HeatSystemRuntime::clearContactCouplings(MemoryAllocator& memoryAllocator) 
     contactCouplings.clear();
 }
 
-bool HeatSystemRuntime::uploadContactPairsToCoupling(
-    ContactCoupling& coupling,
-    const std::vector<ContactPairGPU>& pairs,
-    VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    CommandPool& renderCommandPool) {
+bool HeatSystemRuntime::uploadContactPairsToCoupling(ContactCoupling& coupling, const std::vector<ContactPairGPU>& pairs, VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator, CommandPool& renderCommandPool) {
     VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
     const std::size_t pairCount = pairs.empty() ? 1ull : pairs.size();
     VkDeviceSize bufferSize = sizeof(ContactPairGPU) * pairCount;
@@ -132,14 +128,8 @@ bool HeatSystemRuntime::uploadContactPairsToCoupling(
     return true;
 }
 
-void HeatSystemRuntime::initializeModelBindings(
-    VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    ResourceManager& resourceManager,
-    Remesher& remesher,
-    CommandPool& renderCommandPool,
-    const std::vector<uint32_t>& activeSourceModelIds,
-    const std::vector<uint32_t>& activeReceiverModelIds) {
+void HeatSystemRuntime::initializeModelBindings(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
+    Remesher& remesher, CommandPool& renderCommandPool, const std::vector<uint32_t>& activeSourceModelIds, const std::vector<uint32_t>& activeReceiverModelIds) {
     cleanupModelBindings(memoryAllocator);
 
     std::unordered_set<uint32_t> seenSourceIds;
@@ -216,12 +206,7 @@ void HeatSystemRuntime::cleanupModelBindings(MemoryAllocator& memoryAllocator) {
     receiverModelIds.clear();
 }
 
-void HeatSystemRuntime::addReceiver(
-    VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    Remesher& remesher,
-    CommandPool& renderCommandPool,
-    Model* model) {
+void HeatSystemRuntime::addReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Remesher& remesher, CommandPool& renderCommandPool, Model* model) {
     if (!model) {
         return;
     }
