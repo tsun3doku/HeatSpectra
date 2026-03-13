@@ -12,7 +12,7 @@ static const float VOLUME_EPSILON2 = 1e-30f;
 struct VoronoiNode
 {
     float temperature;
-    float prevTemperature;
+    float conductivityPerMass;
     float thermalMass;
     float density;
     float specificHeat;
@@ -658,6 +658,72 @@ static inline void CCExportArea(
     }
 }
 
+static inline bool intersectSegmentTriangle(
+    float3 p0,
+    float3 p1,
+    float3 v0,
+    float3 v1,
+    float3 v2)
+{
+    const float eps = 1e-6f;
+
+    float3 dir = p1 - p0;
+    float3 e1 = v1 - v0;
+    float3 e2 = v2 - v0;
+
+    float3 pvec = cross(dir, e2);
+    float det = dot(e1, pvec);
+    if (abs(det) < eps)
+        return false;
+
+    float invDet = 1.0f / det;
+    float3 tvec = p0 - v0;
+    float u = dot(tvec, pvec) * invDet;
+    if (u < -eps || u > 1.0f + eps)
+        return false;
+
+    float3 qvec = cross(tvec, e1);
+    float v = dot(dir, qvec) * invDet;
+    if (v < -eps || u + v > 1.0f + eps)
+        return false;
+
+    float t = dot(e2, qvec) * invDet;
+    return t > eps && t < 1.0f - eps;
+}
+
+static inline uint countSegmentMeshIntersections(float3 outsidePoint, float3 queryPoint)
+{
+    uint hitCount = 0u;
+    uint triangleCount = 0u;
+    uint triangleStride = 0u;
+    meshTriangles.GetDimensions(triangleCount, triangleStride);
+    for (uint triIdx = 0u; triIdx < triangleCount; triIdx++)
+    {
+        MeshTriangle tri = meshTriangles[triIdx];
+        if (intersectSegmentTriangle(outsidePoint, queryPoint, tri.v0.xyz, tri.v1.xyz, tri.v2.xyz))
+        {
+            hitCount++;
+        }
+    }
+    return hitCount;
+}
+
+static inline bool isPointInsideMeshFallback(float3 queryPoint, float3 bboxMinW, float3 bboxMaxW)
+{
+    float3 bboxSize = bboxMaxW - bboxMinW;
+    float expand = max(length(bboxSize) * 2.0f, 1.0f);
+
+    float3 outsideA = bboxMaxW + expand * float3(1.0f, 1.0f, 1.0f);
+    float3 outsideB = bboxMaxW + expand * float3(1.731f, 0.941f, 1.217f);
+    float3 outsideC = bboxMinW - expand * float3(1.113f, 1.357f, 0.927f);
+
+    uint insideVotes = 0u;
+    insideVotes += (countSegmentMeshIntersections(outsideA, queryPoint) & 1u);
+    insideVotes += (countSegmentMeshIntersections(outsideB, queryPoint) & 1u);
+    insideVotes += (countSegmentMeshIntersections(outsideC, queryPoint) & 1u);
+    return insideVotes >= 2u;
+}
+
 static float computeRestrictedVolume(uint cellID, float3 seed)
 {
     int debugSlot = -1;
@@ -905,6 +971,8 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
     float4 volBary = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float unrestrictedVolume = 0.0f;
+    float3 unrestrictedCentroid = seed;
+    bool hasUnrestrictedCentroid = false;
 
     float planeAreas[P_MAX];
     for (uint p = 0; p < staticPlaneCount && p < P_MAX; p++) planeAreas[p] = 0.0f;
@@ -913,6 +981,11 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
     {
         float4 un = CCExportBaryVolume(cell, seed);
         unrestrictedVolume = un.w / 6.0f;
+        if (abs(un.w) > 1e-20f)
+        {
+            unrestrictedCentroid = un.xyz / un.w;
+            hasUnrestrictedCentroid = true;
+        }
         if (addVolume) volBary = un / 6.0f;
         
         CCExportArea(cell, seed, staticPlaneCount, planeAreas, 1.0f);
@@ -956,8 +1029,26 @@ static float computeRestrictedVolume(uint cellID, float3 seed)
 
     if (!foundNonBorder && uniqueCount > 0)
     {
-        if (debugThisCell) dumpInfo[debugSlot].restrictedVolume = 0.0f;
-        return 0.0f;
+        float3 bboxSize = bboxMaxW - bboxMinW;
+        float expand = max(length(bboxSize) * 2.0f, 1.0f);
+        float3 fallbackOrigin = bboxMaxW + expand * float3(1.0f, 1.0f, 1.0f);
+
+        bool seedInside = isPointInsideMeshFallback(seed, bboxMinW, bboxMaxW);
+        bool centroidInside = hasUnrestrictedCentroid &&
+                              isPointInsideMeshFallback(unrestrictedCentroid, bboxMinW, bboxMaxW);
+
+        if (seedInside || centroidInside)
+        {
+            origin = fallbackOrigin;
+            inDomain = 0u;
+            foundNonBorder = true;
+            addVolume = false;
+        }
+        else
+        {
+            if (debugThisCell) dumpInfo[debugSlot].restrictedVolume = 0.0f;
+            return 0.0f;
+        }
     }
     
     ConvexCellBackup backup;
@@ -1075,8 +1166,12 @@ void main(uint3 dtid : SV_DispatchThreadID)
     uint flags = seedFlags[nodeID];
     bool isGhost = (flags & 1u) != 0u;
 
-    // thermalMass uses abs(volume)
+    // Precompute conductivity per thermal mass for the diffusion pass hot loop.
     nodes[nodeID].thermalMass = nodes[nodeID].density * nodes[nodeID].specificHeat * abs(vol);
+    if (nodes[nodeID].thermalMass > 1e-20f)
+        nodes[nodeID].conductivityPerMass = nodes[nodeID].conductivity / nodes[nodeID].thermalMass;
+    else
+        nodes[nodeID].conductivityPerMass = 0.0f;
 
     if (!isGhost) nodes[nodeID].volume = vol;
     else nodes[nodeID].volume = 0.0f;

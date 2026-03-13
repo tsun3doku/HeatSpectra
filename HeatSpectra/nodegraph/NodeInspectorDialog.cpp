@@ -2,6 +2,7 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"
+#include "NodeContactPairPanel.hpp"
 #include "NodeGroupPanel.hpp"
 #include "NodeHeatSolverPanel.hpp"
 #include "NodeModelPanel.hpp"
@@ -239,6 +240,9 @@ void NodeInspectorDialog::bind(NodeGraphBridge* nodeGraphBridgePtr, const Runtim
     if (remeshPanel) {
         remeshPanel->bind(nodeGraphBridgePtr);
     }
+    if (contactPairPanel) {
+        contactPairPanel->bind(nodeGraphBridgePtr);
+    }
     if (heatSolverPanel) {
         heatSolverPanel->bind(nodeGraphBridgePtr, runtimeQueryPtr);
     }
@@ -281,6 +285,12 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
         pageStack->setCurrentWidget(remeshPage);
         if (remeshPanel) {
             remeshPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
+    } else if (currentNodeTypeId == nodegraphtypes::ContactPair) {
+        pageStack->setCurrentWidget(contactPairPage);
+        if (contactPairPanel) {
+            contactPairPanel->setNode(currentNodeId);
         }
         if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     } else if (currentNodeTypeId == nodegraphtypes::HeatSolve) {
@@ -388,6 +398,19 @@ void NodeInspectorDialog::buildUi() {
         layout->addWidget(remeshPanel);
     }
     pageStack->addWidget(remeshPage);
+
+    contactPairPage = new QWidget(inspectorContent);
+    {
+        QVBoxLayout* layout = new QVBoxLayout(contactPairPage);
+        contactPairPanel = new NodeContactPairPanel(contactPairPage);
+        contactPairPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(contactPairPanel);
+    }
+    pageStack->addWidget(contactPairPage);
 
     heatPage = new QWidget(inspectorContent);
     {

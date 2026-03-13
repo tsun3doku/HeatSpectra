@@ -16,6 +16,8 @@ NodeDataType inferDataTypeFromSocketValueType(NodeGraphValueType valueType) {
         return NodeDataType::HeatReceiver;
     case NodeGraphValueType::HeatSource:
         return NodeDataType::HeatSource;
+    case NodeGraphValueType::ContactPair:
+        return NodeDataType::ContactPair;
     case NodeGraphValueType::ScalarFloat:
         return NodeDataType::ScalarFloat;
     case NodeGraphValueType::ScalarInt:
@@ -38,6 +40,8 @@ const char* nodeDataTypeName(NodeDataType dataType) {
         return "heat_receiver";
     case NodeDataType::HeatSource:
         return "heat_source";
+    case NodeDataType::ContactPair:
+        return "contact_pair";
     case NodeDataType::ScalarFloat:
         return "scalar_float";
     case NodeDataType::ScalarInt:

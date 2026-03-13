@@ -89,6 +89,7 @@ public:
 	bool flipEdge(uint32_t edgeIdx);
 	bool isDelaunayEdge(uint32_t heIdx) const;
 	int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
+	int makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
 	
 	// Refinement
 	uint32_t addIntrinsicVertex();

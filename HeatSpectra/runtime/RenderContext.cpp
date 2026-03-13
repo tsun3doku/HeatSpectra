@@ -5,8 +5,10 @@
 #include "RuntimeSimulationController.hpp"
 #include "app/SwapchainManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
+#include "heat/ContactSystemController.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemController.hpp"
+#include "mesh/MeshModifiers.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
 #include "nodegraph/NodeSolverController.hpp"
@@ -68,6 +70,16 @@ bool RenderContext::initialize(
 
     const VkRenderPass renderPass = renderRuntime->getFrameGraphRuntime().getRenderPass();
 
+    contactSystemControllerState = std::make_unique<ContactSystemController>(
+        scene.modelRegistry(),
+        core.device(),
+        *allocator,
+        *resourceManager,
+        meshModifiers->getRemesher(),
+        *uniformBufferManager,
+        *commandPool);
+    contactSystemControllerState->initRenderer(renderPass, renderconfig::MaxFramesInFlight);
+
     heatSystemControllerState = std::make_unique<HeatSystemController>(
         core.device(),
         *allocator,
@@ -83,6 +95,7 @@ bool RenderContext::initialize(
         heatSystemState,
         runtimeBusy,
         renderconfig::MaxFramesInFlight);
+    heatSystemControllerState->setContactSystemController(contactSystemControllerState.get());
     heatSystemControllerState->createHeatSystem(swapChainExtent, renderPass);
 
     sceneControllerState = std::make_unique<SceneController>(
@@ -97,13 +110,16 @@ bool RenderContext::initialize(
     modelRegistry = &scene.modelRegistry();
     modelRegistry->setSceneController(sceneControllerState.get());
 
-    nodeSolverController = std::make_unique<NodeSolverController>(scene.modelRegistry(), *heatSystemControllerState);
+    nodeSolverController = std::make_unique<NodeSolverController>(
+        scene.modelRegistry(),
+        *heatSystemControllerState);
     sceneControllerState->focusOnVisibleModel();
 
     NodeRuntimeServices nodeRuntimeServices{};
     nodeRuntimeServices.modelRegistry = &scene.modelRegistry();
     nodeRuntimeServices.sceneController = sceneControllerState.get();
     nodeRuntimeServices.heatSystemController = heatSystemControllerState.get();
+    nodeRuntimeServices.contactSystemController = contactSystemControllerState.get();
     nodeRuntimeServices.nodeSolverController = nodeSolverController.get();
     nodeRuntimeServices.resourceManager = resourceManager;
     nodeRuntimeServices.meshModifiers = meshModifiers;
@@ -174,6 +190,7 @@ void RenderContext::shutdown() {
         modelRegistry->setSceneController(nullptr);
     }
     sceneControllerState.reset();
+    contactSystemControllerState.reset();
     heatSystemControllerState.reset();
 
     if (renderRuntime) {
@@ -227,6 +244,10 @@ HeatSystem* RenderContext::heatSystem() {
 
 HeatSystemController* RenderContext::heatSystemController() {
     return heatSystemControllerState.get();
+}
+
+ContactSystemController* RenderContext::contactSystemController() {
+    return contactSystemControllerState.get();
 }
 
 SceneController* RenderContext::sceneController() {

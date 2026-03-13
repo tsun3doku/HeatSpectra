@@ -16,5 +16,6 @@ public:
     void updateCouplingDescriptors(HeatSystemRuntime::ContactCoupling& coupling, uint32_t nodeCount);
 
 private:
+    bool ensureParamsBuffer(HeatSystemRuntime::ContactCoupling& coupling);
     HeatSystemStageContext context;
 };

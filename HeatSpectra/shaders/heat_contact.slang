@@ -14,7 +14,7 @@ struct HeatSourceTriangle
     uint4  indices;
 };
 
-struct SurfelParams
+struct HeatContactParams
 {
     float thermalConductance;
     float contactPressure;
@@ -51,15 +51,29 @@ struct ContactPairGPU
 [[vk::binding(1)]] StructuredBuffer<uint> receiverTriangleIndexBuffer;
 [[vk::binding(2)]] StructuredBuffer<SurfacePoint> heatSourceBuffer;
 [[vk::binding(3)]] StructuredBuffer<HeatSourceTriangle> heatSourceTriangleBuffer;
-[[vk::binding(4)]] cbuffer SurfelParamsBuffer
+[[vk::binding(4)]] cbuffer HeatContactParamsBuffer
 {
-    SurfelParams surfelParams;
+    HeatContactParams heatContactParams;
 };
 
 [[vk::binding(5)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
 [[vk::binding(6)]] RWStructuredBuffer<uint> injectionKBuffer;
 [[vk::binding(7)]] RWStructuredBuffer<uint> injectionKTBuffer;
 [[vk::binding(8)]] StructuredBuffer<ContactPairGPU> contactPairBuffer;
+[[vk::binding(9)]] StructuredBuffer<uint> emitterTriangleIndexBuffer;
+[[vk::binding(10)]] StructuredBuffer<VoronoiSurfaceMapping> emitterVoronoiMappingBuffer;
+
+[[vk::push_constant]] cbuffer ContactPushConstants
+{
+    uint couplingKind;
+    uint _pcPad0;
+    uint _pcPad1;
+    uint _pcPad2;
+}
+contactPushConstants;
+
+static const uint contactCouplingSourceToReceiver = 0u;
+static const uint contactCouplingReceiverToReceiver = 1u;
 
 void atomicAddFloatK(uint idx, float addVal)
 {
@@ -117,10 +131,81 @@ void addWeightedInjection(uint cellIndex, uint nodeCount, float w, float effecti
         return;
     }
 
-    float h_eff = surfelParams.thermalConductance * contactStrength * (area * w);
+    float h_eff = heatContactParams.thermalConductance * contactStrength * (area * w);
 
     atomicAddFloatK(cellIndex, h_eff);
     atomicAddFloatKT(cellIndex, h_eff * effectiveTemp);
+}
+
+bool trySampleReceiverEmitterTemperature(ContactSampleGPU sample, uint nodeCount, out float effectiveTemp)
+{
+    uint emitterIndexCount = 0;
+    uint emitterIndexStride = 0;
+    emitterTriangleIndexBuffer.GetDimensions(emitterIndexCount, emitterIndexStride);
+    uint emitterTriCount = emitterIndexCount / 3u;
+
+    if (sample.sourceTriangleIndex >= emitterTriCount)
+    {
+        effectiveTemp = 0.0f;
+        return false;
+    }
+
+    uint base = sample.sourceTriangleIndex * 3u;
+    if (base + 2u >= emitterIndexCount)
+    {
+        effectiveTemp = 0.0f;
+        return false;
+    }
+
+    uint e0 = emitterTriangleIndexBuffer[base + 0u];
+    uint e1 = emitterTriangleIndexBuffer[base + 1u];
+    uint e2 = emitterTriangleIndexBuffer[base + 2u];
+
+    uint emitterMapCount = 0;
+    uint emitterMapStride = 0;
+    emitterVoronoiMappingBuffer.GetDimensions(emitterMapCount, emitterMapStride);
+
+    if (e0 >= emitterMapCount || e1 >= emitterMapCount || e2 >= emitterMapCount)
+    {
+        effectiveTemp = 0.0f;
+        return false;
+    }
+
+    uint c0 = emitterVoronoiMappingBuffer[e0].cellIndex;
+    uint c1 = emitterVoronoiMappingBuffer[e1].cellIndex;
+    uint c2 = emitterVoronoiMappingBuffer[e2].cellIndex;
+
+    float w0 = 1.0f - sample.u - sample.v;
+    float w1 = sample.u;
+    float w2 = sample.v;
+
+    float temperatureSum = 0.0f;
+    float weightSum = 0.0f;
+
+    if (c0 != 0xFFFFFFFFu && c0 < nodeCount)
+    {
+        temperatureSum += w0 * asfloat(nodeTemperatureReadBuffer[c0]);
+        weightSum += w0;
+    }
+    if (c1 != 0xFFFFFFFFu && c1 < nodeCount)
+    {
+        temperatureSum += w1 * asfloat(nodeTemperatureReadBuffer[c1]);
+        weightSum += w1;
+    }
+    if (c2 != 0xFFFFFFFFu && c2 < nodeCount)
+    {
+        temperatureSum += w2 * asfloat(nodeTemperatureReadBuffer[c2]);
+        weightSum += w2;
+    }
+
+    if (weightSum <= 0.0f)
+    {
+        effectiveTemp = 0.0f;
+        return false;
+    }
+
+    effectiveTemp = temperatureSum / weightSum;
+    return true;
 }
 
 [numthreads(256, 1, 1)]
@@ -164,6 +249,14 @@ void main(uint3 dtid : SV_DispatchThreadID)
     uint v1 = receiverTriangleIndexBuffer[base + 1u];
     uint v2 = receiverTriangleIndexBuffer[base + 2u];
 
+    uint receiverMapCount = 0;
+    uint receiverMapStride = 0;
+    voronoiMappingBuffer.GetDimensions(receiverMapCount, receiverMapStride);
+    if (v0 >= receiverMapCount || v1 >= receiverMapCount || v2 >= receiverMapCount)
+    {
+        return;
+    }
+
     uint c0 = voronoiMappingBuffer[v0].cellIndex;
     uint c1 = voronoiMappingBuffer[v1].cellIndex;
     uint c2 = voronoiMappingBuffer[v2].cellIndex;
@@ -171,6 +264,14 @@ void main(uint3 dtid : SV_DispatchThreadID)
     uint nodeCount = 0;
     uint nodeStride = 0;
     nodeTemperatureReadBuffer.GetDimensions(nodeCount, nodeStride);
+
+    uint heatSourceVertexCount = 0;
+    uint heatSourceVertexStride = 0;
+    heatSourceBuffer.GetDimensions(heatSourceVertexCount, heatSourceVertexStride);
+
+    uint heatSourceTriangleCount = 0;
+    uint heatSourceTriangleStride = 0;
+    heatSourceTriangleBuffer.GetDimensions(heatSourceTriangleCount, heatSourceTriangleStride);
 
     static const float3 recvBary[7] = {
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f),
@@ -190,19 +291,39 @@ void main(uint3 dtid : SV_DispatchThreadID)
             continue;
         }
 
-        HeatSourceTriangle tri = heatSourceTriangleBuffer[s.sourceTriangleIndex];
-        uint i0 = tri.indices.x;
-        uint i1 = tri.indices.y;
-        uint i2 = tri.indices.z;
+        float effectiveTemp = 0.0f;
+        if (contactPushConstants.couplingKind == contactCouplingReceiverToReceiver)
+        {
+            if (!trySampleReceiverEmitterTemperature(s, nodeCount, effectiveTemp))
+            {
+                continue;
+            }
+        }
+        else
+        {
+            if (s.sourceTriangleIndex >= heatSourceTriangleCount)
+            {
+                continue;
+            }
 
-        float w0s = 1.0f - s.u - s.v;
-        float w1s = s.u;
-        float w2s = s.v;
+            HeatSourceTriangle tri = heatSourceTriangleBuffer[s.sourceTriangleIndex];
+            uint i0 = tri.indices.x;
+            uint i1 = tri.indices.y;
+            uint i2 = tri.indices.z;
+            if (i0 >= heatSourceVertexCount || i1 >= heatSourceVertexCount || i2 >= heatSourceVertexCount)
+            {
+                continue;
+            }
 
-        float t0 = heatSourceBuffer[i0].temperature;
-        float t1 = heatSourceBuffer[i1].temperature;
-        float t2 = heatSourceBuffer[i2].temperature;
-        float effectiveTemp = w0s * t0 + w1s * t1 + w2s * t2;
+            float w0s = 1.0f - s.u - s.v;
+            float w1s = s.u;
+            float w2s = s.v;
+
+            float t0 = heatSourceBuffer[i0].temperature;
+            float t1 = heatSourceBuffer[i1].temperature;
+            float t2 = heatSourceBuffer[i2].temperature;
+            effectiveTemp = w0s * t0 + w1s * t1 + w2s * t2;
+        }
 
         float area = s.wArea;
         float3 bw = recvBary[si];

@@ -9,9 +9,11 @@
 class NodeGraphBridge;
 class RuntimeQuery;
 class QComboBox;
+class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
 class QString;
+class QSpinBox;
 class QTableWidget;
 class QTimer;
 
@@ -29,10 +31,13 @@ public:
     void stopStatusTimer();
 
 private:
+    void refreshContactBindingRows(const NodeGraphNode& node);
     void toggleHeatSystem();
     void pauseHeatSystem();
     void resetHeatSystem();
+    void applySolveSettings();
     void applyMaterialBindings();
+    void applyContactBindings();
     void setStatus(const QString& text) const;
 
     NodeGraphBridge* nodeGraphBridge = nullptr;
@@ -43,12 +48,17 @@ private:
     QPushButton* heatToggleButton = nullptr;
     QPushButton* heatPauseButton = nullptr;
     QPushButton* heatResetButton = nullptr;
+    QDoubleSpinBox* heatCellSizeSpinBox = nullptr;
+    QSpinBox* heatVoxelResolutionSpinBox = nullptr;
+    QPushButton* heatSolveSettingsApplyButton = nullptr;
     QComboBox* heatBindingGroupComboBox = nullptr;
     QComboBox* heatBindingPresetComboBox = nullptr;
     QPushButton* heatBindingAddButton = nullptr;
     QPushButton* heatBindingRemoveButton = nullptr;
     QPushButton* heatBindingApplyButton = nullptr;
     QTableWidget* heatBindingsTable = nullptr;
+    QPushButton* heatContactBindingApplyButton = nullptr;
+    QTableWidget* heatContactBindingsTable = nullptr;
     QTimer* heatStatusTimer = nullptr;
 
     std::function<void(const QString&)> statusSink;

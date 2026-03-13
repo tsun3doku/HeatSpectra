@@ -62,6 +62,8 @@ QColor valueTypeColor(NodeGraphValueType valueType) {
         return QColor(250, 120, 96);
     case NodeGraphValueType::HeatSource:
         return QColor(247, 174, 92);
+    case NodeGraphValueType::ContactPair:
+        return QColor(181, 132, 240);
     case NodeGraphValueType::Point:
         return QColor(96, 204, 120);
     case NodeGraphValueType::Vector3:
@@ -185,6 +187,12 @@ int valueTypeOrdinalAtInputIndex(const NodeGraphNode& node, int inputIndex) {
 NodeGraphScene::NodeGraphScene(QObject* parent)
     : QGraphicsScene(parent) {
     setSceneRect(-2000.0, -2000.0, 4000.0, 4000.0);
+    connect(this, &QGraphicsScene::selectionChanged, this, [this]() {
+        if (suppressSelectionChangedNotifications) {
+            return;
+        }
+        notifySelectedNodeChanged();
+    });
 }
 
 void NodeGraphScene::setBridge(NodeGraphBridge* bridgePtr) {
@@ -196,11 +204,18 @@ void NodeGraphScene::setNodeActivatedCallback(NodeActivatedCallback callback) {
     nodeActivatedCallback = std::move(callback);
 }
 
+void NodeGraphScene::setNodeSelectionChangedCallback(NodeSelectionChangedCallback callback) {
+    nodeSelectionChangedCallback = std::move(callback);
+}
+
 void NodeGraphScene::setStatusCallback(StatusCallback callback) {
     statusCallback = std::move(callback);
 }
 
 void NodeGraphScene::refreshFromGraph() {
+    const std::vector<NodeGraphNodeId> selectedNodeIds = selectedTopLevelNodeIds();
+
+    suppressSelectionChangedNotifications = true;
     clearActiveDragLine();
     hoveredNodeItem = nullptr;
     hoveredEdgeItem = nullptr;
@@ -209,6 +224,8 @@ void NodeGraphScene::refreshFromGraph() {
     clear();
 
     if (!bridge) {
+        suppressSelectionChangedNotifications = false;
+        notifySelectedNodeChanged();
         return;
     }
 
@@ -329,6 +346,24 @@ void NodeGraphScene::refreshFromGraph() {
         line->setData(EdgeToSocketRole, static_cast<qulonglong>(edge.toSocket.value));
         line->setData(EdgeBaseColorRole, static_cast<qulonglong>(edgeColor.rgba()));
     }
+
+    selectNodesById(selectedNodeIds);
+    suppressSelectionChangedNotifications = false;
+    notifySelectedNodeChanged();
+}
+
+void NodeGraphScene::setSelectedNode(NodeGraphNodeId nodeId) {
+    suppressSelectionChangedNotifications = true;
+    clearSelection();
+    if (nodeId.isValid()) {
+        selectNodesById({nodeId});
+    }
+    suppressSelectionChangedNotifications = false;
+    notifySelectedNodeChanged();
+}
+
+void NodeGraphScene::clearNodeSelection() {
+    setSelectedNode({});
 }
 
 bool NodeGraphScene::copySelectedNodes() {
@@ -822,6 +857,12 @@ void NodeGraphScene::updateHoverState(const QPointF& scenePos) {
     }
 }
 
+void NodeGraphScene::notifySelectedNodeChanged() {
+    if (nodeSelectionChangedCallback) {
+        nodeSelectionChangedCallback(selectedSingleNodeId());
+    }
+}
+
 void NodeGraphScene::selectNodesById(const std::vector<NodeGraphNodeId>& nodeIds) {
     if (nodeIds.empty()) {
         return;
@@ -848,6 +889,36 @@ void NodeGraphScene::selectNodesById(const std::vector<NodeGraphNodeId>& nodeIds
             item->setSelected(true);
         }
     }
+}
+
+std::vector<NodeGraphNodeId> NodeGraphScene::selectedTopLevelNodeIds() const {
+    std::vector<NodeGraphNodeId> nodeIds;
+    const QList<QGraphicsItem*> selection = selectedItems();
+    nodeIds.reserve(selection.size());
+
+    for (QGraphicsItem* item : selection) {
+        if (!item || item->parentItem() != nullptr) {
+            continue;
+        }
+        if (item->data(SocketRole).isValid() && item->data(SocketRole).toBool()) {
+            continue;
+        }
+
+        const NodeGraphNodeId nodeId = itemNodeId(item);
+        if (nodeId.isValid()) {
+            nodeIds.push_back(nodeId);
+        }
+    }
+
+    return nodeIds;
+}
+
+NodeGraphNodeId NodeGraphScene::selectedSingleNodeId() const {
+    const std::vector<NodeGraphNodeId> nodeIds = selectedTopLevelNodeIds();
+    if (nodeIds.size() != 1) {
+        return {};
+    }
+    return nodeIds.front();
 }
 
 void NodeGraphScene::setNodeHovered(QGraphicsRectItem* item, bool hovered) {

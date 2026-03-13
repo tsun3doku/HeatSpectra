@@ -4,10 +4,12 @@
 #include "heat/HeatSystemController.hpp"
 #include "scene/ModelRegistry.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <limits>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -58,7 +60,9 @@ bool tryParseReceiverModelKey(const std::string& value, uint32_t& outModelId) {
 
 } // namespace
 
-NodeSolverController::NodeSolverController(ModelRegistry& modelRegistryRef, HeatSystemController& heatSystemControllerRef)
+NodeSolverController::NodeSolverController(
+    ModelRegistry& modelRegistryRef,
+    HeatSystemController& heatSystemControllerRef)
     : modelRegistry(modelRegistryRef),
       heatSystemController(heatSystemControllerRef) {
 }
@@ -93,7 +97,105 @@ void NodeSolverController::setHeatSolveModelRoles(
         }
     }
 
+    std::sort(sourceRuntimeModelIds.begin(), sourceRuntimeModelIds.end());
+    std::sort(receiverRuntimeModelIds.begin(), receiverRuntimeModelIds.end());
+
     heatSystemController.setActiveModels(sourceRuntimeModelIds, receiverRuntimeModelIds);
+}
+
+void NodeSolverController::setHeatSolveContactPairs(const std::vector<HeatSolveContactInput>& contactPairs, bool forceContactRebuild) {
+    std::vector<HeatContactBinding> runtimeContactPairs;
+    runtimeContactPairs.reserve(contactPairs.size());
+
+    for (const HeatSolveContactInput& input : contactPairs) {
+        const ContactPairData& contactPair = input.contactPair;
+        if (!contactPair.hasValidContact || contactPair.emitterModelId == 0 || contactPair.receiverModelId == 0) {
+            continue;
+        }
+
+        uint32_t emitterRuntimeModelId = 0;
+        uint32_t receiverRuntimeModelId = 0;
+        if (!modelRegistry.tryGetNodeModelRuntimeId(contactPair.emitterModelId, emitterRuntimeModelId) ||
+            !modelRegistry.tryGetNodeModelRuntimeId(contactPair.receiverModelId, receiverRuntimeModelId) ||
+            emitterRuntimeModelId == 0 || receiverRuntimeModelId == 0 ||
+            emitterRuntimeModelId == receiverRuntimeModelId) {
+            continue;
+        }
+
+        const ContactCouplingKind couplingKind =
+            (contactPair.kind == ContactPairKind::ReceiverToReceiver)
+            ? ContactCouplingKind::ReceiverToReceiver
+            : ContactCouplingKind::SourceToReceiver;
+
+        HeatContactBinding runtimeContactPair{};
+        runtimeContactPair.pair.kind = couplingKind;
+        runtimeContactPair.pair.emitterModelId = emitterRuntimeModelId;
+        runtimeContactPair.pair.receiverModelId = receiverRuntimeModelId;
+        runtimeContactPair.pair.minNormalDot = contactPair.minNormalDot;
+        runtimeContactPair.pair.contactRadius = contactPair.contactRadius;
+        runtimeContactPair.params = input.params;
+        runtimeContactPairs.push_back(runtimeContactPair);
+    }
+
+    std::sort(
+        runtimeContactPairs.begin(),
+        runtimeContactPairs.end(),
+        [](const HeatContactBinding& lhs, const HeatContactBinding& rhs) {
+            return std::tie(
+                    lhs.pair.kind,
+                    lhs.pair.emitterModelId,
+                    lhs.pair.receiverModelId,
+                    lhs.pair.minNormalDot,
+                    lhs.pair.contactRadius,
+                    lhs.params.thermalConductance,
+                    lhs.params.contactPressure,
+                    lhs.params.frictionCoeff) <
+                std::tie(
+                    rhs.pair.kind,
+                    rhs.pair.emitterModelId,
+                    rhs.pair.receiverModelId,
+                    rhs.pair.minNormalDot,
+                    rhs.pair.contactRadius,
+                    rhs.params.thermalConductance,
+                    rhs.params.contactPressure,
+                    rhs.params.frictionCoeff);
+        });
+
+    std::vector<uint32_t> sourceRuntimeModelIds;
+    std::vector<uint32_t> receiverRuntimeModelIds;
+    std::unordered_set<uint32_t> seenSourceRuntimeModelIds;
+    std::unordered_set<uint32_t> seenReceiverRuntimeModelIds;
+    for (const HeatContactBinding& runtimeContactPair : runtimeContactPairs) {
+        if (runtimeContactPair.pair.kind == ContactCouplingKind::SourceToReceiver) {
+            if (runtimeContactPair.pair.emitterModelId != 0 &&
+                seenSourceRuntimeModelIds.insert(runtimeContactPair.pair.emitterModelId).second) {
+                sourceRuntimeModelIds.push_back(runtimeContactPair.pair.emitterModelId);
+            }
+        } else {
+            if (runtimeContactPair.pair.emitterModelId != 0 &&
+                seenReceiverRuntimeModelIds.insert(runtimeContactPair.pair.emitterModelId).second) {
+                receiverRuntimeModelIds.push_back(runtimeContactPair.pair.emitterModelId);
+            }
+        }
+
+        if (runtimeContactPair.pair.receiverModelId != 0 &&
+            seenReceiverRuntimeModelIds.insert(runtimeContactPair.pair.receiverModelId).second) {
+            receiverRuntimeModelIds.push_back(runtimeContactPair.pair.receiverModelId);
+        }
+    }
+
+    std::sort(sourceRuntimeModelIds.begin(), sourceRuntimeModelIds.end());
+    std::sort(receiverRuntimeModelIds.begin(), receiverRuntimeModelIds.end());
+
+    heatSystemController.setActiveModels(
+        sourceRuntimeModelIds,
+        receiverRuntimeModelIds,
+        false);
+    heatSystemController.setContactPairs(runtimeContactPairs, forceContactRebuild);
+}
+
+void NodeSolverController::setHeatSolveParams(const HeatSolveParams& params) {
+    heatSystemController.setSolveParams(params);
 }
 
 void NodeSolverController::setHeatSolveMaterialBindings(

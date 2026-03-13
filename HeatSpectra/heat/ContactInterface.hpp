@@ -9,7 +9,6 @@
 #include "util/Structs.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 
-class HeatReceiver;
 class HeatSource;
 class Model;
 class Remesher;
@@ -51,7 +50,7 @@ public:
     explicit ContactInterface(Remesher& remesher);
     void mapSurfacePoints(
         Model& sourceModel,
-        const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
+        const std::vector<Model*>& receiverModels,
         std::vector<std::vector<ContactPairGPU>>& receiverContactPairs,
         std::vector<ContactLineVertex>& outOutlineVertices,
         std::vector<ContactLineVertex>& outCorrespondenceVertices,

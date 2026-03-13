@@ -4,6 +4,8 @@
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphScene.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
+#include "scene/ModelRegistry.hpp"
+#include "scene/ModelSelection.hpp"
 #include "util/UiTheme.hpp"
 
 #include <QAction>
@@ -28,6 +30,7 @@
 #include <QPoint>
 
 #include <functional>
+#include <limits>
 #include <map>
 #include <utility>
 
@@ -253,10 +256,23 @@ void NodeGraphDock::setBridge(NodeGraphBridge* bridgePtr) {
     }
 }
 
+void NodeGraphDock::setModelRegistry(const ModelRegistry* modelRegistryPtr) {
+    modelRegistry = modelRegistryPtr;
+}
+
+void NodeGraphDock::setModelSelection(ModelSelection* modelSelectionPtr) {
+    modelSelection = modelSelectionPtr;
+    lastObservedRuntimeModelId = std::numeric_limits<uint32_t>::max();
+}
+
 void NodeGraphDock::refreshGraph() {
     if (graphScene) {
         graphScene->refreshFromGraph();
     }
+}
+
+void NodeGraphDock::syncSelection() {
+    syncViewportSelectionToGraph();
 }
 
 void NodeGraphDock::createUi() {
@@ -286,6 +302,9 @@ void NodeGraphDock::createUi() {
 
     graphScene->setNodeActivatedCallback([this](NodeGraphNodeId nodeId, const QPointF&) {
         openInspectorForNode(nodeId);
+    });
+    graphScene->setNodeSelectionChangedCallback([this](NodeGraphNodeId nodeId) {
+        handleGraphSelectionChanged(nodeId);
     });
     graphScene->setStatusCallback([this](const QString& text) {
         if (statusLabel && !text.isEmpty()) {
@@ -333,6 +352,30 @@ void NodeGraphDock::createUi() {
     rootLayout->addWidget(statusLabel);
 }
 
+void NodeGraphDock::handleGraphSelectionChanged(NodeGraphNodeId nodeId) {
+    if (suppressGraphSelectionHandling) {
+        return;
+    }
+
+    uint32_t runtimeModelId = 0;
+    if (bridge && modelRegistry && nodeId.isValid()) {
+        NodeGraphNode node{};
+        if (bridge->getNode(nodeId, node) && canonicalNodeTypeId(node.typeId) == nodegraphtypes::Model) {
+            modelRegistry->tryGetNodeModelRuntimeId(nodeId.value, runtimeModelId);
+        }
+    }
+
+    if (modelSelection) {
+        if (runtimeModelId != 0) {
+            modelSelection->setSelectedModelID(runtimeModelId);
+        } else {
+            modelSelection->clearSelection();
+        }
+    }
+
+    lastObservedRuntimeModelId = runtimeModelId;
+}
+
 void NodeGraphDock::openInspectorForNode(NodeGraphNodeId nodeId) {
     if (!inspectorDialog || !graphView) {
         return;
@@ -345,6 +388,39 @@ void NodeGraphDock::openInspectorForNode(NodeGraphNodeId nodeId) {
     }
 
     graphView->setFocus(Qt::OtherFocusReason);
+}
+
+void NodeGraphDock::syncViewportSelectionToGraph() {
+    if (!graphScene || !modelSelection || !modelRegistry) {
+        return;
+    }
+
+    const uint32_t selectedRuntimeModelId = modelSelection->getSelectedModelID();
+    if (selectedRuntimeModelId == lastObservedRuntimeModelId) {
+        return;
+    }
+
+    lastObservedRuntimeModelId = selectedRuntimeModelId;
+
+    NodeGraphNodeId nodeId{};
+    if (selectedRuntimeModelId != 0) {
+        uint32_t nodeModelId = 0;
+        if (modelRegistry->tryGetRuntimeModelNodeId(selectedRuntimeModelId, nodeModelId)) {
+            nodeId = NodeGraphNodeId{nodeModelId};
+        }
+    }
+
+    suppressGraphSelectionHandling = true;
+    if (nodeId.isValid()) {
+        graphScene->setSelectedNode(nodeId);
+    } else {
+        graphScene->clearNodeSelection();
+    }
+    suppressGraphSelectionHandling = false;
+
+    if (nodeId.isValid()) {
+        openInspectorForNode(nodeId);
+    }
 }
 
 void NodeGraphDock::showCreateNodeMenu(const QPoint& globalPos, const QPointF& scenePos, bool requireEmptySpace) {

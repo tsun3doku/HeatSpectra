@@ -398,7 +398,11 @@ void HeatReceiver::updateDescriptors(
         surfaceComputeSetB = surfacePingPongSets[1];
     }
 
-    VkDescriptorBufferInfo surfaceInfo{ surfaceBuffer, surfaceBufferOffset, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo surfaceInfo{
+        surfaceBuffer,
+        surfaceBufferOffset,
+        sizeof(SurfacePoint) * intrinsicVertexCount
+    };
     VkDescriptorBufferInfo timeInfo{ timeBuffer, timeBufferOffset, sizeof(TimeUniform) };
     VkDescriptorBufferInfo mappingInfo{ voronoiMappingBuffer, voronoiMappingBufferOffset, sizeof(VoronoiSurfaceMapping) * intrinsicVertexCount };
 

@@ -232,6 +232,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="vulkan\VulkanInstanceContext.cpp" />
     <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp" />
     <ClCompile Include="heat\ContactInterface.cpp" />
+    <ClCompile Include="heat\ContactSystemController.cpp" />
+    <ClCompile Include="heat\ContactSystem.cpp" />
     <ClCompile Include="renderers\ContactLineRenderer.cpp" />
     <ClCompile Include="framegraph\FrameSync.cpp" />
     <ClCompile Include="framegraph\FrameGraph.cpp" />
@@ -286,8 +288,10 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="nodegraph\NodeRemeshPanel.cpp" />
     <ClCompile Include="nodegraph\NodeHeatReceiver.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSource.cpp" />
+    <ClCompile Include="nodegraph\NodeContactPair.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp" />
     <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp" />
+    <ClCompile Include="nodegraph\NodeContactPairPanel.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp" />
     <ClCompile Include="nodegraph\NodePanelUtils.cpp" />
     <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp" />
@@ -312,6 +316,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="spatial\TriangleHashGrid.cpp" />
     <ClCompile Include="voronoi\VoronoiIntegrator.cpp" />
     <ClCompile Include="renderers\VoronoiRenderer.cpp" />
+    <ClCompile Include="renderers\IntrinsicRenderer.cpp" />
+    <ClCompile Include="renderers\OutlineRenderer.cpp" />
     <ClCompile Include="voronoi\VoronoiSeeder.cpp" />
     <ClCompile Include="spatial\VoxelGrid.cpp" />
     <ClCompile Include="vulkan\VulkanBuffer.cpp" />
@@ -396,6 +402,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="app\SwapchainStage.hpp" />
     <ClInclude Include="app\SwapchainManager.hpp" />
     <ClInclude Include="app\VulkanWindow.hpp" />
+    <ClInclude Include="heat\HeatContactParams.hpp" />
     <ClInclude Include="vulkan\CommandBufferManager.hpp" />
     <ClInclude Include="util\ComputeTiming.hpp" />
     <ClInclude Include="framegraph\FrameController.hpp" />
@@ -429,6 +436,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="vulkan\VulkanInstanceContext.hpp" />
     <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp" />
     <ClInclude Include="heat\ContactInterface.hpp" />
+    <ClInclude Include="heat\ContactSystemController.hpp" />
+    <ClInclude Include="heat\ContactSystem.hpp" />
     <ClInclude Include="renderers\ContactLineRenderer.hpp" />
     <ClInclude Include="framegraph\FrameSync.hpp" />
     <ClInclude Include="framegraph\FrameGraph.hpp" />
@@ -490,8 +499,10 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="nodegraph\NodeRemeshPanel.hpp" />
     <ClInclude Include="nodegraph\NodeHeatReceiver.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSource.hpp" />
+    <ClInclude Include="nodegraph\NodeContactPair.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp" />
     <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp" />
+    <ClInclude Include="nodegraph\NodeContactPairPanel.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp" />
     <ClInclude Include="nodegraph\NodePanelUtils.hpp" />
     <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp" />
@@ -511,6 +522,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="spatial\TriangleHashGrid.hpp" />
     <ClInclude Include="voronoi\VoronoiIntegrator.hpp" />
     <ClInclude Include="renderers\VoronoiRenderer.hpp" />
+    <ClInclude Include="renderers\IntrinsicRenderer.hpp" />
+    <ClInclude Include="renderers\OutlineRenderer.hpp" />
     <ClInclude Include="voronoi\VoronoiSeeder.hpp" />
     <ClInclude Include="spatial\VoxelGrid.hpp" />
     <ClInclude Include="renderers\WireframeRenderer.hpp" />

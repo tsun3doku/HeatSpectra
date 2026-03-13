@@ -81,6 +81,34 @@ const NodeGraphBridge* App::getNodeGraphBridge() const {
     return nullptr;
 }
 
+ModelRegistry* App::getModelRegistry() {
+    if (runtimeHost) {
+        return runtimeHost->getModelRegistry();
+    }
+    return nullptr;
+}
+
+const ModelRegistry* App::getModelRegistry() const {
+    if (runtimeHost) {
+        return runtimeHost->getModelRegistry();
+    }
+    return nullptr;
+}
+
+ModelSelection* App::getModelSelection() {
+    if (runtimeHost) {
+        return runtimeHost->getModelSelection();
+    }
+    return nullptr;
+}
+
+const ModelSelection* App::getModelSelection() const {
+    if (runtimeHost) {
+        return runtimeHost->getModelSelection();
+    }
+    return nullptr;
+}
+
 void App::setRenderPaused(bool paused) {
     if (runtimeHost) {
         runtimeHost->setRenderPaused(paused);

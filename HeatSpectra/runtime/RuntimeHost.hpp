@@ -9,6 +9,8 @@
 #include "SimulationError.hpp"
 
 class NodeGraphBridge;
+class ModelRegistry;
+class ModelSelection;
 class RenderSettingsController;
 class RuntimeQuery;
 struct WindowRuntimeState;
@@ -34,6 +36,10 @@ public:
     const RenderSettingsController* getSettingsController() const;
     NodeGraphBridge* getNodeGraphBridge();
     const NodeGraphBridge* getNodeGraphBridge() const;
+    ModelRegistry* getModelRegistry();
+    const ModelRegistry* getModelRegistry() const;
+    ModelSelection* getModelSelection();
+    const ModelSelection* getModelSelection() const;
 
 private:
     std::unique_ptr<RuntimeSystems> systems;

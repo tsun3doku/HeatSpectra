@@ -175,34 +175,38 @@ const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitionsStorage() {
             {},
         },
         {
+            nodegraphtypes::ContactPair,
+            "Contact Pair",
+            NodeGraphNodeCategory::System,
+            {
+                makeInputSocket(
+                    "Emitter",
+                    NodeGraphValueType::Unknown,
+                    {NodeDataType::HeatReceiver, NodeDataType::HeatSource}),
+                makeInputSocket(
+                    "Receiver",
+                    NodeGraphValueType::HeatReceiver,
+                    {NodeDataType::HeatReceiver}),
+                makeOutputSocket(
+                    "Contact Pair",
+                    NodeGraphValueType::ContactPair,
+                    NodeDataType::ContactPair),
+            },
+            {
+                {nodegraphparams::contactpair::MinNormalDot, "Min Normal Dot", NodeGraphParamType::Float, -0.65, 0, false, "", false},
+                {nodegraphparams::contactpair::ContactRadius, "Contact Radius", NodeGraphParamType::Float, 0.01, 0, false, "", false},
+                {nodegraphparams::contactpair::ComputeRequested, "Compute Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
+            },
+        },
+        {
             nodegraphtypes::HeatSolve,
             "Heat Solve",
             NodeGraphNodeCategory::System,
             {
                 makeInputSocket(
-                    "Receiver",
-                    NodeGraphValueType::HeatReceiver,
-                    {NodeDataType::HeatReceiver},
-                    {
-                        makeAttributeContract(
-                            "receiver.active",
-                            GeometryAttributeDomain::Detail,
-                            GeometryAttributeDataType::Bool),
-                    }),
-                makeInputSocket(
-                    "Source",
-                    NodeGraphValueType::HeatSource,
-                    {NodeDataType::HeatSource},
-                    {
-                        makeAttributeContract(
-                            "source.active",
-                            GeometryAttributeDomain::Detail,
-                            GeometryAttributeDataType::Bool),
-                        makeAttributeContract(
-                            "temperature",
-                            GeometryAttributeDomain::Point,
-                            GeometryAttributeDataType::Float),
-                    }),
+                    "Contact Pair",
+                    NodeGraphValueType::ContactPair,
+                    {NodeDataType::ContactPair}),
                 makeInputSocket(
                     "Group",
                     NodeGraphValueType::Mesh,
@@ -213,6 +217,9 @@ const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitionsStorage() {
                 {nodegraphparams::heatsolve::Paused, "Paused", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
                 {nodegraphparams::heatsolve::ResetRequested, "Reset Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
                 {nodegraphparams::heatsolve::MaterialBindings, "Material Bindings", NodeGraphParamType::String, 0.0, 0, false, "", false},
+                {nodegraphparams::heatsolve::ContactBindings, "Contact Bindings", NodeGraphParamType::String, 0.0, 0, false, "", false},
+                {nodegraphparams::heatsolve::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
+                {nodegraphparams::heatsolve::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
             },
         },
         {

@@ -17,9 +17,12 @@ HeatSystemRenderStage::HeatSystemRenderStage(const HeatSystemStageContext& stage
     : context(stageContext) {
 }
 
-void HeatSystemRenderStage::renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, ContactLineRenderer* contactLineRenderer,
-    bool isActive) const {
-    if (!contactLineRenderer || !isActive) {
+void HeatSystemRenderStage::renderContactLines(
+    VkCommandBuffer cmdBuffer,
+    uint32_t frameIndex,
+    VkExtent2D extent,
+    ContactLineRenderer* contactLineRenderer) const {
+    if (!contactLineRenderer) {
         return;
     }
 
@@ -85,6 +88,10 @@ void HeatSystemRenderStage::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint
             supportingHalfedge->getEdgeView(),
             supportingHalfedge->getTriangleView(),
             supportingHalfedge->getLengthView(),
+            supportingHalfedge->getInputHalfedgeView(),
+            supportingHalfedge->getInputEdgeView(),
+            supportingHalfedge->getInputTriangleView(),
+            supportingHalfedge->getInputLengthView(),
             candidateBuffer,
             receiver->getVoronoiCandidateBufferOffset());
 

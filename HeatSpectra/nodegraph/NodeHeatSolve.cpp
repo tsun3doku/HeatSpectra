@@ -5,11 +5,14 @@
 #include "NodeHeatMaterialPresets.hpp"
 #include "NodePanelUtils.hpp"
 #include "NodeSolverController.hpp"
+#include "heat/HeatContactParams.hpp"
+#include "heat/HeatSolveParams.hpp"
 #include "heat/HeatSystemPresets.hpp"
 
 #include <cctype>
 #include <cstdint>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -68,6 +71,64 @@ std::vector<HeatMaterialBindingEntry> parseMaterialBindings(const std::string& s
     return parsedBindings;
 }
 
+std::unordered_map<uint32_t, HeatContactParams> parseContactBindings(const std::string& serializedBindings) {
+    std::unordered_map<uint32_t, HeatContactParams> parsedBindings;
+    if (serializedBindings.empty()) {
+        return parsedBindings;
+    }
+
+    std::stringstream listStream(serializedBindings);
+    std::string token;
+    while (std::getline(listStream, token, ';')) {
+        token = NodePanelUtils::trimCopy(token);
+        if (token.empty()) {
+            continue;
+        }
+
+        const std::size_t separatorIndex = token.find('=');
+        if (separatorIndex == std::string::npos) {
+            continue;
+        }
+
+        uint32_t socketId = 0;
+        if (!NodePanelUtils::tryParseUint32Id(token.substr(0, separatorIndex), socketId) || socketId == 0) {
+            continue;
+        }
+
+        try {
+            HeatContactParams params{};
+            params.thermalConductance = std::stof(NodePanelUtils::trimCopy(token.substr(separatorIndex + 1)));
+            parsedBindings[socketId] = params;
+        } catch (...) {
+            continue;
+        }
+    }
+
+    return parsedBindings;
+}
+
+} // namespace
+
+namespace {
+
+double getFloatParamValue(const NodeGraphNode& node, uint32_t parameterId, double defaultValue) {
+    double value = defaultValue;
+    if (tryGetNodeParamFloat(node, parameterId, value)) {
+        return value;
+    }
+
+    return defaultValue;
+}
+
+int getIntParamValue(const NodeGraphNode& node, uint32_t parameterId, int defaultValue) {
+    int64_t value = defaultValue;
+    if (tryGetNodeParamInt(node, parameterId, value)) {
+        return static_cast<int>(value);
+    }
+
+    return defaultValue;
+}
+
 } // namespace
 
 const char* NodeHeatSolve::typeId() const {
@@ -93,6 +154,7 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     const NodeGraphNodeId selectedNodeId =
         selectHeatSolveNode(context.executionState.state, context.executionState);
     if (!selectedNodeId.isValid()) {
+        solverController->setHeatSolveContactPairs({}, false);
         if (solverController->deactivateHeatSolveIfActive()) {
             return true;
         }
@@ -103,38 +165,78 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
         return executed;
     }
 
-    std::vector<uint32_t> sourceGraphModelIds;
-    std::vector<uint32_t> receiverGraphModelIds;
+    HeatSolveParams solveParams{};
+    solveParams.cellSize = static_cast<float>(getFloatParamValue(
+        context.node,
+        nodegraphparams::heatsolve::CellSize,
+        solveParams.cellSize));
+    solveParams.voxelResolution = getIntParamValue(
+        context.node,
+        nodegraphparams::heatsolve::VoxelResolution,
+        solveParams.voxelResolution);
+    if (solveParams.cellSize <= 0.0f) {
+        solveParams.cellSize = HeatSolveParams{}.cellSize;
+    }
+    if (solveParams.voxelResolution <= 0) {
+        solveParams.voxelResolution = HeatSolveParams{}.voxelResolution;
+    }
+    solverController->setHeatSolveParams(solveParams);
+
+    std::vector<NodeSolverController::HeatSolveContactInput> contactPairInputs;
+    bool forceContactRebuild = false;
     std::vector<GeometryData> receiverMaterialGeometryInputs;
     const std::vector<HeatMaterialBindingEntry> materialBindings = parseMaterialBindings(
         getStringParamValue(context.node, nodegraphparams::heatsolve::MaterialBindings));
-    std::unordered_set<uint32_t> seenSourceModelIds;
-    std::unordered_set<uint32_t> seenReceiverModelIds;
+    const std::unordered_map<uint32_t, HeatContactParams> contactBindings = parseContactBindings(
+        getStringParamValue(context.node, nodegraphparams::heatsolve::ContactBindings));
     std::unordered_set<uint32_t> seenReceiverMaterialModelIds;
     for (const NodeGraphSocket& inputSocket : context.node.inputs) {
         const NodeDataBlock* inputValue = resolveInputValueForSocket(
             context.node,
             inputSocket.id,
             context.executionState);
-        if (!inputValue || inputValue->geometry.modelId == 0) {
+        if (!inputValue) {
             continue;
         }
 
-        if (inputValue->dataType == NodeDataType::HeatSource) {
-            if (seenSourceModelIds.insert(inputValue->geometry.modelId).second) {
-                sourceGraphModelIds.push_back(inputValue->geometry.modelId);
-            }
-        } else if (inputValue->dataType == NodeDataType::HeatReceiver) {
-            if (seenReceiverModelIds.insert(inputValue->geometry.modelId).second) {
-                receiverGraphModelIds.push_back(inputValue->geometry.modelId);
-            }
-            if (seenReceiverMaterialModelIds.insert(inputValue->geometry.modelId).second) {
-                receiverMaterialGeometryInputs.push_back(inputValue->geometry);
-            }
+        if (inputValue->dataType != NodeDataType::ContactPair || !inputValue->contactPairData.hasValidContact) {
+            continue;
         }
+
+        NodeSolverController::HeatSolveContactInput contactInput{};
+        contactInput.inputSocketId = inputSocket.id;
+        contactInput.contactPair = inputValue->contactPairData;
+        const auto bindingIt = contactBindings.find(inputSocket.id.value);
+        if (bindingIt != contactBindings.end()) {
+            contactInput.params = bindingIt->second;
+        }
+        contactPairInputs.push_back(contactInput);
+        forceContactRebuild = forceContactRebuild || inputValue->contactPairData.computeRequested;
+
+        const ContactPairData& contactPair = inputValue->contactPairData;
+        auto pushReceiverMaterialModel = [&](ContactPairRole role, uint32_t modelId, const GeometryData& geometry) {
+            if (role != ContactPairRole::Receiver || modelId == 0) {
+                return;
+            }
+
+            if (seenReceiverMaterialModelIds.insert(modelId).second) {
+                receiverMaterialGeometryInputs.push_back(geometry);
+            }
+        };
+
+        pushReceiverMaterialModel(contactPair.roleA, contactPair.modelIdA, contactPair.geometryA);
+        pushReceiverMaterialModel(contactPair.roleB, contactPair.modelIdB, contactPair.geometryB);
     }
 
-    solverController->setHeatSolveModelRoles(sourceGraphModelIds, receiverGraphModelIds);
+    if (contactPairInputs.empty()) {
+        solverController->setHeatSolveContactPairs({}, false);
+        if (solverController->deactivateHeatSolveIfActive()) {
+            return true;
+        }
+        return executed;
+    }
+
+    solverController->setHeatSolveContactPairs(contactPairInputs, forceContactRebuild);
     solverController->setHeatSolveMaterialBindings(receiverMaterialGeometryInputs, materialBindings);
 
     const bool wantsPaused = resetRequested
@@ -212,22 +314,20 @@ NodeGraphNodeId NodeHeatSolve::selectHeatSolveNode(
             continue;
         }
 
-        bool hasReceiver = false;
-        bool hasSource = false;
+        bool hasContactPair = false;
         for (const NodeGraphSocket& inputSocket : node.inputs) {
             const NodeDataBlock* inputValue = resolveInputValueForSocket(node, inputSocket.id, executionState);
             if (!inputValue) {
                 continue;
             }
 
-            if (inputValue->dataType == NodeDataType::HeatReceiver) {
-                hasReceiver = true;
-            } else if (inputValue->dataType == NodeDataType::HeatSource) {
-                hasSource = true;
+            if (inputValue->dataType == NodeDataType::ContactPair &&
+                inputValue->contactPairData.hasValidContact) {
+                hasContactPair = true;
             }
         }
 
-        if (!hasReceiver || !hasSource) {
+        if (!hasContactPair) {
             continue;
         }
 

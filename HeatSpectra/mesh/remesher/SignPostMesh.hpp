@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <glm/glm.hpp>
+#include <array>
 #include <vector>
 #include <unordered_set>
 
@@ -21,7 +22,9 @@ public:
     void updateAllSignposts();
     glm::dvec2 halfedgeVector(uint32_t heIdx) const;
     void buildHalfedgeVectorsInVertex();
+    void updateVertexVectors(const std::vector<uint32_t>& vertexIndices);
     void buildHalfedgeVectorsInFace();
+    void updateFaceVectors(const std::vector<uint32_t>& faceIndices);
 
     // Intrinsic helpers
     glm::dvec2 computeCircumcenter2D(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c) const;
@@ -29,9 +32,14 @@ public:
     double computeSplitDiagonalLength(uint32_t faceIdx, uint32_t originalVA, uint32_t originalVB, double splitFraction) const;
 
     // Angle operations
+    void rebuildVertexSums();
+    void updateVertexSums(const std::vector<uint32_t>& vertexIndices);
     double computeAngleFromLengths(double a, double b, double c, uint32_t faceIdx) const;
+    std::array<double, 3> computeCornerAngles(uint32_t faceIdx) const;
     void computeCornerScaledAngles();
+    void updateCornerScales(const std::vector<uint32_t>& vertexIndices);
     void computeVertexAngleScales();
+    void updateVertexScales(const std::vector<uint32_t>& vertexIndices);
     void updateCornerAnglesForFace(uint32_t faceIdx);
     void updateAllCornerAngles(const std::unordered_set<uint32_t>& skipFaces);
     

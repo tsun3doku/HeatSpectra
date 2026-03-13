@@ -1,6 +1,9 @@
 #pragma once
 
 #include "NodeGraphDataTypes.hpp"
+#include "contact/ContactTypes.hpp"
+#include "heat/HeatContactParams.hpp"
+#include "heat/HeatSolveParams.hpp"
 #include "heat/HeatSystemPresets.hpp"
 
 #include <cstdint>
@@ -11,11 +14,21 @@ class ModelRegistry;
 
 class NodeSolverController {
 public:
-    NodeSolverController(ModelRegistry& modelRegistry, HeatSystemController& heatSystemController);
+    struct HeatSolveContactInput {
+        NodeGraphSocketId inputSocketId{};
+        ContactPairData contactPair;
+        HeatContactParams params{};
+    };
+
+    NodeSolverController(
+        ModelRegistry& modelRegistry,
+        HeatSystemController& heatSystemController);
 
     void setHeatSolveModelRoles(
         const std::vector<uint32_t>& sourceNodeModelIds,
         const std::vector<uint32_t>& receiverNodeModelIds);
+    void setHeatSolveContactPairs(const std::vector<HeatSolveContactInput>& contactPairs, bool forceContactRebuild = false);
+    void setHeatSolveParams(const HeatSolveParams& params);
     void setHeatSolveMaterialBindings(
         const std::vector<GeometryData>& receiverGeometryInputs,
         const std::vector<HeatMaterialBindingEntry>& materialBindings);

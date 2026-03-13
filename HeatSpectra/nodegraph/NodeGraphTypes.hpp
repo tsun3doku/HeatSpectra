@@ -56,6 +56,7 @@ enum class NodeGraphValueType {
     Mesh,
     HeatReceiver,
     HeatSource,
+    ContactPair,
     Point,
     Vector3,
     ScalarFloat,
@@ -69,9 +70,10 @@ enum class NodeDataType : uint8_t {
     Geometry = 1,
     HeatReceiver = 2,
     HeatSource = 3,
-    ScalarFloat = 4,
-    ScalarInt = 5,
-    ScalarBool = 6
+    ContactPair = 4,
+    ScalarFloat = 5,
+    ScalarInt = 6,
+    ScalarBool = 7
 };
 
 enum class GeometryAttributeDomain : uint8_t {
@@ -108,6 +110,7 @@ inline constexpr const char* Group = "group";
 inline constexpr const char* Remesh = "remesh";
 inline constexpr const char* HeatReceiver = "heat_receiver";
 inline constexpr const char* HeatSource = "heat_source";
+inline constexpr const char* ContactPair = "contact_pair";
 inline constexpr const char* HeatSolve = "heat_solve";
 inline constexpr const char* Custom = "custom";
 }
@@ -193,6 +196,15 @@ constexpr uint32_t Enabled = 1;
 constexpr uint32_t Paused = 2;
 constexpr uint32_t ResetRequested = 3;
 constexpr uint32_t MaterialBindings = 4;
+constexpr uint32_t ContactBindings = 5;
+constexpr uint32_t CellSize = 6;
+constexpr uint32_t VoxelResolution = 7;
+}
+
+namespace contactpair {
+constexpr uint32_t MinNormalDot = 1;
+constexpr uint32_t ContactRadius = 2;
+constexpr uint32_t ComputeRequested = 3;
 }
 }
 

@@ -2,7 +2,6 @@
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/UniformBufferManager.hpp"
-#include "util/Structs.hpp"
 #include "vulkan/VulkanImage.hpp"
 #include "util/file_utils.h"
 
@@ -10,13 +9,8 @@
 #include <cmath>
 #include <iostream>
 
-
 SurfelRenderer::SurfelRenderer(VulkanDevice& device, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager)
     : vulkanDevice(device), memoryAllocator(allocator), uniformBufferManager(uniformBufferManager) {
-    params.thermalConductance = 8000.0f;  
-    params.contactPressure = 1.0f;        // TODO
-    params.frictionCoeff = 0.5f;          // TODO
-    params.padding = 0.0f;                 
 }
 
 SurfelRenderer::~SurfelRenderer() {
@@ -29,7 +23,6 @@ void SurfelRenderer::initialize(VkRenderPass renderPass, uint32_t maxFramesInFli
     
     createCircleGeometry(16); 
     createSurfelBuffers(maxFramesInFlight);
-    createSurfelParamsBuffer();
     if (!createSurfelDescriptorSetLayout() ||
         !createSurfelDescriptorPool(maxFramesInFlight) ||
         !createSurfelDescriptorSets(maxFramesInFlight) ||
@@ -112,26 +105,6 @@ void SurfelRenderer::createSurfelBuffers(uint32_t maxFramesInFlight) {
     }
 }
 
-void SurfelRenderer::createSurfelParamsBuffer() {
-    VkDeviceSize bufferSize = sizeof(SurfelParams);
-    
-    auto bufferResult = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        64 
-    );
-    
-    surfelParamsBuffer = bufferResult.first;
-    surfelParamsBufferOffset = bufferResult.second;
-    mappedSurfelParamsData = memoryAllocator.getMappedPointer(surfelParamsBuffer, surfelParamsBufferOffset);
-    
-    // Copy initial params to GPU
-    if (mappedSurfelParamsData) {
-        memcpy(mappedSurfelParamsData, &params, sizeof(SurfelParams));
-    }
-}
-
 bool SurfelRenderer::createSurfelDescriptorSetLayout() {
     // Binding 0: Surface buffer 
     VkDescriptorSetLayoutBinding surfaceLayoutBinding{};
@@ -175,7 +148,7 @@ bool SurfelRenderer::createSurfelDescriptorSetLayout() {
 bool SurfelRenderer::createSurfelDescriptorPool(uint32_t maxFramesInFlight) {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(maxFramesInFlight * 2);    // UBO + surfel params
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(maxFramesInFlight);
     
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[1].descriptorCount = static_cast<uint32_t>(maxFramesInFlight);        // Surface buffer
@@ -474,11 +447,6 @@ void SurfelRenderer::cleanup() {
         if (uniformBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(uniformBuffers[i], uniformBufferOffsets[i]);
         }
-    }
-    
-    if (surfelParamsBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(surfelParamsBuffer, surfelParamsBufferOffset);
-        surfelParamsBuffer = VK_NULL_HANDLE;
     }
     
     if (vertexBuffer != VK_NULL_HANDLE) {

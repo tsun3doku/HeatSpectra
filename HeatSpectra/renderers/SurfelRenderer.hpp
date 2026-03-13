@@ -30,13 +30,8 @@ public:
     VkBuffer getVertexBuffer() const { return vertexBuffer; }
     VkBuffer getIndexBuffer() const { return indexBuffer; }
     uint32_t getIndexCount() const { return indexCount; }
-    const SurfelParams& getParams() const { return params; }
-    VkBuffer getSurfelParamsBuffer() const { return surfelParamsBuffer; }
-    VkDeviceSize getSurfelParamsBufferOffset() const { return surfelParamsBufferOffset; }
-
 private:
     void createSurfelBuffers(uint32_t maxFramesInFlight);
-    void createSurfelParamsBuffer();
     bool createSurfelDescriptorSetLayout();
     bool createSurfelDescriptorPool(uint32_t maxFramesInFlight);
     bool createSurfelDescriptorSets(uint32_t maxFramesInFlight);
@@ -65,9 +60,4 @@ private:
     VkPipeline pipeline = VK_NULL_HANDLE;
 
     bool initialized = false;
-    
-    SurfelParams params;
-    VkBuffer surfelParamsBuffer = VK_NULL_HANDLE;
-    VkDeviceSize surfelParamsBufferOffset = 0;
-    void* mappedSurfelParamsData = nullptr;
 };

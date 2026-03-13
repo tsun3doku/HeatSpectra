@@ -53,6 +53,7 @@ public:
     VkBuffer seedFlagsBuffer = VK_NULL_HANDLE;
     VkDeviceSize seedFlagsBufferOffset_ = 0;
     void* mappedSeedPositionData = nullptr;
+    void* mappedSeedFlagsData = nullptr;
 
     VkBuffer voxelGridParamsBuffer = VK_NULL_HANDLE;
     VkDeviceSize voxelGridParamsBufferOffset_ = 0;
@@ -100,4 +101,3 @@ public:
     VkPipelineLayout contactPipelineLayout = VK_NULL_HANDLE;
     VkPipeline contactPipeline = VK_NULL_HANDLE;
 };
-

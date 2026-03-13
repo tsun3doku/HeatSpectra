@@ -276,3 +276,43 @@ inline std::vector<float> computeVertexAreas(const std::vector<glm::vec3>& posit
 
 	return vertexAreas;
 }
+
+inline glm::ivec3 computeGridDimensions(const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize) {
+	const float safeCellSize = std::max(cellSize, 1e-8f);
+	const glm::vec3 gridSize = gridMax - gridMin;
+	return glm::ivec3(
+		std::max(1, static_cast<int>(std::ceil(gridSize.x / safeCellSize))),
+		std::max(1, static_cast<int>(std::ceil(gridSize.y / safeCellSize))),
+		std::max(1, static_cast<int>(std::ceil(gridSize.z / safeCellSize))));
+}
+
+inline bool intersectRayAabb(const glm::vec3& origin, const glm::vec3& direction, const glm::vec3& boundsMin, const glm::vec3& boundsMax,
+	float maxDistance, float& outEnter, float& outExit) {
+	outEnter = 0.0f;
+	outExit = maxDistance;
+
+	for (int axis = 0; axis < 3; ++axis) {
+		const float dirAxis = direction[axis];
+		if (std::abs(dirAxis) <= 1e-8f) {
+			if (origin[axis] < boundsMin[axis] || origin[axis] > boundsMax[axis]) {
+				return false;
+			}
+			continue;
+		}
+
+		const float invDir = 1.0f / dirAxis;
+		float t0 = (boundsMin[axis] - origin[axis]) * invDir;
+		float t1 = (boundsMax[axis] - origin[axis]) * invDir;
+		if (t0 > t1) {
+			std::swap(t0, t1);
+		}
+
+		outEnter = std::max(outEnter, t0);
+		outExit = std::min(outExit, t1);
+		if (outEnter > outExit) {
+			return false;
+		}
+	}
+
+	return true;
+}

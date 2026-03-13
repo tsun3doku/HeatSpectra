@@ -118,6 +118,10 @@ void MainWindow::setApp(App* application) {
     if (nodeGraphDock) {
         boundRuntimeQuery = app ? app->runtimeQuery() : nullptr;
         nodeGraphDock->setRuntimeQuery(boundRuntimeQuery);
+        boundModelRegistry = app ? app->getModelRegistry() : nullptr;
+        nodeGraphDock->setModelRegistry(boundModelRegistry);
+        boundModelSelection = app ? app->getModelSelection() : nullptr;
+        nodeGraphDock->setModelSelection(boundModelSelection);
     }
     syncNodeGraphBridge();
 }
@@ -308,17 +312,32 @@ void MainWindow::syncNodeGraphBridge() {
         boundRuntimeQuery = runtimeQuery;
     }
 
+    const ModelRegistry* modelRegistry = app ? app->getModelRegistry() : nullptr;
+    if (modelRegistry != boundModelRegistry) {
+        nodeGraphDock->setModelRegistry(modelRegistry);
+        boundModelRegistry = modelRegistry;
+    }
+
+    ModelSelection* modelSelection = app ? app->getModelSelection() : nullptr;
+    if (modelSelection != boundModelSelection) {
+        nodeGraphDock->setModelSelection(modelSelection);
+        boundModelSelection = modelSelection;
+    }
+
     if (!app) {
+        nodeGraphDock->syncSelection();
         return;
     }
 
     NodeGraphBridge* bridge = app->getNodeGraphBridge();
     if (bridge == boundNodeGraphBridge) {
+        nodeGraphDock->syncSelection();
         return;
     }
 
     nodeGraphDock->setBridge(bridge);
     boundNodeGraphBridge = bridge;
+    nodeGraphDock->syncSelection();
 }
 
 void MainWindow::setNodeGraphVisible(bool visible) {

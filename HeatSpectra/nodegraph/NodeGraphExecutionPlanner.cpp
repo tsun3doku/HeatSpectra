@@ -36,81 +36,6 @@ const NodeGraphNode* findNodeById(const NodeGraphState& state, NodeGraphNodeId n
     return nullptr;
 }
 
-const NodeGraphEdge* findIncomingEdge(const NodeGraphState& state, NodeGraphNodeId toNode, NodeGraphSocketId toSocket) {
-    for (const NodeGraphEdge& edge : state.edges) {
-        if (edge.toNode == toNode && edge.toSocket == toSocket) {
-            return &edge;
-        }
-    }
-
-    return nullptr;
-}
-
-const NodeGraphNode* findUpstreamModelNode(
-    const NodeGraphState& state,
-    NodeGraphNodeId startNodeId,
-    std::unordered_set<uint32_t>& visitedNodeIds) {
-    if (!startNodeId.isValid() || !visitedNodeIds.insert(startNodeId.value).second) {
-        return nullptr;
-    }
-
-    const NodeGraphNode* node = findNodeById(state, startNodeId);
-    if (!node) {
-        return nullptr;
-    }
-
-    if (canonicalNodeTypeId(node->typeId) == nodegraphtypes::Model) {
-        return node;
-    }
-
-    for (const NodeGraphSocket& inputSocket : node->inputs) {
-        const NodeGraphEdge* inputEdge = findIncomingEdge(state, node->id, inputSocket.id);
-        if (!inputEdge) {
-            continue;
-        }
-
-        const NodeGraphNode* upstreamModel = findUpstreamModelNode(state, inputEdge->fromNode, visitedNodeIds);
-        if (upstreamModel) {
-            return upstreamModel;
-        }
-    }
-
-    return nullptr;
-}
-
-bool resolveHeatSolveModelNodes(
-    const NodeGraphState& state,
-    const NodeGraphNode& heatSolveNode) {
-    bool hasReceiverModelNode = false;
-    bool hasSourceModelNode = false;
-
-    for (const NodeGraphSocket& inputSocket : heatSolveNode.inputs) {
-        if (inputSocket.valueType != NodeGraphValueType::HeatReceiver &&
-            inputSocket.valueType != NodeGraphValueType::HeatSource) {
-            continue;
-        }
-
-        const NodeGraphEdge* inputEdge = findIncomingEdge(state, heatSolveNode.id, inputSocket.id);
-        if (!inputEdge) {
-            continue;
-        }
-
-        std::unordered_set<uint32_t> visitedNodeIds;
-        const NodeGraphNode* modelNode = findUpstreamModelNode(state, inputEdge->fromNode, visitedNodeIds);
-        if (!modelNode) {
-            continue;
-        }
-
-        if (inputSocket.valueType == NodeGraphValueType::HeatReceiver) {
-            hasReceiverModelNode = true;
-        } else if (inputSocket.valueType == NodeGraphValueType::HeatSource) {
-            hasSourceModelNode = true;
-        }
-    }
-
-    return hasReceiverModelNode && hasSourceModelNode;
-}
-
 std::unordered_set<uint64_t> buildConnectedInputSocketSet(const NodeGraphState& state) {
     std::unordered_set<uint64_t> connectedInputSockets;
     connectedInputSockets.reserve(state.edges.size() * 2);
@@ -125,26 +50,20 @@ std::vector<std::string> findMissingInputSocketNames(
     const NodeGraphNode& node,
     const std::unordered_set<uint64_t>& connectedInputSockets) {
     if (canonicalNodeTypeId(node.typeId) == nodegraphtypes::HeatSolve) {
-        bool hasReceiverConnection = false;
-        bool hasSourceConnection = false;
+        bool hasContactPairConnection = false;
         for (const NodeGraphSocket& inputSocket : node.inputs) {
             if (connectedInputSockets.find(makeSocketKey(node.id, inputSocket.id)) == connectedInputSockets.end()) {
                 continue;
             }
 
-            if (inputSocket.valueType == NodeGraphValueType::HeatReceiver) {
-                hasReceiverConnection = true;
-            } else if (inputSocket.valueType == NodeGraphValueType::HeatSource) {
-                hasSourceConnection = true;
+            if (inputSocket.valueType == NodeGraphValueType::ContactPair) {
+                hasContactPairConnection = true;
             }
         }
 
         std::vector<std::string> missing;
-        if (!hasReceiverConnection) {
-            missing.push_back("Receiver");
-        }
-        if (!hasSourceConnection) {
-            missing.push_back("Source");
+        if (!hasContactPairConnection) {
+            missing.push_back("Contact Pair");
         }
         return missing;
     }
@@ -199,21 +118,18 @@ bool NodeGraphExecutionPlanner::nodeHasAllRequiredInputs(const NodeGraphState& s
 
     const std::unordered_set<uint64_t> connectedInputSockets = buildConnectedInputSocketSet(state);
     if (canonicalNodeTypeId(node->typeId) == nodegraphtypes::HeatSolve) {
-        bool hasReceiverConnection = false;
-        bool hasSourceConnection = false;
+        bool hasContactPairConnection = false;
         for (const NodeGraphSocket& inputSocket : node->inputs) {
             if (connectedInputSockets.find(makeSocketKey(node->id, inputSocket.id)) == connectedInputSockets.end()) {
                 continue;
             }
 
-            if (inputSocket.valueType == NodeGraphValueType::HeatReceiver) {
-                hasReceiverConnection = true;
-            } else if (inputSocket.valueType == NodeGraphValueType::HeatSource) {
-                hasSourceConnection = true;
+            if (inputSocket.valueType == NodeGraphValueType::ContactPair) {
+                hasContactPairConnection = true;
             }
         }
 
-        return hasReceiverConnection && hasSourceConnection;
+        return hasContactPairConnection;
     }
 
     for (const NodeGraphSocket& inputSocket : node->inputs) {
@@ -353,7 +269,6 @@ NodeGraphExecutionPlan NodeGraphExecutionPlanner::buildPlan(const NodeGraphState
 
     const NodeGraphNode* selectedNode = nullptr;
     const NodeGraphNode* missingConnectionsNode = nullptr;
-    const NodeGraphNode* unresolvedContextNode = nullptr;
     for (const NodeGraphNode* node : enabledHeatSolveNodes) {
         if (!node) {
             continue;
@@ -362,13 +277,6 @@ NodeGraphExecutionPlan NodeGraphExecutionPlanner::buildPlan(const NodeGraphState
         if (!nodeHasAllRequiredInputs(state, node->id)) {
             if (!missingConnectionsNode) {
                 missingConnectionsNode = node;
-            }
-            continue;
-        }
-
-        if (!resolveHeatSolveModelNodes(state, *node)) {
-            if (!unresolvedContextNode) {
-                unresolvedContextNode = node;
             }
             continue;
         }
@@ -386,14 +294,6 @@ NodeGraphExecutionPlan NodeGraphExecutionPlanner::buildPlan(const NodeGraphState
     if (selectedNode) {
         plan.canExecuteHeatSolve = true;
         plan.heatSolveBlockReason.clear();
-        return plan;
-    }
-
-    if (unresolvedContextNode) {
-        plan.heatSolveBlockReason = makeInvariantReason(
-            "HS004",
-            "Enabled Heat Solve node '" + displayNodeLabel(*unresolvedContextNode) +
-            "' does not resolve both Receiver and Source to Model nodes");
         return plan;
     }
 

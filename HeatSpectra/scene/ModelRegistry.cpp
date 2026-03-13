@@ -16,6 +16,10 @@ void ModelRegistry::bindNodeModel(uint32_t nodeModelId, uint32_t runtimeModelId)
     }
 
     std::lock_guard<std::mutex> lock(nodeBindingsMutex);
+    const auto existingBindingIt = runtimeModelIdByNodeModelId.find(nodeModelId);
+    if (existingBindingIt != runtimeModelIdByNodeModelId.end() && existingBindingIt->second != 0) {
+        nodeModelIdByRuntimeModelId.erase(existingBindingIt->second);
+    }
     if (runtimeModelId == 0) {
         runtimeModelIdByNodeModelId.erase(nodeModelId);
         modelPathByNodeModelId.erase(nodeModelId);
@@ -23,11 +27,13 @@ void ModelRegistry::bindNodeModel(uint32_t nodeModelId, uint32_t runtimeModelId)
     }
 
     runtimeModelIdByNodeModelId[nodeModelId] = runtimeModelId;
+    nodeModelIdByRuntimeModelId[runtimeModelId] = nodeModelId;
 }
 
 void ModelRegistry::clearNodeBindings() {
     std::lock_guard<std::mutex> lock(nodeBindingsMutex);
     runtimeModelIdByNodeModelId.clear();
+    nodeModelIdByRuntimeModelId.clear();
     modelPathByNodeModelId.clear();
 }
 
@@ -44,6 +50,22 @@ bool ModelRegistry::tryGetNodeModelRuntimeId(uint32_t nodeModelId, uint32_t& out
     }
 
     outRuntimeModelId = bindingIt->second;
+    return true;
+}
+
+bool ModelRegistry::tryGetRuntimeModelNodeId(uint32_t runtimeModelId, uint32_t& outNodeModelId) const {
+    outNodeModelId = 0;
+    if (runtimeModelId == 0) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(nodeBindingsMutex);
+    const auto bindingIt = nodeModelIdByRuntimeModelId.find(runtimeModelId);
+    if (bindingIt == nodeModelIdByRuntimeModelId.end() || bindingIt->second == 0) {
+        return false;
+    }
+
+    outNodeModelId = bindingIt->second;
     return true;
 }
 
@@ -79,11 +101,18 @@ uint32_t ModelRegistry::getOrLoadModelID(uint32_t nodeModelId, const std::string
     const uint32_t runtimeModelId = activeSceneController->loadModel(modelPath, existingRuntimeModelId);
     if (nodeModelId != 0) {
         std::lock_guard<std::mutex> lock(nodeBindingsMutex);
+        if (existingRuntimeModelId != 0 && existingRuntimeModelId != runtimeModelId) {
+            nodeModelIdByRuntimeModelId.erase(existingRuntimeModelId);
+        }
         if (runtimeModelId != 0) {
             runtimeModelIdByNodeModelId[nodeModelId] = runtimeModelId;
+            nodeModelIdByRuntimeModelId[runtimeModelId] = nodeModelId;
             modelPathByNodeModelId[nodeModelId] = modelPath;
         } else {
             runtimeModelIdByNodeModelId.erase(nodeModelId);
+            if (existingRuntimeModelId != 0) {
+                nodeModelIdByRuntimeModelId.erase(existingRuntimeModelId);
+            }
             modelPathByNodeModelId.erase(nodeModelId);
         }
     }
@@ -108,6 +137,9 @@ bool ModelRegistry::removeNodeModel(uint32_t nodeModelId) {
             runtimeModelId = bindingIt->second;
         }
         runtimeModelIdByNodeModelId.erase(nodeModelId);
+        if (runtimeModelId != 0) {
+            nodeModelIdByRuntimeModelId.erase(runtimeModelId);
+        }
         modelPathByNodeModelId.erase(nodeModelId);
     }
 
@@ -153,6 +185,7 @@ std::size_t ModelRegistry::removeMissingNodeModels(const std::vector<uint32_t>& 
 
             if (runtimeModelId != 0) {
                 staleRuntimeModelIds.push_back(runtimeModelId);
+                nodeModelIdByRuntimeModelId.erase(runtimeModelId);
             }
             modelPathByNodeModelId.erase(nodeModelId);
             bindingIt = runtimeModelIdByNodeModelId.erase(bindingIt);

@@ -2,11 +2,11 @@
 #include "util/GeometryUtils.hpp"
 
 #include "mesh/remesher/Remesher.hpp"
-#include "HeatReceiver.hpp"
 #include "HeatSource.hpp"
 #include "scene/Model.hpp"
 #include "mesh/remesher/iODT.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
+#include "spatial/TriangleHashGrid.hpp"
 
 #include <unordered_map>
 #include <cmath>
@@ -14,13 +14,25 @@
 #include <iostream>
 #include <algorithm>
 
+namespace {
+
+glm::vec3 normalizedOrZero(const glm::vec3& vector) {
+    const float lengthSquared = glm::dot(vector, vector);
+    if (lengthSquared <= 1e-12f) {
+        return glm::vec3(0.0f);
+    }
+    return vector * (1.0f / std::sqrt(lengthSquared));
+}
+
+}
+
 ContactInterface::ContactInterface(Remesher& remesher)
 	: remesher(remesher) {
 }
 
 void ContactInterface::mapSurfacePoints(
     Model& sourceModel,
-    const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
+    const std::vector<Model*>& receiverModels,
     std::vector<std::vector<ContactPairGPU>>& receiverContactPairs,
     std::vector<ContactLineVertex>& outOutlineVertices,
     std::vector<ContactLineVertex>& outCorrespondenceVertices,
@@ -44,21 +56,41 @@ void ContactInterface::mapSurfacePoints(
 		return;
 	}
 
+    std::vector<glm::vec3> sourcePositions;
+    sourcePositions.reserve(sourceMesh.vertices.size());
+    glm::vec3 sourceBoundsMin(std::numeric_limits<float>::infinity());
+    glm::vec3 sourceBoundsMax(-std::numeric_limits<float>::infinity());
+    for (const SupportingHalfedge::IntrinsicVertex& vertex : sourceMesh.vertices) {
+        sourcePositions.push_back(vertex.position);
+        sourceBoundsMin = glm::min(sourceBoundsMin, vertex.position);
+        sourceBoundsMax = glm::max(sourceBoundsMax, vertex.position);
+    }
 
-	glm::mat4 srcModelMat = sourceModel.getModelMatrix();
-	glm::mat4 invSrcModelMat = glm::inverse(srcModelMat);
+    const float contactPadding = std::max(settings.contactRadius, 1e-4f);
+    const glm::vec3 contactPaddingVec(contactPadding);
+    TriangleHashGrid sourceTriangleGrid;
+    sourceTriangleGrid.build(
+        sourcePositions,
+        sourceMesh.indices,
+        sourceBoundsMin - contactPaddingVec,
+        sourceBoundsMax + contactPaddingVec,
+        contactPadding);
+
+    std::vector<size_t> candidateTriangles;
+
+    glm::mat4 srcModelMat = sourceModel.getModelMatrix();
+    glm::mat4 invSrcModelMat = glm::inverse(srcModelMat);
 	glm::mat3 srcNormalMat = glm::transpose(glm::inverse(glm::mat3(srcModelMat)));
 
-	receiverContactPairs.resize(receivers.size());
+	receiverContactPairs.resize(receiverModels.size());
 
-	for (size_t receiverIdx = 0; receiverIdx < receivers.size(); receiverIdx++) {
-		HeatReceiver* receiver = receivers[receiverIdx].get();
-		if (!receiver) {
+	for (size_t receiverIdx = 0; receiverIdx < receiverModels.size(); receiverIdx++) {
+		Model* receiverModel = receiverModels[receiverIdx];
+		if (!receiverModel) {
 			continue;
 		}
 
-		Model& receiverModel = receiver->getModel();
-		iODT* receiverIodt = remesher.getRemesherForModel(&receiverModel);
+		iODT* receiverIodt = remesher.getRemesherForModel(receiverModel);
 		if (!receiverIodt) {
 			continue;
 		}
@@ -70,7 +102,7 @@ void ContactInterface::mapSurfacePoints(
 		SupportingHalfedge::IntrinsicMesh receiverMesh = receiverSupportingHalfedge->buildIntrinsicMesh();
 		receiverContactPairs[receiverIdx].assign(receiverMesh.triangles.size(), ContactPairGPU{});
 
-		glm::mat4 recvModelMat = receiverModel.getModelMatrix();
+		glm::mat4 recvModelMat = receiverModel->getModelMatrix();
 		glm::mat3 recvNormalMat = glm::transpose(glm::inverse(glm::mat3(recvModelMat)));
 
 		for (size_t triIdx = 0; triIdx < receiverMesh.triangles.size(); triIdx++) {
@@ -116,27 +148,34 @@ void ContactInterface::mapSurfacePoints(
 				localN *= (1.0f / std::sqrt(localNLen2));
 
 				glm::vec3 worldPos = glm::vec3(recvModelMat * glm::vec4(localPos, 1.0f));
-				glm::vec3 worldN = glm::vec3(recvNormalMat * localN);
-				float worldNLen2 = glm::dot(worldN, worldN);
-				if (worldNLen2 < 1e-12f) {
+				glm::vec3 worldN = normalizedOrZero(glm::vec3(recvNormalMat * localN));
+				if (glm::dot(worldN, worldN) < 1e-12f) {
 					continue;
 				}
-				worldN *= (1.0f / std::sqrt(worldNLen2));
 
 				glm::vec3 srcPos = glm::vec3(invSrcModelMat * glm::vec4(worldPos, 1.0f));
-				glm::vec3 srcDirPlus = glm::vec3(invSrcModelMat * glm::vec4(worldN, 0.0f));
-				float dirLen2 = glm::dot(srcDirPlus, srcDirPlus);
-				if (dirLen2 < 1e-12f) {
+				glm::vec3 srcDirPlus = normalizedOrZero(glm::vec3(invSrcModelMat * glm::vec4(worldN, 0.0f)));
+				if (glm::dot(srcDirPlus, srcDirPlus) < 1e-12f) {
 					continue;
 				}
-				srcDirPlus *= (1.0f / std::sqrt(dirLen2));
 
 				uint32_t bestTriIdx = iODT::INVALID_INDEX;
 				float bestT = std::numeric_limits<float>::infinity();
 				float bestU = 0.0f;
 				float bestV = 0.0f;
 
-				for (uint32_t sTriIdx = 0; sTriIdx < static_cast<uint32_t>(sourceMesh.triangles.size()); ++sTriIdx) {
+                candidateTriangles.clear();
+                sourceTriangleGrid.getTrianglesAlongRay(
+                    srcPos,
+                    srcDirPlus,
+                    settings.contactRadius,
+                    candidateTriangles);
+
+				for (size_t candidateTriIdx : candidateTriangles) {
+                    const uint32_t sTriIdx = static_cast<uint32_t>(candidateTriIdx);
+                    if (sTriIdx >= sourceMesh.triangles.size()) {
+                        continue;
+                    }
 					const auto& sTri = sourceMesh.triangles[sTriIdx];
 					uint32_t i0 = sTri.vertexIndices[0];
 					uint32_t i1 = sTri.vertexIndices[1];
@@ -145,11 +184,7 @@ void ContactInterface::mapSurfacePoints(
 						continue;
 					}
 
-					glm::vec3 sNWorld = glm::vec3(srcNormalMat * sTri.normal);
-					float sNLen2 = glm::dot(sNWorld, sNWorld);
-					if (sNLen2 > 1e-12f) {
-						sNWorld *= (1.0f / std::sqrt(sNLen2));
-					}
+					glm::vec3 sNWorld = normalizedOrZero(glm::vec3(srcNormalMat * sTri.normal));
 					float nd = glm::dot(worldN, sNWorld);
 					if (settings.minNormalDot < 0.0f) {
 						if (nd > settings.minNormalDot) {
@@ -197,17 +232,16 @@ void ContactInterface::mapSurfacePoints(
 
 	}
 
-	outOutlineVertices.reserve(receivers.size() * 256);
-	outCorrespondenceVertices.reserve(receivers.size() * 256);
+	outOutlineVertices.reserve(receiverModels.size() * 256);
+	outCorrespondenceVertices.reserve(receiverModels.size() * 256);
 
-	for (size_t receiverIdx = 0; receiverIdx < receivers.size(); receiverIdx++) {
-		HeatReceiver* receiver = receivers[receiverIdx].get();
-		if (!receiver) {
+	for (size_t receiverIdx = 0; receiverIdx < receiverModels.size(); receiverIdx++) {
+		Model* receiverModel = receiverModels[receiverIdx];
+		if (!receiverModel) {
 			continue;
 		}
 
-		Model& receiverModel = receiver->getModel();
-		iODT* receiverIodt = remesher.getRemesherForModel(&receiverModel);
+		iODT* receiverIodt = remesher.getRemesherForModel(receiverModel);
 		if (!receiverIodt) {
 			continue;
 		}
@@ -222,7 +256,7 @@ void ContactInterface::mapSurfacePoints(
 		}
 		const auto& contactPairs = receiverContactPairs[receiverIdx];
 
-		glm::mat4 recvModel = receiverModel.getModelMatrix();
+		glm::mat4 recvModel = receiverModel->getModelMatrix();
 		glm::mat4 srcModelMat2 = sourceModel.getModelMatrix();
 
 		for (size_t triIdx = 0; triIdx < receiverMesh.triangles.size(); triIdx++) {

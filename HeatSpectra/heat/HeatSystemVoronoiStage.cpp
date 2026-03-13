@@ -31,7 +31,7 @@ void HeatSystemVoronoiStage::onResourcesRecreated(uint32_t maxFramesInFlight, Vk
 }
 
 bool HeatSystemVoronoiStage::buildReceiverDomains(const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
-    std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains, uint32_t maxNeighbors) const {
+    std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains, const HeatSolveParams& solveParams, uint32_t maxNeighbors) const {
     receiverVoronoiDomains.clear();
 
     std::unordered_set<uint32_t> seenReceiverModelIds;
@@ -73,7 +73,12 @@ bool HeatSystemVoronoiStage::buildReceiverDomains(const std::vector<std::unique_
         }
 
         const SupportingHalfedge::IntrinsicMesh intrinsicMesh = supportingHalfedge->buildIntrinsicMesh();
-        domain.seeder->generateSeeds(intrinsicMesh, receiverModel, 0.005f, domain.voxelGrid, 128);
+        domain.seeder->generateSeeds(
+            intrinsicMesh,
+            receiverModel,
+            solveParams.cellSize,
+            domain.voxelGrid,
+            solveParams.voxelResolution);
         domain.voxelGridBuilt = (domain.voxelGrid.getGridSize() > 0);
 
         const std::vector<VoronoiSeeder::Seed>& domainSeeds = domain.seeder->getSeeds();
@@ -288,6 +293,7 @@ bool HeatSystemVoronoiStage::createVoronoiGeometryBuffers(const std::vector<Voro
             &mappedFlags)) {
         return false;
     }
+    context.resources.mappedSeedFlagsData = mappedFlags;
     std::cout << "  Seed flags: " << seedFlags.size() << " seeds" << std::endl;
 
     return true;
@@ -313,6 +319,7 @@ bool HeatSystemVoronoiStage::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
     }
 
     const glm::vec4* seedPositions = static_cast<const glm::vec4*>(context.resources.mappedSeedPositionData);
+    const uint32_t* seedFlags = static_cast<const uint32_t*>(context.resources.mappedSeedFlagsData);
     std::vector<VoronoiNeighborGPU> neighbors;
     neighbors.reserve(static_cast<size_t>(context.resources.voronoiNodeCount) * static_cast<size_t>(maxNeighbors));
 
@@ -321,6 +328,12 @@ bool HeatSystemVoronoiStage::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
     for (uint32_t cellIdx = 0; cellIdx < context.resources.voronoiNodeCount; cellIdx++) {
         uint32_t neighborOffset = totalNeighbors;
         uint32_t validNeighborCount = 0;
+        if (seedFlags && (seedFlags[cellIdx] & 1u) != 0u) {
+            nodes[cellIdx].neighborOffset = neighborOffset;
+            nodes[cellIdx].neighborCount = 0;
+            continue;
+        }
+
         uint32_t interfaceCount = nodes[cellIdx].interfaceNeighborCount;
         if (interfaceCount > maxNeighbors) {
             interfaceCount = maxNeighbors;
@@ -337,20 +350,29 @@ bool HeatSystemVoronoiStage::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
                 invalidNeighborIndexCount++;
                 continue;
             }
+            if (seedFlags && (seedFlags[neighborIdx] & 1u) != 0u) {
+                continue;
+            }
 
-            VoronoiNeighborGPU neighbor{};
-            neighbor.neighborIndex = neighborIdx;
-            neighbor.interfaceArea = area;
+            float areaOverDistance = 0.0f;
             if (seedPositions) {
                 const glm::vec4& seedA4 = seedPositions[cellIdx];
                 const glm::vec4& seedB4 = seedPositions[neighborIdx];
                 glm::vec3 seedA(seedA4.x, seedA4.y, seedA4.z);
                 glm::vec3 seedB(seedB4.x, seedB4.y, seedB4.z);
-                neighbor.distance = glm::distance(seedA, seedB);
-            } else {
-                neighbor.distance = 0.1f;
+                const float distance = glm::distance(seedA, seedB);
+                if (distance > 1e-12f && area > 1e-8f) {
+                    areaOverDistance = area / distance;
+                }
             }
-            neighbor.interfaceFaceID = 0;
+
+            if (areaOverDistance <= 0.0f) {
+                continue;
+            }
+
+            VoronoiNeighborGPU neighbor{};
+            neighbor.neighborIndex = neighborIdx;
+            neighbor.areaOverDistance = areaOverDistance;
             neighbors.push_back(neighbor);
             validNeighborCount++;
             totalNeighbors++;
@@ -512,7 +534,7 @@ bool HeatSystemVoronoiStage::generateVoronoiDiagram(std::vector<HeatSystemVorono
     const HeatMaterialPreset& defaultPreset = heatMaterialPresetById(HeatMaterialPresetId::Aluminum);
     for (VoronoiNodeGPU& node : initialNodes) {
         node.temperature = 1.0f;
-        node.prevTemperature = 0.0f;
+        node.conductivityPerMass = 0.0f;
         node.volume = 0.0f;
         node.thermalMass = 0.0f;
         node.density = defaultPreset.density;
@@ -864,17 +886,32 @@ void HeatSystemVoronoiStage::insertInterSubstepBarrier(VkCommandBuffer commandBu
         writeOffset = context.resources.tempBufferBOffset_;
     }
 
-    VkBufferMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    barrier.buffer = writeBuffer;
-    barrier.offset = writeOffset;
-    barrier.size = VK_WHOLE_SIZE;
+    VkBufferMemoryBarrier barriers[3]{};
+
+    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[0].buffer = writeBuffer;
+    barriers[0].offset = writeOffset;
+    barriers[0].size = VK_WHOLE_SIZE;
+
+    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[1].buffer = context.resources.injectionKBuffer;
+    barriers[1].offset = context.resources.injectionKBufferOffset_;
+    barriers[1].size = VK_WHOLE_SIZE;
+
+    barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[2].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[2].buffer = context.resources.injectionKTBuffer;
+    barriers[2].offset = context.resources.injectionKTBufferOffset_;
+    barriers[2].size = VK_WHOLE_SIZE;
 
     vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-        0, nullptr, 1, &barrier, 0, nullptr);
+        0, nullptr, 3, barriers, 0, nullptr);
 }
 
 void HeatSystemVoronoiStage::insertFinalTemperatureBarrier(VkCommandBuffer commandBuffer, uint32_t numSubsteps) const {

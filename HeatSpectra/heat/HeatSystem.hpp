@@ -1,6 +1,9 @@
 ﻿#pragma once
 
+#include "contact/ContactTypes.hpp"
 #include "util/Structs.hpp"
+#include "HeatContactParams.hpp"
+#include "HeatSolveParams.hpp"
 #include "HeatSystemRuntime.hpp"
 #include "HeatSystemPresets.hpp"
 #include "HeatSystemResources.hpp"
@@ -23,9 +26,8 @@ class CommandPool;
 class SurfelRenderer;
 class VoronoiRenderer;
 class PointRenderer;
-class ContactLineRenderer;
 class HeatRenderer;
-class ContactInterface;
+class ContactSystemController;
 class VoronoiGeoCompute;
 class VoronoiCandidateCompute;
 class Remesher;
@@ -107,26 +109,31 @@ public:
     bool simulationActive() const override { return isActive; }
     bool simulationPaused() const override { return isPaused; }
     bool voronoiReady() const override { return isVoronoiReady; }
-    void setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds);
+    void setContactSystemController(ContactSystemController* controller);
+    void setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds, bool rebuildContactSystem = true);
+    void setContactPairs(const std::vector<HeatContactBinding>& contactPairs, bool forceContactRebuild = false);
+    void setSolveParams(const HeatSolveParams& params);
     void setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings);
 
 private:    
     using SourceCoupling = HeatSystemRuntime::SourceCoupling;
     using ContactCoupling = HeatSystemRuntime::ContactCoupling;
+    using ContactCouplingKind = ::ContactCouplingKind;
 
     void failInitialization(const char* stage);
     const HeatSystemVoronoiDomain* findReceiverDomain(const HeatReceiver* receiver) const;
     const HeatSystemVoronoiDomain* findReceiverDomainByModelId(uint32_t receiverModelId) const;
     void clearReceiverDomains();
-    void updateCouplingDescriptors(ContactCoupling& coupling, uint32_t nodeCount);
     void initializeHeatModelBindings();
-
-    void initializeContactInterface();
+    void rebuildContactCouplings(bool forceContactRebuild);
+    void clearContactCouplings();
+    bool uploadContactPairsToCoupling(ContactCoupling& coupling, const std::vector<ContactPairGPU>& pairs);
+    const SourceCoupling* findSourceCouplingByModelId(uint32_t modelId) const;
+    HeatReceiver* findReceiverByModelId(uint32_t modelId) const;
 
     void initializeSurfelRenderers(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
-    void initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiGeoCompute();
     void initializeVoronoiCandidateCompute();
 
@@ -139,18 +146,18 @@ private:
     HeatSystemRuntime runtime;
     std::vector<SourceCoupling>& heatSources;
     std::vector<std::unique_ptr<HeatReceiver>>& receivers;
-    std::vector<ContactCoupling>& contactCouplings;
     std::vector<uint32_t>& receiverModelIds;
     std::vector<uint32_t> activeSourceModelIds;
     std::vector<uint32_t> activeReceiverModelIds;
+    std::vector<HeatContactBinding> configuredContactPairs;
+    HeatSolveParams solveParams;
+    std::vector<ContactCoupling> contactCouplings;
     std::vector<HeatSystemVoronoiDomain> receiverVoronoiDomains;
     std::unordered_map<uint32_t, HeatMaterialPresetId> receiverMaterialPresetByModelId;
     
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;
-    std::unique_ptr<ContactLineRenderer> contactLineRenderer;
     std::unique_ptr<HeatRenderer> heatRenderer;
-	std::unique_ptr<ContactInterface> contactInterface;
     std::unique_ptr<VoronoiGeoCompute> voronoiGeoCompute;
     std::unique_ptr<class VoronoiCandidateCompute> voronoiCandidateCompute;
     std::unique_ptr<HeatSystemVoronoiStage> voronoiStage;
@@ -159,6 +166,7 @@ private:
     std::unique_ptr<HeatSystemDebugStage> debugStage;
     std::unique_ptr<HeatSystemRenderStage> renderStage;
     HeatSystemResources resources;
+    ContactSystemController* contactSystemController = nullptr;
     
     uint32_t maxFramesInFlight;
  

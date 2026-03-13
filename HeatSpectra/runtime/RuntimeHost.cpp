@@ -90,3 +90,31 @@ const NodeGraphBridge* RuntimeHost::getNodeGraphBridge() const {
     }
     return nullptr;
 }
+
+ModelRegistry* RuntimeHost::getModelRegistry() {
+    if (systems) {
+        return systems->getModelRegistry();
+    }
+    return nullptr;
+}
+
+const ModelRegistry* RuntimeHost::getModelRegistry() const {
+    if (systems) {
+        return systems->getModelRegistry();
+    }
+    return nullptr;
+}
+
+ModelSelection* RuntimeHost::getModelSelection() {
+    if (systems) {
+        return systems->getModelSelection();
+    }
+    return nullptr;
+}
+
+const ModelSelection* RuntimeHost::getModelSelection() const {
+    if (systems) {
+        return systems->getModelSelection();
+    }
+    return nullptr;
+}

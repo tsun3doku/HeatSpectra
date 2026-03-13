@@ -21,6 +21,7 @@ class NodeGroupPanel;
 class NodeHeatSolverPanel;
 class NodeModelPanel;
 class NodeRemeshPanel;
+class NodeContactPairPanel;
 
 class NodeInspectorDialog : public QWidget {
 public:
@@ -54,11 +55,13 @@ private:
     QWidget* modelPage = nullptr;
     QWidget* groupPage = nullptr;
     QWidget* remeshPage = nullptr;
+    QWidget* contactPairPage = nullptr;
     QWidget* heatPage = nullptr;
 
     NodeModelPanel* modelPanel = nullptr;
     NodeGroupPanel* groupPanel = nullptr;
     NodeRemeshPanel* remeshPanel = nullptr;
+    NodeContactPairPanel* contactPairPanel = nullptr;
     NodeHeatSolverPanel* heatSolverPanel = nullptr;
 
     QTabWidget* mainTabWidget = nullptr;

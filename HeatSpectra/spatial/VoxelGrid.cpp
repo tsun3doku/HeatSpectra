@@ -463,9 +463,14 @@ float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& 
     
     float minDist = FLT_MAX;
     for (size_t triIdx : nearbyTriangles) {
-        const glm::vec3& v0 = vertices[indices[triIdx]].pos;
-        const glm::vec3& v1 = vertices[indices[triIdx + 1]].pos;
-        const glm::vec3& v2 = vertices[indices[triIdx + 2]].pos;
+        const size_t indexBase = triIdx * 3;
+        if (indexBase + 2 >= indices.size()) {
+            continue;
+        }
+
+        const glm::vec3& v0 = vertices[indices[indexBase]].pos;
+        const glm::vec3& v1 = vertices[indices[indexBase + 1]].pos;
+        const glm::vec3& v2 = vertices[indices[indexBase + 2]].pos;
         
         glm::vec3 closest = closestPointOnTriangle(point, v0, v1, v2);
         float dist = glm::length(point - closest);

@@ -6,6 +6,7 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#include "HeatSolveParams.hpp"
 #include "HeatSystemPresets.hpp"
 #include "HeatSystemStageContext.hpp"
 #include "spatial/VoxelGrid.hpp"
@@ -37,6 +38,7 @@ public:
     bool buildReceiverDomains(
         const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
         std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains,
+        const HeatSolveParams& solveParams,
         uint32_t maxNeighbors) const;
     bool generateVoronoiDiagram(
         std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains,

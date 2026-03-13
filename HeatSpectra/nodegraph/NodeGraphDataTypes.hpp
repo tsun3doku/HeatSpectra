@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NodeGraphTypes.hpp"
+#include "util/Structs.hpp"
 
 #include <cstdint>
 #include <string>
@@ -33,9 +34,40 @@ struct GeometryData {
     std::vector<GeometryAttribute> attributes;
 };
 
+enum class ContactPairRole : uint8_t {
+    Source = 0,
+    Receiver = 1
+};
+
+enum class ContactPairKind : uint8_t {
+    SourceToReceiver = 0,
+    ReceiverToReceiver = 1
+};
+
+struct ContactPairData {
+    bool hasValidContact = false;
+    bool computeRequested = false;
+    ContactPairKind kind = ContactPairKind::SourceToReceiver;
+    uint32_t emitterModelId = 0;
+    uint32_t receiverModelId = 0;
+
+    uint32_t modelIdA = 0;
+    ContactPairRole roleA = ContactPairRole::Receiver;
+    GeometryData geometryA{};
+
+    uint32_t modelIdB = 0;
+    ContactPairRole roleB = ContactPairRole::Receiver;
+    GeometryData geometryB{};
+
+    float minNormalDot = -0.65f;
+    float contactRadius = 0.01f;
+    std::vector<ContactPairGPU> contactPairs;
+};
+
 struct NodeDataBlock {
     NodeDataType dataType = NodeDataType::None;
     GeometryData geometry{};
+    ContactPairData contactPairData{};
     double scalarFloatValue = 0.0;
     int64_t scalarIntValue = 0;
     bool scalarBoolValue = false;

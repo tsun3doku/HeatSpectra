@@ -4,6 +4,7 @@
 #include "scene/ModelRegistry.hpp"
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphExecutionPlanner.hpp"
+#include "heat/ContactSystemController.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "scene/SceneController.hpp"
 
@@ -94,6 +95,9 @@ bool NodeRemesh::execute(NodeGraphKernelContext& context) const {
         }
 
         setBoolParameter(bridge, context.node.id, nodegraphparams::remesh::RunRequested, false);
+        if (executed && services.contactSystemController) {
+            services.contactSystemController->clearCache();
+        }
     }
 
     GeometryData remeshedGeometry{};

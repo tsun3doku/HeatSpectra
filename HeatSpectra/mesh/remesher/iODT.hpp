@@ -48,7 +48,10 @@ public:
     void cleanup();
 
 private:
-    void repositionInsertedVertices(int iterations, double tol, double maxEdgeLength, double stepSize);
+    void refreshIntrinsicDirectionalData();
+    void optimalReposition(int iterations, double tol, double maxEdgeLength, double stepSize);
+    int splitLongEdges(double maxEdgeLength, int maxSplits);
+    double repositionInsertedVertices(double stepSize);
     bool delaunayRefinement(int maxIters, float minAngleDegrees);
 
     std::vector<RefinementCandidate> findRefinementCandidates(float minAngleThreshold, float minAreaThreshold);
@@ -56,12 +59,15 @@ private:
 
     static bool byPriorityDescending(const RefinementCandidate& a, const RefinementCandidate& b);
     void markSkipFaces(HalfEdgeMesh& conn, uint32_t vertexIdx, std::unordered_set<uint32_t>& skipFaces);
+    std::vector<uint32_t> collectLocalDelaunayEdges(HalfEdgeMesh& conn, uint32_t vertexIdx);
+    void refreshIntrinsicDirectionalFaces(HalfEdgeMesh& conn, const std::vector<uint32_t>& facePatch);
+    void refreshIntrinsicDirectionalPatch(HalfEdgeMesh& conn, const std::vector<uint32_t>& edgePatch);
 
     bool insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex);
     bool splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiagFront, uint32_t& outDiagBack, uint32_t HESplit, double t = 0.5);
     bool splitEdge(uint32_t heEdge, double tParam, uint32_t& outNewV, bool* outWasInserted = nullptr);
 
-    bool computeWeightedCircumcenter(uint32_t vertIdx, uint32_t& outRefFace, int& outLocalRefIdx, glm::dvec2& outAvgVec, double& outAvgLen);
+    bool computeWeightedCircumcenter(uint32_t vertIdx, glm::dvec2& outAvgVec, double& outAvgLen);
     bool resolveVertex(uint32_t newVertexIdx);
 
     double computeMinAngle(uint32_t faceIdx);

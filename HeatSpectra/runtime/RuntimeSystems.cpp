@@ -117,6 +117,36 @@ const NodeGraphBridge* RuntimeSystems::getNodeGraphBridge() const {
     return render.nodeGraphBridge();
 }
 
+ModelRegistry* RuntimeSystems::getModelRegistry() {
+    if (!scene.isInitialized()) {
+        return nullptr;
+    }
+    return &scene.modelRegistry();
+}
+
+const ModelRegistry* RuntimeSystems::getModelRegistry() const {
+    if (!scene.isInitialized()) {
+        return nullptr;
+    }
+    return &scene.modelRegistry();
+}
+
+ModelSelection* RuntimeSystems::getModelSelection() {
+    RenderRuntime* renderRuntime = render.runtime();
+    if (!renderRuntime) {
+        return nullptr;
+    }
+    return &renderRuntime->getModelSelection();
+}
+
+const ModelSelection* RuntimeSystems::getModelSelection() const {
+    const RenderRuntime* renderRuntime = render.runtime();
+    if (!renderRuntime) {
+        return nullptr;
+    }
+    return &renderRuntime->getModelSelection();
+}
+
 void RuntimeSystems::cleanup() {
     runtimeController.shutdown();
     render.shutdown();

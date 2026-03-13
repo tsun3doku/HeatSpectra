@@ -295,7 +295,7 @@ HalfEdgeMesh::Triangle2D HalfEdgeMesh::layoutTriangle(uint32_t faceIdx) const {
 
 	// Get HEs of face
 	uint32_t he0 = faces[faceIdx].halfEdgeIdx;
-	if (he0 == INVALID_INDEX) {
+	if (he0 == INVALID_INDEX || he0 >= halfEdges.size()) {
 		for (int i = 0; i < 3; ++i) {
 			result.vertices[i] = glm::dvec2(0.0);
 			result.indices[i] = INVALID_INDEX;
@@ -305,8 +305,16 @@ HalfEdgeMesh::Triangle2D HalfEdgeMesh::layoutTriangle(uint32_t faceIdx) const {
 	}
 
 	uint32_t he1 = halfEdges[he0].next;
+	if (he1 == INVALID_INDEX || he1 >= halfEdges.size()) {
+		for (int i = 0; i < 3; ++i) {
+			result.vertices[i] = glm::dvec2(0.0);
+			result.indices[i] = INVALID_INDEX;
+			result.edgeLengths[i] = 0.0;
+		}
+		return result;
+	}
 	uint32_t he2 = halfEdges[he1].next;
-	if (halfEdges[he2].next != he0) {
+	if (he2 == INVALID_INDEX || he2 >= halfEdges.size() || halfEdges[he2].next != he0) {
 		// Not a triangle
 		for (int i = 0; i < 3; ++i) {
 			result.vertices[i] = glm::dvec2(0.0);
@@ -320,11 +328,34 @@ HalfEdgeMesh::Triangle2D HalfEdgeMesh::layoutTriangle(uint32_t faceIdx) const {
 	result.indices[0] = halfEdges[he0].origin;
 	result.indices[1] = halfEdges[he1].origin;
 	result.indices[2] = halfEdges[he2].origin;
+	if (result.indices[0] >= vertices.size() ||
+		result.indices[1] >= vertices.size() ||
+		result.indices[2] >= vertices.size()) {
+		for (int i = 0; i < 3; ++i) {
+			result.vertices[i] = glm::dvec2(0.0);
+			result.indices[i] = INVALID_INDEX;
+			result.edgeLengths[i] = 0.0;
+		}
+		return result;
+	}
 
 	// Edge lengths
-	result.edgeLengths[0] = edges[getEdgeFromHalfEdge(he0)].intrinsicLength;
-	result.edgeLengths[1] = edges[getEdgeFromHalfEdge(he1)].intrinsicLength;
-	result.edgeLengths[2] = edges[getEdgeFromHalfEdge(he2)].intrinsicLength;
+	const uint32_t e0 = getEdgeFromHalfEdge(he0);
+	const uint32_t e1 = getEdgeFromHalfEdge(he1);
+	const uint32_t e2 = getEdgeFromHalfEdge(he2);
+	if (e0 == INVALID_INDEX || e0 >= edges.size() ||
+		e1 == INVALID_INDEX || e1 >= edges.size() ||
+		e2 == INVALID_INDEX || e2 >= edges.size()) {
+		for (int i = 0; i < 3; ++i) {
+			result.vertices[i] = glm::dvec2(0.0);
+			result.indices[i] = INVALID_INDEX;
+			result.edgeLengths[i] = 0.0;
+		}
+		return result;
+	}
+	result.edgeLengths[0] = edges[e0].intrinsicLength;
+	result.edgeLengths[1] = edges[e1].intrinsicLength;
+	result.edgeLengths[2] = edges[e2].intrinsicLength;
 
 	// Validate
 	const double MIN_LENGTH = 1e-12;
@@ -354,9 +385,12 @@ HalfEdgeMesh::Triangle2D HalfEdgeMesh::layoutTriangle(uint32_t faceIdx) const {
 
 std::array<glm::dvec2, 4> HalfEdgeMesh::layoutDiamond(uint32_t heIdx) const {
 	const auto& HEs = halfEdges;
+	if (heIdx >= HEs.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
 
 	uint32_t opp0 = HEs[heIdx].opposite;
-	if (opp0 == INVALID_INDEX) {
+	if (opp0 == INVALID_INDEX || opp0 >= HEs.size()) {
 		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
 	}
 
@@ -370,9 +404,21 @@ std::array<glm::dvec2, 4> HalfEdgeMesh::layoutDiamond(uint32_t heIdx) const {
 	// Get HEs and vertices
 	uint32_t he0 = heIdx;
 	uint32_t he1 = HEs[he0].next;
+	if (he1 == INVALID_INDEX || he1 >= HEs.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
 	uint32_t he2 = HEs[he1].next;
+	if (he2 == INVALID_INDEX || he2 >= HEs.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
 	uint32_t opp1 = HEs[opp0].next;
+	if (opp1 == INVALID_INDEX || opp1 >= HEs.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
 	uint32_t opp2 = HEs[opp1].next;
+	if (opp2 == INVALID_INDEX || opp2 >= HEs.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
 
 	uint32_t va = HEs[he0].origin;
 	uint32_t vb = HEs[opp0].origin;
@@ -387,11 +433,23 @@ std::array<glm::dvec2, 4> HalfEdgeMesh::layoutDiamond(uint32_t heIdx) const {
 	}
 
 	// Get intrinsic lengths for the diamond edges
-	double diagLen = edges[getEdgeFromHalfEdge(he0)].intrinsicLength;		// va-vb
-	double len_vb_vc = edges[getEdgeFromHalfEdge(he1)].intrinsicLength;		// vb-vc
-	double len_vc_va = edges[getEdgeFromHalfEdge(he2)].intrinsicLength;		// vc-va
-	double len_va_vd = edges[getEdgeFromHalfEdge(opp1)].intrinsicLength;	// va-vd
-	double len_vd_vb = edges[getEdgeFromHalfEdge(opp2)].intrinsicLength;	// vd-vb
+	const uint32_t edgeDiag = getEdgeFromHalfEdge(he0);
+	const uint32_t edgeVbVc = getEdgeFromHalfEdge(he1);
+	const uint32_t edgeVcVa = getEdgeFromHalfEdge(he2);
+	const uint32_t edgeVaVd = getEdgeFromHalfEdge(opp1);
+	const uint32_t edgeVdVb = getEdgeFromHalfEdge(opp2);
+	if (edgeDiag == INVALID_INDEX || edgeDiag >= edges.size() ||
+		edgeVbVc == INVALID_INDEX || edgeVbVc >= edges.size() ||
+		edgeVcVa == INVALID_INDEX || edgeVcVa >= edges.size() ||
+		edgeVaVd == INVALID_INDEX || edgeVaVd >= edges.size() ||
+		edgeVdVb == INVALID_INDEX || edgeVdVb >= edges.size()) {
+		return { glm::dvec2(0), glm::dvec2(0), glm::dvec2(0), glm::dvec2(0) };
+	}
+	double diagLen = edges[edgeDiag].intrinsicLength;		// va-vb
+	double len_vb_vc = edges[edgeVbVc].intrinsicLength;		// vb-vc
+	double len_vc_va = edges[edgeVcVa].intrinsicLength;		// vc-va
+	double len_va_vd = edges[edgeVaVd].intrinsicLength;	// va-vd
+	double len_vd_vb = edges[edgeVdVb].intrinsicLength;	// vd-vb
 
 	// Layout: place va at (0,0), vb at (diagLen, 0)
 	glm::dvec2 p1(0.0, 0.0);          // va
@@ -790,21 +848,34 @@ bool HalfEdgeMesh::isDelaunayEdge(uint32_t heIdx) const {
 }
 
 int HalfEdgeMesh::makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges) {
+	std::vector<uint32_t> allEdges;
+	allEdges.reserve(edges.size());
+	for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
+		if (edges[edgeIdx].halfEdgeIdx != INVALID_INDEX) {
+			allEdges.push_back(edgeIdx);
+		}
+	}
+	return makeDelaunayLocal(maxIterations, allEdges, flippedEdges);
+}
+
+int HalfEdgeMesh::makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
 	int totalFlips = 0;
 
 	std::unordered_set<std::pair<uint32_t, uint32_t>, pair_hash> flippedAB;
 
 	for (int iter = 0; iter < maxIterations; ++iter) {
-		// 1) Enqueue all non-delaunay edges
-		auto Es = getEdges();
 		std::queue<uint32_t> queueEdges;
 		std::unordered_set<uint32_t> inQueueEdges;
 		
-		for (uint32_t ei = 0; ei < Es.size(); ++ei) {
-			uint32_t he = Es[ei].halfEdgeIdx;
-			if (he != INVALID_INDEX && !isDelaunayEdge(he)) {
-				queueEdges.push(ei);
-				inQueueEdges.insert(ei);
+		for (uint32_t edgeIdx : seedEdges) {
+			if (edgeIdx >= edges.size()) {
+				continue;
+			}
+
+			uint32_t he = edges[edgeIdx].halfEdgeIdx;
+			if (he != INVALID_INDEX && !isDelaunayEdge(he) && !inQueueEdges.count(edgeIdx)) {
+				queueEdges.push(edgeIdx);
+				inQueueEdges.insert(edgeIdx);
 			}
 		}
 
@@ -828,7 +899,11 @@ int HalfEdgeMesh::makeDelaunay(int maxIterations, std::vector<uint32_t>* flipped
 
 			// Avoid flipping the same undirected edge twice
 			auto vA = halfEdges[he].origin;
-			auto vB = halfEdges[halfEdges[he].next].origin;
+			const uint32_t heNext = halfEdges[he].next;
+			if (heNext == INVALID_INDEX || heNext >= halfEdges.size()) {
+				continue;
+			}
+			auto vB = halfEdges[heNext].origin;
 			auto key = std::minmax(vA, vB);
 
 			if (flippedAB.count(key)) 
@@ -1175,7 +1250,7 @@ HalfEdgeMesh::Split HalfEdgeMesh::splitEdgeTopo(uint32_t edgeIdx, double t) {
 	// Set the two HEs of the edge split
 	uint32_t child1 = heFront;    // Left child HE
 	uint32_t child2 = originalHE; // Right child HE
-	
+
 	// Update Edge members
 	edges[edgeIdx].halfEdgeIdx = child1;
 	edges[edgeIdx].intrinsicLength = lengthA;
@@ -1199,7 +1274,7 @@ HalfEdgeMesh::Split HalfEdgeMesh::splitEdgeTopo(uint32_t edgeIdx, double t) {
 	// Split edges are not original
 	edges[edgeIdx].isOriginal = false;
 	edges[newEdgeIdx].isOriginal = false;
-	
+
 	// Create Edge entries for the diagonals
 	if (diagFront != INVALID_INDEX) {
 		uint32_t diagFrontEdgeIdx = edges.size();
@@ -1262,7 +1337,7 @@ void HalfEdgeMesh::addNeighboringHalfEdgesFromVertex(uint32_t vertexIdx, uint32_
 }
 
 uint32_t HalfEdgeMesh::getNextAroundVertex(uint32_t halfEdgeIdx) const {
-	// Standardized CCW successor around a vertex: next -> next -> opposite.
+	// Standardized CCW traversal around a vertex
 	if (halfEdgeIdx == INVALID_INDEX || halfEdgeIdx >= halfEdges.size()) {
 		return INVALID_INDEX;
 	}
@@ -1283,35 +1358,34 @@ uint32_t HalfEdgeMesh::getNextAroundVertex(uint32_t halfEdgeIdx) const {
 
 std::vector<uint32_t> HalfEdgeMesh::getVertexHalfEdges(uint32_t vertexIdx) const {
 	std::vector<uint32_t> fan;
-	if (vertexIdx >= vertices.size())
-		return fan;
-
-	uint32_t startHE = vertices[vertexIdx].halfEdgeIdx;
-	if (startHE == INVALID_INDEX)
-		return fan;
-
-	if (startHE >= halfEdges.size()) {
+	if (vertexIdx >= vertices.size()) {
 		return fan;
 	}
 
-	// Check if this is halfedge originates from vertex v
+	uint32_t startHE = vertices[vertexIdx].halfEdgeIdx;
+	if (startHE == INVALID_INDEX || startHE >= halfEdges.size()) {
+		return fan;
+	}
+
 	if (halfEdges[startHE].origin != vertexIdx) {
 		return fan;
 	}
 
 	uint32_t he = startHE;
+	const size_t maxSteps = std::max<size_t>(halfEdges.size(), 1);
+	size_t steps = 0;
 	do {
-		// Collect outgoing halfedges
 		fan.push_back(he);
 
-		// Standardized CCW traversal around the vertex
 		uint32_t nextHe = getNextAroundVertex(he);
 		if (nextHe == INVALID_INDEX) {
-			break; 
+			break;
 		}
-		
-		he = nextHe;
 
+		he = nextHe;
+		if (++steps > maxSteps) {
+			break;
+		}
 	} while (he != startHE);
 
 	return fan;
@@ -1385,7 +1459,7 @@ std::vector<uint32_t> HalfEdgeMesh::getNeighboringHalfEdges(uint32_t heIdx) cons
 	std::vector<uint32_t> out;
 	if (heIdx >= halfEdges.size()) return out;
 
-	// The two endpoints of the flipped halfedge:
+	// The two endpoints of the flipped halfedge
 	uint32_t vA = halfEdges[heIdx].origin;
 	uint32_t vB = halfEdges[halfEdges[heIdx].next].origin;
 	uint32_t opp = halfEdges[heIdx].opposite;

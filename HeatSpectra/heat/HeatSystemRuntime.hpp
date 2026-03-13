@@ -1,6 +1,7 @@
 ﻿#pragma once
 
-#include "util/Structs.hpp"
+#include "contact/ContactTypes.hpp"
+#include "HeatContactParams.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -29,12 +30,18 @@ public:
     };
 
     struct ContactCoupling {
-        uint32_t sourceModelId = 0;
+        ContactCouplingKind kind = ContactCouplingKind::SourceToReceiver;
+        uint32_t emitterModelId = 0;
         uint32_t receiverModelId = 0;
         HeatSource* source = nullptr;
+        HeatReceiver* emitterReceiver = nullptr;
         HeatReceiver* receiver = nullptr;
         VkBuffer contactPairBuffer = VK_NULL_HANDLE;
         VkDeviceSize contactPairBufferOffset = 0;
+        uint32_t contactPairCount = 0;
+        HeatContactParams params{};
+        VkBuffer paramsBuffer = VK_NULL_HANDLE;
+        VkDeviceSize paramsBufferOffset = 0;
         VkDescriptorSet contactComputeSetA = VK_NULL_HANDLE;
         VkDescriptorSet contactComputeSetB = VK_NULL_HANDLE;
         bool contactDescriptorsReady = false;
@@ -43,14 +50,6 @@ public:
     const SourceCoupling* findSourceCouplingForModel(const Model* model) const;
     const SourceCoupling* findPrimarySourceCoupling() const;
     Model* findPrimaryReceiverModel() const;
-
-    void clearContactCouplings(MemoryAllocator& memoryAllocator);
-    bool uploadContactPairsToCoupling(
-        ContactCoupling& coupling,
-        const std::vector<ContactPairGPU>& pairs,
-        VulkanDevice& vulkanDevice,
-        MemoryAllocator& memoryAllocator,
-        CommandPool& renderCommandPool);
 
     void initializeModelBindings(
         VulkanDevice& vulkanDevice,
@@ -63,7 +62,6 @@ public:
 
     std::vector<SourceCoupling>& getSourceCouplingsMutable() { return sourceCouplings; }
     std::vector<std::unique_ptr<HeatReceiver>>& getReceiversMutable() { return receivers; }
-    std::vector<ContactCoupling>& getContactCouplingsMutable() { return contactCouplings; }
     std::vector<uint32_t>& getReceiverModelIdsMutable() { return receiverModelIds; }
 
     void cleanupModelBindings(MemoryAllocator& memoryAllocator);
@@ -72,6 +70,5 @@ private:
     void addReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Remesher& remesher, CommandPool& renderCommandPool, Model* model);
     std::vector<SourceCoupling> sourceCouplings;
     std::vector<std::unique_ptr<HeatReceiver>> receivers;
-    std::vector<ContactCoupling> contactCouplings;
     std::vector<uint32_t> receiverModelIds;
 };

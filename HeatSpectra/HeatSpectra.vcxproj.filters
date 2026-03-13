@@ -279,6 +279,12 @@
     <ClCompile Include="renderers\VoronoiRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="renderers\IntrinsicRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\OutlineRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="renderers\PointRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -289,6 +295,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\ContactInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\ContactSystemController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\ContactSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderers\ContactLineRenderer.cpp">
@@ -366,10 +378,16 @@
     <ClCompile Include="nodegraph\NodeHeatSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeContactPair.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeContactPairPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp">
@@ -835,10 +853,22 @@
     <ClInclude Include="renderers\VoronoiRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="renderers\IntrinsicRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\OutlineRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="renderers\PointRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderers\ContactLineRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\ContactSystemController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\ContactSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\ContactInterface.hpp">
@@ -922,10 +952,16 @@
     <ClInclude Include="nodegraph\NodeHeatSource.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeContactPair.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeContactPairPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp">
@@ -956,6 +992,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="render\WindowRuntimeState.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatContactParams.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

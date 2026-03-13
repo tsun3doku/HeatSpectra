@@ -2,6 +2,7 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphExecutionPlanner.hpp"
+#include "heat/ContactSystemController.hpp"
 #include "NodeSolverController.hpp"
 
 #include <algorithm>
@@ -123,10 +124,17 @@ void NodeGraphRuntime::tick(NodeGraphRuntimeExecutionState* outState) {
 }
 
 void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState) {
+    if (runtimeServices.contactSystemController) {
+        runtimeServices.contactSystemController->beginPreviewFrame();
+    }
+
     std::vector<NodeGraphNodeId> executionOrder;
     if (!NodeGraphExecutionPlanner::buildTopologicalOrder(graphState, executionOrder, nullptr)) {
         if (runtimeServices.nodeSolverController) {
             runtimeServices.nodeSolverController->deactivateHeatSolveIfActive();
+        }
+        if (runtimeServices.contactSystemController) {
+            runtimeServices.contactSystemController->endPreviewFrame();
         }
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
@@ -192,6 +200,10 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
                     outputValues[outputIndex];
             }
         }
+    }
+
+    if (runtimeServices.contactSystemController) {
+        runtimeServices.contactSystemController->endPreviewFrame();
     }
 
     if (outState) {

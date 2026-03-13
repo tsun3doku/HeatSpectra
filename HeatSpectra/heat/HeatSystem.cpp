@@ -19,9 +19,8 @@
 #include "renderers/SurfelRenderer.hpp"
 #include "renderers/VoronoiRenderer.hpp"
 #include "renderers/PointRenderer.hpp"
-#include "renderers/ContactLineRenderer.hpp"
 #include "renderers/HeatRenderer.hpp"
-#include "ContactInterface.hpp"
+#include "ContactSystemController.hpp"
 #include "HeatSystem.hpp"
 #include "HeatSystemStageContext.hpp"
 #include "HeatSystemVoronoiStage.hpp"
@@ -51,7 +50,7 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
     : vulkanDevice(vulkanDevice), memoryAllocator(memoryAllocator), resourceManager(resourceManager), remesher(remesher),
       uniformBufferManager(uniformBufferManager), renderCommandPool(cmdPool), runtime(),
       heatSources(runtime.getSourceCouplingsMutable()), receivers(runtime.getReceiversMutable()),
-      contactCouplings(runtime.getContactCouplingsMutable()), receiverModelIds(runtime.getReceiverModelIdsMutable()),
+      receiverModelIds(runtime.getReceiverModelIdsMutable()),
       maxFramesInFlight(maxFramesInFlight) {
     (void)extent;
 
@@ -100,13 +99,6 @@ HeatSystem::HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAlloca
     initializeSurfelRenderers(renderPass, maxFramesInFlight);
     initializeVoronoiRenderer(renderPass, maxFramesInFlight);
     initializePointRenderer(renderPass, maxFramesInFlight);
-    initializeContactLineRenderer(renderPass, maxFramesInFlight);
-
-	contactInterface = std::make_unique<ContactInterface>(remesher);
-    if (!contactInterface) {
-        failInitialization("create ContactInterface");
-        return;
-    }
 
     initializeHeatModelBindings();
 
@@ -178,7 +170,188 @@ void HeatSystem::clearReceiverDomains() {
     receiverVoronoiDomains.clear();
 }
 
-void HeatSystem::setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds) {
+void HeatSystem::setContactSystemController(ContactSystemController* controller) {
+    contactSystemController = controller;
+}
+
+const HeatSystem::SourceCoupling* HeatSystem::findSourceCouplingByModelId(uint32_t modelId) const {
+    if (modelId == 0) {
+        return nullptr;
+    }
+
+    for (const SourceCoupling& sourceCoupling : heatSources) {
+        if (sourceCoupling.modelId == modelId &&
+            sourceCoupling.model &&
+            sourceCoupling.heatSource) {
+            return &sourceCoupling;
+        }
+    }
+
+    return nullptr;
+}
+
+HeatReceiver* HeatSystem::findReceiverByModelId(uint32_t modelId) const {
+    if (modelId == 0) {
+        return nullptr;
+    }
+
+    for (std::size_t receiverIndex = 0; receiverIndex < receivers.size(); ++receiverIndex) {
+        HeatReceiver* receiver = receivers[receiverIndex].get();
+        if (!receiver) {
+            continue;
+        }
+
+        uint32_t receiverModelId = 0;
+        if (receiverIndex < receiverModelIds.size()) {
+            receiverModelId = receiverModelIds[receiverIndex];
+        }
+        if (receiverModelId == 0) {
+            receiverModelId = receiver->getModel().getRuntimeModelId();
+        }
+
+        if (receiverModelId == modelId) {
+            return receiver;
+        }
+    }
+
+    return nullptr;
+}
+
+bool HeatSystem::uploadContactPairsToCoupling(ContactCoupling& coupling, const std::vector<ContactPairGPU>& pairs) {
+    const VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
+    const std::size_t pairCount = pairs.empty() ? 1ull : pairs.size();
+    const VkDeviceSize bufferSize = sizeof(ContactPairGPU) * pairCount;
+
+    coupling.contactDescriptorsReady = false;
+    if (coupling.contactPairBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(coupling.contactPairBuffer, coupling.contactPairBufferOffset);
+        coupling.contactPairBuffer = VK_NULL_HANDLE;
+        coupling.contactPairBufferOffset = 0;
+    }
+    coupling.contactPairCount = 0;
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize stagingOffset = 0;
+    void* stagingData = nullptr;
+    if (createStagingBuffer(memoryAllocator, bufferSize, stagingBuffer, stagingOffset, &stagingData) != VK_SUCCESS || !stagingData) {
+        std::cerr << "[HeatSystem] Failed to create contact staging buffer" << std::endl;
+        return false;
+    }
+
+    if (pairs.empty()) {
+        std::memset(stagingData, 0, static_cast<std::size_t>(bufferSize));
+    } else {
+        std::memcpy(stagingData, pairs.data(), static_cast<std::size_t>(bufferSize));
+    }
+
+    auto [pairHandle, pairOffset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        storageAlignment);
+    if (pairHandle == VK_NULL_HANDLE) {
+        std::cerr << "[HeatSystem] Failed to allocate contact pair buffer" << std::endl;
+        memoryAllocator.free(stagingBuffer, stagingOffset);
+        return false;
+    }
+
+    coupling.contactPairBuffer = pairHandle;
+    coupling.contactPairBufferOffset = pairOffset;
+    coupling.contactPairCount = static_cast<uint32_t>(pairCount);
+
+    VkCommandBuffer cmd = renderCommandPool.beginCommands();
+    VkBufferCopy region{};
+    region.srcOffset = stagingOffset;
+    region.dstOffset = coupling.contactPairBufferOffset;
+    region.size = bufferSize;
+    vkCmdCopyBuffer(cmd, stagingBuffer, coupling.contactPairBuffer, 1, &region);
+    renderCommandPool.endCommands(cmd);
+
+    memoryAllocator.free(stagingBuffer, stagingOffset);
+    return true;
+}
+
+void HeatSystem::clearContactCouplings() {
+    for (ContactCoupling& coupling : contactCouplings) {
+        coupling.kind = ContactCouplingKind::SourceToReceiver;
+        coupling.contactDescriptorsReady = false;
+        coupling.contactComputeSetA = VK_NULL_HANDLE;
+        coupling.contactComputeSetB = VK_NULL_HANDLE;
+        coupling.source = nullptr;
+        coupling.emitterReceiver = nullptr;
+        coupling.receiver = nullptr;
+        if (coupling.contactPairBuffer != VK_NULL_HANDLE) {
+            memoryAllocator.free(coupling.contactPairBuffer, coupling.contactPairBufferOffset);
+            coupling.contactPairBuffer = VK_NULL_HANDLE;
+            coupling.contactPairBufferOffset = 0;
+        }
+        if (coupling.paramsBuffer != VK_NULL_HANDLE) {
+            memoryAllocator.free(coupling.paramsBuffer, coupling.paramsBufferOffset);
+            coupling.paramsBuffer = VK_NULL_HANDLE;
+            coupling.paramsBufferOffset = 0;
+        }
+        coupling.contactPairCount = 0;
+        coupling.params = HeatContactParams{};
+    }
+
+    contactCouplings.clear();
+}
+
+void HeatSystem::rebuildContactCouplings(bool forceContactRebuild) {
+    clearContactCouplings();
+    if (!contactSystemController) {
+        return;
+    }
+
+    for (const HeatContactBinding& request : configuredContactPairs) {
+        if (request.pair.emitterModelId == 0 ||
+            request.pair.receiverModelId == 0 ||
+            request.pair.emitterModelId == request.pair.receiverModelId) {
+            continue;
+        }
+
+        HeatReceiver* receiver = findReceiverByModelId(request.pair.receiverModelId);
+        if (!receiver) {
+            continue;
+        }
+
+        ContactCoupling coupling{};
+        coupling.kind = request.pair.kind;
+        coupling.emitterModelId = request.pair.emitterModelId;
+        coupling.receiverModelId = request.pair.receiverModelId;
+        coupling.receiver = receiver;
+        coupling.params = request.params;
+
+        if (request.pair.kind == ContactCouplingKind::SourceToReceiver) {
+            const SourceCoupling* sourceCoupling = findSourceCouplingByModelId(request.pair.emitterModelId);
+            if (!sourceCoupling) {
+                continue;
+            }
+            coupling.source = sourceCoupling->heatSource.get();
+        } else {
+            HeatReceiver* emitterReceiver = findReceiverByModelId(request.pair.emitterModelId);
+            if (!emitterReceiver || emitterReceiver == receiver) {
+                continue;
+            }
+            coupling.emitterReceiver = emitterReceiver;
+        }
+
+        std::vector<ContactPairGPU> pairs;
+        if (!contactSystemController->computePairsForRuntimeModels(request.pair, pairs, forceContactRebuild)) {
+            continue;
+        }
+        if (!uploadContactPairsToCoupling(coupling, pairs)) {
+            continue;
+        }
+
+        contactCouplings.push_back(std::move(coupling));
+    }
+}
+
+void HeatSystem::setActiveModels(
+    const std::vector<uint32_t>& sourceModelIds,
+    const std::vector<uint32_t>& receiverModelIds,
+    bool rebuildContactSystem) {
     if (activeSourceModelIds == sourceModelIds &&
         activeReceiverModelIds == receiverModelIds) {
         return;
@@ -192,11 +365,49 @@ void HeatSystem::setActiveModels(const std::vector<uint32_t>& sourceModelIds, co
         isActive = false;
         isVoronoiReady = false;
         isVoronoiSeederReady = false;
+        initializeHeatModelBindings();
+        if (rebuildContactSystem) {
+            rebuildContactCouplings(false);
+        }
         setActive(true);
         return;
     }
 
     initializeHeatModelBindings();
+    if (rebuildContactSystem) {
+        rebuildContactCouplings(false);
+    }
+}
+
+void HeatSystem::setContactPairs(
+    const std::vector<HeatContactBinding>& contactPairs,
+    bool forceContactRebuild) {
+    const bool pairsChanged = (configuredContactPairs != contactPairs);
+    configuredContactPairs = contactPairs;
+    if (!pairsChanged && !forceContactRebuild) {
+        return;
+    }
+
+    rebuildContactCouplings(forceContactRebuild);
+
+    if (isActive && isVoronoiReady) {
+        executeBufferTransfers();
+    }
+}
+
+void HeatSystem::setSolveParams(const HeatSolveParams& params) {
+    if (solveParams == params) {
+        return;
+    }
+
+    solveParams = params;
+    clearReceiverDomains();
+    isVoronoiReady = false;
+    isVoronoiSeederReady = false;
+
+    if (isActive) {
+        setActive(true);
+    }
 }
 
 void HeatSystem::setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings) {
@@ -236,12 +447,6 @@ void HeatSystem::setMaterialBindings(const std::vector<HeatModelMaterialBindings
         isVoronoiSeederReady = false;
     }
 
-}
-
-void HeatSystem::updateCouplingDescriptors(ContactCoupling& coupling, uint32_t nodeCount) {
-    if (contactStage) {
-        contactStage->updateCouplingDescriptors(coupling, nodeCount);
-    }
 }
 
 void HeatSystem::initializeHeatModelBindings() {
@@ -385,12 +590,9 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
         heatRenderer->updateDescriptors(remesher, sourceRenderBindings, receivers, maxFramesInFlight, true);
     }
 
-	if (contactLineRenderer) {
-		contactLineRenderer->cleanup();
-		contactLineRenderer.reset();
-	}
-
-	initializeContactLineRenderer(renderPass, maxFramesInFlight);
+    if (contactSystemController) {
+        contactSystemController->reinitRenderer(renderPass, maxFramesInFlight);
+    }
 
     if (!createComputeCommandBuffers(maxFramesInFlight)) {
         std::cerr << "[HeatSystem] Failed to recreate compute command buffers" << std::endl;
@@ -410,14 +612,11 @@ void HeatSystem::setActive(bool active) {
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
 
-	if (active && isVoronoiSeederReady && !isPaused) {
-		initializeContactInterface();
-		executeBufferTransfers();
-	}
+    if (active && isVoronoiSeederReady && !isPaused) {
+        executeBufferTransfers();
+    }
 
 	if (active && !isVoronoiSeederReady) {
-        initializeHeatModelBindings();
-
         for (auto& receiver : receivers) {
             if (!receiver) {
                 continue;
@@ -429,7 +628,7 @@ void HeatSystem::setActive(bool active) {
         }
 
         if (!voronoiStage ||
-            !voronoiStage->buildReceiverDomains(receivers, receiverVoronoiDomains, K_NEIGHBORS)) {
+            !voronoiStage->buildReceiverDomains(receivers, receiverVoronoiDomains, solveParams, K_NEIGHBORS)) {
             std::cerr << "[HeatSystem] Cannot activate: failed to build voronoi domains" << std::endl;
             isActive = false;
             isVoronoiReady = false;
@@ -499,123 +698,16 @@ void HeatSystem::setActive(bool active) {
 			domain.receiver->stageVoronoiSurfaceMapping(cellIndices);
 		}
 
-		initializeContactInterface();
-		executeBufferTransfers();
-		isVoronoiReady = true;
-	}
-	isActive = active;
-}
-
-void HeatSystem::initializeContactInterface() {
-	if (!contactInterface) {
-		contactInterface = std::make_unique<ContactInterface>(remesher);
-	}
-
-    runtime.clearContactCouplings(memoryAllocator);
-
-	ContactInterface::Settings settings{};
-    std::vector<ContactInterface::ContactLineVertex> aggregatedOutlines;
-    std::vector<ContactInterface::ContactLineVertex> aggregatedCorrespondences;
-    for (SourceCoupling& sourceCoupling : heatSources) {
-        if (!sourceCoupling.model || !sourceCoupling.heatSource) {
-            continue;
-        }
-
-        std::vector<std::vector<ContactPairGPU>> receiverContactPairs;
-        std::vector<ContactInterface::ContactLineVertex> sourceOutlineVertices;
-        std::vector<ContactInterface::ContactLineVertex> sourceCorrespondenceVertices;
-        contactInterface->mapSurfacePoints(
-            *sourceCoupling.model,
-            receivers,
-            receiverContactPairs,
-            sourceOutlineVertices,
-            sourceCorrespondenceVertices,
-            settings
-        );
-
-        if (!sourceOutlineVertices.empty()) {
-            aggregatedOutlines.insert(
-                aggregatedOutlines.end(),
-                sourceOutlineVertices.begin(),
-                sourceOutlineVertices.end());
-        }
-        if (!sourceCorrespondenceVertices.empty()) {
-            aggregatedCorrespondences.insert(
-                aggregatedCorrespondences.end(),
-                sourceCorrespondenceVertices.begin(),
-                sourceCorrespondenceVertices.end());
-        }
-
-        const std::size_t pairSetCount = receiverContactPairs.size();
-        const std::size_t receiverCount = receivers.size();
-        std::size_t count = pairSetCount;
-        if (receiverCount < count) {
-            count = receiverCount;
-        }
-        for (std::size_t receiverIdx = 0; receiverIdx < count; ++receiverIdx) {
-            HeatReceiver* receiver = receivers[receiverIdx].get();
-            if (!receiver) {
-                continue;
-            }
-
-            ContactCoupling coupling{};
-            coupling.sourceModelId = sourceCoupling.modelId;
-            coupling.receiverModelId = resourceManager.getModelID(&receiver->getModel());
-
-            if (receiverIdx < receiverModelIds.size()) {
-                coupling.receiverModelId = receiverModelIds[receiverIdx];
-            }
-
-            coupling.source = sourceCoupling.heatSource.get();
-            coupling.receiver = receiver;
-
-            if (!runtime.uploadContactPairsToCoupling(coupling, receiverContactPairs[receiverIdx], vulkanDevice, memoryAllocator, renderCommandPool)) {
-                continue;
-            }
-
-            contactCouplings.push_back(std::move(coupling));
-        }
+        executeBufferTransfers();
+        isVoronoiReady = true;
     }
-
-	if (contactLineRenderer) {
-		std::vector<ContactLineRenderer::LineVertex> outlineVerts;
-		outlineVerts.reserve(aggregatedOutlines.size());
-		for (size_t i = 0; i < aggregatedOutlines.size(); ++i) {
-			ContactLineRenderer::LineVertex v{};
-			v.position = aggregatedOutlines[i].position;
-			v.color = aggregatedOutlines[i].color;
-			outlineVerts.push_back(v);
-		}
-
-		contactLineRenderer->uploadOutlines(outlineVerts);
-		std::vector<ContactLineRenderer::LineVertex> corrVerts;
-		corrVerts.reserve(aggregatedCorrespondences.size());
-
-		for (size_t i = 0; i < aggregatedCorrespondences.size(); ++i) {
-			ContactLineRenderer::LineVertex v{};
-			v.position = aggregatedCorrespondences[i].position;
-			v.color = aggregatedCorrespondences[i].color;
-			corrVerts.push_back(v);
-		}
-		contactLineRenderer->uploadCorrespondences(corrVerts);
-	}
-}
-
-void HeatSystem::initializeContactLineRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-	contactLineRenderer = std::make_unique<ContactLineRenderer>(
-		vulkanDevice,
-		memoryAllocator,
-		uniformBufferManager
-	);
-	contactLineRenderer->initialize(renderPass, 2, maxFramesInFlight);
+    isActive = active;
 }
 
 void HeatSystem::renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
-    if (!renderStage) {
-        return;
+    if (contactSystemController) {
+        contactSystemController->renderLines(cmdBuffer, frameIndex, extent);
     }
-
-    renderStage->renderContactLines(cmdBuffer, frameIndex, extent, contactLineRenderer.get(), isActive);
 }
 
 void HeatSystem::requestReset() {
@@ -838,34 +930,47 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         }
         
         // INJECTION: run all active source->receiver couplings.
-        for (const ContactCoupling& coupling : contactCouplings) {
-            if (!coupling.contactDescriptorsReady || !coupling.receiver) {
-                continue;
-            }
+        {
+            for (const ContactCoupling& coupling : contactCouplings) {
+                if (!coupling.contactDescriptorsReady || !coupling.receiver) {
+                    continue;
+                }
 
-            const HeatSystemVoronoiDomain* receiverDomain = findReceiverDomain(coupling.receiver);
-            if (!receiverDomain || receiverDomain->nodeCount == 0) {
-                continue;
-            }
+                const HeatSystemVoronoiDomain* receiverDomain = findReceiverDomain(coupling.receiver);
+                if (!receiverDomain || receiverDomain->nodeCount == 0) {
+                    continue;
+                }
 
-            uint32_t triCount = static_cast<uint32_t>(coupling.receiver->getIntrinsicTriangleCount());
-            if (triCount == 0) {
-                continue;
-            }
+                uint32_t triCount = static_cast<uint32_t>(coupling.receiver->getIntrinsicTriangleCount());
+                if (triCount == 0) {
+                    continue;
+                }
 
-            uint32_t groupSize = 256;
-            uint32_t groupCount = (triCount + groupSize - 1) / groupSize;
-            VkDescriptorSet contactSet = coupling.contactComputeSetB;
-            if (isEven) {
-                contactSet = coupling.contactComputeSetA;
-            }
-            if (contactSet == VK_NULL_HANDLE) {
-                continue;
-            }
+                uint32_t groupSize = 256;
+                uint32_t groupCount = (triCount + groupSize - 1) / groupSize;
+                VkDescriptorSet contactSet = coupling.contactComputeSetB;
+                if (isEven) {
+                    contactSet = coupling.contactComputeSetA;
+                }
+                if (contactSet == VK_NULL_HANDLE) {
+                    continue;
+                }
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, resources.contactPipeline);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, resources.contactPipelineLayout, 0, 1, &contactSet, 0, nullptr);
-            vkCmdDispatch(commandBuffer, groupCount, 1, 1);
+                ContactPushConstant contactPushConstant{};
+                contactPushConstant.couplingKind =
+                    (coupling.kind == ContactCouplingKind::ReceiverToReceiver) ? 1u : 0u;
+
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, resources.contactPipeline);
+                vkCmdPushConstants(
+                    commandBuffer,
+                    resources.contactPipelineLayout,
+                    VK_SHADER_STAGE_COMPUTE_BIT,
+                    0,
+                    sizeof(ContactPushConstant),
+                    &contactPushConstant);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, resources.contactPipelineLayout, 0, 1, &contactSet, 0, nullptr);
+                vkCmdDispatch(commandBuffer, groupCount, 1, 1);
+            }
         }
 
         VkBufferMemoryBarrier injectionBarriers[2]{};
@@ -949,7 +1054,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 }
 
 void HeatSystem::initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-    voronoiRenderer = std::make_unique<VoronoiRenderer>(vulkanDevice, uniformBufferManager);
+    voronoiRenderer = std::make_unique<VoronoiRenderer>(vulkanDevice, uniformBufferManager, renderCommandPool);
     voronoiRenderer->initialize(renderPass, maxFramesInFlight);
 }
 
@@ -1078,8 +1183,10 @@ void HeatSystem::executeBufferTransfers() {
         );
     }
 
-    for (ContactCoupling& coupling : contactCouplings) {
-        updateCouplingDescriptors(coupling, nodeCount);
+    if (contactStage) {
+        for (ContactCoupling& coupling : contactCouplings) {
+            contactStage->updateCouplingDescriptors(coupling, nodeCount);
+        }
     }
     std::vector<HeatRenderer::SourceRenderBinding> sourceRenderBindings;
     sourceRenderBindings.reserve(heatSources.size());
@@ -1134,6 +1241,10 @@ void HeatSystem::executeBufferTransfers() {
                     supportingHalfedge->getEdgeView(),
                     supportingHalfedge->getTriangleView(),
                     supportingHalfedge->getLengthView(),
+                    supportingHalfedge->getInputHalfedgeView(),
+                    supportingHalfedge->getInputEdgeView(),
+                    supportingHalfedge->getInputTriangleView(),
+                    supportingHalfedge->getInputLengthView(),
                     receiver->getVoronoiCandidateBuffer(),
                     receiver->getVoronoiCandidateBufferOffset()
                 );
@@ -1193,11 +1304,6 @@ void HeatSystem::cleanupResources() {
         pointRenderer->cleanup();
         pointRenderer.reset();
     }
-
-	if (contactLineRenderer) {
-		contactLineRenderer->cleanup();
-		contactLineRenderer.reset();
-	}
 
     if (resources.voronoiPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vulkanDevice.getDevice(), resources.voronoiPipeline, nullptr);
@@ -1300,6 +1406,7 @@ void HeatSystem::cleanup() {
         memoryAllocator.free(resources.seedFlagsBuffer, resources.seedFlagsBufferOffset_);
         resources.seedFlagsBuffer = VK_NULL_HANDLE;
         resources.seedFlagsBufferOffset_ = 0;
+        resources.mappedSeedFlagsData = nullptr;
     }
 
     if (resources.debugCellGeometryBuffer != VK_NULL_HANDLE) {
@@ -1335,6 +1442,8 @@ void HeatSystem::cleanup() {
         resources.voxelOffsetsBuffer = VK_NULL_HANDLE;
         resources.voxelOffsetsBufferOffset_ = 0;
     }
+
+    clearContactCouplings();
 
     runtime.cleanupModelBindings(memoryAllocator);
 }

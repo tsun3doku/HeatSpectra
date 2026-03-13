@@ -3,6 +3,7 @@
 #include "vulkan/CommandBufferManager.hpp"
 #include "app/SwapchainManager.hpp"
 #include "framegraph/FrameSync.hpp"
+#include "ContactSystemController.hpp"
 #include "HeatSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "mesh/MeshModifiers.hpp"
@@ -67,14 +68,18 @@ std::unique_ptr<HeatSystem> HeatSystemController::buildHeatSystem(VkExtent2D ext
         std::cerr << "[HeatSystemController] HeatSystem initialization failed" << std::endl;
         return nullptr;
     }
-    system->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds);
+    system->setContactSystemController(contactSystemController);
+    system->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds, false);
+    system->setContactPairs(configuredContactPairs);
+    system->setSolveParams(configuredSolveParams);
     system->setMaterialBindings(configuredMaterialBindings);
     return system;
 }
 
 void HeatSystemController::setActiveModels(
     const std::vector<uint32_t>& sourceModelIds,
-    const std::vector<uint32_t>& receiverModelIds) {
+    const std::vector<uint32_t>& receiverModelIds,
+    bool rebuildContactSystem) {
     if (configuredSourceModelIds == sourceModelIds &&
         configuredReceiverModelIds == receiverModelIds) {
         return;
@@ -83,7 +88,7 @@ void HeatSystemController::setActiveModels(
     configuredSourceModelIds = sourceModelIds;
     configuredReceiverModelIds = receiverModelIds;
     if (heatSystem) {
-        heatSystem->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds);
+        heatSystem->setActiveModels(configuredSourceModelIds, configuredReceiverModelIds, rebuildContactSystem);
     }
 }
 
@@ -91,6 +96,30 @@ void HeatSystemController::setMaterialBindings(const std::vector<HeatModelMateri
     configuredMaterialBindings = bindings;
     if (heatSystem) {
         heatSystem->setMaterialBindings(configuredMaterialBindings);
+    }
+}
+
+void HeatSystemController::setContactPairs(
+    const std::vector<HeatContactBinding>& contactPairs,
+    bool forceContactRebuild) {
+    configuredContactPairs = contactPairs;
+    if (heatSystem) {
+        heatSystem->setContactPairs(configuredContactPairs, forceContactRebuild);
+    }
+}
+
+void HeatSystemController::setSolveParams(const HeatSolveParams& params) {
+    configuredSolveParams = params;
+    if (heatSystem) {
+        heatSystem->setSolveParams(configuredSolveParams);
+    }
+}
+
+void HeatSystemController::setContactSystemController(ContactSystemController* updatedContactSystemController) {
+    contactSystemController = updatedContactSystemController;
+    if (heatSystem) {
+        heatSystem->setContactSystemController(contactSystemController);
+        heatSystem->setContactPairs(configuredContactPairs, true);
     }
 }
 

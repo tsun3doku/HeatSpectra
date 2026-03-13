@@ -34,10 +34,20 @@ HeatMaterialPreset ceramicPreset = {
     1.5f,
 };
 
-} // namespace
+HeatMaterialPreset customPreset = {
+    HeatMaterialPresetId::Custom,
+    "Custom",
+    1.0f,
+    1.0f,
+    75000.0f,
+};
+
+}
 
 const HeatMaterialPreset& heatMaterialPresetById(HeatMaterialPresetId id) {
     switch (id) {
+    case HeatMaterialPresetId::Custom:
+        return customPreset;
     case HeatMaterialPresetId::Copper:
         return copperPreset;
     case HeatMaterialPresetId::Iron:

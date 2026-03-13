@@ -10,6 +10,7 @@
 
 class NodeGraphBridge;
 class HeatSystemController;
+class ContactSystemController;
 class MeshModifiers;
 class ModelRegistry;
 class NodeSolverController;
@@ -20,6 +21,7 @@ struct NodeRuntimeServices {
     ModelRegistry* modelRegistry = nullptr;
     SceneController* sceneController = nullptr;
     HeatSystemController* heatSystemController = nullptr;
+    ContactSystemController* contactSystemController = nullptr;
     NodeSolverController* nodeSolverController = nullptr;
     ResourceManager* resourceManager = nullptr;
     MeshModifiers* meshModifiers = nullptr;

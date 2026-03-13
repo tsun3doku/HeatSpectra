@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "contact/ContactTypes.hpp"
+#include "HeatContactParams.hpp"
+#include "HeatSolveParams.hpp"
 #include "HeatSystemPresets.hpp"
 
 class VulkanDevice;
@@ -23,6 +26,7 @@ class HeatSystem;
 class ModelUploader;
 class MeshModifiers;
 class VkFrameGraphRuntime;
+class ContactSystemController;
 
 class HeatSystemController {
 public:
@@ -50,8 +54,14 @@ public:
     void resetHeatSystem();
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     bool removeModelByID(uint32_t modelId);
-    void setActiveModels(const std::vector<uint32_t>& sourceModelIds, const std::vector<uint32_t>& receiverModelIds);
+    void setActiveModels(
+        const std::vector<uint32_t>& sourceModelIds,
+        const std::vector<uint32_t>& receiverModelIds,
+        bool rebuildContactSystem = true);
+    void setContactPairs(const std::vector<HeatContactBinding>& contactPairs, bool forceContactRebuild = false);
+    void setSolveParams(const HeatSolveParams& params);
     void setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings);
+    void setContactSystemController(ContactSystemController* contactSystemController);
 
     void createHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
     void recreateHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
@@ -78,7 +88,10 @@ private:
     std::unique_ptr<HeatSystem>& heatSystem;
     std::vector<uint32_t> configuredSourceModelIds;
     std::vector<uint32_t> configuredReceiverModelIds;
+    std::vector<HeatContactBinding> configuredContactPairs;
+    HeatSolveParams configuredSolveParams;
     std::vector<HeatModelMaterialBindings> configuredMaterialBindings;
+    ContactSystemController* contactSystemController = nullptr;
 
     std::atomic<bool>& isOperating;
     const uint32_t maxFramesInFlight;

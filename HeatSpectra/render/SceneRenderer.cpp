@@ -321,7 +321,7 @@ void SceneRenderer::allocateDescriptorSetsForModel(Model* model) {
 
 void SceneRenderer::updateDescriptorSetsForModel(Model* model, iODT* remesher) {
     if (overlayPass) {
-        overlayPass->updateDescriptorSetsForModel(model, remesher, uniformBufferManager, maxFramesInFlight);
+        overlayPass->updateDescriptorSetsForModel(model, remesher, maxFramesInFlight);
     }
 }
 
@@ -333,7 +333,7 @@ void SceneRenderer::allocateNormalsDescriptorSetsForModel(Model* model) {
 
 void SceneRenderer::updateNormalsDescriptorSetsForModel(Model* model, iODT* remesher) {
     if (overlayPass) {
-        overlayPass->updateNormalsDescriptorSetsForModel(model, remesher, uniformBufferManager, maxFramesInFlight);
+        overlayPass->updateNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
     }
 }
 
@@ -345,7 +345,7 @@ void SceneRenderer::allocateVertexNormalsDescriptorSetsForModel(Model* model) {
 
 void SceneRenderer::updateVertexNormalsDescriptorSetsForModel(Model* model, iODT* remesher) {
     if (overlayPass) {
-        overlayPass->updateVertexNormalsDescriptorSetsForModel(model, remesher, uniformBufferManager, maxFramesInFlight);
+        overlayPass->updateVertexNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
     }
 }
 

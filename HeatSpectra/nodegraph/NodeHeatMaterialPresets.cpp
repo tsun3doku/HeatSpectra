@@ -16,6 +16,10 @@ bool tryResolveHeatPresetId(const std::string& value, HeatMaterialPresetId& outI
         outId = HeatMaterialPresetId::Ceramic;
         return true;
     }
+    if (normalized == "custom") {
+        outId = HeatMaterialPresetId::Custom;
+        return true;
+    }
     if (normalized == "aluminum" || normalized == "aluminium") {
         outId = HeatMaterialPresetId::Aluminum;
         return true;

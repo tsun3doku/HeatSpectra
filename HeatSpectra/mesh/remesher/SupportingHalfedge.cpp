@@ -29,56 +29,36 @@ SupportingHalfedge::~SupportingHalfedge() {
 void SupportingHalfedge::initialize() {
     const auto& inputConn = inputMesh.getConnectivity();
     const auto& inputFaces = inputConn.getFaces();
+    const auto& inputHalfedges = inputConn.getHalfEdges();
 
     const auto& intrinsicConn = intrinsicMesh.getConnectivity();
     const auto& intrinsicFaces = intrinsicConn.getFaces();
-
-    supportingInfo.resize(inputFaces.size());
-
-    // For each input triangle, calculate the angle from its reference edge to the supporting halfedge
-    int invalidCount = 0;
-    const auto& inputHalfedges = inputConn.getHalfEdges();
     const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
 
+    supportingInfoPerHalfedge.resize(inputHalfedges.size());
+    for (auto& info : supportingInfoPerHalfedge) {
+        info.supportingHE = INVALID_INDEX;
+        info.supportingAngle = 0.0;
+    }
+
     for (size_t faceIdx = 0; faceIdx < inputFaces.size(); ++faceIdx) {
-        // Get the reference halfedge of the input triangle
-        uint32_t inputRefHE = inputFaces[faceIdx].halfEdgeIdx;
-
-        // Get the halfedge from the intrinsic mesh
-        uint32_t he_intrinsic = intrinsicFaces[faceIdx].halfEdgeIdx;
-
-        if (he_intrinsic == INVALID_INDEX || inputRefHE == INVALID_INDEX) {
-            supportingInfo[faceIdx].supportingHE = INVALID_INDEX;
-            supportingInfo[faceIdx].supportingAngle = 0.0;
-            invalidCount++;
+        if (faceIdx >= intrinsicFaces.size()) {
+            continue;
         }
-        else {
-            supportingInfo[faceIdx].supportingHE = he_intrinsic;
 
-            // Get 2D vectors in the triangle's local frame
-            const auto& inputHVF = inputMesh.getHalfedgeVectorsInFace();
-            const auto& intrinsicHVF = intrinsicMesh.getHalfedgeVectorsInFace();
-
-            if (inputRefHE < inputHVF.size() && he_intrinsic < intrinsicHVF.size()) {
-                glm::dvec2 inputDir = inputHVF[inputRefHE];
-                glm::dvec2 intrinsicDir = intrinsicHVF[he_intrinsic];
-
-                // Compute angles in the 2D space 
-                double inputAngle = std::atan2(inputDir.y, inputDir.x);
-                double intrinsicAngle = std::atan2(intrinsicDir.y, intrinsicDir.x);
-
-                // phi0 is the angle from the first input edge to intrinsic supporting edge
-                double phi0 = intrinsicAngle - inputAngle;
-
-                // Normalize to (-pi, pi]
-                while (phi0 > glm::pi<double>()) phi0 -= 2.0 * glm::pi<double>();
-                while (phi0 <= -glm::pi<double>()) phi0 += 2.0 * glm::pi<double>();
-
-                supportingInfo[faceIdx].supportingAngle = phi0;
+        uint32_t inputHe = inputFaces[faceIdx].halfEdgeIdx;
+        uint32_t intrinsicHe = intrinsicFaces[faceIdx].halfEdgeIdx;
+        for (int i = 0; i < 3; ++i) {
+            if (inputHe == INVALID_INDEX || inputHe >= inputHalfedges.size() ||
+                intrinsicHe == INVALID_INDEX || intrinsicHe >= intrinsicHalfedges.size()) {
+                break;
             }
-            else {
-                supportingInfo[faceIdx].supportingAngle = 0.0;
-            }
+
+            supportingInfoPerHalfedge[inputHe].supportingHE = intrinsicHe;
+            supportingInfoPerHalfedge[inputHe].supportingAngle = 0.0;
+
+            inputHe = inputHalfedges[inputHe].next;
+            intrinsicHe = intrinsicHalfedges[intrinsicHe].next;
         }
     }
 
@@ -89,6 +69,7 @@ void SupportingHalfedge::initialize() {
 void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
     const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
+    const auto& intrinsicFaces = intrinsicConn.getFaces();
 
     if (intrinsicHE >= intrinsicHalfedges.size()) {
         return;
@@ -106,30 +87,70 @@ void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
     std::vector<uint32_t> helist = inputConn.getVertexHalfEdges(v);
     const auto& inputHalfedges = inputConn.getHalfEdges();
 
+    auto cornerAngleAtHalfedge = [&](uint32_t he) -> double {
+        if (he == INVALID_INDEX || he >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t faceIdx = intrinsicHalfedges[he].face;
+        if (faceIdx == INVALID_INDEX || faceIdx >= intrinsicFaces.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he0 = intrinsicFaces[faceIdx].halfEdgeIdx;
+        if (he0 == INVALID_INDEX || he0 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he1 = intrinsicHalfedges[he0].next;
+        if (he1 == INVALID_INDEX || he1 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he2 = intrinsicHalfedges[he1].next;
+        if (he2 == INVALID_INDEX || he2 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const auto angles = intrinsicMesh.computeCornerAngles(faceIdx);
+        if (he == he0) {
+            return angles[0];
+        }
+        if (he == he1) {
+            return angles[1];
+        }
+        if (he == he2) {
+            return angles[2];
+        }
+
+        return 0.0;
+    };
+
     for (uint32_t he : helist) {
         if (he >= inputHalfedges.size()) {
             continue;
         }
 
-        uint32_t te = inputHalfedges[he].face;
-        if (te >= supportingInfo.size()) {
+        if (he >= supportingInfoPerHalfedge.size()) {
             continue;
         }
 
-        if (supportingInfo[te].supportingHE == intrinsicHE) {
+        SupportingInfo& info = supportingInfoPerHalfedge[he];
+        if (info.supportingHE == intrinsicHE) {
             uint32_t mate_h = intrinsicHalfedges[intrinsicHE].opposite;
-            if (mate_h == INVALID_INDEX) {
+            if (mate_h == INVALID_INDEX || mate_h >= intrinsicHalfedges.size()) {
                 continue;
             }
             uint32_t new_ref = intrinsicHalfedges[mate_h].next;
-            if (new_ref == INVALID_INDEX) {
+            if (new_ref == INVALID_INDEX || new_ref >= intrinsicHalfedges.size()) {
                 continue;
             }
 
-            supportingInfo[te].supportingHE = new_ref;
+            info.supportingHE = new_ref;
 
-            double theta = intrinsicHalfedges[new_ref].cornerAngle;
-            supportingInfo[te].supportingAngle -= theta;
+            double theta = cornerAngleAtHalfedge(new_ref);
+            info.supportingAngle -= theta;
+            clampSupportingAngle(info);
         }
     }
 
@@ -140,6 +161,7 @@ void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
 void SupportingHalfedge::updateInsertion(uint32_t h) {
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
     const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
+    const auto& intrinsicFaces = intrinsicConn.getFaces();
 
     if (h >= intrinsicHalfedges.size()) {
         return;
@@ -157,17 +179,56 @@ void SupportingHalfedge::updateInsertion(uint32_t h) {
 
     std::vector<uint32_t> helist = inputConn.getVertexHalfEdges(v);
 
+    auto cornerAngleAtHalfedge = [&](uint32_t he) -> double {
+        if (he == INVALID_INDEX || he >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t faceIdx = intrinsicHalfedges[he].face;
+        if (faceIdx == INVALID_INDEX || faceIdx >= intrinsicFaces.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he0 = intrinsicFaces[faceIdx].halfEdgeIdx;
+        if (he0 == INVALID_INDEX || he0 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he1 = intrinsicHalfedges[he0].next;
+        if (he1 == INVALID_INDEX || he1 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const uint32_t he2 = intrinsicHalfedges[he1].next;
+        if (he2 == INVALID_INDEX || he2 >= intrinsicHalfedges.size()) {
+            return 0.0;
+        }
+
+        const auto angles = intrinsicMesh.computeCornerAngles(faceIdx);
+        if (he == he0) {
+            return angles[0];
+        }
+        if (he == he1) {
+            return angles[1];
+        }
+        if (he == he2) {
+            return angles[2];
+        }
+
+        return 0.0;
+    };
+
     for (uint32_t he : helist) {
         if (he >= inputHalfedges.size()) {
             continue;
         }
 
-        uint32_t te = inputHalfedges[he].face;
-        if (te >= supportingInfo.size()) {
+        if (he >= supportingInfoPerHalfedge.size()) {
             continue;
         }
 
-        uint32_t ref = supportingInfo[te].supportingHE;
+        SupportingInfo& info = supportingInfoPerHalfedge[he];
+        uint32_t ref = info.supportingHE;
         if (ref == INVALID_INDEX || ref >= intrinsicHalfedges.size()) {
             continue;
         }
@@ -180,14 +241,15 @@ void SupportingHalfedge::updateInsertion(uint32_t h) {
         uint32_t matePrev = intrinsicHalfedges[prevRef].opposite;
 
         if (matePrev == h) {
-            double theta = intrinsicHalfedges[ref].cornerAngle;
+            double theta = cornerAngleAtHalfedge(ref);
 
-            double newAngle = supportingInfo[te].supportingAngle + theta;
+            double newAngle = info.supportingAngle + theta;
 
             if (newAngle <= 0.0) {
-                supportingInfo[te].supportingHE = h;
+                info.supportingHE = h;
 
-                supportingInfo[te].supportingAngle = newAngle;
+                info.supportingAngle = newAngle;
+                clampSupportingAngle(info);
             }
         }
     }
@@ -236,6 +298,20 @@ bool SupportingHalfedge::flipEdge(uint32_t edgeIdx) {
 
 int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges) {
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
+    const auto& edges = intrinsicConn.getEdges();
+    std::vector<uint32_t> allEdges;
+    allEdges.reserve(edges.size());
+    for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
+        if (edges[edgeIdx].halfEdgeIdx != INVALID_INDEX) {
+            allEdges.push_back(edgeIdx);
+        }
+    }
+
+    return makeDelaunayLocal(maxIterations, allEdges, flippedEdges);
+}
+
+int SupportingHalfedge::makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
+    auto& intrinsicConn = intrinsicMesh.getConnectivity();
     int totalFlips = 0;
 
     for (int iter = 0; iter < maxIterations; ++iter) {
@@ -243,11 +319,15 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
         std::unordered_set<uint32_t> inQueueEdges;
 
         const auto& edges = intrinsicConn.getEdges();
-        for (uint32_t ei = 0; ei < edges.size(); ++ei) {
-            uint32_t he = edges[ei].halfEdgeIdx;
-            if (he != INVALID_INDEX && !intrinsicConn.isDelaunayEdge(he)) {
-                queueEdges.push(ei);
-                inQueueEdges.insert(ei);
+        for (uint32_t edgeIdx : seedEdges) {
+            if (edgeIdx >= edges.size()) {
+                continue;
+            }
+
+            uint32_t he = edges[edgeIdx].halfEdgeIdx;
+            if (he != INVALID_INDEX && !intrinsicConn.isDelaunayEdge(he) && !inQueueEdges.count(edgeIdx)) {
+                queueEdges.push(edgeIdx);
+                inQueueEdges.insert(edgeIdx);
             }
         }
 
@@ -256,7 +336,6 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
         }
 
         int flipsThisIter = 0;
-        const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
 
         while (!queueEdges.empty()) {
             uint32_t edgeIdx = queueEdges.front();
@@ -272,58 +351,17 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
                 continue;
             }
 
-            uint32_t heOpp = intrinsicHalfedges[he].opposite;
-            uint32_t tri0 = intrinsicHalfedges[he].face;
-            uint32_t tri1 = intrinsicHalfedges[heOpp].face;
-
             if (flipEdge(edgeIdx)) {
                 totalFlips++;
                 flipsThisIter++;
                 if (flippedEdges) {
                     flippedEdges->push_back(edgeIdx);
                 }
-            }
-
-            // Enqueue neighboring edges
-            const auto& halfedges = intrinsicConn.getHalfEdges();
-            std::vector<uint32_t> neighEdges;
-
-            // Get neighbors of the flipped edge
-            if (he < halfedges.size()) {
-                uint32_t hn = halfedges[he].next;
-                uint32_t hp = halfedges[he].prev;
-                uint32_t ho = halfedges[he].opposite;
-
-                if (hn != INVALID_INDEX && hn < halfedges.size()) {
-                    uint32_t ne = halfedges[hn].edgeIdx;
-                    if (ne != INVALID_INDEX && !inQueueEdges.count(ne)) {
-                        queueEdges.push(ne);
-                        inQueueEdges.insert(ne);
-                    }
-                }
-                if (hp != INVALID_INDEX && hp < halfedges.size()) {
-                    uint32_t pe = halfedges[hp].edgeIdx;
-                    if (pe != INVALID_INDEX && !inQueueEdges.count(pe)) {
-                        queueEdges.push(pe);
-                        inQueueEdges.insert(pe);
-                    }
-                }
-                if (ho != INVALID_INDEX && ho < halfedges.size()) {
-                    uint32_t hon = halfedges[ho].next;
-                    uint32_t hop = halfedges[ho].prev;
-                    if (hon != INVALID_INDEX && hon < halfedges.size()) {
-                        uint32_t ne = halfedges[hon].edgeIdx;
-                        if (ne != INVALID_INDEX && !inQueueEdges.count(ne)) {
-                            queueEdges.push(ne);
-                            inQueueEdges.insert(ne);
-                        }
-                    }
-                    if (hop != INVALID_INDEX && hop < halfedges.size()) {
-                        uint32_t pe = halfedges[hop].edgeIdx;
-                        if (pe != INVALID_INDEX && !inQueueEdges.count(pe)) {
-                            queueEdges.push(pe);
-                            inQueueEdges.insert(pe);
-                        }
+                for (uint32_t nhe : intrinsicConn.getNeighboringHalfEdges(he)) {
+                    uint32_t neighEdgeIdx = intrinsicConn.getEdgeFromHalfEdge(nhe);
+                    if (neighEdgeIdx != INVALID_INDEX && !inQueueEdges.count(neighEdgeIdx)) {
+                        queueEdges.push(neighEdgeIdx);
+                        inQueueEdges.insert(neighEdgeIdx);
                     }
                 }
             }
@@ -336,7 +374,7 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
 
     // Count non zero angles after flipping
     int nonZeroCount = 0;
-    for (const auto& info : supportingInfo) {
+    for (const auto& info : supportingInfoPerHalfedge) {
         if (info.supportingAngle != 0.0) {
             nonZeroCount++;
         }
@@ -344,12 +382,24 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
     return totalFlips;
 }
 
-const SupportingHalfedge::SupportingInfo& SupportingHalfedge::getSupportingInfo(uint32_t inputTriangleIdx) const {
+void SupportingHalfedge::clampSupportingAngle(SupportingInfo& info) const {
+    const double pi = glm::pi<double>();
+    const double eps = 1e-12;
+
+    if (info.supportingAngle > 0.0 && info.supportingAngle <= eps) {
+        info.supportingAngle = 0.0;
+    }
+    if (info.supportingAngle <= -pi && info.supportingAngle > -pi - eps) {
+        info.supportingAngle = -pi + eps;
+    }
+}
+
+const SupportingHalfedge::SupportingInfo& SupportingHalfedge::getSupportingInfo(uint32_t inputHalfedgeIdx) const {
     static SupportingInfo invalid;
-    if (inputTriangleIdx >= supportingInfo.size()) {
+    if (inputHalfedgeIdx >= supportingInfoPerHalfedge.size()) {
         return invalid;
     }
-    return supportingInfo[inputTriangleIdx];
+    return supportingInfoPerHalfedge[inputHalfedgeIdx];
 }
 
 void SupportingHalfedge::trackInsertedVertex(uint32_t vertexIdx, const GeodesicTracer::SurfacePoint& surfacePoint) {
@@ -482,13 +532,6 @@ SupportingHalfedge::IntrinsicMesh SupportingHalfedge::buildIntrinsicMesh() const
     // Calculate area weighted vertex normals from neighboring triangles
     calculateVertexNormals(meshData);
 
-    std::cout << "[SupportingHalfedge] Built intrinsic mesh GPU data:" << std::endl;
-    std::cout << "  Vertices: " << meshData.vertices.size() << std::endl;
-    std::cout << "  Triangles: " << meshData.triangles.size() << std::endl;
-    std::cout << "  Indices: " << meshData.indices.size() << std::endl;
-    std::cout << "  Total area: " << std::accumulate(meshData.triangles.begin(), meshData.triangles.end(), 0.0f,
-        [](float sum, const IntrinsicTriangle& t) { return sum + t.area; }) << " m^2" << std::endl;
-
     // Cache the result
     cachedIntrinsicMesh = meshData;
     intrinsicMeshCacheValid = true;
@@ -546,34 +589,25 @@ SupportingHalfedge::GPUBuffers SupportingHalfedge::buildGPUBuffers() const {
     const auto& inputConn = inputMesh.getConnectivity();
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
 
-    const auto& inputFaces = inputConn.getFaces();
     const auto& inputHalfedges = inputConn.getHalfEdges();
+    const auto& inputFaces = inputConn.getFaces();
 
     const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
     const auto& intrinsicEdges = intrinsicConn.getEdges();
     const auto& intrinsicFaces = intrinsicConn.getFaces();
 
-    // Build S[] and A[] - one entry per input triangle
-    buffers.S.resize(inputFaces.size());
-    buffers.A.resize(inputFaces.size());
+    // Build S[] and A[] - one entry per input halfedge
+    buffers.S.resize(inputHalfedges.size(), -1);
+    buffers.A.resize(inputHalfedges.size(), 0.0f);
 
-    for (size_t faceIdx = 0; faceIdx < inputFaces.size(); ++faceIdx) {
-        const auto& face = inputFaces[faceIdx];
-        if (face.halfEdgeIdx == INVALID_INDEX) {
-            buffers.S[faceIdx] = -1;
-            buffers.A[faceIdx] = 0.0f;
+    for (size_t inputHe = 0; inputHe < inputHalfedges.size(); ++inputHe) {
+        if (inputHe >= supportingInfoPerHalfedge.size()) {
             continue;
         }
 
-        // supportingInfo is indexed by faceIdx
-        if (faceIdx < supportingInfo.size()) {
-            buffers.S[faceIdx] = static_cast<int32_t>(supportingInfo[faceIdx].supportingHE);
-            buffers.A[faceIdx] = static_cast<float>(supportingInfo[faceIdx].supportingAngle);
-        }
-        else {
-            buffers.S[faceIdx] = -1;
-            buffers.A[faceIdx] = 0.0f;
-        }
+        const SupportingInfo& info = supportingInfoPerHalfedge[inputHe];
+        buffers.S[inputHe] = static_cast<int32_t>(info.supportingHE);
+        buffers.A[inputHe] = static_cast<float>(info.supportingAngle);
     }
 
     // Build H[] - intrinsic halfedge data [origin, edge, face, next] (4 ints per halfedge)
@@ -806,23 +840,6 @@ float SupportingHalfedge::getAverageTriangleArea() const {
     }
     
     return totalArea / static_cast<float>(cachedIntrinsicMesh.triangles.size());
-}
-
-double SupportingHalfedge::getIntrinsicCornerAngle(uint32_t intrinsicHE) const {
-    auto& intrinsicConn = intrinsicMesh.getConnectivity();
-    const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
-
-    if (intrinsicHE >= intrinsicHalfedges.size()) {
-        return 0.0;
-    }
-
-    double storedAngle = intrinsicHalfedges[intrinsicHE].cornerAngle;
-
-    if (storedAngle > 0.0) {
-        return storedAngle;
-    }
-
-    return 0.0;
 }
 
 void SupportingHalfedge::cleanup() {

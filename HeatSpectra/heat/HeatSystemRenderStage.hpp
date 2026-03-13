@@ -19,7 +19,7 @@ class HeatSystemRenderStage {
 public:
     explicit HeatSystemRenderStage(const HeatSystemStageContext& stageContext);
 
-    void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, ContactLineRenderer* contactLineRenderer, bool isActive) const;
+    void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, ContactLineRenderer* contactLineRenderer) const;
     void renderVoronoiSurface(
         VkCommandBuffer cmdBuffer,
         uint32_t frameIndex,

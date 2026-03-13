@@ -40,8 +40,29 @@ NodeGraphSocketId findFirstInputSocketByValueType(const NodeGraphNode& node, Nod
     return {};
 }
 
+NodeGraphSocketId findFirstInputSocketByName(const NodeGraphNode& node, const char* name) {
+    if (!name || name[0] == '\0') {
+        return {};
+    }
+
+    for (const NodeGraphSocket& socket : node.inputs) {
+        if (socket.id.isValid() && socket.name == name) {
+            return socket.id;
+        }
+    }
+
+    return {};
+}
+
 std::string makeHeatSolveSocketName(NodeGraphValueType valueType, std::size_t socketOrdinal) {
-    const char* baseName = (valueType == NodeGraphValueType::HeatReceiver) ? "Receiver" : "Source";
+    const char* baseName = "Input";
+    if (valueType == NodeGraphValueType::ContactPair) {
+        baseName = "Contact Pair";
+    } else if (valueType == NodeGraphValueType::HeatReceiver) {
+        baseName = "Receiver";
+    } else if (valueType == NodeGraphValueType::HeatSource) {
+        baseName = "Source";
+    }
     if (socketOrdinal <= 1) {
         return baseName;
     }
@@ -66,7 +87,8 @@ void NodeGraphBridge::resetToDefaultGraph() {
     const NodeGraphNodeId sourceRemeshNode = document.addNode(nodegraphtypes::Remesh, "Source Remesh", 240.0f, 240.0f);
     const NodeGraphNodeId heatReceiverNode = document.addNode(nodegraphtypes::HeatReceiver, "", 470.0f, 40.0f);
     const NodeGraphNodeId heatSourceNode = document.addNode(nodegraphtypes::HeatSource, "", 470.0f, 240.0f);
-    const NodeGraphNodeId heatSolveNode = document.addNode(nodegraphtypes::HeatSolve, "", 730.0f, 140.0f);
+    const NodeGraphNodeId contactPairNode = document.addNode(nodegraphtypes::ContactPair, "", 650.0f, 140.0f);
+    const NodeGraphNodeId heatSolveNode = document.addNode(nodegraphtypes::HeatSolve, "", 870.0f, 140.0f);
 
     const NodeGraphNode* receiverModelPtr = document.findNode(receiverModelNode);
     const NodeGraphNode* sourceModelPtr = document.findNode(sourceModelNode);
@@ -74,44 +96,50 @@ void NodeGraphBridge::resetToDefaultGraph() {
     const NodeGraphNode* sourceRemeshPtr = document.findNode(sourceRemeshNode);
     const NodeGraphNode* heatReceiverPtr = document.findNode(heatReceiverNode);
     const NodeGraphNode* heatSourcePtr = document.findNode(heatSourceNode);
+    const NodeGraphNode* contactPairPtr = document.findNode(contactPairNode);
     const NodeGraphNode* heatSolvePtr = document.findNode(heatSolveNode);
 
     if (receiverModelPtr && sourceModelPtr &&
         receiverRemeshPtr && sourceRemeshPtr &&
-        heatReceiverPtr && heatSourcePtr && heatSolvePtr &&
+        heatReceiverPtr && heatSourcePtr && contactPairPtr && heatSolvePtr &&
         !receiverModelPtr->outputs.empty() && !sourceModelPtr->outputs.empty() &&
         !receiverRemeshPtr->inputs.empty() && !receiverRemeshPtr->outputs.empty() &&
         !sourceRemeshPtr->inputs.empty() && !sourceRemeshPtr->outputs.empty() &&
         !heatReceiverPtr->inputs.empty() && !heatReceiverPtr->outputs.empty() &&
-        !heatSourcePtr->inputs.empty() && !heatSourcePtr->outputs.empty()) {
-        const NodeGraphSocketId heatSolveReceiverInputId =
-            findFirstInputSocketByValueType(*heatSolvePtr, NodeGraphValueType::HeatReceiver);
-        const NodeGraphSocketId heatSolveSourceInputId =
-            findFirstInputSocketByValueType(*heatSolvePtr, NodeGraphValueType::HeatSource);
-        if (heatSolveReceiverInputId.isValid() && heatSolveSourceInputId.isValid()) {
+        !heatSourcePtr->inputs.empty() && !heatSourcePtr->outputs.empty() &&
+        contactPairPtr->inputs.size() >= 2 && !contactPairPtr->outputs.empty()) {
+        const NodeGraphSocketId heatSolveContactPairInputId =
+            findFirstInputSocketByValueType(*heatSolvePtr, NodeGraphValueType::ContactPair);
+        const NodeGraphSocketId contactPairEmitterInputId =
+            findFirstInputSocketByName(*contactPairPtr, "Emitter");
+        const NodeGraphSocketId contactPairReceiverInputId =
+            findFirstInputSocketByName(*contactPairPtr, "Receiver");
+        if (heatSolveContactPairInputId.isValid() &&
+            contactPairEmitterInputId.isValid() &&
+            contactPairReceiverInputId.isValid()) {
             document.addConnection(receiverModelNode, receiverModelPtr->outputs[0].id, receiverRemeshNode, receiverRemeshPtr->inputs[0].id);
             document.addConnection(sourceModelNode, sourceModelPtr->outputs[0].id, sourceRemeshNode, sourceRemeshPtr->inputs[0].id);
             document.addConnection(receiverRemeshNode, receiverRemeshPtr->outputs[0].id, heatReceiverNode, heatReceiverPtr->inputs[0].id);
             document.addConnection(sourceRemeshNode, sourceRemeshPtr->outputs[0].id, heatSourceNode, heatSourcePtr->inputs[0].id);
-            document.addConnection(heatReceiverNode, heatReceiverPtr->outputs[0].id, heatSolveNode, heatSolveReceiverInputId);
-            document.addConnection(heatSourceNode, heatSourcePtr->outputs[0].id, heatSolveNode, heatSolveSourceInputId);
+            document.addConnection(heatSourceNode, heatSourcePtr->outputs[0].id, contactPairNode, contactPairEmitterInputId);
+            document.addConnection(heatReceiverNode, heatReceiverPtr->outputs[0].id, contactPairNode, contactPairReceiverInputId);
+            document.addConnection(contactPairNode, contactPairPtr->outputs[0].id, heatSolveNode, heatSolveContactPairInputId);
         }
     }
 
     NodeGraphParamValue receiverModelPath{};
     receiverModelPath.id = nodegraphparams::model::Path;
     receiverModelPath.type = NodeGraphParamType::String;
-    receiverModelPath.stringValue = "models/teapot.obj";
+    receiverModelPath.stringValue = "models/channel_tube.obj";
     document.setNodeParameter(receiverModelNode, receiverModelPath);
 
     NodeGraphParamValue sourceModelPath{};
     sourceModelPath.id = nodegraphparams::model::Path;
     sourceModelPath.type = NodeGraphParamType::String;
-    sourceModelPath.stringValue = "models/heatsource_torus.obj";
+    sourceModelPath.stringValue = "models/heatsource_tube.obj";
     document.setNodeParameter(sourceModelNode, sourceModelPath);
 
-    ensureHeatSolveSpareInputLocked(heatSolveNode, NodeGraphValueType::HeatReceiver);
-    ensureHeatSolveSpareInputLocked(heatSolveNode, NodeGraphValueType::HeatSource);
+    ensureHeatSolveSpareInputLocked(heatSolveNode, NodeGraphValueType::ContactPair);
 
     rebuildStateLocked();
 
@@ -219,7 +247,9 @@ bool NodeGraphBridge::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphPa
 }
 
 bool NodeGraphBridge::ensureHeatSolveSpareInputLocked(NodeGraphNodeId nodeId, NodeGraphValueType valueType) {
-    if (valueType != NodeGraphValueType::HeatReceiver && valueType != NodeGraphValueType::HeatSource) {
+    if (valueType != NodeGraphValueType::ContactPair &&
+        valueType != NodeGraphValueType::HeatReceiver &&
+        valueType != NodeGraphValueType::HeatSource) {
         return false;
     }
 

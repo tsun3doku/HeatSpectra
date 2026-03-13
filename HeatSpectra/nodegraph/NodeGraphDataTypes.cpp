@@ -14,6 +14,8 @@ const char* nodeDataTypeToString(NodeDataType dataType) {
         return "heat_receiver";
     case NodeDataType::HeatSource:
         return "heat_source";
+    case NodeDataType::ContactPair:
+        return "contact_pair";
     case NodeDataType::ScalarFloat:
         return "scalar_float";
     case NodeDataType::ScalarInt:
@@ -341,6 +343,32 @@ void refreshNodeDataBlockMetadata(NodeDataBlock& dataBlock) {
         dataBlock.metadata.erase("geometry.group_names.smooth");
         dataBlock.metadata.erase("geometry.attribute_count");
         dataBlock.metadata.erase("geometry.attributes");
+    }
+
+    if (dataBlock.dataType == NodeDataType::ContactPair) {
+        const ContactPairData& contactPairData = dataBlock.contactPairData;
+        dataBlock.metadata["contact_pair.valid"] = contactPairData.hasValidContact ? "true" : "false";
+        dataBlock.metadata["contact_pair.kind"] =
+            (contactPairData.kind == ContactPairKind::ReceiverToReceiver)
+            ? "receiver_to_receiver"
+            : "source_to_receiver";
+        dataBlock.metadata["contact_pair.emitter_model_id"] = std::to_string(contactPairData.emitterModelId);
+        dataBlock.metadata["contact_pair.receiver_model_id"] = std::to_string(contactPairData.receiverModelId);
+        dataBlock.metadata["contact_pair.model_a_id"] = std::to_string(contactPairData.modelIdA);
+        dataBlock.metadata["contact_pair.model_b_id"] = std::to_string(contactPairData.modelIdB);
+        dataBlock.metadata["contact_pair.min_normal_dot"] = std::to_string(contactPairData.minNormalDot);
+        dataBlock.metadata["contact_pair.contact_radius"] = std::to_string(contactPairData.contactRadius);
+        dataBlock.metadata["contact_pair.compute_requested"] = contactPairData.computeRequested ? "true" : "false";
+    } else {
+        dataBlock.metadata.erase("contact_pair.valid");
+        dataBlock.metadata.erase("contact_pair.kind");
+        dataBlock.metadata.erase("contact_pair.emitter_model_id");
+        dataBlock.metadata.erase("contact_pair.receiver_model_id");
+        dataBlock.metadata.erase("contact_pair.model_a_id");
+        dataBlock.metadata.erase("contact_pair.model_b_id");
+        dataBlock.metadata.erase("contact_pair.min_normal_dot");
+        dataBlock.metadata.erase("contact_pair.contact_radius");
+        dataBlock.metadata.erase("contact_pair.compute_requested");
     }
 }
 

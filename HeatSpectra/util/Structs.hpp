@@ -113,19 +113,19 @@ struct ContactPairGPU {
     float _pad2;
 };
 
+struct ContactPushConstant {
+    uint32_t couplingKind;
+    uint32_t _pad0;
+    uint32_t _pad1;
+    uint32_t _pad2;
+};
+
 struct IntrinsicVertexData {
     glm::vec3 position;            // 3D world position
     uint32_t intrinsicVertexId;    // ID in intrinsic mesh
     glm::vec3 normal;              // Area weighted vertex normal
     float padding;                 
 };   
-
-struct SurfelParams {              
-    float thermalConductance;  
-    float contactPressure;     
-    float frictionCoeff;      
-    float padding;         
-};
 
 struct HeatSourcePushConstant {
     alignas(16) glm::mat4 heatSourceModelMatrix;    
@@ -155,14 +155,12 @@ struct NormalPushConstant {
 
 struct VoronoiNeighborGPU {
     uint32_t neighborIndex;     
-    float interfaceArea;        // Area of the voronoi face shared with this neighbor
-    float distance;             // Distance to neighbor
-    uint32_t interfaceFaceID;  
+    float areaOverDistance;     // Precomputed interfaceArea / distance for diffusion
 };
 
 struct VoronoiNodeGPU {
     float temperature;
-    float prevTemperature;
+    float conductivityPerMass;
     float thermalMass;      
     float density;
     float specificHeat;

@@ -42,7 +42,6 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, Frame
         frameRequest.flags.drawSurfels = false;
         frameRequest.flags.drawVoronoi = false;
         frameRequest.flags.drawPoints = false;
-        frameRequest.flags.drawContactLines = false;
     }
     frameRequest.overlay = frameState.overlay;
 

@@ -9,6 +9,7 @@ enum class HeatMaterialPresetId : uint8_t {
     Copper = 1,
     Iron = 2,
     Ceramic = 3,
+    Custom = 4,
 };
 
 struct HeatMaterialPreset {

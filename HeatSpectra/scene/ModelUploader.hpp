@@ -15,7 +15,7 @@ class VulkanDevice;
 class ModelUploader {
 public:
     static constexpr const char* DefaultSceneModelPath = "models/teapot.obj";
-    static constexpr const char* DefaultHeatModelPath = "models/heatsource_torus.obj";
+    static constexpr const char* DefaultHeatModelPath = "models/heatsource_tube.obj";
 
     ModelUploader(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool);
 

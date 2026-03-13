@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "framegraph/FrameSync.hpp"
+#include "heat/ContactSystemController.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemController.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
@@ -42,6 +43,7 @@ public:
     const RenderRuntime* runtime() const;
     HeatSystem* heatSystem();
     HeatSystemController* heatSystemController();
+    ContactSystemController* contactSystemController();
     SceneController* sceneController();
     NodeGraphBridge* nodeGraphBridge();
     const NodeGraphBridge* nodeGraphBridge() const;
@@ -54,6 +56,7 @@ private:
     FrameSync frameSync;
     std::unique_ptr<HeatSystem> heatSystemState;
     std::unique_ptr<HeatSystemController> heatSystemControllerState;
+    std::unique_ptr<ContactSystemController> contactSystemControllerState;
     std::unique_ptr<SceneController> sceneControllerState;
     std::unique_ptr<NodeSolverController> nodeSolverController;
     std::unique_ptr<InputController> inputControllerState;

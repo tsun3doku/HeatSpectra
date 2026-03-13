@@ -15,6 +15,8 @@
 #include "VulkanCoreContext.hpp"
 
 class NodeGraphBridge;
+class ModelSelection;
+class ModelRegistry;
 class RuntimeQuery;
 struct WindowRuntimeState;
 
@@ -37,6 +39,10 @@ public:
     const RenderSettingsController* getSettingsController() const;
     NodeGraphBridge* getNodeGraphBridge();
     const NodeGraphBridge* getNodeGraphBridge() const;
+    ModelRegistry* getModelRegistry();
+    const ModelRegistry* getModelRegistry() const;
+    ModelSelection* getModelSelection();
+    const ModelSelection* getModelSelection() const;
 
 private:
     void cleanup();

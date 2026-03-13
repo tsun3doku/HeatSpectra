@@ -2,16 +2,17 @@
 
 #include "HeatSystemResources.hpp"
 
+#include "HeatContactParams.hpp"
 #include "HeatReceiver.hpp"
 #include "HeatSource.hpp"
-#include "renderers/SurfelRenderer.hpp"
-#include "util/Structs.hpp"
 #include "util/file_utils.h"
 #include "mesh/remesher/Remesher.hpp"
+#include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
 
 #include <array>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -19,18 +20,44 @@ HeatSystemContactStage::HeatSystemContactStage(const HeatSystemStageContext& sta
     : context(stageContext) {
 }
 
+bool HeatSystemContactStage::ensureParamsBuffer(HeatSystemRuntime::ContactCoupling& coupling) {
+    if (coupling.paramsBuffer == VK_NULL_HANDLE) {
+        const auto bufferResult = context.memoryAllocator.allocate(
+            sizeof(HeatContactParams),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            64);
+        coupling.paramsBuffer = bufferResult.first;
+        coupling.paramsBufferOffset = bufferResult.second;
+        if (coupling.paramsBuffer == VK_NULL_HANDLE) {
+            return false;
+        }
+    }
+
+    void* mappedData = context.memoryAllocator.getMappedPointer(coupling.paramsBuffer, coupling.paramsBufferOffset);
+    if (!mappedData) {
+        return false;
+    }
+
+    std::memcpy(mappedData, &coupling.params, sizeof(HeatContactParams));
+    return true;
+}
+
 void HeatSystemContactStage::refreshCouplings() {
 }
 
 bool HeatSystemContactStage::createDescriptorPool(uint32_t maxFramesInFlight) {
     (void)maxFramesInFlight;
-    const uint32_t maxReceivers = 10;
-    const uint32_t maxHeatSources = 8;
-    const uint32_t totalSets = maxReceivers * maxHeatSources * 2;
+    const uint32_t maxReceivers = 24;
+    const uint32_t maxHeatSources = 16;
+    const uint32_t maxCouplings =
+        (maxHeatSources * maxReceivers) +
+        (maxReceivers * (maxReceivers - 1));
+    const uint32_t totalSets = maxCouplings * 2;
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 8;
+    poolSizes[0].descriptorCount = totalSets * 10;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = totalSets * 1;
 
@@ -60,6 +87,8 @@ bool HeatSystemContactStage::createDescriptorSetLayout() {
         {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -101,12 +130,17 @@ bool HeatSystemContactStage::createPipeline() {
     shaderStageInfo.module = computeShaderModule;
     shaderStageInfo.pName = "main";
 
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(ContactPushConstant);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &context.resources.contactDescriptorSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = nullptr;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(context.vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr,
         &context.resources.contactPipelineLayout) != VK_SUCCESS) {
@@ -135,25 +169,93 @@ bool HeatSystemContactStage::createPipeline() {
 
 void HeatSystemContactStage::updateCouplingDescriptors(HeatSystemRuntime::ContactCoupling& coupling, uint32_t nodeCount) {
     coupling.contactDescriptorsReady = false;
-    if (nodeCount == 0 || !coupling.source || !coupling.receiver) {
+    if (nodeCount == 0 || !coupling.receiver) {
         return;
     }
 
-    HeatReceiver* receiver = coupling.receiver;
-    HeatSource* source = coupling.source;
-    auto* surfel = context.remesher.getSurfelForModel(&receiver->getModel());
-    if (!surfel) {
+    HeatReceiver* const receiver = coupling.receiver;
+    if (!ensureParamsBuffer(coupling)) {
         return;
     }
 
     if (receiver->getTriangleIndicesBuffer() == VK_NULL_HANDLE ||
         receiver->getVoronoiMappingBuffer() == VK_NULL_HANDLE ||
         coupling.contactPairBuffer == VK_NULL_HANDLE ||
-        receiver->getIntrinsicTriangleCount() == 0 ||
-        source->getSourceBuffer() == VK_NULL_HANDLE ||
-        source->getTriangleGeometryBuffer() == VK_NULL_HANDLE ||
-        source->getVertexCount() == 0 ||
-        source->getTriangleCount() == 0) {
+        receiver->getIntrinsicTriangleCount() == 0) {
+        return;
+    }
+
+    VkBuffer sourceSurfaceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize sourceSurfaceOffset = 0;
+    VkDeviceSize sourceSurfaceRange = 0;
+
+    VkBuffer sourceTriangleBuffer = VK_NULL_HANDLE;
+    VkDeviceSize sourceTriangleOffset = 0;
+    VkDeviceSize sourceTriangleRange = 0;
+    VkDeviceSize receiverTriangleIndexRange = sizeof(uint32_t) * 3ull * receiver->getIntrinsicTriangleCount();
+    VkDeviceSize contactPairRange = sizeof(ContactPairGPU) * coupling.contactPairCount;
+
+    VkBuffer emitterTriangleIndexBuffer = receiver->getTriangleIndicesBuffer();
+    VkDeviceSize emitterTriangleIndexOffset = receiver->getTriangleIndicesBufferOffset();
+    VkDeviceSize emitterTriangleIndexRange = sizeof(uint32_t) * 3ull * receiver->getIntrinsicTriangleCount();
+
+    VkBuffer emitterVoronoiMappingBuffer = receiver->getVoronoiMappingBuffer();
+    VkDeviceSize emitterVoronoiMappingOffset = receiver->getVoronoiMappingBufferOffset();
+    VkDeviceSize emitterVoronoiMappingRange = sizeof(VoronoiSurfaceMapping) * receiver->getIntrinsicVertexCount();
+
+    if (coupling.kind == ContactCouplingKind::SourceToReceiver) {
+        HeatSource* source = coupling.source;
+        if (!source ||
+            source->getSourceBuffer() == VK_NULL_HANDLE ||
+            source->getTriangleGeometryBuffer() == VK_NULL_HANDLE ||
+            source->getVertexCount() == 0 ||
+            source->getTriangleCount() == 0) {
+            return;
+        }
+
+        sourceSurfaceBuffer = source->getSourceBuffer();
+        sourceSurfaceOffset = source->getSourceBufferOffset();
+        sourceSurfaceRange = sizeof(SurfacePoint) * source->getVertexCount();
+
+        sourceTriangleBuffer = source->getTriangleGeometryBuffer();
+        sourceTriangleOffset = source->getTriangleGeometryBufferOffset();
+        sourceTriangleRange = sizeof(HeatSourceTriangleGPU) * source->getTriangleCount();
+    } else {
+        HeatReceiver* emitterReceiver = coupling.emitterReceiver;
+        if (!emitterReceiver ||
+            emitterReceiver == receiver ||
+            emitterReceiver->getSurfaceBuffer() == VK_NULL_HANDLE ||
+            emitterReceiver->getTriangleIndicesBuffer() == VK_NULL_HANDLE ||
+            emitterReceiver->getVoronoiMappingBuffer() == VK_NULL_HANDLE ||
+            emitterReceiver->getIntrinsicVertexCount() == 0 ||
+            emitterReceiver->getIntrinsicTriangleCount() == 0) {
+            return;
+        }
+
+        sourceSurfaceBuffer = emitterReceiver->getSurfaceBuffer();
+        sourceSurfaceOffset = emitterReceiver->getSurfaceBufferOffset();
+        sourceSurfaceRange = sizeof(SurfacePoint) * emitterReceiver->getIntrinsicVertexCount();
+
+        // Unused in receiver->receiver mode, but must still be a valid descriptor.
+        sourceTriangleBuffer = emitterReceiver->getTriangleIndicesBuffer();
+        sourceTriangleOffset = emitterReceiver->getTriangleIndicesBufferOffset();
+        sourceTriangleRange = sizeof(uint32_t) * 3ull * emitterReceiver->getIntrinsicTriangleCount();
+
+        emitterTriangleIndexBuffer = emitterReceiver->getTriangleIndicesBuffer();
+        emitterTriangleIndexOffset = emitterReceiver->getTriangleIndicesBufferOffset();
+        emitterTriangleIndexRange = sizeof(uint32_t) * 3ull * emitterReceiver->getIntrinsicTriangleCount();
+
+        emitterVoronoiMappingBuffer = emitterReceiver->getVoronoiMappingBuffer();
+        emitterVoronoiMappingOffset = emitterReceiver->getVoronoiMappingBufferOffset();
+        emitterVoronoiMappingRange = sizeof(VoronoiSurfaceMapping) * emitterReceiver->getIntrinsicVertexCount();
+    }
+
+    if (sourceSurfaceRange == 0 ||
+        sourceTriangleRange == 0 ||
+        receiverTriangleIndexRange == 0 ||
+        contactPairRange == 0 ||
+        emitterTriangleIndexRange == 0 ||
+        emitterVoronoiMappingRange == 0) {
         return;
     }
 
@@ -183,19 +285,21 @@ void HeatSystemContactStage::updateCouplingDescriptors(HeatSystemRuntime::Contac
     VkBuffer tempBuffers[2] = { context.resources.tempBufferA, context.resources.tempBufferB };
     VkDeviceSize tempOffsets[2] = { context.resources.tempBufferAOffset_, context.resources.tempBufferBOffset_ };
     for (uint32_t pass = 0; pass < 2; ++pass) {
-        std::array<VkDescriptorBufferInfo, 9> infos = {
+        std::array<VkDescriptorBufferInfo, 11> infos = {
             VkDescriptorBufferInfo{tempBuffers[pass], tempOffsets[pass], sizeof(float) * nodeCount},
-            VkDescriptorBufferInfo{receiver->getTriangleIndicesBuffer(), receiver->getTriangleIndicesBufferOffset(), VK_WHOLE_SIZE},
-            VkDescriptorBufferInfo{source->getSourceBuffer(), source->getSourceBufferOffset(), sizeof(SurfacePoint) * source->getVertexCount()},
-            VkDescriptorBufferInfo{source->getTriangleGeometryBuffer(), source->getTriangleGeometryBufferOffset(), VK_WHOLE_SIZE},
-            VkDescriptorBufferInfo{surfel->getSurfelParamsBuffer(), surfel->getSurfelParamsBufferOffset(), sizeof(SurfelParams)},
+            VkDescriptorBufferInfo{receiver->getTriangleIndicesBuffer(), receiver->getTriangleIndicesBufferOffset(), receiverTriangleIndexRange},
+            VkDescriptorBufferInfo{sourceSurfaceBuffer, sourceSurfaceOffset, sourceSurfaceRange},
+            VkDescriptorBufferInfo{sourceTriangleBuffer, sourceTriangleOffset, sourceTriangleRange},
+            VkDescriptorBufferInfo{coupling.paramsBuffer, coupling.paramsBufferOffset, sizeof(HeatContactParams)},
             VkDescriptorBufferInfo{receiver->getVoronoiMappingBuffer(), receiver->getVoronoiMappingBufferOffset(), sizeof(VoronoiSurfaceMapping) * receiver->getIntrinsicVertexCount()},
             VkDescriptorBufferInfo{context.resources.injectionKBuffer, context.resources.injectionKBufferOffset_, sizeof(uint32_t) * nodeCount},
             VkDescriptorBufferInfo{context.resources.injectionKTBuffer, context.resources.injectionKTBufferOffset_, sizeof(uint32_t) * nodeCount},
-            VkDescriptorBufferInfo{coupling.contactPairBuffer, coupling.contactPairBufferOffset, VK_WHOLE_SIZE},
+            VkDescriptorBufferInfo{coupling.contactPairBuffer, coupling.contactPairBufferOffset, contactPairRange},
+            VkDescriptorBufferInfo{emitterTriangleIndexBuffer, emitterTriangleIndexOffset, emitterTriangleIndexRange},
+            VkDescriptorBufferInfo{emitterVoronoiMappingBuffer, emitterVoronoiMappingOffset, emitterVoronoiMappingRange},
         };
 
-        std::array<VkWriteDescriptorSet, 9> writes{};
+        std::array<VkWriteDescriptorSet, 11> writes{};
         for (uint32_t i = 0; i < static_cast<uint32_t>(writes.size()); ++i) {
             writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet = sets[pass];

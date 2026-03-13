@@ -106,9 +106,14 @@ float VoronoiSeeder::computePointToMeshDistance(const glm::vec3& point, const Mo
 
     // Check only nearby triangles
     for (size_t triIdx : nearbyTriangles) {
-        glm::vec3 v0 = vertices[indices[triIdx]].pos;
-        glm::vec3 v1 = vertices[indices[triIdx + 1]].pos;
-        glm::vec3 v2 = vertices[indices[triIdx + 2]].pos;
+        const size_t indexBase = triIdx * 3;
+        if (indexBase + 2 >= indices.size()) {
+            continue;
+        }
+
+        glm::vec3 v0 = vertices[indices[indexBase]].pos;
+        glm::vec3 v1 = vertices[indices[indexBase + 1]].pos;
+        glm::vec3 v2 = vertices[indices[indexBase + 2]].pos;
 
         glm::vec3 closestPoint = closestPointOnTriangle(point, v0, v1, v2);
         float distSq = glm::distance2(point, closestPoint);

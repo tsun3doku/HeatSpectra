@@ -21,14 +21,18 @@ class QRectF;
 class NodeGraphScene : public QGraphicsScene {
 public:
     using NodeActivatedCallback = std::function<void(NodeGraphNodeId, const QPointF&)>;
+    using NodeSelectionChangedCallback = std::function<void(NodeGraphNodeId)>;
     using StatusCallback = std::function<void(const QString&)>;
 
     explicit NodeGraphScene(QObject* parent = nullptr);
 
     void setBridge(NodeGraphBridge* bridge);
     void setNodeActivatedCallback(NodeActivatedCallback callback);
+    void setNodeSelectionChangedCallback(NodeSelectionChangedCallback callback);
     void setStatusCallback(StatusCallback callback);
     void refreshFromGraph();
+    void setSelectedNode(NodeGraphNodeId nodeId);
+    void clearNodeSelection();
     bool copySelectedNodes();
     bool pasteCopiedNodes();
     bool removeSelectedNodes();
@@ -53,6 +57,7 @@ private:
 
     NodeGraphBridge* bridge = nullptr;
     NodeActivatedCallback nodeActivatedCallback;
+    NodeSelectionChangedCallback nodeSelectionChangedCallback;
     StatusCallback statusCallback;
     QGraphicsPathItem* activeDragLine = nullptr;
     QPointF activeDragStartPos{};
@@ -83,12 +88,16 @@ private:
     std::vector<CopiedNode> copiedNodes;
     std::vector<CopiedEdge> copiedEdges;
     uint32_t pasteGeneration = 0;
+    bool suppressSelectionChangedNotifications = false;
 
     void syncNodePositionsToBridge();
     void clearActiveDragLine();
     void updateEdgePathsFromCurrentLayout();
     void updateHoverState(const QPointF& scenePos);
+    void notifySelectedNodeChanged();
     void selectNodesById(const std::vector<NodeGraphNodeId>& nodeIds);
+    std::vector<NodeGraphNodeId> selectedTopLevelNodeIds() const;
+    NodeGraphNodeId selectedSingleNodeId() const;
     static void setNodeHovered(QGraphicsRectItem* item, bool hovered);
     static void setEdgeHovered(QGraphicsPathItem* item, bool hovered);
     static NodeGraphEdgeId itemEdgeId(const QGraphicsItem* item);

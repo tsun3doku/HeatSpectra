@@ -5,7 +5,7 @@ layout(local_size_x = 256) in;
 
 struct VoronoiNode {
     float temperature;        
-    float prevTemperature;   
+    float conductivityPerMass;
     float thermalMass;
     float density;
     float specificHeat;
@@ -18,9 +18,7 @@ struct VoronoiNode {
 
 struct VoronoiNeighbor {
     uint neighborIndex;
-    float interfaceArea;
-    float distance;
-    uint interfaceFaceID; 
+    float areaOverDistance;
 };
 
 // Binding 0: VoronoiNode metadata (thermal mass, conductivity, etc.)
@@ -80,14 +78,12 @@ void main() {
     if ((seedFlags.flags[nodeID] & 1u) != 0u) {
         injectionKBuffer.values[nodeID] = 0u;
         injectionKTBuffer.values[nodeID] = 0u;
-        float currentTemp = uintBitsToFloat(tempRead.temperatures[nodeID]);
-        tempWrite.temperatures[nodeID] = floatBitsToUint(currentTemp);
+        tempWrite.temperatures[nodeID] = tempRead.temperatures[nodeID];
         return;
     }
     
     VoronoiNode node = nodes[nodeID];
     
-    float volume = max(node.volume, 1e-12);             // Minimum volume
     float thermalMass = max(node.thermalMass, 1e-12);   // Minimum thermal mass
     
     // Read current temperature from ping pong buffer
@@ -100,38 +96,14 @@ void main() {
 
     float totalConductance = 0.0;
     float totalFlux = 0.0;
-    uint validNeighborCount = 0;
-    
-    for (uint i = 0; i < node.neighborCount && i < 50; i++) {
-        if (node.neighborOffset + i >= neighbors.length()) {
-            continue;
-        }
-
+    for (uint i = 0; i < node.neighborCount; i++) {
         VoronoiNeighbor neighbor = neighbors[node.neighborOffset + i];
-        uint neighborID = neighbor.neighborIndex;
-        
-        if (neighborID == 0xFFFFFFFF || neighborID >= nodes.length()) {
-            continue;
-        }
-        
-        bool neighborIsGhost = (seedFlags.flags[neighborID] & 1u) != 0u;
-        if (neighborIsGhost) {
-            continue;  // Skip ghost neighbors
-        }
-        
-        validNeighborCount++;
-        
+
         // Extract neighbor data
-        float neighborTemp = uintBitsToFloat(tempRead.temperatures[neighborID]);
-        float area = neighbor.interfaceArea;
-        float distance = neighbor.distance;
+        float neighborTemp = uintBitsToFloat(tempRead.temperatures[neighbor.neighborIndex]);
         
-        if (distance <= 1e-12 || area <= 1e-8) {
-            continue;
-        }
-        
-        // Conductance coefficient: (k * A / d) / thermalMass
-        float conductance = (node.conductivity * area / distance) / thermalMass;
+        // Conductance coefficient: (k / thermalMass) * (A / d)
+        float conductance = node.conductivityPerMass * neighbor.areaOverDistance;
         
         totalConductance += conductance;
         totalFlux += conductance * neighborTemp;

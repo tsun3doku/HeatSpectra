@@ -7,10 +7,8 @@
 #include "scene/Model.hpp"
 #include "mesh/remesher/Remesher.hpp"
 #include "vulkan/ResourceManager.hpp"
-#include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
-#include <cstring>
 #include <iostream>
 #include <unordered_set>
 
@@ -50,82 +48,6 @@ Model* HeatSystemRuntime::findPrimaryReceiverModel() const {
     }
 
     return nullptr;
-}
-
-void HeatSystemRuntime::clearContactCouplings(MemoryAllocator& memoryAllocator) {
-    for (ContactCoupling& coupling : contactCouplings) {
-        coupling.contactDescriptorsReady = false;
-        coupling.contactComputeSetA = VK_NULL_HANDLE;
-        coupling.contactComputeSetB = VK_NULL_HANDLE;
-        coupling.source = nullptr;
-        coupling.receiver = nullptr;
-        if (coupling.contactPairBuffer != VK_NULL_HANDLE) {
-            memoryAllocator.free(coupling.contactPairBuffer, coupling.contactPairBufferOffset);
-            coupling.contactPairBuffer = VK_NULL_HANDLE;
-            coupling.contactPairBufferOffset = 0;
-        }
-    }
-    contactCouplings.clear();
-}
-
-bool HeatSystemRuntime::uploadContactPairsToCoupling(ContactCoupling& coupling, const std::vector<ContactPairGPU>& pairs, VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator, CommandPool& renderCommandPool) {
-    VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
-    const std::size_t pairCount = pairs.empty() ? 1ull : pairs.size();
-    VkDeviceSize bufferSize = sizeof(ContactPairGPU) * pairCount;
-
-    coupling.contactDescriptorsReady = false;
-    if (coupling.contactPairBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(coupling.contactPairBuffer, coupling.contactPairBufferOffset);
-        coupling.contactPairBuffer = VK_NULL_HANDLE;
-        coupling.contactPairBufferOffset = 0;
-    }
-
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize stagingOffset = 0;
-    void* stagingData = nullptr;
-    if (createStagingBuffer(
-        memoryAllocator,
-        bufferSize,
-        stagingBuffer,
-        stagingOffset,
-        &stagingData
-    ) != VK_SUCCESS || !stagingData) {
-        std::cerr << "[HeatSystemRuntime] Failed to create contact staging buffer" << std::endl;
-        return false;
-    }
-
-    if (pairs.empty()) {
-        std::memset(stagingData, 0, static_cast<std::size_t>(bufferSize));
-    } else {
-        std::memcpy(stagingData, pairs.data(), static_cast<std::size_t>(bufferSize));
-    }
-
-    auto [pairHandle, pairOffset] = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        storageAlignment
-    );
-    if (pairHandle == VK_NULL_HANDLE) {
-        std::cerr << "[HeatSystemRuntime] Failed to allocate contact pair buffer" << std::endl;
-        memoryAllocator.free(stagingBuffer, stagingOffset);
-        return false;
-    }
-
-    coupling.contactPairBuffer = pairHandle;
-    coupling.contactPairBufferOffset = pairOffset;
-
-    VkCommandBuffer cmd = renderCommandPool.beginCommands();
-    VkBufferCopy region{};
-    region.srcOffset = stagingOffset;
-    region.dstOffset = coupling.contactPairBufferOffset;
-    region.size = bufferSize;
-    vkCmdCopyBuffer(cmd, stagingBuffer, coupling.contactPairBuffer, 1, &region);
-    renderCommandPool.endCommands(cmd);
-
-    memoryAllocator.free(stagingBuffer, stagingOffset);
-    return true;
 }
 
 void HeatSystemRuntime::initializeModelBindings(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
@@ -188,7 +110,7 @@ void HeatSystemRuntime::initializeModelBindings(VulkanDevice& vulkanDevice, Memo
 }
 
 void HeatSystemRuntime::cleanupModelBindings(MemoryAllocator& memoryAllocator) {
-    clearContactCouplings(memoryAllocator);
+    (void)memoryAllocator;
 
     for (SourceCoupling& sourceCoupling : sourceCouplings) {
         if (sourceCoupling.heatSource) {

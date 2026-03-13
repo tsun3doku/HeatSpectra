@@ -12,9 +12,9 @@ class MemoryAllocator;
 
 // 
 //                          [ This DS enables GPU based rendering of intrinsic triangulations
-//                            Tracks for each input triangle:
+//                            Tracks for each input halfedge:
 //                            - Which intrinsic HE currently supports it
-//                            - The angular offset between first input edge and support HE ]
+//                            - The angular offset between the input halfedge and support HE ]
 
 class SupportingHalfedge {
 public:
@@ -56,8 +56,8 @@ public:
     };
 
     struct GPUBuffers {
-        std::vector<int32_t> S;      // Supporting halfedge: S[inputTriIdx] = intrinsicHalfedgeIdx
-        std::vector<float> A;        // Supporting angle: A[inputTriIdx] = angle
+        std::vector<int32_t> S;      // Supporting halfedge: S[inputHalfedgeIdx] = intrinsicHalfedgeIdx
+        std::vector<float> A;        // Supporting angle: A[inputHalfedgeIdx] = angle
         std::vector<int32_t> H;      // Intrinsic halfedge data [origin, edge, face, next]
         std::vector<int32_t> E;      // Intrinsic edge data [he0, he1]
         std::vector<int32_t> T;      // Intrinsic triangle data [halfedge]
@@ -79,11 +79,12 @@ public:
     void updateInsertion(uint32_t intrinsicHE);
     bool flipEdge(uint32_t edgeIdx);
     int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
+    int makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
 
     // Track where inserted vertices are located on the input mesh
     void trackInsertedVertex(uint32_t vertexIdx, const struct GeodesicTracer::SurfacePoint& surfacePoint);
 
-    const SupportingInfo& getSupportingInfo(uint32_t inputTriangleIdx) const;
+    const SupportingInfo& getSupportingInfo(uint32_t inputHalfedgeIdx) const;
 
     IntrinsicMesh buildIntrinsicMesh() const;
     void calculateVertexNormals(IntrinsicMesh& meshData) const;
@@ -94,8 +95,7 @@ public:
     void cleanup();
     void invalidateIntrinsicMeshCache() { intrinsicMeshCacheValid = false; }
 
-    const std::vector<SupportingInfo>& getAllSupportingInfo() const { return supportingInfo; }
-    double getIntrinsicCornerAngle(uint32_t intrinsicHE) const;
+    const std::vector<SupportingInfo>& getAllSupportingInfo() const { return supportingInfoPerHalfedge; }
     bool isUploadedToGPU() const { return gpuDataUploaded; }
 
     VkBufferView getSupportingHalfedgeView() const { return bufferViewS; }
@@ -119,13 +119,15 @@ public:
     size_t getVertexCount() const { return cachedIntrinsicMesh.vertices.size(); }
 
 private:
+    void clampSupportingAngle(SupportingInfo& info) const;
+
     const SignpostMesh& inputMesh;
     SignpostMesh& intrinsicMesh;
     const GeodesicTracer& tracer;
     VulkanDevice& vulkanDevice;
     MemoryAllocator& allocator;
 
-    std::vector<SupportingInfo> supportingInfo;     // One entry per input triangle
+    std::vector<SupportingInfo> supportingInfoPerHalfedge;     // One entry per input halfedge
     std::unordered_map<uint32_t, InsertedVertexLocation> insertedVertexLocations;
 
     bool gpuDataUploaded = false;

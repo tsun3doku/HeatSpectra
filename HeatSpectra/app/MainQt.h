@@ -6,6 +6,8 @@ class App;
 class QCheckBox;
 class QDoubleSpinBox;
 class QAction;
+class ModelRegistry;
+class ModelSelection;
 class NodeGraphDock;
 class NodeGraphBridge;
 class RenderSettingsController;
@@ -71,6 +73,8 @@ private:
     QWidget* controlsPanel = nullptr;
     NodeGraphDock* nodeGraphDock = nullptr;
     NodeGraphBridge* boundNodeGraphBridge = nullptr;
+    const ModelRegistry* boundModelRegistry = nullptr;
+    ModelSelection* boundModelSelection = nullptr;
     RenderSettingsController* settingsController = nullptr;
     const RuntimeQuery* boundRuntimeQuery = nullptr;
     QSplitter* mainSplitter = nullptr;

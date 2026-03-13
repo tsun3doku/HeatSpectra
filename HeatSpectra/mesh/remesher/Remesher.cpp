@@ -22,6 +22,8 @@ bool Remesher::performRemeshing(Model* targetModel, int iterations, double minAn
 
     ModelRemeshData& remeshData = modelRemeshData[targetModel];
     remeshData.remesher = std::make_unique<iODT>(*targetModel, vulkanDevice, memoryAllocator);
+    std::cout << "[Remesher] Starting ODT for model runtime ID: "
+              << targetModel->getRuntimeModelId() << std::endl;
 
     const bool success = remeshData.remesher->optimalDelaunayTriangulation(
         iterations,

@@ -1,5 +1,6 @@
 ﻿#include "NodeGraphKernels.hpp"
 
+#include "NodeContactPair.hpp"
 #include "NodeHeatReceiver.hpp"
 #include "NodeHeatSolve.hpp"
 #include "NodeHeatSource.hpp"
@@ -46,6 +47,7 @@ void NodeGraphKernels::registerDefaultKernels() {
     registerKernel(std::make_unique<NodeRemesh>());
     registerKernel(std::make_unique<NodeHeatReceiver>());
     registerKernel(std::make_unique<NodeHeatSource>());
+    registerKernel(std::make_unique<NodeContactPair>());
     registerKernel(std::make_unique<NodeHeatSolve>());
 }
 
