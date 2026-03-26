@@ -6,11 +6,14 @@
 #include <cstdint>
 
 #include "InputActions.hpp"
+#include "nodegraph/NodeGraphEditor.hpp"
+#include "nodegraph/NodeGraphTypes.hpp"
 
 class Camera;
 class GizmoController;
 class ModelSelection;
 class ResourceManager;
+class SceneController;
 class SwapchainManager;
 
 class InputController {
@@ -19,6 +22,8 @@ public:
         GizmoController& gizmoController,
         ModelSelection& modelSelection,
         ResourceManager& resourceManager,
+        SceneController& sceneController,
+        NodeGraphBridge& nodeGraphBridge,
         const SwapchainManager& swapchainManager,
         InputActionHandler& actionHandler);
     ~InputController() = default;
@@ -39,14 +44,18 @@ private:
     GizmoController& gizmoController;
     ModelSelection& modelSelection;
     ResourceManager& resourceManager;
+    SceneController& sceneController;
+    NodeGraphEditor nodeGraphEditor;
     const SwapchainManager& swapchainManager;
     InputActionHandler& actionHandler;
 
-    glm::vec3 modelStartPosition{0.0f};
     glm::vec3 accumulatedTranslation{0.0f};
     glm::vec3 lastAppliedTranslation{0.0f};
     float accumulatedRotation = 0.0f;
     float lastAppliedRotation = 0.0f;
     glm::vec3 cachedGizmoPosition{0.0f};
+    NodeGraphNodeId activeTransformNodeId{};
+    glm::vec3 transformDragStartTranslation{0.0f};
+    glm::vec3 transformDragStartRotationDegrees{0.0f};
 };
 

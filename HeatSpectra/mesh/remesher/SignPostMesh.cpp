@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 
+#include "domain/GeometryData.hpp"
 #include "scene/Model.hpp"
 #include "SignPostMesh.hpp"
 
@@ -74,6 +75,63 @@ void SignpostMesh::buildFromModel(const Model& src) {
     }
     
     // Compute corner angles 
+    updateAllCornerAngles(std::unordered_set<uint32_t>());
+}
+
+void SignpostMesh::buildFromGeometry(const GeometryData& geometry) {
+    conn.buildFromGeometry(geometry);
+    auto& HEs = conn.getHalfEdges();
+    auto& V = conn.getVertices();
+
+    const auto& connFaces = conn.getFaces();
+    faceNormals.resize(connFaces.size());
+    for (uint32_t fid = 0; fid < connFaces.size(); ++fid) {
+        uint32_t startHe = connFaces[fid].halfEdgeIdx;
+        if (startHe == INVALID_INDEX) {
+            faceNormals[fid] = glm::vec3(0.0f);
+            continue;
+        }
+
+        uint32_t he1 = startHe;
+        uint32_t he2 = HEs[he1].next;
+        uint32_t he3 = HEs[he2].next;
+        uint32_t v0 = HEs[he1].origin;
+        uint32_t v1 = HEs[he2].origin;
+        uint32_t v2 = HEs[he3].origin;
+        if (v0 >= V.size() || v1 >= V.size() || v2 >= V.size()) {
+            faceNormals[fid] = glm::vec3(0.0f);
+            continue;
+        }
+
+        const glm::vec3 A = V[v0].position;
+        const glm::vec3 B = V[v1].position;
+        const glm::vec3 C = V[v2].position;
+        faceNormals[fid] = glm::normalize(glm::cross(B - A, C - A));
+    }
+
+    auto& edges = conn.getEdges();
+    for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
+        const uint32_t he = edges[edgeIdx].halfEdgeIdx;
+        if (he == INVALID_INDEX || he >= HEs.size()) {
+            continue;
+        }
+
+        const uint32_t v1 = HEs[he].origin;
+        const uint32_t heN = HEs[he].next;
+        if (heN == INVALID_INDEX || v1 == INVALID_INDEX) {
+            continue;
+        }
+
+        const uint32_t v2 = HEs[heN].origin;
+        if (v1 >= V.size() || v2 >= V.size()) {
+            continue;
+        }
+
+        const glm::dvec3 dv1(V[v1].position.x, V[v1].position.y, V[v1].position.z);
+        const glm::dvec3 dv2(V[v2].position.x, V[v2].position.y, V[v2].position.z);
+        edges[edgeIdx].intrinsicLength = glm::length(dv2 - dv1);
+    }
+
     updateAllCornerAngles(std::unordered_set<uint32_t>());
 }
 
@@ -172,6 +230,7 @@ glm::dvec2 SignpostMesh::halfedgeVector(uint32_t heIdx) const {
     const auto& HEs = conn.getHalfEdges();
     if (heIdx >= HEs.size()) 
         return glm::dvec2(0.0);
+
     const auto& he = HEs[heIdx];
 
     // Get raw signpost angle and apply vertex angle scaling
@@ -305,7 +364,9 @@ void SignpostMesh::buildHalfedgeVectorsInFace() {
     const uint32_t faceCount = conn.getFaces().size();
     for (uint32_t f = 0; f < faceCount; ++f) {
         auto faceHEs = conn.getFaceHalfEdges(f);
-        if (faceHEs.size() != 3) continue;
+        if (faceHEs.size() != 3) {
+            continue;
+        }
 
         // Use the canonical triangle layout in this face
         Triangle2D tri = layoutTriangle(f);

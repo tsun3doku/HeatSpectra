@@ -14,7 +14,7 @@
 #include "spatial/Grid.hpp"
 #include "scene/Model.hpp"
 #include "scene/ModelSelection.hpp"
-#include "mesh/remesher/Remesher.hpp"
+#include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/UniformBufferManager.hpp"
@@ -25,13 +25,18 @@
 #include "renderers/IntrinsicRenderer.hpp"
 #include "renderers/OutlineRenderer.hpp"
 #include "mesh/remesher/iODT.hpp"
+#include "runtime/RuntimeIntrinsicCache.hpp"
+#include "heat/HeatSystem.hpp"
+#include "heat/VoronoiSystem.hpp"
 
 namespace render {
 
-OverlayPass::OverlayPass(VulkanDevice& device, VkFrameGraphRuntime& runtime, ResourceManager& resources, UniformBufferManager& ubo, GeometryPass& geometry, 
+OverlayPass::OverlayPass(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, VkFrameGraphRuntime& runtime, ResourceManager& resources, UniformBufferManager& ubo, GeometryPass& geometry,
     uint32_t framesInFlight, CommandPool& pool, framegraph::PassId passId, framegraph::ResourceId depthResolveId, framegraph::ResourceId depthMsaaId)
     : geometryPass(geometry),
       vulkanDevice(device),
+      memoryAllocator(allocator),
+      remeshResources(remeshResources),
       frameGraphRuntime(runtime),
       resourceManager(resources),
       uniformBufferManager(ubo),
@@ -64,6 +69,8 @@ void OverlayPass::create() {
 
     intrinsicRenderer = std::make_unique<IntrinsicRenderer>(
         vulkanDevice,
+        memoryAllocator,
+        remeshResources,
         uniformBufferManager,
         renderCommandPool,
         frameGraphRuntime.getRenderPass(),
@@ -112,18 +119,6 @@ void OverlayPass::updateDescriptors() {
     }
 }
 
-void OverlayPass::allocateDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->allocateDescriptorSetsForModel(model, maxFramesInFlight);
-    }
-}
-
-void OverlayPass::updateDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->updateDescriptorSetsForModel(model, remesher, maxFramesInFlight);
-    }
-}
-
 void OverlayPass::setTimingOverlayLines(const std::vector<std::string>& lines) {
     if (timingOverlay) {
         timingOverlay->setLines(lines);
@@ -136,27 +131,9 @@ void OverlayPass::updateGridLabels(const glm::vec3& gridSize) {
     }
 }
 
-void OverlayPass::allocateNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
+void OverlayPass::updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic, uint32_t maxFramesInFlight) {
     if (intrinsicRenderer) {
-        intrinsicRenderer->allocateNormalsDescriptorSetsForModel(model, maxFramesInFlight);
-    }
-}
-
-void OverlayPass::updateNormalsDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->updateNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
-    }
-}
-
-void OverlayPass::allocateVertexNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->allocateVertexNormalsDescriptorSetsForModel(model, maxFramesInFlight);
-    }
-}
-
-void OverlayPass::updateVertexNormalsDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->updateVertexNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
+        intrinsicRenderer->updatePayloadForModel(model, intrinsic, maxFramesInFlight);
     }
 }
 
@@ -164,34 +141,39 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
     if (!ready) {
         return;
     }
-    if (!services.remesher || !services.modelSelection || !services.gizmoController || !services.wireframeRenderer) {
+    if (!services.modelSelection || !services.gizmoController || !services.wireframeRenderer) {
         return;
     }
 
-    Remesher& remesher = *services.remesher;
     ModelSelection& modelSelection = *services.modelSelection;
     GizmoController& gizmoController = *services.gizmoController;
     WireframeRenderer& wireframeRenderer = *services.wireframeRenderer;
-    FrameSimulation* simulation = services.simulation;
+    HeatSystem* heatSystem = services.heatSystem;
+    VoronoiSystem* voronoiSystem = services.voronoiSystem;
 
     VkCommandBuffer commandBuffer = context.commandBuffer;
     const uint32_t currentFrame = context.currentFrame;
     const VkExtent2D extent = context.extent;
 
-    if (simulation && flags.drawHeatOverlay && (simulation->simulationActive() || simulation->simulationPaused())) {
-        simulation->renderHeatOverlay(commandBuffer, currentFrame);
+    if (heatSystem && flags.drawHeatOverlay && (heatSystem->getIsActive() || heatSystem->getIsPaused())) {
+        std::cout << "[OverlayPass] renderHeatOverlay"
+                  << " frame=" << currentFrame
+                  << " simActive=" << (heatSystem->getIsActive() ? "true" : "false")
+                  << " simPaused=" << (heatSystem->getIsPaused() ? "true" : "false")
+                  << std::endl;
+        heatSystem->renderHeatOverlay(commandBuffer, currentFrame);
     }
 
     if (flags.drawIntrinsicOverlay && intrinsicRenderer) {
-        intrinsicRenderer->renderSupportingHalfedges(commandBuffer, currentFrame, remesher);
+        intrinsicRenderer->renderSupportingHalfedges(commandBuffer, currentFrame, resourceManager);
     }
 
     if (params.drawIntrinsicNormals && intrinsicRenderer) {
-        intrinsicRenderer->renderIntrinsicNormals(commandBuffer, currentFrame, remesher, params.normalLength);
+        intrinsicRenderer->renderIntrinsicNormals(commandBuffer, currentFrame, resourceManager, params.normalLength);
     }
 
     if (params.drawIntrinsicVertexNormals && intrinsicRenderer) {
-        intrinsicRenderer->renderIntrinsicVertexNormals(commandBuffer, currentFrame, remesher, params.normalLength);
+        intrinsicRenderer->renderIntrinsicVertexNormals(commandBuffer, currentFrame, resourceManager, params.normalLength);
     }
 
     if (outlineRenderer) {
@@ -205,14 +187,22 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
         gridRenderer->renderLabels(commandBuffer, currentFrame);
     }
 
-    if (simulation && flags.drawSurfels && simulation->simulationActive() && simulation->voronoiReady()) {
-        simulation->renderSurfels(commandBuffer, currentFrame, glm::mat4(1.0f), 0.0025f);
+    if (heatSystem && flags.drawSurfels && (heatSystem->getIsActive() || heatSystem->getIsPaused()) && heatSystem->voronoiReady()) {
+        heatSystem->renderSurfels(commandBuffer, currentFrame, glm::mat4(1.0f), 0.0025f);
     }
-    if (simulation && flags.drawVoronoi && simulation->simulationActive() && simulation->voronoiReady()) {
-        simulation->renderVoronoiSurface(commandBuffer, currentFrame);
+    bool voronoiReady = false;
+    if (voronoiSystem) {
+        voronoiReady = voronoiSystem->isReady();
     }
-    if (simulation && flags.drawPoints && simulation->simulationActive() && simulation->voronoiReady()) {
-        simulation->renderOccupancy(commandBuffer, currentFrame, extent);
+    if (flags.drawVoronoi && voronoiReady) {
+        std::cout << "[OverlayPass] renderVoronoi"
+                  << " frame=" << currentFrame
+                  << " voronoiReady=" << (voronoiReady ? "true" : "false")
+                  << std::endl;
+        voronoiSystem->renderVoronoiSurface(commandBuffer, currentFrame);
+    }
+    if (voronoiSystem && flags.drawPoints && voronoiReady) {
+        voronoiSystem->renderOccupancy(commandBuffer, currentFrame, extent);
     }
 
     if (flags.wireframeMode > 0) {
@@ -238,8 +228,8 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
         }
     }
 
-    if (simulation && flags.drawContactLines) {
-        simulation->renderContactLines(commandBuffer, currentFrame, extent);
+    if (heatSystem && flags.drawContactLines) {
+        heatSystem->renderContactLines(commandBuffer, currentFrame, extent);
     }
 
     if (timingOverlay) {
@@ -275,7 +265,6 @@ void OverlayPass::destroy() {
         intrinsicRenderer->cleanup();
         intrinsicRenderer.reset();
     }
-
     if (timingOverlay) {
         timingOverlay->cleanup();
         timingOverlay.reset();

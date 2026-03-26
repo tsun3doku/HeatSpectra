@@ -9,7 +9,6 @@
 class NodeGraphBridge;
 class QDoubleSpinBox;
 class QLabel;
-class QPushButton;
 class QSpinBox;
 class QString;
 
@@ -22,19 +21,18 @@ public:
     void setStatusSink(std::function<void(const QString&)> statusSink);
 
 private:
-    void applySettings();
-    void executeRemesh();
+    bool writeParameters();
+    void onParametersEdited();
     void setStatus(const QString& text) const;
 
     NodeGraphBridge* nodeGraphBridge = nullptr;
     NodeGraphNodeId currentNodeId{};
+    bool syncingFromNode = false;
 
     QSpinBox* iterationsSpinBox = nullptr;
     QDoubleSpinBox* minAngleSpinBox = nullptr;
     QDoubleSpinBox* maxEdgeLengthSpinBox = nullptr;
     QDoubleSpinBox* stepSizeSpinBox = nullptr;
-    QPushButton* applyButton = nullptr;
-    QPushButton* runButton = nullptr;
 
     std::function<void(const QString&)> statusSink;
 };

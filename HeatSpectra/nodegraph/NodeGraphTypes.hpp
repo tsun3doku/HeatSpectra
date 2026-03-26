@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -54,9 +54,12 @@ inline bool operator!=(NodeGraphEdgeId lhs, NodeGraphEdgeId rhs) {
 
 enum class NodeGraphValueType {
     Mesh,
+    Intrinsic,
     HeatReceiver,
     HeatSource,
-    ContactPair,
+    Contact,
+    Heat,
+    Voronoi,
     Point,
     Vector3,
     ScalarFloat,
@@ -68,12 +71,15 @@ enum class NodeGraphValueType {
 enum class NodeDataType : uint8_t {
     None = 0,
     Geometry = 1,
-    HeatReceiver = 2,
-    HeatSource = 3,
-    ContactPair = 4,
-    ScalarFloat = 5,
-    ScalarInt = 6,
-    ScalarBool = 7
+    Intrinsic = 2,
+    HeatReceiver = 3,
+    HeatSource = 4,
+    Heat = 5,
+    Voronoi = 6,
+    Contact = 7,
+    ScalarFloat = 8,
+    ScalarInt = 9,
+    ScalarBool = 10
 };
 
 enum class GeometryAttributeDomain : uint8_t {
@@ -104,16 +110,7 @@ enum class NodeGraphNodeCategory {
 
 using NodeTypeId = std::string;
 
-namespace nodegraphtypes {
-inline constexpr const char* Model = "model";
-inline constexpr const char* Group = "group";
-inline constexpr const char* Remesh = "remesh";
-inline constexpr const char* HeatReceiver = "heat_receiver";
-inline constexpr const char* HeatSource = "heat_source";
-inline constexpr const char* ContactPair = "contact_pair";
-inline constexpr const char* HeatSolve = "heat_solve";
-inline constexpr const char* Custom = "custom";
-}
+
 
 struct NodeGraphAttributeContract {
     std::string name;
@@ -163,50 +160,7 @@ struct NodeGraphParamValue {
     std::string stringValue;
 };
 
-namespace nodegraphparams {
-namespace model {
-constexpr uint32_t Path = 1;
-constexpr uint32_t ApplyRequested = 2;
-}
 
-namespace group {
-constexpr uint32_t Enabled = 1;
-constexpr uint32_t SourceName = 2;
-constexpr uint32_t TargetName = 3;
-constexpr uint32_t SourceType = 4;
-
-namespace sourcetype {
-constexpr int64_t Vertex = 0;
-constexpr int64_t Object = 1;
-constexpr int64_t Material = 2;
-constexpr int64_t Smooth = 3;
-}
-}
-
-namespace remesh {
-constexpr uint32_t Iterations = 1;
-constexpr uint32_t MinAngleDegrees = 2;
-constexpr uint32_t MaxEdgeLength = 3;
-constexpr uint32_t StepSize = 4;
-constexpr uint32_t RunRequested = 5;
-}
-
-namespace heatsolve {
-constexpr uint32_t Enabled = 1;
-constexpr uint32_t Paused = 2;
-constexpr uint32_t ResetRequested = 3;
-constexpr uint32_t MaterialBindings = 4;
-constexpr uint32_t ContactBindings = 5;
-constexpr uint32_t CellSize = 6;
-constexpr uint32_t VoxelResolution = 7;
-}
-
-namespace contactpair {
-constexpr uint32_t MinNormalDot = 1;
-constexpr uint32_t ContactRadius = 2;
-constexpr uint32_t ComputeRequested = 3;
-}
-}
 
 struct NodeTypeDefinition {
     NodeTypeId id;
@@ -216,10 +170,7 @@ struct NodeTypeDefinition {
     std::vector<NodeGraphParamDefinition> parameters;
 };
 
-const std::vector<NodeTypeDefinition>& builtInNodeTypeDefinitions();
-const NodeTypeDefinition* findNodeTypeDefinitionById(const NodeTypeId& typeId);
-NodeTypeId canonicalNodeTypeId(const NodeTypeId& requestedTypeId);
-const NodeGraphParamDefinition* findNodeParamDefinition(const NodeTypeDefinition& definition, uint32_t paramId);
+
 
 struct NodeGraphSocket {
     NodeGraphSocketId id{};
@@ -263,8 +214,15 @@ enum class NodeGraphChangeType : uint8_t {
     EdgeRemoved = 4
 };
 
+enum class NodeGraphChangeReason : uint8_t {
+    Topology = 0,
+    Parameter = 1,
+    Layout = 2
+};
+
 struct NodeGraphChange {
     NodeGraphChangeType type = NodeGraphChangeType::Reset;
+    NodeGraphChangeReason reason = NodeGraphChangeReason::Topology;
     NodeGraphNode node{};
     NodeGraphNodeId nodeId{};
     NodeGraphEdge edge{};
@@ -277,10 +235,4 @@ struct NodeGraphDelta {
     std::vector<NodeGraphChange> changes;
 };
 
-NodeGraphParamValue makeNodeGraphParamValue(const NodeGraphParamDefinition& definition);
-const NodeGraphParamValue* findNodeParamValue(const NodeGraphNode& node, uint32_t paramId);
-NodeGraphParamValue* findNodeParamValue(NodeGraphNode& node, uint32_t paramId);
-bool tryGetNodeParamFloat(const NodeGraphNode& node, uint32_t paramId, double& outValue);
-bool tryGetNodeParamInt(const NodeGraphNode& node, uint32_t paramId, int64_t& outValue);
-bool tryGetNodeParamBool(const NodeGraphNode& node, uint32_t paramId, bool& outValue);
-bool tryGetNodeParamString(const NodeGraphNode& node, uint32_t paramId, std::string& outValue);
+

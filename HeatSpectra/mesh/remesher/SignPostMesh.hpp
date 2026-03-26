@@ -6,6 +6,7 @@
 
 #include "HalfEdgeMesh.hpp"
 
+struct GeometryData;
 class Model;
 
 class SignpostMesh {
@@ -16,6 +17,7 @@ public:
 
     // Construction
     void buildFromModel(const Model& srcModel);
+    void buildFromGeometry(const GeometryData& geometry);
     Triangle2D layoutTriangle(uint32_t faceIdx) const;
 
     // Intrinsic operations

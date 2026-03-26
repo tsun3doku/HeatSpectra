@@ -1,6 +1,9 @@
 #include "NodePanelUtils.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
+#include "NodeGraphEditor.hpp"
 
 #include <cctype>
 #include <filesystem>
@@ -8,6 +11,19 @@
 #include <sstream>
 
 namespace NodePanelUtils {
+
+namespace {
+
+bool writeParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter) {
+    if (!nodeGraphBridge) {
+        return false;
+    }
+
+    NodeGraphEditor editor(*nodeGraphBridge);
+    return editor.setNodeParameter(nodeId, parameter);
+}
+
+}
 
 bool readBoolParam(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue) {
     bool value = defaultValue;
@@ -50,7 +66,7 @@ bool writeBoolParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, ui
     parameter.id = parameterId;
     parameter.type = NodeGraphParamType::Bool;
     parameter.boolValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
+    return writeParam(nodeGraphBridge, nodeId, parameter);
 }
 
 bool writeFloatParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, double value) {
@@ -62,7 +78,7 @@ bool writeFloatParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, u
     parameter.id = parameterId;
     parameter.type = NodeGraphParamType::Float;
     parameter.floatValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
+    return writeParam(nodeGraphBridge, nodeId, parameter);
 }
 
 bool writeIntParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, int64_t value) {
@@ -74,7 +90,7 @@ bool writeIntParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uin
     parameter.id = parameterId;
     parameter.type = NodeGraphParamType::Int;
     parameter.intValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
+    return writeParam(nodeGraphBridge, nodeId, parameter);
 }
 
 bool writeStringParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, uint32_t parameterId, const std::string& value) {
@@ -86,7 +102,7 @@ bool writeStringParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, 
     parameter.id = parameterId;
     parameter.type = NodeGraphParamType::String;
     parameter.stringValue = value;
-    return nodeGraphBridge->setNodeParameter(nodeId, parameter);
+    return writeParam(nodeGraphBridge, nodeId, parameter);
 }
 
 std::string trimCopy(const std::string& value) {
@@ -173,27 +189,6 @@ void appendDelimitedNames(
     }
 }
 
-const NodeGraphNode* findNodeInState(const NodeGraphState& state, NodeGraphNodeId nodeId) {
-    for (const NodeGraphNode& node : state.nodes) {
-        if (node.id == nodeId) {
-            return &node;
-        }
-    }
-    return nullptr;
-}
-
-const NodeGraphEdge* findIncomingEdgeInState(
-    const NodeGraphState& state,
-    NodeGraphNodeId toNodeId,
-    NodeGraphSocketId toSocketId) {
-    for (const NodeGraphEdge& edge : state.edges) {
-        if (edge.toNode == toNodeId && edge.toSocket == toSocketId) {
-            return &edge;
-        }
-    }
-    return nullptr;
-}
-
 void collectUpstreamModelPaths(
     const NodeGraphState& state,
     NodeGraphNodeId nodeId,
@@ -204,12 +199,12 @@ void collectUpstreamModelPaths(
         return;
     }
 
-    const NodeGraphNode* node = findNodeInState(state, nodeId);
+    const NodeGraphNode* node = ::findNodeInState(state, nodeId);
     if (!node) {
         return;
     }
 
-    if (canonicalNodeTypeId(node->typeId) == nodegraphtypes::Model) {
+    if (getNodeTypeId(node->typeId) == nodegraphtypes::Model) {
         const std::string modelPath = readStringParam(*node, nodegraphparams::model::Path);
         if (!modelPath.empty() && seenPaths.insert(modelPath).second) {
             outModelPaths.push_back(modelPath);
@@ -218,7 +213,7 @@ void collectUpstreamModelPaths(
     }
 
     for (const NodeGraphSocket& inputSocket : node->inputs) {
-        const NodeGraphEdge* inputEdge = findIncomingEdgeInState(state, node->id, inputSocket.id);
+        const NodeGraphEdge* inputEdge = ::findIncomingEdgeInState(state, node->id, inputSocket.id);
         if (!inputEdge) {
             continue;
         }
@@ -236,12 +231,12 @@ void collectUpstreamModelNodeIds(
         return;
     }
 
-    const NodeGraphNode* node = findNodeInState(state, nodeId);
+    const NodeGraphNode* node = ::findNodeInState(state, nodeId);
     if (!node) {
         return;
     }
 
-    if (canonicalNodeTypeId(node->typeId) == nodegraphtypes::Model) {
+    if (getNodeTypeId(node->typeId) == nodegraphtypes::Model) {
         if (node->id.isValid() && seenModelNodeIds.insert(node->id.value).second) {
             outModelNodeIds.push_back(node->id.value);
         }
@@ -249,7 +244,7 @@ void collectUpstreamModelNodeIds(
     }
 
     for (const NodeGraphSocket& inputSocket : node->inputs) {
-        const NodeGraphEdge* inputEdge = findIncomingEdgeInState(state, node->id, inputSocket.id);
+        const NodeGraphEdge* inputEdge = ::findIncomingEdgeInState(state, node->id, inputSocket.id);
         if (!inputEdge) {
             continue;
         }
@@ -283,4 +278,4 @@ std::vector<std::string> resolveCandidateModelPaths(const std::string& modelPath
     return candidates;
 }
 
-} // namespace NodePanelUtils
+} 

@@ -123,7 +123,6 @@ public:
     void createRenderVertexBuffer();
     void createRenderIndexBuffer();
 
-    void equalizeFaceAreas();
     void recalculateNormals();
     void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
     void updateVertexBuffer();

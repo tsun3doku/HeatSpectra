@@ -1,6 +1,8 @@
 #include "HeatSystemSurfaceStage.hpp"
 
+#include "HeatReceiverRuntime.hpp"
 #include "HeatSystemResources.hpp"
+#include "scene/Model.hpp"
 
 #include "util/Structs.hpp"
 #include "util/file_utils.h"
@@ -127,4 +129,56 @@ bool HeatSystemSurfaceStage::createPipeline() {
 
     vkDestroyShaderModule(context.vulkanDevice.getDevice(), computeShaderModule, nullptr);
     return true;
+}
+
+void HeatSystemSurfaceStage::dispatchSurfaceTemperatureUpdates(
+    VkCommandBuffer commandBuffer,
+    uint32_t nodeCount,
+    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
+    bool finalWritesBufferB) const {
+    if (nodeCount == 0 ||
+        context.resources.surfacePipeline == VK_NULL_HANDLE ||
+        context.resources.surfacePipelineLayout == VK_NULL_HANDLE) {
+        return;
+    }
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.surfacePipeline);
+
+    HeatSourcePushConstant surfacePushConstant{};
+    surfacePushConstant.substepIndex = 0;
+
+    for (const auto& receiver : receivers) {
+        if (!receiver || receiver->getIntrinsicVertexCount() == 0) {
+            continue;
+        }
+
+        const VkDescriptorSet surfaceSet = finalWritesBufferB
+            ? receiver->getSurfaceComputeSetB()
+            : receiver->getSurfaceComputeSetA();
+        if (surfaceSet == VK_NULL_HANDLE) {
+            continue;
+        }
+
+        const uint32_t workGroupSize = 256;
+        const uint32_t vertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
+        const uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
+
+        vkCmdPushConstants(
+            commandBuffer,
+            context.resources.surfacePipelineLayout,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            0,
+            sizeof(HeatSourcePushConstant),
+            &surfacePushConstant);
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            context.resources.surfacePipelineLayout,
+            0,
+            1,
+            &surfaceSet,
+            0,
+            nullptr);
+        vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
+    }
 }

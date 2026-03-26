@@ -1,21 +1,35 @@
 #include "NodeGraphDataTypes.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
+
+#include "NodeGraphPayloadTypes.hpp"
+#include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <unordered_map>
 #include <unordered_set>
 
-const char* nodeDataTypeToString(NodeDataType dataType) {
+static std::atomic<uint64_t> geometryRevisionCounter{1};
+
+const char* nodeDataTypeName(NodeDataType dataType) {
     switch (dataType) {
     case NodeDataType::Geometry:
         return "geometry";
+    case NodeDataType::Intrinsic:
+        return "intrinsic";
     case NodeDataType::HeatReceiver:
         return "heat_receiver";
     case NodeDataType::HeatSource:
         return "heat_source";
-    case NodeDataType::ContactPair:
-        return "contact_pair";
+    case NodeDataType::Contact:
+        return "contact";
+    case NodeDataType::Heat:
+        return "heat";
+    case NodeDataType::Voronoi:
+        return "voronoi";
     case NodeDataType::ScalarFloat:
         return "scalar_float";
     case NodeDataType::ScalarInt:
@@ -29,6 +43,27 @@ const char* nodeDataTypeToString(NodeDataType dataType) {
 }
 
 namespace {
+
+const GeometryData* resolveGeometryForDataBlock(const NodeDataBlock& dataBlock, const NodePayloadRegistry* registry) {
+    if (!registry || dataBlock.payloadHandle.key == 0) {
+        return nullptr;
+    }
+
+    switch (dataBlock.dataType) {
+    case NodeDataType::Geometry:
+        return registry->get<GeometryData>(dataBlock.payloadHandle);
+    case NodeDataType::HeatReceiver: {
+        const HeatReceiverData* heatReceiver = registry->get<HeatReceiverData>(dataBlock.payloadHandle);
+        return heatReceiver ? registry->get<GeometryData>(heatReceiver->geometryHandle) : nullptr;
+    }
+    case NodeDataType::HeatSource: {
+        const HeatSourceData* heatSource = registry->get<HeatSourceData>(dataBlock.payloadHandle);
+        return heatSource ? registry->get<GeometryData>(heatSource->geometryHandle) : nullptr;
+    }
+    default:
+        return nullptr;
+    }
+}
 
 GeometryAttribute* findAttribute(
     GeometryData& geometry,
@@ -186,7 +221,7 @@ std::string geometryGroupNamesListForType(const GeometryData& geometry, const ch
 
 } // namespace
 
-void setDetailBoolAttribute(GeometryData& geometry, const std::string& name, bool value) {
+void setGeometryDetailBool(GeometryData& geometry, const std::string& name, bool value) {
     GeometryAttribute* attribute = findAttribute(geometry, name, GeometryAttributeDomain::Detail);
     if (!attribute) {
         geometry.attributes.push_back({});
@@ -202,24 +237,7 @@ void setDetailBoolAttribute(GeometryData& geometry, const std::string& name, boo
     attribute->boolValues.assign(1, value ? 1 : 0);
 }
 
-void setPointFloatAttributeConstant(GeometryData& geometry, const std::string& name, float value) {
-    GeometryAttribute* attribute = findAttribute(geometry, name, GeometryAttributeDomain::Point);
-    if (!attribute) {
-        geometry.attributes.push_back({});
-        attribute = &geometry.attributes.back();
-    }
-
-    attribute->name = name;
-    attribute->domain = GeometryAttributeDomain::Point;
-    attribute->dataType = GeometryAttributeDataType::Float;
-    attribute->tupleSize = 1;
-    attribute->intValues.clear();
-    attribute->boolValues.clear();
-    const std::size_t pointCount = geometry.pointPositions.size() / 3;
-    attribute->floatValues.assign(pointCount, value);
-}
-
-void setPrimitiveIntAttributeFromUInt32(
+void setGeometryPrimitiveIntAttribute(
     GeometryData& geometry,
     const std::string& name,
     const std::vector<uint32_t>& values) {
@@ -241,7 +259,7 @@ void setPrimitiveIntAttributeFromUInt32(
     }
 }
 
-void ensureGeometryGroups(GeometryData& geometry) {
+void normalizeGeometryGroups(GeometryData& geometry) {
     const std::size_t triangleCount = geometry.triangleIndices.size() / 3;
     if (geometry.triangleGroupIds.size() != triangleCount) {
         geometry.triangleGroupIds.assign(triangleCount, 0u);
@@ -299,39 +317,51 @@ void ensureGeometryGroups(GeometryData& geometry) {
         return lhs.id < rhs.id;
     });
 
-    setPrimitiveIntAttributeFromUInt32(geometry, "group.id", geometry.triangleGroupIds);
+    setGeometryPrimitiveIntAttribute(geometry, "group.id", geometry.triangleGroupIds);
 }
 
-void refreshNodeDataBlockMetadata(NodeDataBlock& dataBlock) {
-    dataBlock.metadata["data.type"] = nodeDataTypeToString(dataBlock.dataType);
+void bumpGeometryRevision(GeometryData& geometry) {
+    geometry.geometryRevision = geometryRevisionCounter.fetch_add(1, std::memory_order_relaxed);
+}
+
+void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* registry) {
+    dataBlock.metadata["data.type"] = nodeDataTypeName(dataBlock.dataType);
 
     if (dataBlock.dataType == NodeDataType::Geometry ||
         dataBlock.dataType == NodeDataType::HeatReceiver ||
         dataBlock.dataType == NodeDataType::HeatSource) {
-        if (dataBlock.geometry.sourceModelPath.empty()) {
+        const GeometryData* geometry = resolveGeometryForDataBlock(dataBlock, registry);
+        if (!geometry || geometry->baseModelPath.empty()) {
             dataBlock.metadata.erase("geometry.model_path");
         } else {
-            dataBlock.metadata["geometry.model_path"] = dataBlock.geometry.sourceModelPath;
+            dataBlock.metadata["geometry.model_path"] = geometry->baseModelPath;
         }
-        dataBlock.metadata["geometry.model_id"] = std::to_string(dataBlock.geometry.modelId);
-        dataBlock.metadata["geometry.point_count"] = std::to_string(dataBlock.geometry.pointPositions.size() / 3);
-        dataBlock.metadata["geometry.triangle_count"] = std::to_string(dataBlock.geometry.triangleIndices.size() / 3);
-        dataBlock.metadata["geometry.group_count"] = std::to_string(dataBlock.geometry.groups.size());
-        dataBlock.metadata["geometry.groups"] = geometryGroupSummary(dataBlock.geometry);
-        dataBlock.metadata["geometry.group_names"] = geometryGroupNamesList(dataBlock.geometry);
+        const uint32_t modelId = geometry ? geometry->modelId : 0u;
+        const uint64_t revision = geometry ? geometry->geometryRevision : 0u;
+        const size_t pointCount = geometry ? geometry->pointPositions.size() / 3 : 0u;
+        const size_t triangleCount = geometry ? geometry->triangleIndices.size() / 3 : 0u;
+        const size_t groupCount = geometry ? geometry->groups.size() : 0u;
+        dataBlock.metadata["geometry.model_id"] = std::to_string(modelId);
+        dataBlock.metadata["geometry.revision"] = std::to_string(revision);
+        dataBlock.metadata["geometry.point_count"] = std::to_string(pointCount);
+        dataBlock.metadata["geometry.triangle_count"] = std::to_string(triangleCount);
+        dataBlock.metadata["geometry.group_count"] = std::to_string(groupCount);
+        dataBlock.metadata["geometry.groups"] = geometry ? geometryGroupSummary(*geometry) : "none";
+        dataBlock.metadata["geometry.group_names"] = geometry ? geometryGroupNamesList(*geometry) : "none";
         dataBlock.metadata["geometry.group_names.vertex"] =
-            geometryGroupNamesListForType(dataBlock.geometry, "geometry.group_names.vertex");
+            geometry ? geometryGroupNamesListForType(*geometry, "geometry.group_names.vertex") : std::string();
         dataBlock.metadata["geometry.group_names.object"] =
-            geometryGroupNamesListForType(dataBlock.geometry, "geometry.group_names.object");
+            geometry ? geometryGroupNamesListForType(*geometry, "geometry.group_names.object") : std::string();
         dataBlock.metadata["geometry.group_names.material"] =
-            geometryGroupNamesListForType(dataBlock.geometry, "geometry.group_names.material");
+            geometry ? geometryGroupNamesListForType(*geometry, "geometry.group_names.material") : std::string();
         dataBlock.metadata["geometry.group_names.smooth"] =
-            geometryGroupNamesListForType(dataBlock.geometry, "geometry.group_names.smooth");
-        dataBlock.metadata["geometry.attribute_count"] = std::to_string(dataBlock.geometry.attributes.size());
-        dataBlock.metadata["geometry.attributes"] = geometryAttributeSummary(dataBlock.geometry);
+            geometry ? geometryGroupNamesListForType(*geometry, "geometry.group_names.smooth") : std::string();
+        dataBlock.metadata["geometry.attribute_count"] = std::to_string(geometry ? geometry->attributes.size() : 0u);
+        dataBlock.metadata["geometry.attributes"] = geometry ? geometryAttributeSummary(*geometry) : "none";
     } else {
         dataBlock.metadata.erase("geometry.model_path");
         dataBlock.metadata.erase("geometry.model_id");
+        dataBlock.metadata.erase("geometry.revision");
         dataBlock.metadata.erase("geometry.point_count");
         dataBlock.metadata.erase("geometry.triangle_count");
         dataBlock.metadata.erase("geometry.group_count");
@@ -345,34 +375,82 @@ void refreshNodeDataBlockMetadata(NodeDataBlock& dataBlock) {
         dataBlock.metadata.erase("geometry.attributes");
     }
 
-    if (dataBlock.dataType == NodeDataType::ContactPair) {
-        const ContactPairData& contactPairData = dataBlock.contactPairData;
-        dataBlock.metadata["contact_pair.valid"] = contactPairData.hasValidContact ? "true" : "false";
-        dataBlock.metadata["contact_pair.kind"] =
-            (contactPairData.kind == ContactPairKind::ReceiverToReceiver)
-            ? "receiver_to_receiver"
-            : "source_to_receiver";
-        dataBlock.metadata["contact_pair.emitter_model_id"] = std::to_string(contactPairData.emitterModelId);
-        dataBlock.metadata["contact_pair.receiver_model_id"] = std::to_string(contactPairData.receiverModelId);
-        dataBlock.metadata["contact_pair.model_a_id"] = std::to_string(contactPairData.modelIdA);
-        dataBlock.metadata["contact_pair.model_b_id"] = std::to_string(contactPairData.modelIdB);
-        dataBlock.metadata["contact_pair.min_normal_dot"] = std::to_string(contactPairData.minNormalDot);
-        dataBlock.metadata["contact_pair.contact_radius"] = std::to_string(contactPairData.contactRadius);
-        dataBlock.metadata["contact_pair.compute_requested"] = contactPairData.computeRequested ? "true" : "false";
+    if (dataBlock.dataType == NodeDataType::Intrinsic) {
+        const IntrinsicMeshData* intrinsic = registry ? registry->get<IntrinsicMeshData>(dataBlock.payloadHandle) : nullptr;
+        const size_t vertexCount = intrinsic ? intrinsic->vertices.size() : 0u;
+        const size_t triangleCount = intrinsic ? intrinsic->triangleIndices.size() / 3 : 0u;
+        dataBlock.metadata["intrinsic.vertex_count"] = std::to_string(vertexCount);
+        dataBlock.metadata["intrinsic.triangle_count"] = std::to_string(triangleCount);
+        dataBlock.metadata["intrinsic.face_count"] = std::to_string(intrinsic ? intrinsic->faceIds.size() : 0u);
     } else {
-        dataBlock.metadata.erase("contact_pair.valid");
-        dataBlock.metadata.erase("contact_pair.kind");
-        dataBlock.metadata.erase("contact_pair.emitter_model_id");
-        dataBlock.metadata.erase("contact_pair.receiver_model_id");
-        dataBlock.metadata.erase("contact_pair.model_a_id");
-        dataBlock.metadata.erase("contact_pair.model_b_id");
-        dataBlock.metadata.erase("contact_pair.min_normal_dot");
-        dataBlock.metadata.erase("contact_pair.contact_radius");
-        dataBlock.metadata.erase("contact_pair.compute_requested");
+        dataBlock.metadata.erase("intrinsic.vertex_count");
+        dataBlock.metadata.erase("intrinsic.triangle_count");
+        dataBlock.metadata.erase("intrinsic.face_count");
+    }
+
+    if (dataBlock.dataType == NodeDataType::HeatSource) {
+        const HeatSourceData* heatSource = registry ? registry->get<HeatSourceData>(dataBlock.payloadHandle) : nullptr;
+        dataBlock.metadata["heat_source.temperature"] =
+            heatSource ? std::to_string(heatSource->temperature) : std::string();
+    } else {
+        dataBlock.metadata.erase("heat_source.temperature");
+    }
+
+    if (dataBlock.dataType == NodeDataType::HeatReceiver) {
+        const HeatReceiverData* heatReceiver = registry ? registry->get<HeatReceiverData>(dataBlock.payloadHandle) : nullptr;
+        dataBlock.metadata["heat_receiver.active"] = heatReceiver ? "true" : "false";
+    } else {
+        dataBlock.metadata.erase("heat_receiver.active");
+    }
+
+    if (dataBlock.dataType == NodeDataType::Heat) {
+        const HeatData* heatData = registry ? registry->get<HeatData>(dataBlock.payloadHandle) : nullptr;
+        dataBlock.metadata["heat.active"] = (heatData && heatData->active) ? "true" : "false";
+        dataBlock.metadata["heat.paused"] = (heatData && heatData->paused) ? "true" : "false";
+        dataBlock.metadata["heat.reset_requested"] = (heatData && heatData->resetRequested) ? "true" : "false";
+        dataBlock.metadata["heat.source_count"] =
+            std::to_string(heatData ? heatData->sourceHandles.size() : 0u);
+        dataBlock.metadata["heat.receiver_count"] =
+            std::to_string(heatData ? heatData->receiverGeometryHandles.size() : 0u);
+        dataBlock.metadata["heat.material_binding_count"] =
+            std::to_string(heatData ? heatData->materialBindings.size() : 0u);
+    } else {
+        dataBlock.metadata.erase("heat.active");
+        dataBlock.metadata.erase("heat.paused");
+        dataBlock.metadata.erase("heat.reset_requested");
+        dataBlock.metadata.erase("heat.source_count");
+        dataBlock.metadata.erase("heat.receiver_count");
+        dataBlock.metadata.erase("heat.material_binding_count");
+    }
+
+    if (dataBlock.dataType == NodeDataType::Contact) {
+        const ContactData* contactData = registry ? registry->get<ContactData>(dataBlock.payloadHandle) : nullptr;
+        dataBlock.metadata["contact.active"] = (contactData && contactData->active) ? "true" : "false";
+        dataBlock.metadata["contact.binding_count"] =
+            std::to_string(contactData ? contactData->bindings.size() : 0u);
+    } else {
+        dataBlock.metadata.erase("contact.active");
+        dataBlock.metadata.erase("contact.binding_count");
+    }
+
+    if (dataBlock.dataType == NodeDataType::Voronoi) {
+        const VoronoiData* voronoiData = registry ? registry->get<VoronoiData>(dataBlock.payloadHandle) : nullptr;
+        dataBlock.metadata["voronoi.active"] = (voronoiData && voronoiData->active) ? "true" : "false";
+        dataBlock.metadata["voronoi.receiver_count"] =
+            std::to_string(voronoiData ? voronoiData->receiverGeometryHandles.size() : 0u);
+        dataBlock.metadata["voronoi.cell_size"] =
+            voronoiData ? std::to_string(voronoiData->params.cellSize) : std::string();
+        dataBlock.metadata["voronoi.voxel_resolution"] =
+            voronoiData ? std::to_string(voronoiData->params.voxelResolution) : std::string();
+    } else {
+        dataBlock.metadata.erase("voronoi.active");
+        dataBlock.metadata.erase("voronoi.receiver_count");
+        dataBlock.metadata.erase("voronoi.cell_size");
+        dataBlock.metadata.erase("voronoi.voxel_resolution");
     }
 }
 
-void seedOutputDataBlocksFromInputs(
+void initializeOutputsFromInputs(
     const NodeGraphNode& node,
     const std::vector<const NodeDataBlock*>& inputs,
     std::vector<NodeDataBlock>& outputs) {
@@ -405,13 +483,13 @@ void seedOutputDataBlocksFromInputs(
     }
 
     mergedMetadata["graph.producer_node_id"] = std::to_string(node.id.value);
-    mergedMetadata["graph.producer_type_id"] = canonicalNodeTypeId(node.typeId);
+    mergedMetadata["graph.producer_type_id"] = getNodeTypeId(node.typeId);
     mergedMetadata["graph.lineage_depth"] = std::to_string(mergedLineage.size());
 
     for (NodeDataBlock& output : outputs) {
         output = {};
         output.metadata = mergedMetadata;
         output.lineageNodeIds = mergedLineage;
-        refreshNodeDataBlockMetadata(output);
+        updateDataBlockMetadata(output);
     }
 }

@@ -11,12 +11,6 @@ static const float VOLUME_EPSILON2 = 1e-30f;
 
 struct VoronoiNode
 {
-    float temperature;
-    float conductivityPerMass;
-    float thermalMass;
-    float density;
-    float specificHeat;
-    float conductivity;
     float volume;
     uint  neighborOffset;
     uint  neighborCount;
@@ -1165,13 +1159,6 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
     uint flags = seedFlags[nodeID];
     bool isGhost = (flags & 1u) != 0u;
-
-    // Precompute conductivity per thermal mass for the diffusion pass hot loop.
-    nodes[nodeID].thermalMass = nodes[nodeID].density * nodes[nodeID].specificHeat * abs(vol);
-    if (nodes[nodeID].thermalMass > 1e-20f)
-        nodes[nodeID].conductivityPerMass = nodes[nodeID].conductivity / nodes[nodeID].thermalMass;
-    else
-        nodes[nodeID].conductivityPerMass = 0.0f;
 
     if (!isGhost) nodes[nodeID].volume = vol;
     else nodes[nodeID].volume = 0.0f;

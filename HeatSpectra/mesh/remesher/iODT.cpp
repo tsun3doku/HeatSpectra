@@ -11,11 +11,12 @@
 #include <future>
 
 #include "iODT.hpp"
+#include "domain/GeometryData.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 
 iODT::iODT(Model& model, VulkanDevice& vulkanDevice, MemoryAllocator& allocator) 
-    : model(model), vulkanDevice(vulkanDevice), allocator(allocator), tracer(intrinsicMesh), tracerInput(inputMesh) {
+    : vulkanDevice(vulkanDevice), allocator(allocator), tracer(intrinsicMesh), tracerInput(inputMesh) {
     
     // Build the input mesh 
     inputMesh.buildFromModel(model);
@@ -50,6 +51,40 @@ iODT::iODT(Model& model, VulkanDevice& vulkanDevice, MemoryAllocator& allocator)
     }
     
     // Initialize supporting halfedge
+    supportingHalfedge = std::make_unique<SupportingHalfedge>(inputMesh, intrinsicMesh, tracer, vulkanDevice, allocator);
+    supportingHalfedge->initialize();
+    supportingHalfedge->uploadToGPU();
+}
+
+iODT::iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAllocator& allocator)
+    : vulkanDevice(vulkanDevice), allocator(allocator), tracer(intrinsicMesh), tracerInput(inputMesh) {
+
+    inputMesh.buildFromGeometry(geometry);
+    inputMesh.updateAllCornerAngles({});
+    inputMesh.computeCornerScaledAngles();
+    inputMesh.updateAllSignposts();
+    inputMesh.computeVertexAngleScales();
+    inputMesh.buildHalfedgeVectorsInVertex();
+    inputMesh.buildHalfedgeVectorsInFace();
+
+    intrinsicMesh.buildFromGeometry(geometry);
+    auto& conn = intrinsicMesh.getConnectivity();
+    intrinsicMesh.updateAllCornerAngles({});
+    intrinsicMesh.computeCornerScaledAngles();
+    intrinsicMesh.updateAllSignposts();
+    intrinsicMesh.computeVertexAngleScales();
+    intrinsicMesh.buildHalfedgeVectorsInVertex();
+    intrinsicMesh.buildHalfedgeVectorsInFace();
+
+    initializeVertexLocations();
+
+    const auto& edges = conn.getEdges();
+    for (size_t i = 0; i < edges.size(); ++i) {
+        if (edges[i].halfEdgeIdx != INVALID_INDEX) {
+            conn.getEdges()[i].isOriginal = true;
+        }
+    }
+
     supportingHalfedge = std::make_unique<SupportingHalfedge>(inputMesh, intrinsicMesh, tracer, vulkanDevice, allocator);
     supportingHalfedge->initialize();
     supportingHalfedge->uploadToGPU();

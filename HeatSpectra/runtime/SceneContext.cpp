@@ -26,16 +26,12 @@ bool SceneContext::initialize(VulkanCoreContext& core) {
         return false;
     }
 
-    uniformBufferManagerState =
-        std::make_unique<UniformBufferManager>(core.device(), *allocator, renderconfig::MaxFramesInFlight);
+    uniformBufferManagerState = std::make_unique<UniformBufferManager>(core.device(), *allocator, renderconfig::MaxFramesInFlight);
     materialSystemState = std::make_unique<MaterialSystem>(*uniformBufferManagerState);
-    lightingSystemState =
-        std::make_unique<LightingSystem>(cameraControllerState.getCamera(), *uniformBufferManagerState);
-    modelUploaderState =
-        std::make_unique<ModelUploader>(core.device(), *allocator, cameraControllerState.getCamera(), *commandPool);
+    lightingSystemState = std::make_unique<LightingSystem>(cameraControllerState.getCamera(), *uniformBufferManagerState);
+    modelUploaderState = std::make_unique<ModelUploader>(core.device(), *allocator, cameraControllerState.getCamera(), *commandPool);
     resourceManagerState = std::make_unique<ResourceManager>(*allocator);
-    meshModifiersState =
-        std::make_unique<MeshModifiers>(core.device(), *allocator, *resourceManagerState, *uniformBufferManagerState);
+    meshModifiersState = std::make_unique<MeshModifiers>(core.device(), *allocator, *resourceManagerState);
 
     modelUploaderState->uploadInitialModels(*resourceManagerState, *meshModifiersState);
     initialized = true;
@@ -43,9 +39,6 @@ bool SceneContext::initialize(VulkanCoreContext& core) {
 }
 
 void SceneContext::shutdown() {
-    modelRegistryState.setSceneController(nullptr);
-    modelRegistryState.clearNodeBindings();
-
     if (meshModifiersState) {
         meshModifiersState->cleanup();
     }
@@ -123,12 +116,4 @@ LightingSystem* SceneContext::lightingSystem() {
 
 const LightingSystem* SceneContext::lightingSystem() const {
     return lightingSystemState.get();
-}
-
-ModelRegistry& SceneContext::modelRegistry() {
-    return modelRegistryState;
-}
-
-const ModelRegistry& SceneContext::modelRegistry() const {
-    return modelRegistryState;
 }

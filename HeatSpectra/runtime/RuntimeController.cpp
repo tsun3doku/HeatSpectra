@@ -30,7 +30,6 @@ bool RuntimeController::initialize(
     runtimeSimulationController = std::make_unique<RuntimeSimulationController>(
         *render.heatSystemController(),
         *render.sceneController(),
-        *render.nodeGraphBridge(),
         *render.nodeGraphController(),
         settingsManager);
 

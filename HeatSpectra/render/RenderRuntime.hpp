@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 
@@ -19,6 +19,7 @@ class CameraController;
 class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
+class RuntimeIntrinsicCache;
 class MeshModifiers;
 class InputController;
 class LightingSystem;
@@ -31,13 +32,15 @@ class WireframeRenderer;
 class FrameController;
 class VkFrameGraphBackend;
 class VkFrameGraphRuntime;
-class FrameSimulation;
+class HeatSystem;
+class VoronoiSystem;
 
 struct RenderRuntimeServices {
     ResourceManager& resourceManager;
     MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    FrameSimulation* simulation = nullptr;
+    HeatSystem* heatSystem = nullptr;
+    VoronoiSystem* voronoiSystem = nullptr;
     InputController& inputController;
     LightingSystem& lightingSystem;
     MaterialSystem& materialSystem;
@@ -56,9 +59,10 @@ public:
         std::atomic<bool>& isShuttingDown);
     ~RenderRuntime();
 
-    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ResourceManager& resourceManager, UniformBufferManager& ubo);
+    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, ResourceManager& resourceManager, UniformBufferManager& ubo);
     bool initializeFrameController(const RenderRuntimeServices& services);
-    void setSimulation(FrameSimulation* simulation);
+    void setSystems(HeatSystem* heatSystem, VoronoiSystem* voronoiSystem);
+    void setHeatSystem(HeatSystem* heatSystem);
 
     bool initializeSyncObjects();
     void shutdownSyncObjects();

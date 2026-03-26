@@ -81,16 +81,16 @@ const NodeGraphBridge* App::getNodeGraphBridge() const {
     return nullptr;
 }
 
-ModelRegistry* App::getModelRegistry() {
+SceneController* App::getSceneController() {
     if (runtimeHost) {
-        return runtimeHost->getModelRegistry();
+        return runtimeHost->getSceneController();
     }
     return nullptr;
 }
 
-const ModelRegistry* App::getModelRegistry() const {
+const SceneController* App::getSceneController() const {
     if (runtimeHost) {
-        return runtimeHost->getModelRegistry();
+        return runtimeHost->getSceneController();
     }
     return nullptr;
 }

@@ -9,10 +9,12 @@
 
 class VulkanDevice;
 class MemoryAllocator;
+struct GeometryData;
 
 class iODT {
 public:
     iODT(Model& model, VulkanDevice& vulkanDevice, MemoryAllocator& allocator);
+    iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAllocator& allocator);
     ~iODT();
     
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
@@ -74,7 +76,6 @@ private:
     bool isEdgeOriginal(uint32_t edgeIdx) const;
 
     void initializeVertexLocations();
-    Model& model;                   // Base input model
     SignpostMesh intrinsicMesh;     // Intrinsic mesh 
     SignpostMesh inputMesh;         // Input mesh 
     VulkanDevice& vulkanDevice;     

@@ -1,10 +1,11 @@
-﻿#include "FrameGraphicsStage.hpp"
+#include "FrameGraphicsStage.hpp"
 
 #include <iostream>
 
-#include "FrameSimulation.hpp"
 #include "FramePass.hpp"
 #include "FrameSync.hpp"
+#include "heat/HeatSystem.hpp"
+#include "heat/VoronoiSystem.hpp"
 #include "mesh/MeshModifiers.hpp"
 #include "render/SceneRenderer.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -20,7 +21,7 @@ FrameGraphicsStage::FrameGraphicsStage(VulkanDevice& vulkanDevice, FrameSync& fr
       wireframeRenderer(wireframeRenderer) {
 }
 
-FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, FrameSimulation* simulation, const FrameSyncState& syncState, bool allowHeatSolve) {
+FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, HeatSystem* heatSystem, VoronoiSystem* voronoiSystem, const FrameSyncState& syncState, bool allowHeatSolve) {
     const auto& commandBuffers = sceneRenderer.getCommandBuffers();
     if (frameState.frameIndex >= commandBuffers.size()) {
         std::cout << "[FrameGraphicsStage] Missing scene renderer command buffer for frame index" << std::endl;
@@ -37,17 +38,12 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, Frame
     frameRequest.extent = frameState.extent;
     frameRequest.sceneView = frameState.sceneView;
     frameRequest.flags = frameState.flags;
-    if (!allowHeatSolve) {
-        frameRequest.flags.drawHeatOverlay = false;
-        frameRequest.flags.drawSurfels = false;
-        frameRequest.flags.drawVoronoi = false;
-        frameRequest.flags.drawPoints = false;
-    }
+    (void)allowHeatSolve;
     frameRequest.overlay = frameState.overlay;
 
     render::RenderServices services{};
-    services.remesher = &meshModifiers.getRemesher();
-    services.simulation = simulation;
+    services.heatSystem = heatSystem;
+    services.voronoiSystem = voronoiSystem;
     services.modelSelection = &modelSelection;
     services.gizmoController = &gizmoController;
     services.wireframeRenderer = &wireframeRenderer;

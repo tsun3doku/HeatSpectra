@@ -1,4 +1,6 @@
 #include "VulkanBuffer.hpp"
+#include "CommandBufferManager.hpp"
+
 #include <cstring>
 #include <iostream>
 
@@ -161,5 +163,55 @@ VkResult createVertexBuffer(MemoryAllocator& allocator, VkDeviceSize size, VkBuf
     auto [buffer, offset] = allocator.allocate(size, usage, properties, alignment);
     outBuffer = buffer;
     outOffset = offset;
+    return VK_SUCCESS;
+}
+
+VkResult uploadDeviceBuffer(
+    MemoryAllocator& allocator,
+    CommandPool& commandPool,
+    const void* data,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkDeviceSize alignment,
+    VkBuffer& outBuffer,
+    VkDeviceSize& outOffset) {
+    outBuffer = VK_NULL_HANDLE;
+    outOffset = 0;
+
+    if (size == 0 || data == nullptr) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize stagingOffset = 0;
+    void* stagingData = nullptr;
+    if (createStagingBuffer(allocator, size, stagingBuffer, stagingOffset, &stagingData) != VK_SUCCESS || !stagingData) {
+        return VK_ERROR_MEMORY_MAP_FAILED;
+    }
+
+    std::memcpy(stagingData, data, static_cast<size_t>(size));
+
+    auto [buffer, offset] = allocator.allocate(
+        size,
+        usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        alignment);
+    if (buffer == VK_NULL_HANDLE) {
+        allocator.free(stagingBuffer, stagingOffset);
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+
+    outBuffer = buffer;
+    outOffset = offset;
+
+    VkCommandBuffer cmd = commandPool.beginCommands();
+    VkBufferCopy region{};
+    region.srcOffset = stagingOffset;
+    region.dstOffset = outOffset;
+    region.size = size;
+    vkCmdCopyBuffer(cmd, stagingBuffer, outBuffer, 1, &region);
+    commandPool.endCommands(cmd);
+
+    allocator.free(stagingBuffer, stagingOffset);
     return VK_SUCCESS;
 }

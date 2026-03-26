@@ -1,12 +1,20 @@
 #include "NodeGraphRuntime.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphExecutionPlanner.hpp"
-#include "heat/ContactSystemController.hpp"
-#include "NodeSolverController.hpp"
+#include "NodeGraphCompiler.hpp"
+#include "runtime/ContactPreviewStore.hpp"
+#include "runtime/RuntimePayloadController.hpp"
+#include "contact/ContactSystemController.hpp"
+#include "domain/ContactData.hpp"
+#include "domain/HeatData.hpp"
+#include "domain/VoronoiData.hpp"
+#include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -27,10 +35,34 @@ void NodeGraphRuntime::rebuildNodeById() {
 
 void NodeGraphRuntime::applyDelta(const NodeGraphDelta& delta) {
     if (!delta.changes.empty()) {
+        bool shouldClearCaches = false;
+        std::unordered_set<uint32_t> dirtyNodeIds;
         for (const NodeGraphChange& change : delta.changes) {
+            if (change.reason == NodeGraphChangeReason::Topology) {
+                shouldClearCaches = true;
+            }
+            if (change.reason == NodeGraphChangeReason::Parameter &&
+                change.type == NodeGraphChangeType::NodeUpsert &&
+                change.node.id.isValid()) {
+                dirtyNodeIds.insert(change.node.id.value);
+            }
             applyChange(change);
         }
         rebuildNodeById();
+        if (shouldClearCaches) {
+            clearNodeCaches();
+            if (runtimeServices.contactSystemController) {
+                runtimeServices.contactSystemController->clearCache();
+            }
+            if (runtimeServices.contactPreviewStore) {
+                runtimeServices.contactPreviewStore->clearAllPreviews();
+            }
+            if (runtimeServices.payloadRegistry) {
+                runtimeServices.payloadRegistry->clear();
+            }
+        } else if (!dirtyNodeIds.empty()) {
+            invalidateNodeCaches(dirtyNodeIds);
+        }
     }
     graphState.revision = delta.toRevision;
 }
@@ -111,30 +143,18 @@ void NodeGraphRuntime::tick(NodeGraphRuntimeExecutionState* outState) {
 
     executeDataflow(outState);
 
-    bool hasHeatSolveNode = false;
-    for (const NodeGraphNode& node : graphState.nodes) {
-        if (canonicalNodeTypeId(node.typeId) == nodegraphtypes::HeatSolve) {
-            hasHeatSolveNode = true;
-            break;
-        }
-    }
-    if (!hasHeatSolveNode && runtimeServices.nodeSolverController) {
-        runtimeServices.nodeSolverController->deactivateHeatSolveIfActive();
-    }
 }
 
 void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState) {
-    if (runtimeServices.contactSystemController) {
-        runtimeServices.contactSystemController->beginPreviewFrame();
-    }
-
-    std::vector<NodeGraphNodeId> executionOrder;
-    if (!NodeGraphExecutionPlanner::buildTopologicalOrder(graphState, executionOrder, nullptr)) {
-        if (runtimeServices.nodeSolverController) {
-            runtimeServices.nodeSolverController->deactivateHeatSolveIfActive();
+    NodeGraphCompiled compiled = NodeGraphCompiler::compile(graphState);
+    if (graphState.nodes.size() > 0 && compiled.executionOrder.size() != graphState.nodes.size()) {
+        if (runtimeServices.runtimePayloadController) {
+            runtimeServices.runtimePayloadController->applyContactPayload(ContactData{});
+            runtimeServices.runtimePayloadController->applyHeatPayload(HeatData{});
+            runtimeServices.runtimePayloadController->applyVoronoiPayload(VoronoiData{});
         }
-        if (runtimeServices.contactSystemController) {
-            runtimeServices.contactSystemController->endPreviewFrame();
+        if (runtimeServices.contactPreviewStore) {
+            runtimeServices.contactPreviewStore->endFrame();
         }
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
@@ -143,6 +163,7 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
         return;
     }
 
+    const std::vector<NodeGraphNodeId>& executionOrder = compiled.executionOrder;
     std::unordered_map<uint64_t, const NodeGraphEdge*> incomingEdgeByInputSocket;
     incomingEdgeByInputSocket.reserve(graphState.edges.size() * 2);
     NodeGraphRuntimeExecutionState state{};
@@ -161,7 +182,7 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
         }
 
         const NodeGraphNode& node = *nodeIt->second;
-        const NodeTypeId typeId = canonicalNodeTypeId(node.typeId);
+        const NodeTypeId typeId = getNodeTypeId(node.typeId);
 
         std::vector<const NodeDataBlock*> inputValues(node.inputs.size(), nullptr);
         for (std::size_t inputIndex = 0; inputIndex < node.inputs.size(); ++inputIndex) {
@@ -180,12 +201,9 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
             inputValues[inputIndex] = &outputIt->second;
         }
 
-        std::vector<NodeDataBlock> outputValues;
-        outputValues.reserve(node.outputs.size());
-        if (kernels.hasKernel(typeId)) {
-            outputValues.resize(node.outputs.size());
-            seedOutputDataBlocksFromInputs(node, inputValues, outputValues);
-
+    std::vector<NodeDataBlock> outputValues;
+    outputValues.reserve(node.outputs.size());
+    if (kernels.hasKernel(typeId)) {
             const NodeGraphKernelExecutionState kernelState{
                 graphState,
                 *bridge,
@@ -193,7 +211,31 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
                 incomingEdgeByInputSocket,
                 state.outputValueBySocket};
 
-            kernels.executeNode(node, kernelState, inputValues, outputValues);
+            uint64_t inputHash = 0;
+            bool canHash = kernels.computeInputHash(node, kernelState, inputValues, inputHash);
+            bool reusedCache = false;
+            if (canHash) {
+                const auto hashIt = lastHashByNodeId.find(node.id.value);
+                const auto cacheIt = cachedOutputsByNodeId.find(node.id.value);
+                if (hashIt != lastHashByNodeId.end() &&
+                    cacheIt != cachedOutputsByNodeId.end() &&
+                    hashIt->second == inputHash &&
+                    cacheIt->second.size() == node.outputs.size()) {
+                    outputValues = cacheIt->second;
+                    reusedCache = true;
+                }
+            }
+
+            if (!reusedCache) {
+                outputValues.resize(node.outputs.size());
+                initializeOutputsFromInputs(node, inputValues, outputValues);
+                kernels.executeNode(node, kernelState, inputValues, outputValues);
+
+                if (canHash) {
+                    lastHashByNodeId[node.id.value] = inputHash;
+                    cachedOutputsByNodeId[node.id.value] = outputValues;
+                }
+            }
 
             for (std::size_t outputIndex = 0; outputIndex < node.outputs.size(); ++outputIndex) {
                 state.outputValueBySocket[makeSocketKey(node.id, node.outputs[outputIndex].id)] =
@@ -202,8 +244,8 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
         }
     }
 
-    if (runtimeServices.contactSystemController) {
-        runtimeServices.contactSystemController->endPreviewFrame();
+    if (runtimeServices.contactPreviewStore) {
+        runtimeServices.contactPreviewStore->endFrame();
     }
 
     if (outState) {
@@ -212,6 +254,35 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
     }
 }
 
-uint64_t NodeGraphRuntime::makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
-    return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
+void NodeGraphRuntime::clearNodeCaches() {
+    lastHashByNodeId.clear();
+    cachedOutputsByNodeId.clear();
+}
+
+void NodeGraphRuntime::invalidateNodeCaches(const std::unordered_set<uint32_t>& dirtyNodeIds) {
+    if (dirtyNodeIds.empty()) {
+        return;
+    }
+
+    std::unordered_set<uint32_t> invalidatedNodeIds = dirtyNodeIds;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const NodeGraphEdge& edge : graphState.edges) {
+            if (!edge.fromNode.isValid() || !edge.toNode.isValid()) {
+                continue;
+            }
+            if (invalidatedNodeIds.find(edge.fromNode.value) == invalidatedNodeIds.end()) {
+                continue;
+            }
+            if (invalidatedNodeIds.insert(edge.toNode.value).second) {
+                changed = true;
+            }
+        }
+    }
+
+    for (uint32_t nodeId : invalidatedNodeIds) {
+        lastHashByNodeId.erase(nodeId);
+        cachedOutputsByNodeId.erase(nodeId);
+    }
 }

@@ -1,4 +1,4 @@
-﻿#include <array>
+#include <array>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -8,7 +8,6 @@
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/FrameGraphResources.hpp"
 #include "vulkan/CommandBufferManager.hpp"
-#include "mesh/remesher/Remesher.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "SceneRenderer.hpp"
 #include "vulkan/UniformBufferManager.hpp"
@@ -69,8 +68,10 @@ void recordComputeToGraphicsBarrier(VkCommandBuffer commandBuffer, VkPipelineSta
 }
 }
 
-SceneRenderer::SceneRenderer(VulkanDevice& device, FrameGraph& graph, VkFrameGraphRuntime& runtime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
+SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, FrameGraph& graph, VkFrameGraphRuntime& runtime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
     : vulkanDevice(device),
+      memoryAllocator(allocator),
+      remeshResources(remeshResources),
       frameGraph(graph),
       frameGraphRuntime(runtime),
       resourceManager(manager),
@@ -152,6 +153,8 @@ bool SceneRenderer::initializePasses() {
 
     auto overlay = std::make_unique<render::OverlayPass>(
         vulkanDevice,
+        memoryAllocator,
+        remeshResources,
         frameGraphRuntime,
         resourceManager,
         uniformBufferManager,
@@ -313,55 +316,10 @@ void SceneRenderer::updateDescriptorSets() {
     updatePassDescriptors();
 }
 
-void SceneRenderer::allocateDescriptorSetsForModel(Model* model) {
+void SceneRenderer::updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic) {
     if (overlayPass) {
-        overlayPass->allocateDescriptorSetsForModel(model, maxFramesInFlight);
+        overlayPass->updateIntrinsicPayloadForModel(model, intrinsic, maxFramesInFlight);
     }
-}
-
-void SceneRenderer::updateDescriptorSetsForModel(Model* model, iODT* remesher) {
-    if (overlayPass) {
-        overlayPass->updateDescriptorSetsForModel(model, remesher, maxFramesInFlight);
-    }
-}
-
-void SceneRenderer::allocateNormalsDescriptorSetsForModel(Model* model) {
-    if (overlayPass) {
-        overlayPass->allocateNormalsDescriptorSetsForModel(model, maxFramesInFlight);
-    }
-}
-
-void SceneRenderer::updateNormalsDescriptorSetsForModel(Model* model, iODT* remesher) {
-    if (overlayPass) {
-        overlayPass->updateNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
-    }
-}
-
-void SceneRenderer::allocateVertexNormalsDescriptorSetsForModel(Model* model) {
-    if (overlayPass) {
-        overlayPass->allocateVertexNormalsDescriptorSetsForModel(model, maxFramesInFlight);
-    }
-}
-
-void SceneRenderer::updateVertexNormalsDescriptorSetsForModel(Model* model, iODT* remesher) {
-    if (overlayPass) {
-        overlayPass->updateVertexNormalsDescriptorSetsForModel(model, remesher, maxFramesInFlight);
-    }
-}
-
-void SceneRenderer::updateModelDescriptors(Model* model, Remesher& remesher) {
-    if (!model) {
-        return;
-    }
-
-    iODT* modelRemesher = remesher.getRemesherForModel(model);
-    if (!modelRemesher) {
-        return;
-    }
-
-    updateDescriptorSetsForModel(model, modelRemesher);
-    updateNormalsDescriptorSetsForModel(model, modelRemesher);
-    updateVertexNormalsDescriptorSetsForModel(model, modelRemesher);
 }
 
 void SceneRenderer::setTimingOverlayLines(const std::vector<std::string>& lines) {

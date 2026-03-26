@@ -1,22 +1,27 @@
 #pragma once
 
 #include "NodeGraphKernels.hpp"
+#include "NodeHeatMaterialPresets.hpp"
+
+#include <vector>
 
 class NodeHeatSolve final : public NodeKernel {
 public:
     const char* typeId() const override;
     bool execute(NodeGraphKernelContext& context) const override;
+    bool computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const override;
 
 private:
-    static uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
-    static bool getBoolParamValue(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue = false);
-    static std::string getStringParamValue(const NodeGraphNode& node, uint32_t parameterId);
-    static bool setBoolParameter(NodeGraphBridge& bridge, NodeGraphNodeId nodeId, uint32_t parameterId, bool value);
-    static const NodeDataBlock* resolveInputValueForSocket(
-        const NodeGraphNode& node,
-        NodeGraphSocketId inputSocketId,
-        const NodeGraphKernelExecutionState& executionState);
+    static void populateOutputPayloads(
+        NodeGraphKernelContext& context,
+        const std::vector<NodeDataHandle>& sourceHandles,
+        const std::vector<NodeDataHandle>& receiverGeometryHandles,
+        const std::vector<HeatMaterialBindingEntry>& materialBindings,
+        bool active,
+        bool paused,
+        bool resetRequested);
     static NodeGraphNodeId selectHeatSolveNode(
         const NodeGraphState& state,
         const NodeGraphKernelExecutionState& executionState);
+    static std::vector<HeatMaterialBindingEntry> parseMaterialBindings(const std::string& serializedBindings);
 };

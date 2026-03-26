@@ -1,4 +1,6 @@
 #include "NodeModelPanel.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
 #include "NodePanelUtils.hpp"
@@ -29,12 +31,9 @@ NodeModelPanel::NodeModelPanel(QWidget* parent)
     pathRow->addWidget(browseButton);
     layout->addLayout(pathRow);
 
-    applyButton = new QPushButton("Apply Selected Model", this);
-    layout->addWidget(applyButton);
-
     QLabel* hintLabel = new QLabel(
-        "Model nodes are independent. Their downstream graph wiring "
-        "determines how runtime consumes this mesh.",
+        "Model nodes author geometry only. Their downstream graph wiring "
+        "and runtime projection determine how sinks consume this mesh.",
         this);
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);
@@ -43,9 +42,6 @@ NodeModelPanel::NodeModelPanel(QWidget* parent)
 
     connect(browseButton, &QPushButton::clicked, this, [this]() {
         browseModelFile();
-    });
-    connect(applyButton, &QPushButton::clicked, this, [this]() {
-        applySettings();
     });
 }
 
@@ -110,13 +106,12 @@ void NodeModelPanel::applySettings() {
         return;
     }
 
-    if (!NodePanelUtils::writeStringParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::Path, modelPath) ||
-        !NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::ApplyRequested, true)) {
+    if (!NodePanelUtils::writeStringParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::Path, modelPath)) {
         setStatus("Failed to update model settings.");
         return;
     }
 
-    setStatus("Model path applied.");
+    setStatus("Model path updated.");
 }
 
 void NodeModelPanel::setStatus(const QString& text) const {

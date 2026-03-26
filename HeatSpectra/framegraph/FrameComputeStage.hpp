@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 
@@ -7,13 +7,13 @@
 class VulkanDevice;
 class FrameSync;
 class ComputeTiming;
-class FrameSimulation;
+class HeatSystem;
 class VkFrameGraphRuntime;
 
 class FrameComputeStage {
 public:
     FrameComputeStage(VulkanDevice& vulkanDevice, VkFrameGraphRuntime& frameGraphRuntime, FrameSync& frameSync, ComputeTiming& computeTiming);
-    FrameStageResult execute(uint32_t frameIndex, FrameSimulation* simulation, FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(uint32_t frameIndex, HeatSystem* heatSystem, FrameSyncState& syncState, bool allowHeatSolve);
 
 private:
     VulkanDevice& vulkanDevice;

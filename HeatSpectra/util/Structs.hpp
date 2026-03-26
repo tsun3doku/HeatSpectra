@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -105,17 +105,23 @@ struct ContactSampleGPU {
     float wArea;
 };
 
-struct ContactPairGPU {
-    ContactSampleGPU samples[7];
-    float contactArea;
-    float _pad0;
-    float _pad1;
-    float _pad2;
-};
+struct ContactCellMap {
+    uint32_t sampleIndex;
+    float weight;
+    uint32_t _pad0;
+    uint32_t _pad1;
+};  // 16 bytes
+
+struct ContactCellRange {
+    uint32_t cellIndex;
+    uint32_t startIndex;
+    uint32_t count;
+    uint32_t _pad0;
+};  // 16 bytes
 
 struct ContactPushConstant {
     uint32_t couplingKind;
-    uint32_t _pad0;
+    float heatSourceTemperature;
     uint32_t _pad1;
     uint32_t _pad2;
 };
@@ -132,8 +138,20 @@ struct HeatSourcePushConstant {
     alignas(16) glm::mat4 visModelMatrix;
     alignas(16) glm::mat4 inverseHeatSourceModelMatrix;
     uint32_t maxNodeNeighbors;
-    uint32_t substepIndex;      // 0 = update display
+    uint32_t substepIndex;          // 0 = update display
 };  
+
+struct HeatBufferPushConstant {
+    alignas(16) glm::mat4 modelMatrix;
+    alignas(16) glm::vec4 sourceParams; // x = temperature, y = isSource
+};
+
+struct HeatSourceRenderPushConstant {
+    alignas(16) glm::mat4 modelMatrix;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
+    alignas(16) glm::vec4 sourceParams; // x = temperature, y = isSource
+};
 
 struct GeometryPushConstant {
     alignas(16) glm::mat4 modelMatrix; 
@@ -153,23 +171,25 @@ struct NormalPushConstant {
     float avgArea;
 };
 
-struct VoronoiNeighborGPU {
+struct VoronoiNeighbor {
     uint32_t neighborIndex;     
-    float areaOverDistance;     // Precomputed interfaceArea / distance for diffusion
+    float areaOverDistance;         // Precomputed interfaceArea / distance for diffusion
 };
 
-struct VoronoiNodeGPU {
-    float temperature;
-    float conductivityPerMass;
-    float thermalMass;      
-    float density;
-    float specificHeat;
-    float conductivity;
-    
+struct VoronoiNode {
     float volume;               
     uint32_t neighborOffset;    
     uint32_t neighborCount;     
     uint32_t interfaceNeighborCount; 
+};
+
+struct VoronoiMaterialNode {
+    float temperature;
+    float conductivityPerMass;
+    float thermalMass;
+    float density;
+    float specificHeat;
+    float conductivity;
 };
 
 struct DebugCellGeometry {
@@ -184,9 +204,9 @@ struct DebugCellGeometry {
 const uint32_t DEBUG_MAX_PLANE_AREAS = 50;
 
 struct DebugPlaneArea {
-    uint32_t planeIndex;       // Cell plane index in shader-side convex cell
-    uint32_t neighborCellID;   // Neighbor cell tied to this interface plane
-    float area;                // Signed interface area
+    uint32_t planeIndex;            // Cell plane index in shader-side convex cell
+    uint32_t neighborCellID;        // Neighbor cell tied to this interface plane
+    float area;                     // Signed interface area
     float _padding;
 };
 

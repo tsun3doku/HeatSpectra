@@ -1,8 +1,11 @@
 #include "IntrinsicRenderer.hpp"
 
-#include "mesh/remesher/Remesher.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "mesh/remesher/iODT.hpp"
+#include "runtime/RuntimeIntrinsicCache.hpp"
+#include "vulkan/MemoryAllocator.hpp"
+#include "vulkan/ResourceManager.hpp"
+#include "vulkan/VulkanBuffer.hpp"
 #include "scene/Model.hpp"
 #include "util/File_utils.h"
 #include "util/Structs.hpp"
@@ -16,10 +19,11 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <unordered_set>
 
-IntrinsicRenderer::IntrinsicRenderer(VulkanDevice& device, UniformBufferManager& uboManager, CommandPool& commandPool,
+IntrinsicRenderer::IntrinsicRenderer(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, UniformBufferManager& uboManager, CommandPool& commandPool,
     VkRenderPass renderPass, uint32_t maxFramesInFlight, uint32_t subpassIndex)
-    : vulkanDevice(device), uniformBufferManager(uboManager), renderCommandPool(commandPool) {
+    : vulkanDevice(device), allocator(allocator), remeshResources(remeshResources), uniformBufferManager(uboManager), renderCommandPool(commandPool) {
     if (!initialize(renderPass, maxFramesInFlight, subpassIndex)) {
         std::cerr << "[IntrinsicRenderer] Failed to initialize renderer resources" << std::endl;
     }
@@ -718,6 +722,394 @@ void IntrinsicRenderer::updateVertexNormalsDescriptorSetsForModel(Model* model, 
     }
 }
 
+bool IntrinsicRenderer::uploadPayloadState(Model* model, const IntrinsicMeshData& intrinsic, PayloadState& state) {
+    if (!model) {
+        return false;
+    }
+
+    releasePayloadState(state);
+
+    auto uploadTexel = [this](const void* data, VkDeviceSize size, VkFormat format,
+        VkBuffer& buffer, VkDeviceSize& offset, VkBufferView& view, const char* label) -> bool {
+            if (size == 0) {
+                return false;
+            }
+            if (createTexelBuffer(allocator, vulkanDevice, data, size, format, buffer, offset, view) != VK_SUCCESS) {
+                std::cerr << "[IntrinsicRenderer] Failed to upload " << label << " buffer" << std::endl;
+                return false;
+            }
+            return true;
+        };
+
+    if (!uploadTexel(intrinsic.supportingHalfedges.data(), intrinsic.supportingHalfedges.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, state.bufferS, state.offsetS, state.viewS, "supporting-halfedge") ||
+        !uploadTexel(intrinsic.supportingAngles.data(), intrinsic.supportingAngles.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, state.bufferA, state.offsetA, state.viewA, "supporting-angle") ||
+        !uploadTexel(intrinsic.intrinsicHalfedges.data(), intrinsic.intrinsicHalfedges.size() * sizeof(int32_t), VK_FORMAT_R32G32B32A32_SINT, state.bufferH, state.offsetH, state.viewH, "intrinsic-halfedge") ||
+        !uploadTexel(intrinsic.intrinsicEdges.data(), intrinsic.intrinsicEdges.size() * sizeof(int32_t), VK_FORMAT_R32G32_SINT, state.bufferE, state.offsetE, state.viewE, "intrinsic-edge") ||
+        !uploadTexel(intrinsic.intrinsicTriangles.data(), intrinsic.intrinsicTriangles.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, state.bufferT, state.offsetT, state.viewT, "intrinsic-triangle") ||
+        !uploadTexel(intrinsic.intrinsicEdgeLengths.data(), intrinsic.intrinsicEdgeLengths.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, state.bufferL, state.offsetL, state.viewL, "intrinsic-length") ||
+        !uploadTexel(intrinsic.inputHalfedges.data(), intrinsic.inputHalfedges.size() * sizeof(int32_t), VK_FORMAT_R32G32B32A32_SINT, state.bufferHInput, state.offsetHInput, state.viewHInput, "input-halfedge") ||
+        !uploadTexel(intrinsic.inputEdges.data(), intrinsic.inputEdges.size() * sizeof(int32_t), VK_FORMAT_R32G32_SINT, state.bufferEInput, state.offsetEInput, state.viewEInput, "input-edge") ||
+        !uploadTexel(intrinsic.inputTriangles.data(), intrinsic.inputTriangles.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, state.bufferTInput, state.offsetTInput, state.viewTInput, "input-triangle") ||
+        !uploadTexel(intrinsic.inputEdgeLengths.data(), intrinsic.inputEdgeLengths.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, state.bufferLInput, state.offsetLInput, state.viewLInput, "input-length")) {
+        releasePayloadState(state);
+        return false;
+    }
+
+    if (!intrinsic.triangles.empty()) {
+        std::vector<IntrinsicTriangleData> gpuTriangles;
+        gpuTriangles.reserve(intrinsic.triangles.size());
+        for (const IntrinsicMeshTriangleData& triangle : intrinsic.triangles) {
+            IntrinsicTriangleData gpuTriangle{};
+            gpuTriangle.center = glm::vec3(triangle.center[0], triangle.center[1], triangle.center[2]);
+            gpuTriangle.area = triangle.area;
+            gpuTriangle.normal = glm::vec3(triangle.normal[0], triangle.normal[1], triangle.normal[2]);
+            gpuTriangle.padding = 0.0f;
+            gpuTriangles.push_back(gpuTriangle);
+        }
+
+        void* mappedPtr = nullptr;
+        if (createStorageBuffer(
+                allocator,
+                vulkanDevice,
+                gpuTriangles.data(),
+                gpuTriangles.size() * sizeof(IntrinsicTriangleData),
+                state.intrinsicTriangleBuffer,
+                state.triangleGeometryOffset,
+                &mappedPtr) != VK_SUCCESS) {
+            std::cerr << "[IntrinsicRenderer] Failed to upload intrinsic triangle geometry" << std::endl;
+            releasePayloadState(state);
+            return false;
+        }
+    }
+
+    if (!intrinsic.vertices.empty()) {
+        std::vector<IntrinsicVertexData> gpuVertices;
+        gpuVertices.reserve(intrinsic.vertices.size());
+        for (const IntrinsicMeshVertexData& vertex : intrinsic.vertices) {
+            IntrinsicVertexData gpuVertex{};
+            gpuVertex.position = glm::vec3(vertex.position[0], vertex.position[1], vertex.position[2]);
+            gpuVertex.intrinsicVertexId = vertex.intrinsicVertexId;
+            gpuVertex.normal = glm::vec3(vertex.normal[0], vertex.normal[1], vertex.normal[2]);
+            gpuVertex.padding = 0.0f;
+            gpuVertices.push_back(gpuVertex);
+        }
+
+        void* mappedPtr = nullptr;
+        if (createStorageBuffer(
+                allocator,
+                vulkanDevice,
+                gpuVertices.data(),
+                gpuVertices.size() * sizeof(IntrinsicVertexData),
+                state.intrinsicVertexBuffer,
+                state.vertexGeometryOffset,
+                &mappedPtr) != VK_SUCCESS) {
+            std::cerr << "[IntrinsicRenderer] Failed to upload intrinsic vertex geometry" << std::endl;
+            releasePayloadState(state);
+            return false;
+        }
+    }
+
+    state.triangleCount = intrinsic.triangles.size();
+    state.vertexCount = intrinsic.vertices.size();
+    state.averageTriangleArea = 0.0f;
+    for (const IntrinsicMeshTriangleData& triangle : intrinsic.triangles) {
+        state.averageTriangleArea += triangle.area;
+    }
+    if (state.triangleCount > 0) {
+        state.averageTriangleArea /= static_cast<float>(state.triangleCount);
+    }
+    state.uploaded = true;
+    return true;
+}
+
+void IntrinsicRenderer::updatePayloadDescriptorSetsForModel(Model* model, const PayloadState& state, uint32_t maxFramesInFlight) {
+    if (!model || !state.uploaded) {
+        return;
+    }
+
+    if (perModelSupportingHalfedgeDescriptorSets.find(model) == perModelSupportingHalfedgeDescriptorSets.end()) {
+        allocateDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    auto descriptorSetIt = perModelSupportingHalfedgeDescriptorSets.find(model);
+    if (descriptorSetIt == perModelSupportingHalfedgeDescriptorSets.end()) {
+        return;
+    }
+
+    const auto& descriptorSets = descriptorSetIt->second;
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        std::array<VkWriteDescriptorSet, 12> descriptorWrites{};
+
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+
+        VkBufferView bufferViews[10] = {
+            state.viewS,
+            state.viewA,
+            state.viewH,
+            state.viewE,
+            state.viewT,
+            state.viewL,
+            state.viewHInput,
+            state.viewEInput,
+            state.viewTInput,
+            state.viewLInput
+        };
+
+        for (int j = 0; j < 10; ++j) {
+            descriptorWrites[j + 1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[j + 1].dstSet = descriptorSets[i];
+            descriptorWrites[j + 1].dstBinding = 1 + j;
+            descriptorWrites[j + 1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+            descriptorWrites[j + 1].descriptorCount = 1;
+            descriptorWrites[j + 1].pTexelBufferView = &bufferViews[j];
+        }
+
+        VkDescriptorImageInfo wireframeInfo{};
+        wireframeInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        wireframeInfo.imageView = wireframeTextureView;
+        wireframeInfo.sampler = wireframeTextureSampler;
+
+        descriptorWrites[11].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[11].dstSet = descriptorSets[i];
+        descriptorWrites[11].dstBinding = 11;
+        descriptorWrites[11].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[11].descriptorCount = 1;
+        descriptorWrites[11].pImageInfo = &wireframeInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForModel(Model* model, const PayloadState& state, uint32_t maxFramesInFlight) {
+    if (!model || !state.uploaded || state.intrinsicTriangleBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    if (perModelIntrinsicNormalsDescriptorSets.find(model) == perModelIntrinsicNormalsDescriptorSets.end()) {
+        allocateNormalsDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    auto descriptorSetIt = perModelIntrinsicNormalsDescriptorSets.find(model);
+    if (descriptorSetIt == perModelIntrinsicNormalsDescriptorSets.end()) {
+        return;
+    }
+
+    const auto& descriptorSets = descriptorSetIt->second;
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+
+        VkDescriptorBufferInfo triangleBufferInfo{};
+        triangleBufferInfo.buffer = state.intrinsicTriangleBuffer;
+        triangleBufferInfo.offset = state.triangleGeometryOffset;
+        triangleBufferInfo.range = state.triangleCount * sizeof(IntrinsicTriangleData);
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &triangleBufferInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForModel(Model* model, const PayloadState& state, uint32_t maxFramesInFlight) {
+    if (!model || !state.uploaded || state.intrinsicVertexBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    if (perModelIntrinsicVertexNormalsDescriptorSets.find(model) == perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+        allocateVertexNormalsDescriptorSetsForModel(model, maxFramesInFlight);
+    }
+    auto descriptorSetIt = perModelIntrinsicVertexNormalsDescriptorSets.find(model);
+    if (descriptorSetIt == perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+        return;
+    }
+
+    const auto& descriptorSets = descriptorSetIt->second;
+    for (size_t i = 0; i < maxFramesInFlight; ++i) {
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBufferManager.getUniformBuffers()[i];
+        uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+
+        VkDescriptorBufferInfo vertexBufferInfo{};
+        vertexBufferInfo.buffer = state.intrinsicVertexBuffer;
+        vertexBufferInfo.offset = state.vertexGeometryOffset;
+        vertexBufferInfo.range = state.vertexCount * sizeof(IntrinsicVertexData);
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = descriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &vertexBufferInfo;
+
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+}
+
+void IntrinsicRenderer::updatePayloadForModel(Model* model, const IntrinsicMeshData& intrinsic, uint32_t maxFramesInFlight) {
+    if (!model) {
+        return;
+    }
+
+    PayloadState& state = payloadStateByModel[model];
+    if (!uploadPayloadState(model, intrinsic, state)) {
+        releaseDescriptorSetsForModel(model);
+        return;
+    }
+
+    updatePayloadDescriptorSetsForModel(model, state, maxFramesInFlight);
+    updatePayloadNormalsDescriptorSetsForModel(model, state, maxFramesInFlight);
+    updatePayloadVertexNormalsDescriptorSetsForModel(model, state, maxFramesInFlight);
+}
+
+void IntrinsicRenderer::releaseDescriptorSetsForModel(Model* model) {
+    if (!model) {
+        return;
+    }
+
+    auto freeSets = [this, model](VkDescriptorPool pool, auto& setMap) {
+        auto it = setMap.find(model);
+        if (it == setMap.end()) {
+            return;
+        }
+        if (pool != VK_NULL_HANDLE && !it->second.empty()) {
+            vkFreeDescriptorSets(
+                vulkanDevice.getDevice(),
+                pool,
+                static_cast<uint32_t>(it->second.size()),
+                it->second.data());
+        }
+        setMap.erase(it);
+    };
+
+    freeSets(supportingHalfedgeDescriptorPool, perModelSupportingHalfedgeDescriptorSets);
+    freeSets(intrinsicNormalsDescriptorPool, perModelIntrinsicNormalsDescriptorSets);
+    freeSets(intrinsicVertexNormalsDescriptorPool, perModelIntrinsicVertexNormalsDescriptorSets);
+
+    auto payloadIt = payloadStateByModel.find(model);
+    if (payloadIt != payloadStateByModel.end()) {
+        releasePayloadState(payloadIt->second);
+        payloadStateByModel.erase(payloadIt);
+    }
+}
+
+void IntrinsicRenderer::pruneStaleModelResources(const ResourceManager& resourceManager) {
+    std::unordered_set<Model*> liveModels;
+    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
+        if (Model* model = const_cast<Model*>(resourceManager.getModelByID(modelId))) {
+            liveModels.insert(model);
+        }
+    }
+
+    std::vector<Model*> staleModels;
+    staleModels.reserve(perModelSupportingHalfedgeDescriptorSets.size() +
+        perModelIntrinsicNormalsDescriptorSets.size() +
+        perModelIntrinsicVertexNormalsDescriptorSets.size());
+
+    auto collectStale = [&](const auto& setMap) {
+        for (const auto& [model, sets] : setMap) {
+            (void)sets;
+            if (!model || liveModels.find(model) == liveModels.end() ||
+                payloadStateByModel.find(model) == payloadStateByModel.end()) {
+                staleModels.push_back(model);
+            }
+        }
+    };
+
+    collectStale(perModelSupportingHalfedgeDescriptorSets);
+    collectStale(perModelIntrinsicNormalsDescriptorSets);
+    collectStale(perModelIntrinsicVertexNormalsDescriptorSets);
+    for (const auto& [model, state] : payloadStateByModel) {
+        (void)state;
+        if (!model || liveModels.find(model) == liveModels.end()) {
+            staleModels.push_back(model);
+        }
+    }
+
+    std::sort(staleModels.begin(), staleModels.end());
+    staleModels.erase(std::unique(staleModels.begin(), staleModels.end()), staleModels.end());
+    for (Model* model : staleModels) {
+        releaseDescriptorSetsForModel(model);
+    }
+}
+
+void IntrinsicRenderer::releasePayloadState(PayloadState& state) {
+    auto destroyView = [this](VkBufferView& view) {
+        if (view != VK_NULL_HANDLE) {
+            vkDestroyBufferView(vulkanDevice.getDevice(), view, nullptr);
+            view = VK_NULL_HANDLE;
+        }
+    };
+    destroyView(state.viewS);
+    destroyView(state.viewA);
+    destroyView(state.viewH);
+    destroyView(state.viewE);
+    destroyView(state.viewT);
+    destroyView(state.viewL);
+    destroyView(state.viewHInput);
+    destroyView(state.viewEInput);
+    destroyView(state.viewTInput);
+    destroyView(state.viewLInput);
+
+    auto freeBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset) {
+        if (buffer != VK_NULL_HANDLE) {
+            allocator.free(buffer, offset);
+            buffer = VK_NULL_HANDLE;
+            offset = 0;
+        }
+    };
+    freeBuffer(state.bufferS, state.offsetS);
+    freeBuffer(state.bufferA, state.offsetA);
+    freeBuffer(state.bufferH, state.offsetH);
+    freeBuffer(state.bufferE, state.offsetE);
+    freeBuffer(state.bufferT, state.offsetT);
+    freeBuffer(state.bufferL, state.offsetL);
+    freeBuffer(state.bufferHInput, state.offsetHInput);
+    freeBuffer(state.bufferEInput, state.offsetEInput);
+    freeBuffer(state.bufferTInput, state.offsetTInput);
+    freeBuffer(state.bufferLInput, state.offsetLInput);
+    freeBuffer(state.intrinsicTriangleBuffer, state.triangleGeometryOffset);
+    freeBuffer(state.intrinsicVertexBuffer, state.vertexGeometryOffset);
+
+    state.triangleCount = 0;
+    state.vertexCount = 0;
+    state.averageTriangleArea = 0.0f;
+    state.uploaded = false;
+}
+
 bool IntrinsicRenderer::createSupportingHalfedgePipeline(VkRenderPass renderPass, uint32_t subpassIndex) {
     auto vertShaderCode = readFile("shaders/intrinsic_supporting_vert.spv");
     auto geomShaderCode = readFile("shaders/intrinsic_supporting_geom.spv");
@@ -1223,26 +1615,27 @@ bool IntrinsicRenderer::createIntrinsicVertexNormalsPipeline(VkRenderPass render
     return true;
 }
 
-void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, Remesher& remesher) {
+void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager) {
     if (!initialized || supportingHalfedgePipeline == VK_NULL_HANDLE) {
         return;
     }
 
+    pruneStaleModelResources(resourceManager);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipeline);
     vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
 
-    for (Model* model : remesher.getRemeshedModels()) {
-        iODT* modelRemesher = remesher.getRemesherForModel(model);
-        if (!modelRemesher) {
+    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
+        const Model* model = resourceManager.getModelByID(modelId);
+        if (!model) {
+            continue;
+        }
+        Model* mutableModel = const_cast<Model*>(model);
+        auto payloadIt = payloadStateByModel.find(mutableModel);
+        if (payloadIt == payloadStateByModel.end() || !payloadIt->second.uploaded) {
             continue;
         }
 
-        auto* supportingHalfedge = modelRemesher->getSupportingHalfedge();
-        if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
-            continue;
-        }
-
-        auto it = perModelSupportingHalfedgeDescriptorSets.find(model);
+        auto it = perModelSupportingHalfedgeDescriptorSets.find(mutableModel);
         if (it == perModelSupportingHalfedgeDescriptorSets.end()) {
             continue;
         }
@@ -1252,7 +1645,7 @@ void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer,
             continue;
         }
 
-        glm::mat4 modelMatrix = model->getModelMatrix();
+        glm::mat4 modelMatrix = mutableModel->getModelMatrix();
         vkCmdPushConstants(commandBuffer, supportingHalfedgePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
 
         VkBuffer modelVertexBuffer = model->getVertexBuffer();
@@ -1266,31 +1659,33 @@ void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer,
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 }
 
-void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, Remesher& remesher, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength) {
     if (!initialized || intrinsicNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
 
+    pruneStaleModelResources(resourceManager);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipeline);
 
-    for (Model* model : remesher.getRemeshedModels()) {
-        iODT* modelRemesher = remesher.getRemesherForModel(model);
-        if (!modelRemesher) {
+    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
+        const Model* model = resourceManager.getModelByID(modelId);
+        if (!model) {
             continue;
         }
-
-        auto* supportingHalfedge = modelRemesher->getSupportingHalfedge();
-        if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
+        Model* mutableModel = const_cast<Model*>(model);
+        auto payloadIt = payloadStateByModel.find(mutableModel);
+        if (payloadIt == payloadStateByModel.end() || !payloadIt->second.uploaded) {
             continue;
         }
+        const PayloadState& state = payloadIt->second;
 
-        size_t triangleCount = supportingHalfedge->getTriangleCount();
-        if (triangleCount == 0) {
-            continue;
-        }
-
-        auto it = perModelIntrinsicNormalsDescriptorSets.find(model);
+        auto it = perModelIntrinsicNormalsDescriptorSets.find(mutableModel);
         if (it == perModelIntrinsicNormalsDescriptorSets.end()) {
+            continue;
+        }
+
+        size_t triangleCount = state.triangleCount;
+        if (triangleCount == 0) {
             continue;
         }
 
@@ -1300,9 +1695,9 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = model->getModelMatrix();
+        pushConstants.modelMatrix = mutableModel->getModelMatrix();
         pushConstants.normalLength = normalLength;
-        pushConstants.avgArea = supportingHalfedge->getAverageTriangleArea();
+        pushConstants.avgArea = state.averageTriangleArea;
 
         vkCmdPushConstants(commandBuffer, intrinsicNormalsPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipelineLayout, 0, 1, &modelDescriptorSets[currentFrame], 0, nullptr);
@@ -1310,31 +1705,33 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
     }
 }
 
-void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, Remesher& remesher, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength) {
     if (!initialized || intrinsicVertexNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
 
+    pruneStaleModelResources(resourceManager);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicVertexNormalsPipeline);
 
-    for (Model* model : remesher.getRemeshedModels()) {
-        iODT* modelRemesher = remesher.getRemesherForModel(model);
-        if (!modelRemesher) {
+    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
+        const Model* model = resourceManager.getModelByID(modelId);
+        if (!model) {
             continue;
         }
-
-        auto* supportingHalfedge = modelRemesher->getSupportingHalfedge();
-        if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
+        Model* mutableModel = const_cast<Model*>(model);
+        auto payloadIt = payloadStateByModel.find(mutableModel);
+        if (payloadIt == payloadStateByModel.end() || !payloadIt->second.uploaded) {
             continue;
         }
+        const PayloadState& state = payloadIt->second;
 
-        size_t vertexCount = supportingHalfedge->getVertexCount();
-        if (vertexCount == 0) {
-            continue;
-        }
-
-        auto it = perModelIntrinsicVertexNormalsDescriptorSets.find(model);
+        auto it = perModelIntrinsicVertexNormalsDescriptorSets.find(mutableModel);
         if (it == perModelIntrinsicVertexNormalsDescriptorSets.end()) {
+            continue;
+        }
+
+        size_t vertexCount = state.vertexCount;
+        if (vertexCount == 0) {
             continue;
         }
 
@@ -1344,7 +1741,7 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = model->getModelMatrix();
+        pushConstants.modelMatrix = mutableModel->getModelMatrix();
         pushConstants.normalLength = normalLength;
         pushConstants.avgArea = 0.0f;
 
@@ -1427,6 +1824,11 @@ void IntrinsicRenderer::cleanup() {
     perModelSupportingHalfedgeDescriptorSets.clear();
     perModelIntrinsicNormalsDescriptorSets.clear();
     perModelIntrinsicVertexNormalsDescriptorSets.clear();
+    for (auto& [model, state] : payloadStateByModel) {
+        (void)model;
+        releasePayloadState(state);
+    }
+    payloadStateByModel.clear();
 
     initialized = false;
 }

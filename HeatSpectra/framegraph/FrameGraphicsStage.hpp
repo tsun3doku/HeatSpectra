@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 
@@ -11,7 +11,8 @@ class MeshModifiers;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
-class FrameSimulation;
+class HeatSystem;
+class VoronoiSystem;
 
 class FrameGraphicsStage {
 public:
@@ -24,7 +25,7 @@ public:
         GizmoController& gizmoController,
         WireframeRenderer& wireframeRenderer);
 
-    FrameStageResult execute(const FrameState& frameState, FrameSimulation* simulation, const FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(const FrameState& frameState, HeatSystem* heatSystem, VoronoiSystem* voronoiSystem, const FrameSyncState& syncState, bool allowHeatSolve);
 
 private:
     VulkanDevice& vulkanDevice;

@@ -85,6 +85,7 @@ public:
     bool isModelSelected(uint32_t id) const;
     
     const std::vector<uint32_t>& getSelectedModelIDsRenderThread() const;
+    const std::vector<uint32_t>& getSelectedRuntimeModelIDsRenderThread() const;
     uint32_t getSelectedModelID() const;
     
     PickedResult getLastPickedResult() const { 

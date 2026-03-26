@@ -1,8 +1,16 @@
 # HeatSpectra
 
-Realtime thermal analysis visualization 
+![Heat Transfer](HeatSpectra/docs/heat.gif)
 
-![Heat Transfer Capture](HeatSpectra/docs/capture.png)
+This project allows the visualization of heat transfer between two or more 3D closed surface geometry. The simulation is deterministic, transient and operates in realtime using stable pre-processing methods. 
+
+![Voronoi](HeatSpectra/docs/voronoi.png)
+
+The major pre-processing methods include an intrinsic remeshing operation that preserves the shape of the geometry and a meshless restricted voronoi diagram step that discretizes the volume of the surface boundary.
+
+![Contact](HeatSpectra/docs/contact.png)
+
+This project is a work in progress. Functionality, performance and physical accuracy will be continuously updated.
 
 ## Quick Start
 1. Download the latest demo release from the [Releases](https://github.com/tsun3doku/HeatSpectra/releases) page

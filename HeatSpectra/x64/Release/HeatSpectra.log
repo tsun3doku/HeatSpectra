@@ -1,13 +1,11 @@
 ﻿   Qt/MSBuild: 3.4.1.0
   Reading Qt configuration (C:/Qt/6.9.3/msvc2022_64/bin/qmake)
    Qt: 6.9.3
-  SceneRenderer.cpp
-  OverlayPass.cpp
-  OutlineRenderer.cpp
+  IntrinsicRenderer.cpp
   Generating code
-  83 of 24324 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
-    29 functions were new in current compilation
-    140 functions had inline decision re-evaluated but remain unchanged
+  50 of 25665 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    66 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   HeatSpectra.vcxproj -> C:\Users\tsundoku\Documents\Visual Studio 2022\Projects\HeatSpectra\x64\Release\HeatSpectra.exe
   0 File(s) copied

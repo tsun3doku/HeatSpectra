@@ -1,4 +1,4 @@
-﻿#include "FrameSync.hpp"
+#include "FrameSync.hpp"
 
 #include <array>
 

@@ -1,26 +1,30 @@
 #include "HeatSystemContactStage.hpp"
 
+#include "ContactSampling.hpp"
+#include "HeatReceiverRuntime.hpp"
+#include "HeatSystemSimRuntime.hpp"
 #include "HeatSystemResources.hpp"
-
 #include "HeatContactParams.hpp"
-#include "HeatReceiver.hpp"
-#include "HeatSource.hpp"
+#include "HeatSourceRuntime.hpp"
 #include "util/file_utils.h"
-#include "mesh/remesher/Remesher.hpp"
+#include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
+#include "voronoi/VoronoiModelRuntime.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 HeatSystemContactStage::HeatSystemContactStage(const HeatSystemStageContext& stageContext)
     : context(stageContext) {
 }
 
-bool HeatSystemContactStage::ensureParamsBuffer(HeatSystemRuntime::ContactCoupling& coupling) {
+bool HeatSystemContactStage::ensureParamsBuffer(HeatContactRuntime::ContactCoupling& coupling) {
     if (coupling.paramsBuffer == VK_NULL_HANDLE) {
         const auto bufferResult = context.memoryAllocator.allocate(
             sizeof(HeatContactParams),
@@ -46,6 +50,28 @@ bool HeatSystemContactStage::ensureParamsBuffer(HeatSystemRuntime::ContactCoupli
 void HeatSystemContactStage::refreshCouplings() {
 }
 
+const HeatReceiverRuntime* HeatSystemContactStage::findReceiverRuntime(
+    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
+    uint32_t runtimeModelId) const {
+    for (const auto& receiver : receivers) {
+        if (receiver && receiver->getRuntimeModelId() == runtimeModelId) {
+            return receiver.get();
+        }
+    }
+    return nullptr;
+}
+
+const VoronoiModelRuntime* HeatSystemContactStage::findVoronoiModelRuntime(
+    const std::vector<std::unique_ptr<VoronoiModelRuntime>>& voronoiModelRuntimes,
+    uint32_t runtimeModelId) const {
+    for (const auto& modelRuntime : voronoiModelRuntimes) {
+        if (modelRuntime && modelRuntime->getRuntimeModelId() == runtimeModelId) {
+            return modelRuntime.get();
+        }
+    }
+    return nullptr;
+}
+
 bool HeatSystemContactStage::createDescriptorPool(uint32_t maxFramesInFlight) {
     (void)maxFramesInFlight;
     const uint32_t maxReceivers = 24;
@@ -57,7 +83,7 @@ bool HeatSystemContactStage::createDescriptorPool(uint32_t maxFramesInFlight) {
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 10;
+    poolSizes[0].descriptorCount = totalSets * 8;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = totalSets * 1;
 
@@ -79,16 +105,14 @@ bool HeatSystemContactStage::createDescriptorPool(uint32_t maxFramesInFlight) {
 bool HeatSystemContactStage::createDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {4, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -167,97 +191,161 @@ bool HeatSystemContactStage::createPipeline() {
     return true;
 }
 
-void HeatSystemContactStage::updateCouplingDescriptors(HeatSystemRuntime::ContactCoupling& coupling, uint32_t nodeCount) {
+void HeatSystemContactStage::updateCouplingDescriptors(
+    HeatContactRuntime::ContactCoupling& coupling,
+    const HeatSystemSimRuntime& simRuntime,
+    const HeatPackage& heatPackage,
+    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
+    const std::vector<std::unique_ptr<VoronoiModelRuntime>>& voronoiModelRuntimes) {
     coupling.contactDescriptorsReady = false;
-    if (nodeCount == 0 || !coupling.receiver) {
+    (void)heatPackage;
+
+    if (coupling.couplingType != ContactCouplingType::SourceToReceiver || !coupling.source) {
         return;
     }
 
-    HeatReceiver* const receiver = coupling.receiver;
-    if (!ensureParamsBuffer(coupling)) {
+    const VoronoiModelRuntime* receiverModelRuntime = findVoronoiModelRuntime(voronoiModelRuntimes, coupling.receiverModelId);
+    if (!findReceiverRuntime(receivers, coupling.receiverModelId) || !receiverModelRuntime) {
         return;
     }
 
-    if (receiver->getTriangleIndicesBuffer() == VK_NULL_HANDLE ||
-        receiver->getVoronoiMappingBuffer() == VK_NULL_HANDLE ||
-        coupling.contactPairBuffer == VK_NULL_HANDLE ||
-        receiver->getIntrinsicTriangleCount() == 0) {
+    const auto& triangleIndices = receiverModelRuntime->getIntrinsicTriangleIndices();
+    const auto& cellIndices = receiverModelRuntime->getVoronoiSurfaceCellIndices();
+    const std::size_t triangleCount = triangleIndices.size() / 3;
+    const std::size_t contactPairCount = std::min(coupling.contactPairsCPU.size(), triangleCount);
+    if (contactPairCount == 0 || cellIndices.empty()) {
         return;
     }
 
-    VkBuffer sourceSurfaceBuffer = VK_NULL_HANDLE;
-    VkDeviceSize sourceSurfaceOffset = 0;
-    VkDeviceSize sourceSurfaceRange = 0;
+    std::vector<ContactSampleGPU> samples;
+    samples.reserve(contactPairCount * Quadrature::count);
 
-    VkBuffer sourceTriangleBuffer = VK_NULL_HANDLE;
-    VkDeviceSize sourceTriangleOffset = 0;
-    VkDeviceSize sourceTriangleRange = 0;
-    VkDeviceSize receiverTriangleIndexRange = sizeof(uint32_t) * 3ull * receiver->getIntrinsicTriangleCount();
-    VkDeviceSize contactPairRange = sizeof(ContactPairGPU) * coupling.contactPairCount;
+    std::vector<ContactCellWeight> cellWeights;
+    cellWeights.reserve(contactPairCount * Quadrature::count * 3);
 
-    VkBuffer emitterTriangleIndexBuffer = receiver->getTriangleIndicesBuffer();
-    VkDeviceSize emitterTriangleIndexOffset = receiver->getTriangleIndicesBufferOffset();
-    VkDeviceSize emitterTriangleIndexRange = sizeof(uint32_t) * 3ull * receiver->getIntrinsicTriangleCount();
-
-    VkBuffer emitterVoronoiMappingBuffer = receiver->getVoronoiMappingBuffer();
-    VkDeviceSize emitterVoronoiMappingOffset = receiver->getVoronoiMappingBufferOffset();
-    VkDeviceSize emitterVoronoiMappingRange = sizeof(VoronoiSurfaceMapping) * receiver->getIntrinsicVertexCount();
-
-    if (coupling.kind == ContactCouplingKind::SourceToReceiver) {
-        HeatSource* source = coupling.source;
-        if (!source ||
-            source->getSourceBuffer() == VK_NULL_HANDLE ||
-            source->getTriangleGeometryBuffer() == VK_NULL_HANDLE ||
-            source->getVertexCount() == 0 ||
-            source->getTriangleCount() == 0) {
-            return;
+    for (std::size_t triangleIndex = 0; triangleIndex < contactPairCount; ++triangleIndex) {
+        const ContactPair& contactPair = coupling.contactPairsCPU[triangleIndex];
+        if (contactPair.contactArea <= 0.0f) {
+            continue;
         }
 
-        sourceSurfaceBuffer = source->getSourceBuffer();
-        sourceSurfaceOffset = source->getSourceBufferOffset();
-        sourceSurfaceRange = sizeof(SurfacePoint) * source->getVertexCount();
+        const std::size_t triangleBase = triangleIndex * 3;
+        const uint32_t vertexIndices[3] = {
+            triangleIndices[triangleBase + 0],
+            triangleIndices[triangleBase + 1],
+            triangleIndices[triangleBase + 2],
+        };
 
-        sourceTriangleBuffer = source->getTriangleGeometryBuffer();
-        sourceTriangleOffset = source->getTriangleGeometryBufferOffset();
-        sourceTriangleRange = sizeof(HeatSourceTriangleGPU) * source->getTriangleCount();
-    } else {
-        HeatReceiver* emitterReceiver = coupling.emitterReceiver;
-        if (!emitterReceiver ||
-            emitterReceiver == receiver ||
-            emitterReceiver->getSurfaceBuffer() == VK_NULL_HANDLE ||
-            emitterReceiver->getTriangleIndicesBuffer() == VK_NULL_HANDLE ||
-            emitterReceiver->getVoronoiMappingBuffer() == VK_NULL_HANDLE ||
-            emitterReceiver->getIntrinsicVertexCount() == 0 ||
-            emitterReceiver->getIntrinsicTriangleCount() == 0) {
-            return;
+        const uint32_t mappedCells[3] = {
+            vertexIndices[0] < cellIndices.size() ? cellIndices[vertexIndices[0]] : std::numeric_limits<uint32_t>::max(),
+            vertexIndices[1] < cellIndices.size() ? cellIndices[vertexIndices[1]] : std::numeric_limits<uint32_t>::max(),
+            vertexIndices[2] < cellIndices.size() ? cellIndices[vertexIndices[2]] : std::numeric_limits<uint32_t>::max(),
+        };
+
+        for (uint32_t sampleIndex = 0; sampleIndex < Quadrature::count; ++sampleIndex) {
+            const ContactSampleGPU& sample = contactPair.samples[sampleIndex];
+            if (sample.sourceTriangleIndex == std::numeric_limits<uint32_t>::max() || sample.wArea <= 0.0f) {
+                continue;
+            }
+
+            const uint32_t flattenedSampleIndex = static_cast<uint32_t>(samples.size());
+            samples.push_back(sample);
+
+            const glm::vec3 barycentric = Quadrature::bary[sampleIndex];
+            const float baryWeights[3] = { barycentric.x, barycentric.y, barycentric.z };
+            for (int cornerIndex = 0; cornerIndex < 3; ++cornerIndex) {
+                const uint32_t cellIndex = mappedCells[cornerIndex];
+                const float weight = sample.wArea * baryWeights[cornerIndex];
+                if (cellIndex == std::numeric_limits<uint32_t>::max() || weight <= 0.0f) {
+                    continue;
+                }
+
+                ContactCellWeight cellWeight{};
+                cellWeight.cellIndex = cellIndex;
+                cellWeight.sampleIndex = flattenedSampleIndex;
+                cellWeight.weight = weight;
+                cellWeights.push_back(cellWeight);
+            }
         }
-
-        sourceSurfaceBuffer = emitterReceiver->getSurfaceBuffer();
-        sourceSurfaceOffset = emitterReceiver->getSurfaceBufferOffset();
-        sourceSurfaceRange = sizeof(SurfacePoint) * emitterReceiver->getIntrinsicVertexCount();
-
-        // Unused in receiver->receiver mode, but must still be a valid descriptor.
-        sourceTriangleBuffer = emitterReceiver->getTriangleIndicesBuffer();
-        sourceTriangleOffset = emitterReceiver->getTriangleIndicesBufferOffset();
-        sourceTriangleRange = sizeof(uint32_t) * 3ull * emitterReceiver->getIntrinsicTriangleCount();
-
-        emitterTriangleIndexBuffer = emitterReceiver->getTriangleIndicesBuffer();
-        emitterTriangleIndexOffset = emitterReceiver->getTriangleIndicesBufferOffset();
-        emitterTriangleIndexRange = sizeof(uint32_t) * 3ull * emitterReceiver->getIntrinsicTriangleCount();
-
-        emitterVoronoiMappingBuffer = emitterReceiver->getVoronoiMappingBuffer();
-        emitterVoronoiMappingOffset = emitterReceiver->getVoronoiMappingBufferOffset();
-        emitterVoronoiMappingRange = sizeof(VoronoiSurfaceMapping) * emitterReceiver->getIntrinsicVertexCount();
     }
 
-    if (sourceSurfaceRange == 0 ||
-        sourceTriangleRange == 0 ||
-        receiverTriangleIndexRange == 0 ||
-        contactPairRange == 0 ||
-        emitterTriangleIndexRange == 0 ||
-        emitterVoronoiMappingRange == 0) {
+    if (samples.empty() || cellWeights.empty()) {
         return;
     }
+
+    std::sort(cellWeights.begin(), cellWeights.end(), [](const ContactCellWeight& lhs, const ContactCellWeight& rhs) {
+        if (lhs.cellIndex != rhs.cellIndex) {
+            return lhs.cellIndex < rhs.cellIndex;
+        }
+        return lhs.sampleIndex < rhs.sampleIndex;
+    });
+
+    std::vector<ContactCellMap> contactCellMap;
+    contactCellMap.reserve(cellWeights.size());
+    std::vector<ContactCellRange> contactCellRanges;
+    contactCellRanges.reserve(cellWeights.size());
+
+    std::size_t rangeStart = 0;
+    while (rangeStart < cellWeights.size()) {
+        const uint32_t cellIndex = cellWeights[rangeStart].cellIndex;
+        std::size_t rangeEnd = rangeStart;
+        while (rangeEnd < cellWeights.size() && cellWeights[rangeEnd].cellIndex == cellIndex) {
+            ContactCellMap mapEntry{};
+            mapEntry.sampleIndex = cellWeights[rangeEnd].sampleIndex;
+            mapEntry.weight = cellWeights[rangeEnd].weight;
+            contactCellMap.push_back(mapEntry);
+            ++rangeEnd;
+        }
+
+        ContactCellRange range{};
+        range.cellIndex = cellIndex;
+        range.startIndex = static_cast<uint32_t>(rangeStart);
+        range.count = static_cast<uint32_t>(rangeEnd - rangeStart);
+        contactCellRanges.push_back(range);
+        rangeStart = rangeEnd;
+    }
+
+    auto recreateBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset, const void* data, VkDeviceSize size) -> bool {
+        if (buffer != VK_NULL_HANDLE) {
+            context.memoryAllocator.free(buffer, offset);
+            buffer = VK_NULL_HANDLE;
+            offset = 0;
+        }
+
+        return createStorageBuffer(
+                   context.memoryAllocator,
+                   context.vulkanDevice,
+                   data,
+                   size,
+                   buffer,
+                   offset,
+                   nullptr,
+                   true) == VK_SUCCESS &&
+            buffer != VK_NULL_HANDLE;
+    };
+
+    if (!recreateBuffer(
+            coupling.contactSampleBuffer,
+            coupling.contactSampleBufferOffset,
+            samples.data(),
+            sizeof(ContactSampleGPU) * samples.size()) ||
+        !recreateBuffer(
+            coupling.contactCellMapBuffer,
+            coupling.contactCellMapBufferOffset,
+            contactCellMap.data(),
+            sizeof(ContactCellMap) * contactCellMap.size()) ||
+        !recreateBuffer(
+            coupling.contactCellRangeBuffer,
+            coupling.contactCellRangeBufferOffset,
+            contactCellRanges.data(),
+            sizeof(ContactCellRange) * contactCellRanges.size()) ||
+        !ensureParamsBuffer(coupling)) {
+        return;
+    }
+
+    coupling.contactSampleCount = static_cast<uint32_t>(samples.size());
+    coupling.contactCellMapCount = static_cast<uint32_t>(contactCellMap.size());
+    coupling.contactCellRangeCount = static_cast<uint32_t>(contactCellRanges.size());
 
     if (coupling.contactComputeSetA == VK_NULL_HANDLE || coupling.contactComputeSetB == VK_NULL_HANDLE) {
         std::array<VkDescriptorSetLayout, 2> layouts = {
@@ -271,9 +359,10 @@ void HeatSystemContactStage::updateCouplingDescriptors(HeatSystemRuntime::Contac
         allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
         allocInfo.pSetLayouts = layouts.data();
 
-        VkDescriptorSet sets[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
-        if (vkAllocateDescriptorSets(context.vulkanDevice.getDevice(), &allocInfo, sets) != VK_SUCCESS) {
-            std::cerr << "[HeatSystem] Failed to allocate contact coupling descriptor sets" << std::endl;
+        std::array<VkDescriptorSet, 2> sets = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+        if (vkAllocateDescriptorSets(context.vulkanDevice.getDevice(), &allocInfo, sets.data()) != VK_SUCCESS) {
+            coupling.contactComputeSetA = VK_NULL_HANDLE;
+            coupling.contactComputeSetB = VK_NULL_HANDLE;
             return;
         }
 
@@ -281,36 +370,111 @@ void HeatSystemContactStage::updateCouplingDescriptors(HeatSystemRuntime::Contac
         coupling.contactComputeSetB = sets[1];
     }
 
-    VkDescriptorSet sets[2] = { coupling.contactComputeSetA, coupling.contactComputeSetB };
-    VkBuffer tempBuffers[2] = { context.resources.tempBufferA, context.resources.tempBufferB };
-    VkDeviceSize tempOffsets[2] = { context.resources.tempBufferAOffset_, context.resources.tempBufferBOffset_ };
-    for (uint32_t pass = 0; pass < 2; ++pass) {
-        std::array<VkDescriptorBufferInfo, 11> infos = {
-            VkDescriptorBufferInfo{tempBuffers[pass], tempOffsets[pass], sizeof(float) * nodeCount},
-            VkDescriptorBufferInfo{receiver->getTriangleIndicesBuffer(), receiver->getTriangleIndicesBufferOffset(), receiverTriangleIndexRange},
-            VkDescriptorBufferInfo{sourceSurfaceBuffer, sourceSurfaceOffset, sourceSurfaceRange},
-            VkDescriptorBufferInfo{sourceTriangleBuffer, sourceTriangleOffset, sourceTriangleRange},
-            VkDescriptorBufferInfo{coupling.paramsBuffer, coupling.paramsBufferOffset, sizeof(HeatContactParams)},
-            VkDescriptorBufferInfo{receiver->getVoronoiMappingBuffer(), receiver->getVoronoiMappingBufferOffset(), sizeof(VoronoiSurfaceMapping) * receiver->getIntrinsicVertexCount()},
-            VkDescriptorBufferInfo{context.resources.injectionKBuffer, context.resources.injectionKBufferOffset_, sizeof(uint32_t) * nodeCount},
-            VkDescriptorBufferInfo{context.resources.injectionKTBuffer, context.resources.injectionKTBufferOffset_, sizeof(uint32_t) * nodeCount},
-            VkDescriptorBufferInfo{coupling.contactPairBuffer, coupling.contactPairBufferOffset, contactPairRange},
-            VkDescriptorBufferInfo{emitterTriangleIndexBuffer, emitterTriangleIndexOffset, emitterTriangleIndexRange},
-            VkDescriptorBufferInfo{emitterVoronoiMappingBuffer, emitterVoronoiMappingOffset, emitterVoronoiMappingRange},
+    auto updateSet = [this, &coupling, &simRuntime](VkDescriptorSet descriptorSet, VkBuffer tempReadBuffer, VkDeviceSize tempReadOffset) {
+        VkDescriptorBufferInfo bufferInfos[9] = {
+            { tempReadBuffer, tempReadOffset, sizeof(float) * simRuntime.getNodeCount() },
+            { coupling.paramsBuffer, coupling.paramsBufferOffset, sizeof(HeatContactParams) },
+            { simRuntime.getInjectionKBuffer(), simRuntime.getInjectionKBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
+            { simRuntime.getInjectionKTBuffer(), simRuntime.getInjectionKTBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
+            { coupling.contactSampleBuffer, coupling.contactSampleBufferOffset, sizeof(ContactSampleGPU) * coupling.contactSampleCount },
+            { coupling.contactCellMapBuffer, coupling.contactCellMapBufferOffset, sizeof(ContactCellMap) * coupling.contactCellMapCount },
+            { coupling.contactCellRangeBuffer, coupling.contactCellRangeBufferOffset, sizeof(ContactCellRange) * coupling.contactCellRangeCount },
+            { simRuntime.getInjectionKBuffer(), simRuntime.getInjectionKBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
+            { simRuntime.getInjectionKBuffer(), simRuntime.getInjectionKBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
         };
 
-        std::array<VkWriteDescriptorSet, 11> writes{};
-        for (uint32_t i = 0; i < static_cast<uint32_t>(writes.size()); ++i) {
-            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writes[i].dstSet = sets[pass];
-            writes[i].dstBinding = i;
-            writes[i].dstArrayElement = 0;
-            writes[i].descriptorCount = 1;
-            writes[i].descriptorType = (i == 4u) ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            writes[i].pBufferInfo = &infos[i];
+        VkWriteDescriptorSet writes[9]{};
+        for (uint32_t binding = 0; binding < 9; ++binding) {
+            writes[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[binding].dstSet = descriptorSet;
+            writes[binding].dstBinding = binding;
+            writes[binding].descriptorCount = 1;
+            writes[binding].descriptorType =
+                (binding == 1) ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[binding].pBufferInfo = &bufferInfos[binding];
         }
-        vkUpdateDescriptorSets(context.vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-    }
+        vkUpdateDescriptorSets(context.vulkanDevice.getDevice(), 9, writes, 0, nullptr);
+    };
+
+    updateSet(coupling.contactComputeSetA, simRuntime.getTempBufferA(), simRuntime.getTempBufferAOffset());
+    updateSet(coupling.contactComputeSetB, simRuntime.getTempBufferB(), simRuntime.getTempBufferBOffset());
 
     coupling.contactDescriptorsReady = true;
+}
+
+void HeatSystemContactStage::dispatchCoupling(
+    VkCommandBuffer commandBuffer,
+    const HeatContactRuntime::ContactCoupling& coupling,
+    bool evenSubstep) const {
+    if (!coupling.contactDescriptorsReady || coupling.contactCellRangeCount == 0) {
+        return;
+    }
+
+    VkDescriptorSet descriptorSet = evenSubstep ? coupling.contactComputeSetA : coupling.contactComputeSetB;
+    if (descriptorSet == VK_NULL_HANDLE ||
+        context.resources.contactPipeline == VK_NULL_HANDLE ||
+        context.resources.contactPipelineLayout == VK_NULL_HANDLE) {
+        return;
+    }
+
+    ContactPushConstant pushConstant{};
+    pushConstant.couplingKind =
+        (coupling.couplingType == ContactCouplingType::ReceiverToReceiver) ? 1u : 0u;
+    if (coupling.source) {
+        pushConstant.heatSourceTemperature = coupling.source->getUniformTemperature();
+    }
+
+    const uint32_t workGroupSize = 256;
+    const uint32_t workGroupCount = (coupling.contactCellRangeCount + workGroupSize - 1) / workGroupSize;
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.contactPipeline);
+    vkCmdPushConstants(
+        commandBuffer,
+        context.resources.contactPipelineLayout,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        0,
+        sizeof(ContactPushConstant),
+        &pushConstant);
+    vkCmdBindDescriptorSets(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        context.resources.contactPipelineLayout,
+        0,
+        1,
+        &descriptorSet,
+        0,
+        nullptr);
+    vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);
+}
+
+void HeatSystemContactStage::insertInjectionBarrier(
+    VkCommandBuffer commandBuffer,
+    const HeatSystemSimRuntime& simRuntime) const {
+    VkBufferMemoryBarrier barriers[2]{};
+
+    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[0].buffer = simRuntime.getInjectionKBuffer();
+    barriers[0].offset = simRuntime.getInjectionKBufferOffset();
+    barriers[0].size = VK_WHOLE_SIZE;
+
+    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    barriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[1].buffer = simRuntime.getInjectionKTBuffer();
+    barriers[1].offset = simRuntime.getInjectionKTBufferOffset();
+    barriers[1].size = VK_WHOLE_SIZE;
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,
+        0,
+        nullptr,
+        2,
+        barriers,
+        0,
+        nullptr);
 }

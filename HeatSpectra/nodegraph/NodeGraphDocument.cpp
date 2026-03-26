@@ -1,4 +1,6 @@
-﻿#include "NodeGraphDocument.hpp"
+#include "NodeGraphDocument.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,8 +9,8 @@
 NodeGraphDocument::NodeGraphDocument() = default;
 
 NodeGraphNodeId NodeGraphDocument::addNode(const NodeTypeId& typeId, const std::string& title, float x, float y) {
-    const NodeTypeId canonicalTypeId = canonicalNodeTypeId(typeId);
-    const NodeTypeDefinition* definition = findNodeTypeDefinitionById(canonicalTypeId);
+    const NodeTypeId canonicalTypeId = getNodeTypeId(typeId);
+    const NodeTypeDefinition* definition = NodeGraphRegistry::findNodeById(canonicalTypeId);
     if (!definition) {
         return {};
     }
@@ -72,7 +74,7 @@ bool NodeGraphDocument::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraph
         return false;
     }
 
-    const NodeTypeDefinition* definition = findNodeTypeDefinitionById(node->typeId);
+    const NodeTypeDefinition* definition = NodeGraphRegistry::findNodeById(node->typeId);
     if (!definition) {
         return false;
     }

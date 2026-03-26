@@ -5,8 +5,6 @@ class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
 class CommandPool;
-class Remesher;
-class HeatSystemRuntime;
 class HeatSystemResources;
 
 struct HeatSystemStageContext {
@@ -15,8 +13,6 @@ struct HeatSystemStageContext {
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
-    Remesher& remesher;
-    HeatSystemRuntime& runtime;
     HeatSystemResources& resources;
 };
 

@@ -1,4 +1,4 @@
-﻿#include "FrameController.hpp"
+#include "FrameController.hpp"
 
 #include "scene/CameraController.hpp"
 #include "util/ComputeTiming.hpp"
@@ -7,7 +7,8 @@
 #include "render/SceneRenderer.hpp"
 #include "app/SwapchainManager.hpp"
 #include "VkFrameGraphBackend.hpp"
-#include "FrameSimulation.hpp"
+#include "heat/HeatSystem.hpp"
+#include "heat/VoronoiSystem.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/WindowRuntimeState.hpp"
 
@@ -35,7 +36,8 @@ FrameController::FrameController(
       computeTiming(computeTiming),
       frameStats(frameStats),
       cameraController(cameraController),
-      simulation(services.simulation),
+      heatSystem(services.heatSystem),
+      voronoiSystem(services.voronoiSystem),
       isOperating(isOperating),
       isShuttingDown(isShuttingDown),
       swapchainStage(
@@ -46,7 +48,8 @@ FrameController::FrameController(
           frameGraphBackend,
           sceneRenderer,
           frameSync,
-          simulation,
+          heatSystem,
+          voronoiSystem,
           isShuttingDown),
       frameUpdateStage(
           services.inputController,
@@ -87,9 +90,15 @@ bool FrameController::recreateSwapChain() {
     return swapchainStage.recreateSwapChain();
 }
 
-void FrameController::setSimulation(FrameSimulation* updatedSimulation) {
-    simulation = updatedSimulation;
-    swapchainStage.setSimulation(updatedSimulation);
+void FrameController::setSystems(HeatSystem* updatedHeatSystem, VoronoiSystem* updatedVoronoiSystem) {
+    heatSystem = updatedHeatSystem;
+    voronoiSystem = updatedVoronoiSystem;
+    swapchainStage.setSystems(updatedHeatSystem, updatedVoronoiSystem);
+}
+
+void FrameController::setHeatSystem(HeatSystem* updatedHeatSystem) {
+    heatSystem = updatedHeatSystem;
+    swapchainStage.setHeatSystem(updatedHeatSystem);
 }
 
 void FrameController::drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve) {
@@ -131,13 +140,13 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
     frameUpdateStage.updateFrameState(frameState.frameIndex, frameState.sceneView);
 
     FrameSyncState syncState{};
-    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, simulation, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, heatSystem, syncState, allowHeatSolve))) {
         return;
     }
 
     updateTimingOverlay(timingLines, frameState.flags);
 
-    if (!handleStageResult(frameGraphicsStage.execute(frameState, simulation, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameGraphicsStage.execute(frameState, heatSystem, voronoiSystem, syncState, allowHeatSolve))) {
         return;
     }
 

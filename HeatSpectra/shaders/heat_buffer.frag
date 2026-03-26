@@ -8,6 +8,11 @@ layout(location = 3) in vec2 fragTexCoord;
 layout(location = 4) in vec3 fragBaryCoord;
 layout(location = 5) in vec2 fragIntrinsicCoord;
 
+layout(push_constant) uniform PushConstants {
+    mat4 modelMatrix;
+    vec4 sourceParams; // x = temperature, y = isSource
+} push;
+
 // GBuffer outputs
 layout(location = 0) out vec4 gAlbedo;
 layout(location = 1) out vec4 gNormal;
@@ -293,6 +298,15 @@ int findIntrinsicTriangle(int inputTri, vec2 p, out vec3 baryCoords) {
 }
 
 void main() {
+    if (push.sourceParams.y > 0.5) {
+        float temperatureScale = 50.0;
+        float normalized = clamp(push.sourceParams.x / temperatureScale, 0.0, 1.0);
+        vec3 heatColor = temperatureToColor(normalized);
+        gAlbedo = vec4(heatColor, 1.0);
+        gNormal = vec4(normalize(fragNormal), 0.0);
+        return;
+    }
+
     int inputTri = gl_PrimitiveID;
     ivec3 faceHEs;
     vec2 triCoords[3];
@@ -351,7 +365,7 @@ void main() {
     float temp0 = texelFetch(heatColors, v0 * 3 + 0).w;
     float temp1 = texelFetch(heatColors, v1 * 3 + 0).w;
     float temp2 = texelFetch(heatColors, v2 * 3 + 0).w;
-    
+
     // Interpolate temperatures using barycentric coordinates
     float interpolatedTemp = baryCoords.x * temp0 + baryCoords.y * temp1 + baryCoords.z * temp2;
     

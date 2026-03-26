@@ -1,31 +1,25 @@
-﻿#pragma once
+#pragma once
 
 #include "remesher/Remesher.hpp"
 
-#include <cstdint>
-
-class Model;
-class ModelSelection;
-class ResourceManager;
-class UniformBufferManager;
-class MemoryAllocator;
 class VulkanDevice;
+class MemoryAllocator;
+class ResourceManager;
 
 class MeshModifiers {
 public:
-    MeshModifiers(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager);
-
-    Model* performRemeshing(ModelSelection& modelSelection, int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize, uint32_t targetModelId = 0);
-    bool areAllModelsRemeshed() const;
+    MeshModifiers(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager);
 
     Remesher& getRemesher() {
         return remesher;
     }
+
     const Remesher& getRemesher() const {
         return remesher;
     }
 
-    void cleanup();
+    void cleanup() {
+    }
 
 private:
     ResourceManager& resourceManager;

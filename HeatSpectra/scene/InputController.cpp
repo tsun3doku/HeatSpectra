@@ -5,17 +5,44 @@
 #include "Model.hpp"
 #include "ModelSelection.hpp"
 #include "app/SwapchainManager.hpp"
+#include "nodegraph/NodeGraphBridge.hpp"
+#include "scene/SceneController.hpp"
 #include "vulkan/ResourceManager.hpp"
 
 #include <algorithm>
 #include <cmath>
 
+namespace {
+bool resolveSelectedTransformNode(
+    SceneController& sceneController,
+    NodeGraphEditor& nodeGraphEditor,
+    const ModelSelection& modelSelection,
+    NodeGraphNodeId& outTransformNodeId) {
+    outTransformNodeId = {};
+    const auto& selectedIDs = modelSelection.getSelectedModelIDsRenderThread();
+    if (selectedIDs.size() != 1) {
+        return false;
+    }
+
+    uint32_t nodeModelId = 0;
+    if (!sceneController.tryGetRuntimeModelNodeId(selectedIDs.front(), nodeModelId) || nodeModelId == 0) {
+        return false;
+    }
+
+    return nodeGraphEditor.ensureTransformForModelNode(NodeGraphNodeId{nodeModelId}, outTransformNodeId);
+}
+
+}
+
 InputController::InputController(Camera& camera, GizmoController& gizmoController, ModelSelection& modelSelection, ResourceManager& resourceManager,
+    SceneController& sceneController, NodeGraphBridge& nodeGraphBridge,
     const SwapchainManager& swapchainManager, InputActionHandler& actionHandler)
     : camera(camera),
       gizmoController(gizmoController),
       modelSelection(modelSelection),
       resourceManager(resourceManager),
+      sceneController(sceneController),
+      nodeGraphEditor(nodeGraphBridge),
       swapchainManager(swapchainManager),
       actionHandler(actionHandler) {
 }
@@ -40,15 +67,6 @@ void InputController::handleKeyInput(Qt::Key key, bool pressed) {
     }
     else if (key == Qt::Key_AsciiTilde) {
         actionHandler.onTimingOverlayToggleRequested();
-    }
-    else if (key == Qt::Key_Space) {
-        actionHandler.onSimulationToggleRequested();
-    }
-    else if (key == Qt::Key_P) {
-        actionHandler.onSimulationPauseRequested();
-    }
-    else if (key == Qt::Key_R) {
-        actionHandler.onSimulationResetRequested();
     }
     else if (key == Qt::Key_F) {
         if (modelSelection.getSelected()) {
@@ -99,6 +117,7 @@ void InputController::handleMouseRelease(int button, float mouseX, float mouseY)
         lastAppliedTranslation = glm::vec3(0.0f);
         accumulatedRotation = 0.0f;
         lastAppliedRotation = 0.0f;
+        activeTransformNodeId = {};
     }
 }
 
@@ -140,6 +159,19 @@ void InputController::updateGizmo() {
             }
 
             if (hitAxis != GizmoAxis::None) {
+                NodeGraphNodeId transformNodeId{};
+                if (!resolveSelectedTransformNode(sceneController, nodeGraphEditor, modelSelection, transformNodeId)) {
+                    modelSelection.clearLastPickedResult();
+                    return;
+                }
+
+                glm::vec3 initialTranslation(0.0f);
+                glm::vec3 initialRotationDegrees(0.0f);
+                if (!nodeGraphEditor.readTransformNodeValues(transformNodeId, initialTranslation, initialRotationDegrees)) {
+                    modelSelection.clearLastPickedResult();
+                    return;
+                }
+
                 if (lastPick.stencilValue >= 3 && lastPick.stencilValue <= 5) {
                     gizmoController.setMode(GizmoMode::Translate);
                 }
@@ -155,9 +187,13 @@ void InputController::updateGizmo() {
                 isDraggingGizmo = true;
                 cachedGizmoPosition = gizmoPosition;
                 gizmoController.startDrag(hitAxis, rayOrigin, rayDir, cachedGizmoPosition);
-                modelStartPosition = cachedGizmoPosition;
                 accumulatedTranslation = glm::vec3(0.0f);
+                lastAppliedTranslation = glm::vec3(0.0f);
                 accumulatedRotation = 0.0f;
+                lastAppliedRotation = 0.0f;
+                activeTransformNodeId = transformNodeId;
+                transformDragStartTranslation = initialTranslation;
+                transformDragStartRotationDegrees = initialRotationDegrees;
 
                 modelSelection.clearLastPickedResult();
             }
@@ -167,21 +203,19 @@ void InputController::updateGizmo() {
     if (!isDraggingGizmo) {
         return;
     }
-
-    const auto& selectedIDs = modelSelection.getSelectedModelIDsRenderThread();
+    if (!activeTransformNodeId.isValid()) {
+        return;
+    }
 
     if (gizmoController.getMode() == GizmoMode::Translate) {
         const glm::vec3 currentTranslation = accumulatedTranslation;
-        const glm::vec3 deltaTranslation = currentTranslation - lastAppliedTranslation;
-
-        if (glm::length(deltaTranslation) < 1e-6f) {
+        if (glm::length(currentTranslation - lastAppliedTranslation) < 1e-6f) {
             return;
         }
 
-        for (const uint32_t id : selectedIDs) {
-            if (Model* model = resourceManager.getModelByID(id)) {
-                model->translate(deltaTranslation);
-            }
+        const glm::vec3 authoredTranslation = transformDragStartTranslation + currentTranslation;
+        if (!nodeGraphEditor.writeTransformTranslation(activeTransformNodeId, authoredTranslation)) {
+            return;
         }
 
         lastAppliedTranslation = currentTranslation;
@@ -194,25 +228,26 @@ void InputController::updateGizmo() {
             return;
         }
 
-        glm::vec3 rotationAxis{};
         const GizmoAxis activeAxis = gizmoController.getActiveAxis();
-        if (activeAxis == GizmoAxis::X) {
-            rotationAxis = glm::vec3(1.0f, 0.0f, 0.0f);
-        }
-        else if (activeAxis == GizmoAxis::Y) {
-            rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-        }
-        else if (activeAxis == GizmoAxis::Z) {
-            rotationAxis = glm::vec3(0.0f, 0.0f, 1.0f);
-        }
-        else {
+        if (activeAxis != GizmoAxis::X &&
+            activeAxis != GizmoAxis::Y &&
+            activeAxis != GizmoAxis::Z) {
             return;
         }
 
-        for (const uint32_t id : selectedIDs) {
-            if (Model* model = resourceManager.getModelByID(id)) {
-                model->rotate(glm::radians(deltaRotation), rotationAxis, cachedGizmoPosition);
-            }
+        glm::vec3 authoredRotation = transformDragStartRotationDegrees;
+        if (activeAxis == GizmoAxis::X) {
+            authoredRotation.x += currentRotation;
+        }
+        else if (activeAxis == GizmoAxis::Y) {
+            authoredRotation.y += currentRotation;
+        }
+        else if (activeAxis == GizmoAxis::Z) {
+            authoredRotation.z += currentRotation;
+        }
+
+        if (!nodeGraphEditor.writeTransformRotation(activeTransformNodeId, authoredRotation)) {
+            return;
         }
 
         lastAppliedRotation = currentRotation;

@@ -1,15 +1,13 @@
 #include "HeatSystemRenderStage.hpp"
 
-#include "HeatSystemResources.hpp"
-#include "HeatReceiver.hpp"
-#include "HeatSource.hpp"
-#include "mesh/remesher/Remesher.hpp"
+#include "HeatReceiverRuntime.hpp"
+#include "HeatSourceRuntime.hpp"
+#include "runtime/HeatOverlayData.hpp"
 #include "renderers/ContactLineRenderer.hpp"
-#include "renderers/HeatRenderer.hpp"
-#include "renderers/PointRenderer.hpp"
-#include "renderers/SurfelRenderer.hpp"
-#include "renderers/VoronoiRenderer.hpp"
+#include "renderers/HeatReceiverRenderer.hpp"
+#include "renderers/HeatSourceRenderer.hpp"
 #include "scene/Model.hpp"
+#include "vulkan/ResourceManager.hpp"
 
 #include <glm/glm.hpp>
 
@@ -29,169 +27,65 @@ void HeatSystemRenderStage::renderContactLines(
     contactLineRenderer->render(cmdBuffer, frameIndex, glm::mat4(1.0f), extent);
 }
 
-const HeatSystemVoronoiDomain* HeatSystemRenderStage::findReceiverDomainByModelId(
-    const std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains,
-    uint32_t receiverModelId) const {
-    if (receiverModelId == 0) {
-        return nullptr;
-    }
-
-    for (const HeatSystemVoronoiDomain& domain : receiverVoronoiDomains) {
-        if (domain.receiverModelId == receiverModelId) {
-            return &domain;
-        }
-    }
-
-    return nullptr;
-}
-
-void HeatSystemRenderStage::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VoronoiRenderer* voronoiRenderer,
-    const std::vector<std::unique_ptr<HeatReceiver>>& receivers, const std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains, bool isActive) const {
-    if (!voronoiRenderer || !isActive) {
-        return;
-    }
-
-    for (const auto& receiver : receivers) {
-        const HeatSystemVoronoiDomain* receiverDomain =
-            findReceiverDomainByModelId(receiverVoronoiDomains, receiver->getModel().getRuntimeModelId());
-        if (!receiverDomain || receiverDomain->nodeCount == 0) {
-            continue;
-        }
-
-        Model& model = receiver->getModel();
-        const uint32_t vertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
-        const VkBuffer candidateBuffer = receiver->getVoronoiCandidateBuffer();
-        if (candidateBuffer == VK_NULL_HANDLE || vertexCount == 0) {
-            continue;
-        }
-
-        auto* iodt = context.remesher.getRemesherForModel(&model);
-        if (!iodt) {
-            continue;
-        }
-
-        auto* supportingHalfedge = iodt->getSupportingHalfedge();
-        if (!supportingHalfedge || !supportingHalfedge->isUploadedToGPU()) {
-            continue;
-        }
-
-        voronoiRenderer->updateDescriptors(
-            frameIndex,
-            vertexCount,
-            context.resources.seedPositionBuffer,
-            context.resources.seedPositionBufferOffset_,
-            context.resources.neighborIndicesBuffer,
-            context.resources.neighborIndicesBufferOffset_,
-            supportingHalfedge->getSupportingHalfedgeView(),
-            supportingHalfedge->getSupportingAngleView(),
-            supportingHalfedge->getHalfedgeView(),
-            supportingHalfedge->getEdgeView(),
-            supportingHalfedge->getTriangleView(),
-            supportingHalfedge->getLengthView(),
-            supportingHalfedge->getInputHalfedgeView(),
-            supportingHalfedge->getInputEdgeView(),
-            supportingHalfedge->getInputTriangleView(),
-            supportingHalfedge->getInputLengthView(),
-            candidateBuffer,
-            receiver->getVoronoiCandidateBufferOffset());
-
-        voronoiRenderer->render(
-            cmdBuffer,
-            model.getVertexBuffer(),
-            model.getVertexBufferOffset(),
-            model.getIndexBuffer(),
-            model.getIndexBufferOffset(),
-            static_cast<uint32_t>(model.getIndices().size()),
-            frameIndex,
-            model.getModelMatrix());
-    }
-}
-
-void HeatSystemRenderStage::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex, HeatRenderer* heatRenderer,
-    const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings, const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
+void HeatSystemRenderStage::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex,
+    HeatSourceRenderer* heatSourceRenderer, HeatReceiverRenderer* heatReceiverRenderer,
+    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings, const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
     bool isActive, bool isPaused) const {
-    if (!heatRenderer || (!isActive && !isPaused)) {
+    if ((!heatSourceRenderer && !heatReceiverRenderer) || (!isActive && !isPaused)) {
         return;
     }
 
-    std::vector<HeatRenderer::SourceRenderBinding> sourceRenderBindings;
-    sourceRenderBindings.reserve(sourceCouplings.size());
-    for (const HeatSystemRuntime::SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (!sourceCoupling.model || !sourceCoupling.heatSource) {
-            continue;
+    if (heatSourceRenderer) {
+        std::vector<HeatOverlayData> sourceRenderBindings;
+        sourceRenderBindings.reserve(sourceBindings.size());
+        for (const HeatSystemRuntime::SourceBinding& runtimeSourceBinding : sourceBindings) {
+            if (runtimeSourceBinding.geometryPackage.runtimeModelId == 0 || !runtimeSourceBinding.heatSource) {
+                continue;
+            }
+
+            Model* sourceModel = context.resourceManager.getModelByID(runtimeSourceBinding.geometryPackage.runtimeModelId);
+            if (!sourceModel) {
+                continue;
+            }
+
+            HeatOverlayData sourceOverlayBinding{};
+            sourceOverlayBinding.model = sourceModel;
+            sourceOverlayBinding.sourceTemperature = runtimeSourceBinding.heatSource->getUniformTemperature();
+            sourceOverlayBinding.sourceBufferView = runtimeSourceBinding.heatSource->getSourceBufferView();
+            sourceOverlayBinding.sourceVertexCount = static_cast<uint32_t>(runtimeSourceBinding.heatSource->getVertexCount());
+            sourceRenderBindings.push_back(sourceOverlayBinding);
         }
 
-        HeatRenderer::SourceRenderBinding sourceBinding{};
-        sourceBinding.model = sourceCoupling.model;
-        sourceBinding.heatSource = sourceCoupling.heatSource.get();
-        sourceRenderBindings.push_back(sourceBinding);
+        heatSourceRenderer->render(cmdBuffer, frameIndex, sourceRenderBindings);
     }
 
-    heatRenderer->render(cmdBuffer, frameIndex, sourceRenderBindings, receivers);
-}
+    if (heatReceiverRenderer) {
+        std::vector<HeatReceiverRenderer::ReceiverRenderBinding> receiverRenderBindings;
+        receiverRenderBindings.reserve(receivers.size());
+        for (const auto& receiver : receivers) {
+            if (!receiver) {
+                continue;
+            }
 
-void HeatSystemRenderStage::renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent,PointRenderer* pointRenderer, bool isActive) const {
-    if (!pointRenderer || !isActive) {
-        return;
-    }
+            Model* receiverModel = context.resourceManager.getModelByID(receiver->getRuntimeModelId());
+            if (!receiverModel) {
+                continue;
+            }
 
-    pointRenderer->render(cmdBuffer, frameIndex, glm::mat4(1.0f), extent);
-}
-
-const HeatSystemRuntime::SourceCoupling* HeatSystemRenderStage::findSourceCouplingForModel(const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings,
-    const Model* model) const {
-    if (!model) {
-        return nullptr;
-    }
-
-    for (const HeatSystemRuntime::SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (sourceCoupling.model == model) {
-            return &sourceCoupling;
+            HeatReceiverRenderer::ReceiverRenderBinding receiverBinding{};
+            receiverBinding.model = receiverModel;
+            receiverRenderBindings.push_back(receiverBinding);
         }
-    }
 
-    return nullptr;
+        heatReceiverRenderer->render(cmdBuffer, frameIndex, receiverRenderBindings);
+    }
 }
 
 void HeatSystemRenderStage::renderSurfels(VkCommandBuffer cmdBuffer, uint32_t frameIndex, float radius,
-    const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings, const std::vector<std::unique_ptr<HeatReceiver>>& receivers) const {
-    for (Model* model : context.remesher.getRemeshedModels()) {
-        SurfelRenderer* surfelRenderer = context.remesher.getSurfelForModel(model);
-        if (!surfelRenderer) {
-            continue;
-        }
-
-        SurfelRenderer::Surfel surfel{};
-        surfel.modelMatrix = model->getModelMatrix();
-        surfel.surfelRadius = radius;
-
-        VkBuffer surfaceBuffer = VK_NULL_HANDLE;
-        VkDeviceSize surfaceBufferOffset = 0;
-        uint32_t surfelCount = 0;
-
-        const HeatSystemRuntime::SourceCoupling* sourceCoupling =
-            findSourceCouplingForModel(sourceCouplings, model);
-        if (sourceCoupling && sourceCoupling->heatSource) {
-            surfaceBuffer = sourceCoupling->heatSource->getSourceBuffer();
-            surfaceBufferOffset = sourceCoupling->heatSource->getSourceBufferOffset();
-            surfelCount = static_cast<uint32_t>(sourceCoupling->heatSource->getVertexCount());
-        } else {
-            for (const auto& receiver : receivers) {
-                if (&receiver->getModel() != model) {
-                    continue;
-                }
-
-                surfaceBuffer = receiver->getSurfaceBuffer();
-                surfaceBufferOffset = receiver->getSurfaceBufferOffset();
-                surfelCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
-                break;
-            }
-        }
-
-        if (surfaceBuffer == VK_NULL_HANDLE || surfelCount == 0) {
-            continue;
-        }
-
-        surfelRenderer->render(cmdBuffer, surfaceBuffer, surfaceBufferOffset, surfelCount, surfel, frameIndex);
-    }
+    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings, const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers) const {
+    (void)cmdBuffer;
+    (void)frameIndex;
+    (void)radius;
+    (void)sourceBindings;
+    (void)receivers;
 }

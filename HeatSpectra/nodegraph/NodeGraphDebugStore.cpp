@@ -1,4 +1,9 @@
 #include "NodeGraphDebugStore.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
+
+#include "NodeGraphPayloadTypes.hpp"
+#include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
 #include <iomanip>
@@ -10,7 +15,28 @@ namespace {
 
 NodeGraphDebugStore gStore;
 
-const char* domainName(GeometryAttributeDomain domain) {
+const GeometryData* resolveGeometryForDebugBlock(const NodeDataBlock& block, const NodePayloadRegistry* payloadRegistry) {
+    if (!payloadRegistry || block.payloadHandle.key == 0) {
+        return nullptr;
+    }
+
+    switch (block.dataType) {
+    case NodeDataType::Geometry:
+        return payloadRegistry->get<GeometryData>(block.payloadHandle);
+    case NodeDataType::HeatReceiver: {
+        const HeatReceiverData* heatReceiver = payloadRegistry->get<HeatReceiverData>(block.payloadHandle);
+        return heatReceiver ? payloadRegistry->get<GeometryData>(heatReceiver->geometryHandle) : nullptr;
+    }
+    case NodeDataType::HeatSource: {
+        const HeatSourceData* heatSource = payloadRegistry->get<HeatSourceData>(block.payloadHandle);
+        return heatSource ? payloadRegistry->get<GeometryData>(heatSource->geometryHandle) : nullptr;
+    }
+    default:
+        return nullptr;
+    }
+}
+
+const char* attributeDomainName(GeometryAttributeDomain domain) {
     switch (domain) {
     case GeometryAttributeDomain::Point:
         return "point";
@@ -25,76 +51,86 @@ const char* domainName(GeometryAttributeDomain domain) {
     }
 }
 
-const char* dataTypeName(GeometryAttributeDataType dataType) {
+const char* attributeDataTypeName(GeometryAttributeDataType dataType) {
     switch (dataType) {
-    case GeometryAttributeDataType::Float:
-        return "float";
     case GeometryAttributeDataType::Int:
         return "int";
     case GeometryAttributeDataType::Bool:
         return "bool";
-    default:
-        return "unknown";
-    }
-}
-
-std::size_t elemCount(const GeometryAttribute& attribute) {
-    const std::size_t tuple = std::max<std::size_t>(1, attribute.tupleSize);
-    switch (attribute.dataType) {
     case GeometryAttributeDataType::Float:
-        return attribute.floatValues.size() / tuple;
-    case GeometryAttributeDataType::Int:
-        return attribute.intValues.size() / tuple;
-    case GeometryAttributeDataType::Bool:
-        return attribute.boolValues.size() / tuple;
     default:
-        return 0;
+        return "float";
     }
 }
 
-std::string elemValue(const GeometryAttribute& attribute, std::size_t elemIndex) {
-    const std::size_t tuple = std::max<std::size_t>(1, attribute.tupleSize);
-    const std::size_t start = elemIndex * tuple;
+std::size_t attributeElementCount(const GeometryData& geometry, GeometryAttributeDomain domain) {
+    switch (domain) {
+    case GeometryAttributeDomain::Point:
+        return geometry.pointPositions.size() / 3;
+    case GeometryAttributeDomain::Primitive:
+        return geometry.triangleIndices.size() / 3;
+    case GeometryAttributeDomain::Vertex:
+        return geometry.triangleIndices.size();
+    case GeometryAttributeDomain::Detail:
+    default:
+        return 1;
+    }
+}
 
-    std::ostringstream stream;
-    for (std::size_t c = 0; c < tuple; ++c) {
-        if (c > 0) {
+template <typename TValue>
+void appendTupleSample(
+    std::ostringstream& stream,
+    const std::vector<TValue>& values,
+    std::size_t tupleStart,
+    uint32_t tupleSize) {
+    if (tupleSize <= 1) {
+        if (tupleStart < values.size()) {
+            stream << values[tupleStart];
+        }
+        return;
+    }
+
+    stream << "(";
+    for (uint32_t i = 0; i < tupleSize; ++i) {
+        const std::size_t index = tupleStart + static_cast<std::size_t>(i);
+        if (index >= values.size()) {
+            break;
+        }
+        if (i > 0) {
             stream << ", ";
         }
+        stream << values[index];
+    }
+    stream << ")";
+}
 
-        const std::size_t valueIndex = start + c;
-        switch (attribute.dataType) {
-        case GeometryAttributeDataType::Float:
-            if (valueIndex < attribute.floatValues.size()) {
-                stream << std::fixed << std::setprecision(4) << attribute.floatValues[valueIndex];
-            } else {
-                stream << "0.0";
-            }
-            break;
-        case GeometryAttributeDataType::Int:
-            if (valueIndex < attribute.intValues.size()) {
-                stream << attribute.intValues[valueIndex];
-            } else {
-                stream << "0";
-            }
-            break;
-        case GeometryAttributeDataType::Bool:
-            if (valueIndex < attribute.boolValues.size()) {
-                stream << (attribute.boolValues[valueIndex] != 0 ? "true" : "false");
-            } else {
-                stream << "false";
-            }
-            break;
-        default:
-            stream << "n/a";
-            break;
+void appendTupleSampleBool(
+    std::ostringstream& stream,
+    const std::vector<uint8_t>& values,
+    std::size_t tupleStart,
+    uint32_t tupleSize) {
+    if (tupleSize <= 1) {
+        if (tupleStart < values.size()) {
+            stream << (values[tupleStart] ? "true" : "false");
         }
+        return;
     }
 
-    return stream.str();
+    stream << "(";
+    for (uint32_t i = 0; i < tupleSize; ++i) {
+        const std::size_t index = tupleStart + static_cast<std::size_t>(i);
+        if (index >= values.size()) {
+            break;
+        }
+        if (i > 0) {
+            stream << ", ";
+        }
+        stream << (values[index] ? "true" : "false");
+    }
+    stream << ")";
 }
 
-}
+} // namespace
 
 NodeGraphDebugStore& NodeGraphDebugStore::instance() {
     return gStore;
@@ -104,12 +140,13 @@ bool NodeGraphDebugStore::tryGetLatestNodeDebugInfo(NodeGraphNodeId nodeId, Node
     return instance().tryGetNode(nodeId, outInfo);
 }
 
-void NodeGraphDebugStore::setState(const NodeGraphState& graphState) {
+void NodeGraphDebugStore::setState(const NodeGraphState& graphState, NodePayloadRegistry* registry) {
     std::lock_guard<std::mutex> lock(mutex);
     state = graphState;
     revision = graphState.revision;
     srcByInput.clear();
     outBySocket.clear();
+    payloadRegistry = registry;
 }
 
 void NodeGraphDebugStore::publish(
@@ -141,7 +178,7 @@ bool NodeGraphDebugStore::tryGetNode(NodeGraphNodeId nodeId, NodeGraphRuntimeNod
     outInfo = {};
     outInfo.revision = revision;
     outInfo.nodeId = nodeIt->id;
-    outInfo.nodeTypeId = canonicalNodeTypeId(nodeIt->typeId);
+    outInfo.nodeTypeId = getNodeTypeId(nodeIt->typeId);
 
     outInfo.inputs.reserve(nodeIt->inputs.size());
     for (const NodeGraphSocket& socket : nodeIt->inputs) {
@@ -177,7 +214,7 @@ uint64_t NodeGraphDebugStore::socketKey(NodeGraphNodeId nodeId, NodeGraphSocketI
     return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
 }
 
-NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block) {
+NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block) const {
     NodeGraphRuntimeSocketDebugInfo info{};
     info.socketId = socket.id;
     info.socketName = socket.name;
@@ -187,27 +224,77 @@ NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphS
     }
 
     info.hasValue = true;
-    info.dataType = nodeDataTypeToString(block->dataType);
+    info.dataType = nodeDataTypeName(block->dataType);
     info.metadata = block->metadata;
     info.lineageNodeIds = block->lineageNodeIds;
+
+    if (!payloadRegistry || block->payloadHandle.key == 0) {
+        return info;
+    }
 
     if (block->dataType == NodeDataType::Geometry ||
         block->dataType == NodeDataType::HeatReceiver ||
         block->dataType == NodeDataType::HeatSource) {
-        info.attributes.reserve(block->geometry.attributes.size());
-        for (const GeometryAttribute& attribute : block->geometry.attributes) {
-            NodeGraphRuntimeAttributeDebugInfo attr{};
-            attr.name = attribute.name;
-            attr.domain = domainName(attribute.domain);
-            attr.dataType = dataTypeName(attribute.dataType);
-            attr.tupleSize = attribute.tupleSize;
-            const std::size_t count = elemCount(attribute);
-            attr.elementCount = static_cast<uint32_t>(count);
-            attr.sampleValues.reserve(count);
-            for (std::size_t i = 0; i < count; ++i) {
-                attr.sampleValues.push_back(elemValue(attribute, i));
+        const GeometryData* geometry = resolveGeometryForDebugBlock(*block, payloadRegistry);
+        if (!geometry) {
+            return info;
+        }
+
+        constexpr std::size_t kMaxSampleElements = 12;
+        info.attributes.reserve(geometry->attributes.size());
+        for (const GeometryAttribute& attribute : geometry->attributes) {
+            NodeGraphRuntimeAttributeDebugInfo attributeInfo{};
+            attributeInfo.name = attribute.name;
+            attributeInfo.domain = attributeDomainName(attribute.domain);
+            attributeInfo.dataType = attributeDataTypeName(attribute.dataType);
+            attributeInfo.tupleSize = attribute.tupleSize == 0 ? 1 : attribute.tupleSize;
+
+            const std::size_t expectedElements = attributeElementCount(*geometry, attribute.domain);
+            std::size_t availableElements = 0;
+            switch (attribute.dataType) {
+            case GeometryAttributeDataType::Int:
+                availableElements = attribute.tupleSize == 0
+                    ? 0
+                    : attribute.intValues.size() / attributeInfo.tupleSize;
+                break;
+            case GeometryAttributeDataType::Bool:
+                availableElements = attribute.tupleSize == 0
+                    ? 0
+                    : attribute.boolValues.size() / attributeInfo.tupleSize;
+                break;
+            case GeometryAttributeDataType::Float:
+            default:
+                availableElements = attribute.tupleSize == 0
+                    ? 0
+                    : attribute.floatValues.size() / attributeInfo.tupleSize;
+                break;
             }
-            info.attributes.push_back(std::move(attr));
+
+            const std::size_t elementCount = std::min(expectedElements, availableElements);
+            attributeInfo.elementCount = static_cast<uint32_t>(elementCount);
+            const std::size_t sampleCount = std::min(elementCount, kMaxSampleElements);
+            attributeInfo.sampleValues.reserve(sampleCount);
+
+            for (std::size_t elementIndex = 0; elementIndex < sampleCount; ++elementIndex) {
+                const std::size_t tupleStart = elementIndex * attributeInfo.tupleSize;
+                std::ostringstream stream;
+                stream << std::fixed << std::setprecision(4);
+                switch (attribute.dataType) {
+                case GeometryAttributeDataType::Int:
+                    appendTupleSample(stream, attribute.intValues, tupleStart, attributeInfo.tupleSize);
+                    break;
+                case GeometryAttributeDataType::Bool:
+                    appendTupleSampleBool(stream, attribute.boolValues, tupleStart, attributeInfo.tupleSize);
+                    break;
+                case GeometryAttributeDataType::Float:
+                default:
+                    appendTupleSample(stream, attribute.floatValues, tupleStart, attributeInfo.tupleSize);
+                    break;
+                }
+                attributeInfo.sampleValues.push_back(stream.str());
+            }
+
+            info.attributes.push_back(std::move(attributeInfo));
         }
     }
 

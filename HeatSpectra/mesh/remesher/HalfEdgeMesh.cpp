@@ -6,143 +6,119 @@
 #include <set>
 #include <iostream>
 
+#include "domain/GeometryData.hpp"
 #include "scene/Model.hpp"
 #include "HalfEdgeMesh.hpp"
 
-void HalfEdgeMesh::buildFromModel(const class Model& srcModel) {
+namespace {
+
+void buildFromIndexedMesh(
+	HalfEdgeMesh& mesh,
+	const std::vector<glm::vec3>& vertexPositions,
+	const std::vector<uint32_t>& indices) {
+	auto& vertices = mesh.getVertices();
+	auto& edges = mesh.getEdges();
+	auto& faces = mesh.getFaces();
+	auto& halfEdges = mesh.getHalfEdges();
+
 	vertices.clear();
 	edges.clear();
 	faces.clear();
 	halfEdges.clear();
 
-	// Create vertices
-	size_t vertexCount = srcModel.getVertexCount();
-	vertices.resize(vertexCount);
-	for (size_t i = 0; i < vertexCount; ++i) {
-		vertices[i].position = srcModel.getVertices()[i].pos;
+	vertices.resize(vertexPositions.size());
+	for (size_t i = 0; i < vertexPositions.size(); ++i) {
+		vertices[i].position = vertexPositions[i];
 		vertices[i].originalIndex = static_cast<uint32_t>(i);
-		vertices[i].halfEdgeIdx = INVALID_INDEX;
+		vertices[i].halfEdgeIdx = HalfEdgeMesh::INVALID_INDEX;
 	}
 
-	// Create faces and HEs
-	const std::vector<uint32_t>& indices = srcModel.getIndices();
-	size_t triangleCount = indices.size() / 3;
-
-	// Pre-allocate space 
+	const size_t triangleCount = indices.size() / 3;
 	halfEdges.reserve(triangleCount * 3);
 	faces.reserve(triangleCount);
 
-	// Create a map to store pairs of vertices to their HE index
-	std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, pair_hash> halfEdgeMap;
+	std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, HalfEdgeMesh::pair_hash> halfEdgeMap;
 
-	// For each triangle
 	for (size_t i = 0; i < triangleCount; ++i) {
-		uint32_t idx0 = indices[i * 3];
-		uint32_t idx1 = indices[i * 3 + 1];
-		uint32_t idx2 = indices[i * 3 + 2];
+		const uint32_t idx0 = indices[i * 3];
+		const uint32_t idx1 = indices[i * 3 + 1];
+		const uint32_t idx2 = indices[i * 3 + 2];
 
-		// Check for degenerate triangles 
+		if (idx0 >= vertices.size() || idx1 >= vertices.size() || idx2 >= vertices.size()) {
+			continue;
+		}
 		if (idx0 == idx1 || idx1 == idx2 || idx2 == idx0) {
 			continue;
 		}
 
-		// Create a new face
-		Face face;
-		uint32_t faceIdx = static_cast<uint32_t>(faces.size());
-		uint32_t he0Idx = static_cast<uint32_t>(halfEdges.size());
-		uint32_t he1Idx = he0Idx + 1;
-		uint32_t he2Idx = he0Idx + 2;
+		HalfEdgeMesh::Face face;
+		const uint32_t faceIdx = static_cast<uint32_t>(faces.size());
+		const uint32_t he0Idx = static_cast<uint32_t>(halfEdges.size());
+		const uint32_t he1Idx = he0Idx + 1;
+		const uint32_t he2Idx = he0Idx + 2;
 
-		// Create three HEs for this face
-		HalfEdge he0, he1, he2;
-
-		// Set origin vertex for each halfedge
+		HalfEdgeMesh::HalfEdge he0, he1, he2;
 		he0.origin = idx0;
 		he1.origin = idx1;
 		he2.origin = idx2;
-
-		// Set face for each halfedge
 		he0.face = faceIdx;
 		he1.face = faceIdx;
 		he2.face = faceIdx;
-
-		// Set HE connectivity
 		he0.next = he1Idx;
 		he1.next = he2Idx;
 		he2.next = he0Idx;
-
 		he0.prev = he2Idx;
 		he1.prev = he0Idx;
 		he2.prev = he1Idx;
-
-		// Set HE for face
 		face.halfEdgeIdx = he0Idx;
 
-		// Store HE index for each vertex pair
 		halfEdgeMap[{idx0, idx1}] = he0Idx;
 		halfEdgeMap[{idx1, idx2}] = he1Idx;
 		halfEdgeMap[{idx2, idx0}] = he2Idx;
 
-		// Set HE indices for vertices 
-		vertices[idx0].halfEdgeIdx = he0Idx;  // he0 originates from idx0
-		vertices[idx1].halfEdgeIdx = he1Idx;  // he1 originates from idx1  
-		vertices[idx2].halfEdgeIdx = he2Idx;  // he2 originates from idx2
+		vertices[idx0].halfEdgeIdx = he0Idx;
+		vertices[idx1].halfEdgeIdx = he1Idx;
+		vertices[idx2].halfEdgeIdx = he2Idx;
 
-		// Add the HEs and face to data structures
 		halfEdges.push_back(he0);
 		halfEdges.push_back(he1);
 		halfEdges.push_back(he2);
 		faces.push_back(face);
 	}
 
-	// Connect opposite HEs
 	for (auto& pair : halfEdgeMap) {
-		uint32_t v1 = pair.first.first;
-		uint32_t v2 = pair.first.second;
-		uint32_t heIdx = pair.second;
-
-		// Find opposite HE
+		const uint32_t v1 = pair.first.first;
+		const uint32_t v2 = pair.first.second;
+		const uint32_t heIdx = pair.second;
 		auto oppositeIt = halfEdgeMap.find({ v2, v1 });
 		if (oppositeIt != halfEdgeMap.end()) {
 			halfEdges[heIdx].opposite = oppositeIt->second;
 		}
 	}
 
-	// Create edges in triangle order
 	edges.reserve(halfEdges.size() / 2);
-	
 	std::vector<std::pair<uint32_t, uint32_t>> edgeOrder;
 	std::set<std::pair<uint32_t, uint32_t>> seenEdges;
-	
-	// Process triangles in order, adding edges as first encountered
-	const std::vector<uint32_t>& modelIndices = srcModel.getIndices();
-	for (size_t triangleIdx = 0; triangleIdx < modelIndices.size() / 3; ++triangleIdx) {
-		uint32_t v0 = modelIndices[triangleIdx * 3];
-		uint32_t v1 = modelIndices[triangleIdx * 3 + 1];
-		uint32_t v2 = modelIndices[triangleIdx * 3 + 2];
-		
-		// Check each edge of this triangle: (v0,v1), (v1,v2), (v2,v0)
-		std::vector<std::pair<uint32_t, uint32_t>> triangleEdges = {
+	for (size_t triangleIdx = 0; triangleIdx < indices.size() / 3; ++triangleIdx) {
+		const uint32_t v0 = indices[triangleIdx * 3];
+		const uint32_t v1 = indices[triangleIdx * 3 + 1];
+		const uint32_t v2 = indices[triangleIdx * 3 + 2];
+		const std::vector<std::pair<uint32_t, uint32_t>> triangleEdges = {
 			{v0, v1}, {v1, v2}, {v2, v0}
 		};
-		
 		for (const auto& directedEdge : triangleEdges) {
-			auto unorderedEdge = std::minmax(directedEdge.first, directedEdge.second);
-			
+			const auto unorderedEdge = std::minmax(directedEdge.first, directedEdge.second);
 			if (seenEdges.find(unorderedEdge) == seenEdges.end()) {
 				seenEdges.insert(unorderedEdge);
 				edgeOrder.push_back(directedEdge);
 			}
 		}
 	}
-	
-	// Create Edge objects
+
 	for (const auto& directedEdge : edgeOrder) {
-		uint32_t v1 = directedEdge.first;
-		uint32_t v2 = directedEdge.second;
-		
-		// Look up the halfedge
-		uint32_t foundHE = INVALID_INDEX;
+		const uint32_t v1 = directedEdge.first;
+		const uint32_t v2 = directedEdge.second;
+		uint32_t foundHE = HalfEdgeMesh::INVALID_INDEX;
 		auto it = halfEdgeMap.find({v1, v2});
 		if (it != halfEdgeMap.end()) {
 			foundHE = it->second;
@@ -152,22 +128,55 @@ void HalfEdgeMesh::buildFromModel(const class Model& srcModel) {
 				foundHE = reverseIt->second;
 			}
 		}
-		
-		if (foundHE != INVALID_INDEX) {
-			uint32_t newEdgeIdx = static_cast<uint32_t>(edges.size());
+
+		if (foundHE != HalfEdgeMesh::INVALID_INDEX) {
+			const uint32_t newEdgeIdx = static_cast<uint32_t>(edges.size());
 			edges.emplace_back(foundHE);
-			
-			// Set both halfedges of this edge to point to the same edge index
 			halfEdges[foundHE].edgeIdx = newEdgeIdx;
-			uint32_t oppositeHE = halfEdges[foundHE].opposite;
-			if (oppositeHE != INVALID_INDEX) {
+			const uint32_t oppositeHE = halfEdges[foundHE].opposite;
+			if (oppositeHE != HalfEdgeMesh::INVALID_INDEX) {
 				halfEdges[oppositeHE].edgeIdx = newEdgeIdx;
 			}
 		}
 	}
+}
+
+} // namespace
+
+void HalfEdgeMesh::buildFromModel(const class Model& srcModel) {
+	vertices.clear();
+	edges.clear();
+	faces.clear();
+	halfEdges.clear();
+
+	std::vector<glm::vec3> vertexPositions;
+	vertexPositions.reserve(srcModel.getVertexCount());
+	for (const ::Vertex& vertex : srcModel.getVertices()) {
+		vertexPositions.push_back(vertex.pos);
+	}
+	buildFromIndexedMesh(*this, vertexPositions, srcModel.getIndices());
 
 	if (!isManifold()) {
 		std::cerr << "[HalfEdgeMesh] Mesh is not manifold" << std::endl;
+		return;
+	}
+
+	initializeIntrinsicLengths();
+}
+
+void HalfEdgeMesh::buildFromGeometry(const GeometryData& geometry) {
+	std::vector<glm::vec3> vertexPositions;
+	vertexPositions.reserve(geometry.pointPositions.size() / 3);
+	for (size_t index = 0; index + 2 < geometry.pointPositions.size(); index += 3) {
+		vertexPositions.emplace_back(
+			geometry.pointPositions[index],
+			geometry.pointPositions[index + 1],
+			geometry.pointPositions[index + 2]);
+	}
+	buildFromIndexedMesh(*this, vertexPositions, geometry.triangleIndices);
+
+	if (!isManifold()) {
+		std::cerr << "[HalfEdgeMesh] GeometryData mesh is not manifold" << std::endl;
 		return;
 	}
 

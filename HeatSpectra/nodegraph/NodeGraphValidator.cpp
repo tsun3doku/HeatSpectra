@@ -12,12 +12,18 @@ NodeDataType inferDataTypeFromSocketValueType(NodeGraphValueType valueType) {
     switch (valueType) {
     case NodeGraphValueType::Mesh:
         return NodeDataType::Geometry;
+    case NodeGraphValueType::Intrinsic:
+        return NodeDataType::Intrinsic;
     case NodeGraphValueType::HeatReceiver:
         return NodeDataType::HeatReceiver;
     case NodeGraphValueType::HeatSource:
         return NodeDataType::HeatSource;
-    case NodeGraphValueType::ContactPair:
-        return NodeDataType::ContactPair;
+    case NodeGraphValueType::Contact:
+        return NodeDataType::Contact;
+    case NodeGraphValueType::Heat:
+        return NodeDataType::Heat;
+    case NodeGraphValueType::Voronoi:
+        return NodeDataType::Voronoi;
     case NodeGraphValueType::ScalarFloat:
         return NodeDataType::ScalarFloat;
     case NodeGraphValueType::ScalarInt:
@@ -36,12 +42,18 @@ const char* nodeDataTypeName(NodeDataType dataType) {
     switch (dataType) {
     case NodeDataType::Geometry:
         return "geometry";
+    case NodeDataType::Intrinsic:
+        return "intrinsic";
     case NodeDataType::HeatReceiver:
         return "heat_receiver";
     case NodeDataType::HeatSource:
         return "heat_source";
-    case NodeDataType::ContactPair:
-        return "contact_pair";
+    case NodeDataType::Contact:
+        return "contact";
+    case NodeDataType::Heat:
+        return "heat";
+    case NodeDataType::Voronoi:
+        return "voronoi";
     case NodeDataType::ScalarFloat:
         return "scalar_float";
     case NodeDataType::ScalarInt:

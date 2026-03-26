@@ -1,4 +1,4 @@
-﻿#include "FrameStats.hpp"
+#include "FrameStats.hpp"
 
 #include "render/SceneRenderer.hpp"
 

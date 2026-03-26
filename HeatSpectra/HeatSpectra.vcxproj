@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -33,6 +33,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -40,12 +41,14 @@
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -53,6 +56,7 @@
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="$(QtMsBuild)\qt_defaults.props" Condition="Exists('$(QtMsBuild)\qt_defaults.props')" />
@@ -204,6 +208,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="nodegraph\NodeGraphRegistry.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphUtils.cpp" />
     <ClCompile Include="scene\Camera.cpp" />
     <ClCompile Include="scene\CameraController.cpp" />
     <ClCompile Include="scene\MousePicker.cpp" />
@@ -219,6 +225,10 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="runtime\VulkanCoreContext.cpp" />
     <ClCompile Include="runtime\SceneContext.cpp" />
     <ClCompile Include="runtime\RenderContext.cpp" />
+    <ClCompile Include="runtime\ContactPreviewStore.cpp" />
+    <ClCompile Include="runtime\ComputeCache.cpp" />
+    <ClCompile Include="runtime\RuntimePackageCompiler.cpp" />
+    <ClCompile Include="runtime\RuntimePayloadController.cpp" />
     <ClCompile Include="runtime\RuntimeController.cpp" />
     <ClCompile Include="runtime\RenderSettingsManager.cpp" />
     <ClCompile Include="runtime\RenderSettingsController.cpp" />
@@ -228,12 +238,11 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="runtime\RuntimeExecutionController.cpp" />
     <ClCompile Include="runtime\RuntimeSystems.cpp" />
     <ClCompile Include="scene\SceneController.cpp" />
-    <ClCompile Include="scene\ModelRegistry.cpp" />
     <ClCompile Include="vulkan\VulkanInstanceContext.cpp" />
     <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp" />
     <ClCompile Include="heat\ContactInterface.cpp" />
-    <ClCompile Include="heat\ContactSystemController.cpp" />
-    <ClCompile Include="heat\ContactSystem.cpp" />
+    <ClCompile Include="contact\ContactSystemController.cpp" />
+    <ClCompile Include="contact\ContactSystem.cpp" />
     <ClCompile Include="renderers\ContactLineRenderer.cpp" />
     <ClCompile Include="framegraph\FrameSync.cpp" />
     <ClCompile Include="framegraph\FrameGraph.cpp" />
@@ -255,17 +264,31 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="mesh\\remesher\\HalfEdgeMesh.cpp" />
     <ClCompile Include="spatial\HashGrid.cpp" />
     <ClCompile Include="renderers\HashGridRenderer.cpp" />
-    <ClCompile Include="renderers\HeatRenderer.cpp" />
+    <ClCompile Include="renderers\HeatReceiverRenderer.cpp" />
+    <ClCompile Include="renderers\HeatSourceRenderer.cpp" />
     <ClCompile Include="util\HDR.cpp" />
-    <ClCompile Include="heat\HeatReceiver.cpp" />
+    <ClCompile Include="heat\HeatReceiverRuntime.cpp" />
+    <ClCompile Include="voronoi\VoronoiBuilder.cpp" />
+    <ClCompile Include="voronoi\VoronoiGeometryRuntime.cpp" />
+    <ClCompile Include="voronoi\VoronoiModelRuntime.cpp" />
+    <ClCompile Include="voronoi\VoronoiSurfaceStage.cpp" />
+    <ClCompile Include="voronoi\VoronoiSurfaceRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemPresets.cpp" />
-    <ClCompile Include="heat\HeatSource.cpp" />
+    <ClCompile Include="heat\HeatSourceRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemController.cpp" />
     <ClCompile Include="heat\HeatSystem.cpp" />
+    <ClCompile Include="heat\VoronoiSystem.cpp" />
+    <ClCompile Include="heat\VoronoiSystemRuntime.cpp" />
+    <ClCompile Include="heat\VoronoiSystemController.cpp" />
     <ClCompile Include="heat\HeatSystemRuntime.cpp" />
+    <ClCompile Include="heat\HeatSystemSimRuntime.cpp" />
+    <ClCompile Include="heat\HeatSystemSurfaceRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemResources.cpp" />
     <ClCompile Include="heat\HeatSystemVoronoiStage.cpp" />
     <ClCompile Include="heat\HeatSystemContactStage.cpp" />
+    <ClCompile Include="contact\ContactSystemRuntime.cpp" />
+    <ClCompile Include="heat\HeatContactRuntime.cpp" />
+    <ClCompile Include="heat\HeatSystemSimStage.cpp" />
     <ClCompile Include="heat\HeatSystemSurfaceStage.cpp" />
     <ClCompile Include="heat\HeatSystemDebugStage.cpp" />
     <ClCompile Include="heat\HeatSystemRenderStage.cpp" />
@@ -275,28 +298,37 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="nodegraph\NodeGraphController.cpp" />
     <ClCompile Include="nodegraph\NodeGraphDocument.cpp" />
     <ClCompile Include="nodegraph\NodeGraphDock.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphEditor.cpp" />
     <ClCompile Include="nodegraph\NodeGraphDataTypes.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphHash.cpp" />
     <ClCompile Include="nodegraph\NodeGraphRuntime.cpp" />
     <ClCompile Include="nodegraph\NodeGraphKernels.cpp" />
     <ClCompile Include="nodegraph\NodeGraphDebugStore.cpp" />
-    <ClCompile Include="nodegraph\NodeSolverController.cpp" />
     <ClCompile Include="nodegraph\NodeModel.cpp" />
+    <ClCompile Include="nodegraph\NodeModelTransform.cpp" />
     <ClCompile Include="nodegraph\NodeModelPanel.cpp" />
+    <ClCompile Include="nodegraph\NodeTransform.cpp" />
+    <ClCompile Include="nodegraph\NodeTransformPanel.cpp" />
     <ClCompile Include="nodegraph\NodeGroup.cpp" />
     <ClCompile Include="nodegraph\NodeGroupPanel.cpp" />
     <ClCompile Include="nodegraph\NodeRemesh.cpp" />
     <ClCompile Include="nodegraph\NodeRemeshPanel.cpp" />
+    <ClCompile Include="nodegraph\NodeVoronoiPanel.cpp" />
     <ClCompile Include="nodegraph\NodeHeatReceiver.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSource.cpp" />
-    <ClCompile Include="nodegraph\NodeContactPair.cpp" />
+    <ClCompile Include="nodegraph\NodeHeatSourcePanel.cpp" />
+    <ClCompile Include="nodegraph\NodeContact.cpp" />
+    <ClCompile Include="nodegraph\NodeVoronoi.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp" />
     <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp" />
-    <ClCompile Include="nodegraph\NodeContactPairPanel.cpp" />
+    <ClCompile Include="nodegraph\NodeContactPanel.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp" />
     <ClCompile Include="nodegraph\NodePanelUtils.cpp" />
-    <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphCompiler.cpp" />
     <ClCompile Include="nodegraph\NodeInspectorDialog.cpp" />
     <ClCompile Include="nodegraph\NodeGraphScene.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphSceneStyle.cpp" />
+    <ClCompile Include="nodegraph\NodeGraphSceneUtils.cpp" />
     <ClCompile Include="nodegraph\NodeGraphTypes.cpp" />
     <ClCompile Include="nodegraph\NodeGraphValidator.cpp" />
     <ClCompile Include="mesh\MeshModifiers.cpp" />
@@ -364,6 +396,8 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <None Include="shaders\hash_grid_vis.frag" />
     <None Include="shaders\hash_grid_vis.vert" />
     <None Include="shaders\heat_buffer.frag" />
+    <None Include="shaders\heat_source.frag" />
+    <None Include="shaders\heat_source.vert" />
     <None Include="shaders\heat_contact_centroid.comp" />
     <None Include="shaders\heat_geometry.slang" />
     <None Include="shaders\heat_source.comp" />
@@ -402,11 +436,19 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="app\SwapchainStage.hpp" />
     <ClInclude Include="app\SwapchainManager.hpp" />
     <ClInclude Include="app\VulkanWindow.hpp" />
+    <ClInclude Include="contact\ContactTypes.hpp" />
+    <ClInclude Include="domain\ContactData.hpp" />
+    <ClInclude Include="domain\RemeshParams.hpp" />
+    <ClInclude Include="domain\VoronoiParams.hpp" />
+    <ClInclude Include="domain\VoronoiData.hpp" />
+    <ClInclude Include="heat\ContactSampling.hpp" />
     <ClInclude Include="heat\HeatContactParams.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphPayloadTypes.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphRegistry.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphUtils.hpp" />
     <ClInclude Include="vulkan\CommandBufferManager.hpp" />
     <ClInclude Include="util\ComputeTiming.hpp" />
     <ClInclude Include="framegraph\FrameController.hpp" />
-    <ClInclude Include="framegraph\FrameSimulation.hpp" />
     <ClInclude Include="framegraph\FrameTypes.hpp" />
     <ClInclude Include="framegraph\FrameUpdateStage.hpp" />
     <ClInclude Include="framegraph\FrameComputeStage.hpp" />
@@ -420,6 +462,13 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="runtime\VulkanCoreContext.hpp" />
     <ClInclude Include="runtime\SceneContext.hpp" />
     <ClInclude Include="runtime\RenderContext.hpp" />
+    <ClInclude Include="runtime\ContactPreviewStore.hpp" />
+    <ClInclude Include="runtime\ComputeCache.hpp" />
+    <ClInclude Include="runtime\RuntimePackageCompiler.hpp" />
+    <ClInclude Include="runtime\RuntimePackages.hpp" />
+    <ClInclude Include="runtime\RuntimePayloadController.hpp" />
+    <ClInclude Include="runtime\RuntimeContactTypes.hpp" />
+    <ClInclude Include="runtime\RuntimeThermalTypes.hpp" />
     <ClInclude Include="runtime\RuntimeController.hpp" />
     <ClInclude Include="runtime\RenderSettingsManager.hpp" />
     <ClInclude Include="runtime\RenderSettingsController.hpp" />
@@ -432,12 +481,11 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="render\SceneColorSpace.hpp" />
     <ClInclude Include="render\WindowRuntimeState.hpp" />
     <ClInclude Include="scene\SceneController.hpp" />
-    <ClInclude Include="scene\ModelRegistry.hpp" />
     <ClInclude Include="vulkan\VulkanInstanceContext.hpp" />
     <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp" />
     <ClInclude Include="heat\ContactInterface.hpp" />
-    <ClInclude Include="heat\ContactSystemController.hpp" />
-    <ClInclude Include="heat\ContactSystem.hpp" />
+    <ClInclude Include="contact\ContactSystemController.hpp" />
+    <ClInclude Include="contact\ContactSystem.hpp" />
     <ClInclude Include="renderers\ContactLineRenderer.hpp" />
     <ClInclude Include="framegraph\FrameSync.hpp" />
     <ClInclude Include="framegraph\FrameGraph.hpp" />
@@ -465,18 +513,34 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="mesh\\remesher\\HalfEdgeMesh.hpp" />
     <ClInclude Include="spatial\HashGrid.hpp" />
     <ClInclude Include="renderers\HashGridRenderer.hpp" />
-    <ClInclude Include="renderers\HeatRenderer.hpp" />
+    <ClInclude Include="renderers\HeatReceiverRenderer.hpp" />
+    <ClInclude Include="renderers\HeatSourceRenderer.hpp" />
     <ClInclude Include="util\HDR.hpp" />
-    <ClInclude Include="heat\HeatReceiver.hpp" />
+    <ClInclude Include="heat\HeatReceiverRuntime.hpp" />
+    <ClInclude Include="voronoi\VoronoiBuilder.hpp" />
+    <ClInclude Include="voronoi\VoronoiDomain.hpp" />
+    <ClInclude Include="voronoi\VoronoiGeometryRuntime.hpp" />
+    <ClInclude Include="voronoi\VoronoiModelRuntime.hpp" />
+    <ClInclude Include="voronoi\VoronoiResources.hpp" />
+    <ClInclude Include="voronoi\VoronoiStageContext.hpp" />
+    <ClInclude Include="voronoi\VoronoiSurfaceStage.hpp" />
+    <ClInclude Include="voronoi\VoronoiSurfaceRuntime.hpp" />
+    <ClInclude Include="voronoi\VoronoiSystemResources.hpp" />
     <ClInclude Include="heat\HeatSystemPresets.hpp" />
-    <ClInclude Include="heat\HeatSource.hpp" />
+    <ClInclude Include="heat\HeatSourceRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemController.hpp" />
     <ClInclude Include="heat\HeatSystem.hpp" />
+    <ClInclude Include="heat\VoronoiSystem.hpp" />
+    <ClInclude Include="heat\VoronoiSystemRuntime.hpp" />
+    <ClInclude Include="heat\VoronoiSystemController.hpp" />
     <ClInclude Include="heat\HeatSystemRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemResources.hpp" />
     <ClInclude Include="heat\HeatSystemStageContext.hpp" />
     <ClInclude Include="heat\HeatSystemVoronoiStage.hpp" />
     <ClInclude Include="heat\HeatSystemContactStage.hpp" />
+    <ClInclude Include="contact\ContactSystemRuntime.hpp" />
+    <ClInclude Include="heat\HeatContactRuntime.hpp" />
+    <ClInclude Include="heat\HeatSystemSimStage.hpp" />
     <ClInclude Include="heat\HeatSystemSurfaceStage.hpp" />
     <ClInclude Include="heat\HeatSystemDebugStage.hpp" />
     <ClInclude Include="heat\HeatSystemRenderStage.hpp" />
@@ -486,28 +550,37 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="nodegraph\NodeGraphController.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDocument.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDock.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphEditor.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphHash.hpp" />
     <ClInclude Include="nodegraph\NodeGraphRuntime.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDebugStore.hpp" />
     <ClInclude Include="nodegraph\NodeGraphKernels.hpp" />
-    <ClInclude Include="nodegraph\NodeSolverController.hpp" />
     <ClInclude Include="nodegraph\NodeModel.hpp" />
+    <ClInclude Include="nodegraph\NodeModelTransform.hpp" />
     <ClInclude Include="nodegraph\NodeModelPanel.hpp" />
+    <ClInclude Include="nodegraph\NodeTransform.hpp" />
+    <ClInclude Include="nodegraph\NodeTransformPanel.hpp" />
     <ClInclude Include="nodegraph\NodeGroup.hpp" />
     <ClInclude Include="nodegraph\NodeGroupPanel.hpp" />
     <ClInclude Include="nodegraph\NodeRemesh.hpp" />
     <ClInclude Include="nodegraph\NodeRemeshPanel.hpp" />
+    <ClInclude Include="nodegraph\NodeVoronoiPanel.hpp" />
     <ClInclude Include="nodegraph\NodeHeatReceiver.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSource.hpp" />
-    <ClInclude Include="nodegraph\NodeContactPair.hpp" />
+    <ClInclude Include="nodegraph\NodeHeatSourcePanel.hpp" />
+    <ClInclude Include="nodegraph\NodeContact.hpp" />
+    <ClInclude Include="nodegraph\NodeVoronoi.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp" />
     <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp" />
-    <ClInclude Include="nodegraph\NodeContactPairPanel.hpp" />
+    <ClInclude Include="nodegraph\NodeContactPanel.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp" />
     <ClInclude Include="nodegraph\NodePanelUtils.hpp" />
-    <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphCompiler.hpp" />
     <ClInclude Include="nodegraph\NodeInspectorDialog.hpp" />
     <ClInclude Include="nodegraph\NodeGraphScene.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphSceneStyle.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphSceneUtils.hpp" />
     <ClInclude Include="nodegraph\NodeGraphTypes.hpp" />
     <ClInclude Include="nodegraph\NodeGraphValidator.hpp" />
     <ClInclude Include="mesh\MeshModifiers.hpp" />

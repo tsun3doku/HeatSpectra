@@ -1,15 +1,15 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 #include "scene/SceneView.hpp"
-#include "FrameSimulation.hpp"
 
 #include <vector>
 
+class HeatSystem;
+class VoronoiSystem;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
-class Remesher;
 
 namespace render {
 
@@ -37,8 +37,8 @@ struct OverlayParams {
 };
 
 struct RenderServices {
-    Remesher* remesher = nullptr;
-    FrameSimulation* simulation = nullptr;
+    HeatSystem* heatSystem = nullptr;
+    VoronoiSystem* voronoiSystem = nullptr;
     ModelSelection* modelSelection = nullptr;
     GizmoController* gizmoController = nullptr;
     WireframeRenderer* wireframeRenderer = nullptr;

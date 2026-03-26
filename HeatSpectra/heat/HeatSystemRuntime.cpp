@@ -1,148 +1,72 @@
-﻿#include "HeatSystemRuntime.hpp"
+#include "HeatSystemRuntime.hpp"
 
 #include "vulkan/CommandBufferManager.hpp"
-#include "HeatReceiver.hpp"
-#include "HeatSource.hpp"
+#include "HeatSourceRuntime.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "scene/Model.hpp"
-#include "mesh/remesher/Remesher.hpp"
-#include "vulkan/ResourceManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 #include <iostream>
 #include <unordered_set>
 
-HeatSystemRuntime::HeatSystemRuntime() = default;
-
-HeatSystemRuntime::~HeatSystemRuntime() = default;
-
-const HeatSystemRuntime::SourceCoupling* HeatSystemRuntime::findSourceCouplingForModel(const Model* model) const {
-    if (!model) {
-        return nullptr;
-    }
-
-    for (const SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (sourceCoupling.model == model) {
-            return &sourceCoupling;
+const HeatSystemRuntime::SourceBinding* HeatSystemRuntime::findBaseSourceBinding() const {
+    for (const SourceBinding& sourceBinding : sourceBindings) {
+        if (sourceBinding.geometryPackage.runtimeModelId != 0 && sourceBinding.heatSource) {
+            return &sourceBinding;
         }
     }
 
     return nullptr;
 }
 
-const HeatSystemRuntime::SourceCoupling* HeatSystemRuntime::findPrimarySourceCoupling() const {
-    for (const SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (sourceCoupling.model && sourceCoupling.heatSource) {
-            return &sourceCoupling;
-        }
-    }
+void HeatSystemRuntime::initializeModelBindings(
+    VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator,
+    CommandPool& renderCommandPool,
+    const HeatPackage& heatPackage) {
+    cleanupModelBindings();
 
-    return nullptr;
-}
-
-Model* HeatSystemRuntime::findPrimaryReceiverModel() const {
-    for (const auto& receiver : receivers) {
-        if (receiver) {
-            return &receiver->getModel();
-        }
-    }
-
-    return nullptr;
-}
-
-void HeatSystemRuntime::initializeModelBindings(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
-    Remesher& remesher, CommandPool& renderCommandPool, const std::vector<uint32_t>& activeSourceModelIds, const std::vector<uint32_t>& activeReceiverModelIds) {
-    cleanupModelBindings(memoryAllocator);
-
+    const std::size_t pairCount = heatPackage.sourceRuntimeModelIds.size();
     std::unordered_set<uint32_t> seenSourceIds;
-    for (uint32_t sourceId : activeSourceModelIds) {
+    for (std::size_t index = 0; index < pairCount; ++index) {
+        const uint32_t sourceId = heatPackage.sourceRuntimeModelIds[index];
         if (sourceId == 0 || !seenSourceIds.insert(sourceId).second) {
             continue;
         }
 
-        Model* sourceModel = resourceManager.getModelByID(sourceId);
-        if (!sourceModel) {
+        const GeometryData& geometry = heatPackage.sourceGeometries[index];
+        if (geometry.intrinsicHandle.key == 0) {
             continue;
         }
 
-        SourceCoupling sourceCoupling{};
-        sourceCoupling.modelId = sourceId;
-        sourceCoupling.model = sourceModel;
-        sourceCoupling.heatSource = std::make_unique<HeatSource>(
+        SourceBinding sourceBinding{};
+        sourceBinding.geometryPackage.geometry = geometry;
+        sourceBinding.geometryPackage.runtimeModelId = sourceId;
+        const auto tempIt = heatPackage.sourceTemperatureByRuntimeId.find(sourceId);
+        const float initialTemperature =
+            (tempIt != heatPackage.sourceTemperatureByRuntimeId.end()) ? tempIt->second : 100.0f;
+        sourceBinding.heatSource = std::make_unique<HeatSourceRuntime>(
             vulkanDevice,
             memoryAllocator,
-            *sourceModel,
-            remesher,
-            renderCommandPool);
-        if (!sourceCoupling.heatSource || !sourceCoupling.heatSource->isInitialized()) {
+            geometry,
+            heatPackage.sourceIntrinsics[index],
+            renderCommandPool,
+            initialTemperature);
+        if (!sourceBinding.heatSource || !sourceBinding.heatSource->isInitialized()) {
             std::cerr << "[HeatSystemRuntime] Failed to initialize heat source for model " << sourceId << std::endl;
-            if (sourceCoupling.heatSource) {
-                sourceCoupling.heatSource->cleanup();
+            if (sourceBinding.heatSource) {
+                sourceBinding.heatSource->cleanup();
             }
             continue;
         }
-        sourceCouplings.push_back(std::move(sourceCoupling));
-    }
-
-    std::unordered_set<uint32_t> sourceIdSet;
-    for (const SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (sourceCoupling.modelId != 0) {
-            sourceIdSet.insert(sourceCoupling.modelId);
-        }
-    }
-
-    std::unordered_set<uint32_t> seenReceiverIds;
-    for (uint32_t receiverId : activeReceiverModelIds) {
-        if (receiverId == 0 ||
-            sourceIdSet.find(receiverId) != sourceIdSet.end() ||
-            !seenReceiverIds.insert(receiverId).second) {
-            continue;
-        }
-
-        Model* receiverModel = resourceManager.getModelByID(receiverId);
-        if (!receiverModel) {
-            continue;
-        }
-
-        addReceiver(vulkanDevice, memoryAllocator, remesher, renderCommandPool, receiverModel);
-        receiverModelIds.push_back(receiverId);
+        sourceBindings.push_back(std::move(sourceBinding));
     }
 }
 
-void HeatSystemRuntime::cleanupModelBindings(MemoryAllocator& memoryAllocator) {
-    (void)memoryAllocator;
-
-    for (SourceCoupling& sourceCoupling : sourceCouplings) {
-        if (sourceCoupling.heatSource) {
-            sourceCoupling.heatSource->cleanup();
+void HeatSystemRuntime::cleanupModelBindings() {
+    for (SourceBinding& sourceBinding : sourceBindings) {
+        if (sourceBinding.heatSource) {
+            sourceBinding.heatSource->cleanup();
         }
     }
-    sourceCouplings.clear();
-
-    for (auto& receiver : receivers) {
-        if (receiver) {
-            receiver->cleanup();
-        }
-    }
-    receivers.clear();
-    receiverModelIds.clear();
-}
-
-void HeatSystemRuntime::addReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Remesher& remesher, CommandPool& renderCommandPool, Model* model) {
-    if (!model) {
-        return;
-    }
-
-    auto receiver = std::make_unique<HeatReceiver>(vulkanDevice, memoryAllocator, *model, remesher, renderCommandPool);
-    if (!receiver->createReceiverBuffers()) {
-        std::cerr << "[HeatSystemRuntime] Failed to create receiver buffers for model " << model->getRuntimeModelId() << std::endl;
-        receiver->cleanup();
-        return;
-    }
-    if (!receiver->initializeReceiverBuffer()) {
-        std::cerr << "[HeatSystemRuntime] Failed to initialize receiver staging buffer for model " << model->getRuntimeModelId() << std::endl;
-        receiver->cleanup();
-        return;
-    }
-    receivers.push_back(std::move(receiver));
+    sourceBindings.clear();
 }

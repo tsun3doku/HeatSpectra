@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 class NodeGraphBridge;
 
@@ -27,11 +28,14 @@ private:
     void applyChange(const NodeGraphChange& change);
     void executeDataflow(NodeGraphRuntimeExecutionState* outState);
     void rebuildNodeById();
-    static uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
+    void clearNodeCaches();
+    void invalidateNodeCaches(const std::unordered_set<uint32_t>& dirtyNodeIds);
 
     NodeGraphBridge* bridge = nullptr;
     NodeRuntimeServices runtimeServices{};
     NodeGraphKernels kernels;
     NodeGraphState graphState{};
     std::unordered_map<uint32_t, const NodeGraphNode*> nodeById{};
+    std::unordered_map<uint32_t, uint64_t> lastHashByNodeId{};
+    std::unordered_map<uint32_t, std::vector<NodeDataBlock>> cachedOutputsByNodeId{};
 };

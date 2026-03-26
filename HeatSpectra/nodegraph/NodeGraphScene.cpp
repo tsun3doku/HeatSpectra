@@ -1,6 +1,7 @@
 #include "NodeGraphScene.hpp"
 #include "NodeGraphNodeRectItem.hpp"
-#include "render/SceneColorSpace.hpp"
+#include "NodeGraphSceneStyle.hpp"
+#include "NodeGraphSceneUtils.hpp"
 
 #include <QBrush>
 #include <QColor>
@@ -18,7 +19,6 @@
 #include <QVariant>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -26,163 +26,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-namespace {
-
-constexpr qreal nodeWidth = 180.0;
-constexpr qreal nodeHeight = 94.0;
-constexpr qreal nodeHeaderHeight = nodeHeight * 0.25;
-constexpr qreal socketStartY = nodeHeaderHeight + 16.0;
-constexpr qreal socketSpacing = 18.0;
-constexpr qreal socketRadius = 5.0;
-const std::array<float, 4> clearColor = clearColorSRGBA();
-
-QColor categoryColor(NodeGraphNodeCategory category) {
-    switch (category) {
-    case NodeGraphNodeCategory::Model:
-        return QColor(105, 92, 210);
-    case NodeGraphNodeCategory::PointSurface:
-        return QColor(72, 172, 96);
-    case NodeGraphNodeCategory::Meshing:
-        return QColor(196, 62, 62);
-    case NodeGraphNodeCategory::System:
-        return QColor(219, 136, 46);
-    case NodeGraphNodeCategory::Custom:
-        return QColor(88, 100, 126);
-    }
-
-    return QColor(88, 100, 126);
-}
-
-QColor valueTypeColor(NodeGraphValueType valueType) {
-    switch (valueType) {
-    case NodeGraphValueType::Mesh:
-        return QColor(113, 104, 232);
-    case NodeGraphValueType::HeatReceiver:
-        return QColor(250, 120, 96);
-    case NodeGraphValueType::HeatSource:
-        return QColor(247, 174, 92);
-    case NodeGraphValueType::ContactPair:
-        return QColor(181, 132, 240);
-    case NodeGraphValueType::Point:
-        return QColor(96, 204, 120);
-    case NodeGraphValueType::Vector3:
-        return QColor(92, 188, 224);
-    case NodeGraphValueType::ScalarFloat:
-        return QColor(241, 165, 76);
-    case NodeGraphValueType::ScalarInt:
-        return QColor(230, 142, 74);
-    case NodeGraphValueType::ScalarBool:
-        return QColor(235, 214, 97);
-    case NodeGraphValueType::Unknown:
-        return QColor(152, 162, 180);
-    }
-
-    return QColor(152, 162, 180);
-}
-
-qreal socketY(std::size_t index) {
-    return socketStartY + static_cast<qreal>(index) * socketSpacing;
-}
-
-QPointF inputAnchor(const QRectF& rect) {
-    return QPointF(rect.left(), rect.center().y());
-}
-
-QPointF outputAnchor(const QRectF& rect) {
-    return QPointF(rect.right(), rect.center().y());
-}
-
-QPainterPath buildEdgePath(
-    const QPointF& src,
-    const QPointF& dst,
-    NodeGraphSocketDirection srcDirection = NodeGraphSocketDirection::Output,
-    NodeGraphSocketDirection dstDirection = NodeGraphSocketDirection::Input) {
-    const qreal dx = dst.x() - src.x();
-    const qreal baseTangent = std::max(48.0, std::min(240.0, std::fabs(dx) * 0.5));
-
-    const qreal srcSign = (srcDirection == NodeGraphSocketDirection::Output) ? 1.0 : -1.0;
-    const qreal dstSign = (dstDirection == NodeGraphSocketDirection::Input) ? -1.0 : 1.0;
-
-    QPainterPath path(src);
-    path.cubicTo(
-        QPointF(src.x() + srcSign * baseTangent, src.y()),
-        QPointF(dst.x() + dstSign * baseTangent, dst.y()),
-        dst);
-    return path;
-}
-
-void setDecorativeItemFlags(QGraphicsItem* item) {
-    if (!item) {
-        return;
-    }
-
-    item->setAcceptedMouseButtons(Qt::NoButton);
-    item->setFlag(QGraphicsItem::ItemIsSelectable, false);
-    item->setFlag(QGraphicsItem::ItemIsMovable, false);
-}
-
-NodeGraphEdgeId findIncomingEdgeForInput(const NodeGraphState& state, NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
-    for (const NodeGraphEdge& edge : state.edges) {
-        if (edge.toNode == nodeId && edge.toSocket == socketId) {
-            return edge.id;
-        }
-    }
-
-    return {};
-}
-
-const NodeGraphNode* findStateNodeById(const NodeGraphState& state, NodeGraphNodeId nodeId) {
-    for (const NodeGraphNode& node : state.nodes) {
-        if (node.id == nodeId) {
-            return &node;
-        }
-    }
-    return nullptr;
-}
-
-int findSocketIndexById(const std::vector<NodeGraphSocket>& sockets, NodeGraphSocketId socketId) {
-    for (std::size_t index = 0; index < sockets.size(); ++index) {
-        if (sockets[index].id == socketId) {
-            return static_cast<int>(index);
-        }
-    }
-    return -1;
-}
-
-NodeGraphSocketId socketByIndex(const std::vector<NodeGraphSocket>& sockets, int index) {
-    if (index < 0 || index >= static_cast<int>(sockets.size())) {
-        return {};
-    }
-    return sockets[static_cast<std::size_t>(index)].id;
-}
-
-std::vector<NodeGraphSocketId> matchingInputSocketsByType(const NodeGraphNode& node, NodeGraphValueType valueType) {
-    std::vector<NodeGraphSocketId> sockets;
-    for (const NodeGraphSocket& socket : node.inputs) {
-        if (socket.valueType == valueType) {
-            sockets.push_back(socket.id);
-        }
-    }
-    return sockets;
-}
-
-int valueTypeOrdinalAtInputIndex(const NodeGraphNode& node, int inputIndex) {
-    if (inputIndex < 0 || inputIndex >= static_cast<int>(node.inputs.size())) {
-        return -1;
-    }
-
-    const NodeGraphValueType valueType = node.inputs[static_cast<std::size_t>(inputIndex)].valueType;
-    int ordinal = 0;
-    for (int index = 0; index <= inputIndex; ++index) {
-        if (node.inputs[static_cast<std::size_t>(index)].valueType == valueType) {
-            ++ordinal;
-        }
-    }
-    return ordinal - 1;
-}
-
-}
 
 NodeGraphScene::NodeGraphScene(QObject* parent)
     : QGraphicsScene(parent) {
@@ -197,7 +40,14 @@ NodeGraphScene::NodeGraphScene(QObject* parent)
 
 void NodeGraphScene::setBridge(NodeGraphBridge* bridgePtr) {
     bridge = bridgePtr;
-    refreshFromGraph();
+    editor.setBridge(bridgePtr);
+    if (!bridge) {
+        clearSceneState();
+        return;
+    }
+    const NodeGraphState state = bridge->state();
+    lastSeenRevision = state.revision;
+    buildFromState(state);
 }
 
 void NodeGraphScene::setNodeActivatedCallback(NodeActivatedCallback callback) {
@@ -212,144 +62,306 @@ void NodeGraphScene::setStatusCallback(StatusCallback callback) {
     statusCallback = std::move(callback);
 }
 
-void NodeGraphScene::refreshFromGraph() {
-    const std::vector<NodeGraphNodeId> selectedNodeIds = selectedTopLevelNodeIds();
-
-    suppressSelectionChangedNotifications = true;
-    clearActiveDragLine();
-    hoveredNodeItem = nullptr;
-    hoveredEdgeItem = nullptr;
-    inputSocketItemsBySocket.clear();
-    outputSocketItemsBySocket.clear();
-    clear();
-
+void NodeGraphScene::applyPendingChanges() {
     if (!bridge) {
-        suppressSelectionChangedNotifications = false;
-        notifySelectedNodeChanged();
         return;
     }
 
-    const NodeGraphState state = bridge->state();
-    std::unordered_map<uint32_t, QRectF> nodeBoundsById;
-    std::unordered_map<uint32_t, QPointF> inputAnchorBySocketId;
-    std::unordered_map<uint32_t, QPointF> outputAnchorBySocketId;
-    std::unordered_map<uint32_t, NodeGraphValueType> outputValueTypeBySocketId;
-
-    for (const NodeGraphNode& node : state.nodes) {
-        const QColor headerColor = categoryColor(node.category);
-        const QColor nodeBorderColor = headerColor.lighter(150);
-        QGraphicsRectItem* nodeRect = new NodeGraphNodeRectItem(
-            QRectF(0.0, 0.0, nodeWidth, nodeHeight),
-            NodeBasePenColorRole,
-            NodeHoveredRole);
-        nodeRect->setBrush(QBrush(QColor(32, 38, 56)));
-        addItem(nodeRect);
-        nodeRect->setPos(node.x, node.y);
-        nodeRect->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
-        nodeRect->setData(NodeBasePenColorRole, static_cast<qulonglong>(nodeBorderColor.rgba()));
-        nodeRect->setData(NodeHoveredRole, false);
-        nodeRect->setFlag(QGraphicsItem::ItemIsMovable, true);
-        nodeRect->setFlag(QGraphicsItem::ItemIsSelectable, true);
-        nodeRect->setZValue(1.0);
-
-        QGraphicsRectItem* headerRect = new QGraphicsRectItem(0.0, 0.0, nodeWidth, nodeHeaderHeight, nodeRect);
-        headerRect->setPen(QPen(Qt::NoPen));
-        headerRect->setBrush(headerColor);
-        setDecorativeItemFlags(headerRect);
-
-        QGraphicsSimpleTextItem* titleItem = new QGraphicsSimpleTextItem(QString::fromStdString(node.title), nodeRect);
-        titleItem->setBrush(QColor(244, 244, 244));
-        titleItem->setPos(10.0, 8.0);
-        setDecorativeItemFlags(titleItem);
-
-        for (std::size_t index = 0; index < node.inputs.size(); ++index) {
-            const NodeGraphSocket& socket = node.inputs[index];
-            const qreal y = socketY(index);
-
-            QGraphicsSimpleTextItem* inputItem = new QGraphicsSimpleTextItem(QString::fromStdString(socket.name), nodeRect);
-            inputItem->setBrush(QColor(180, 190, 210));
-            inputItem->setPos(12.0, y - 8.0);
-            setDecorativeItemFlags(inputItem);
-
-            QGraphicsEllipseItem* inputSocket = new QGraphicsEllipseItem(-socketRadius, y - socketRadius, socketRadius * 2.0, socketRadius * 2.0, nodeRect);
-            inputSocket->setPen(QPen(QColor(24, 28, 38), 1.0));
-            inputSocket->setBrush(valueTypeColor(socket.valueType));
-            inputSocket->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
-            inputSocket->setData(SocketRole, true);
-            inputSocket->setData(SocketIdRole, static_cast<qulonglong>(socket.id.value));
-            inputSocket->setData(SocketDirectionRole, static_cast<int>(NodeGraphSocketDirection::Input));
-            setDecorativeItemFlags(inputSocket);
-
-            inputAnchorBySocketId[socket.id.value] = nodeRect->mapToScene(QPointF(0.0, y));
-            inputSocketItemsBySocket[socket.id.value] = inputSocket;
-        }
-
-        for (std::size_t index = 0; index < node.outputs.size(); ++index) {
-            const NodeGraphSocket& socket = node.outputs[index];
-            const qreal y = socketY(index);
-
-            QGraphicsSimpleTextItem* outputItem = new QGraphicsSimpleTextItem(QString::fromStdString(socket.name), nodeRect);
-            outputItem->setBrush(QColor(180, 210, 190));
-            outputItem->setPos(nodeWidth - outputItem->boundingRect().width() - 12.0, y - 8.0);
-            setDecorativeItemFlags(outputItem);
-
-            QGraphicsEllipseItem* outputSocket = new QGraphicsEllipseItem(nodeWidth - socketRadius, y - socketRadius, socketRadius * 2.0, socketRadius * 2.0, nodeRect);
-            outputSocket->setPen(QPen(QColor(24, 28, 38), 1.0));
-            outputSocket->setBrush(valueTypeColor(socket.valueType));
-            outputSocket->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
-            outputSocket->setData(SocketRole, true);
-            outputSocket->setData(SocketIdRole, static_cast<qulonglong>(socket.id.value));
-            outputSocket->setData(SocketDirectionRole, static_cast<int>(NodeGraphSocketDirection::Output));
-            setDecorativeItemFlags(outputSocket);
-
-            outputAnchorBySocketId[socket.id.value] = nodeRect->mapToScene(QPointF(nodeWidth, y));
-            outputValueTypeBySocketId[socket.id.value] = socket.valueType;
-            outputSocketItemsBySocket[socket.id.value] = outputSocket;
-        }
-
-        nodeBoundsById[node.id.value] = nodeRect->sceneBoundingRect();
+    NodeGraphDelta delta{};
+    if (!bridge->consumeChanges(lastSeenRevision, delta)) {
+        return;
     }
 
+    applyDelta(delta);
+}
+
+void NodeGraphScene::buildFromState(const NodeGraphState& state) {
+    const std::vector<NodeGraphNodeId> selectedNodeIds = selectedTopLevelNodeIds();
+
+    suppressSelectionChangedNotifications = true;
+    clearSceneState();
+
+    for (const NodeGraphNode& node : state.nodes) {
+        createNodeItem(node);
+    }
     for (const NodeGraphEdge& edge : state.edges) {
-        QPointF src{};
-        QPointF dst{};
-
-        const auto srcSocketIt = outputAnchorBySocketId.find(edge.fromSocket.value);
-        const auto dstSocketIt = inputAnchorBySocketId.find(edge.toSocket.value);
-        if (srcSocketIt != outputAnchorBySocketId.end() && dstSocketIt != inputAnchorBySocketId.end()) {
-            src = srcSocketIt->second;
-            dst = dstSocketIt->second;
-        } else {
-            const auto srcNodeIt = nodeBoundsById.find(edge.fromNode.value);
-            const auto dstNodeIt = nodeBoundsById.find(edge.toNode.value);
-            if (srcNodeIt == nodeBoundsById.end() || dstNodeIt == nodeBoundsById.end()) {
-                continue;
-            }
-
-            src = outputAnchor(srcNodeIt->second);
-            dst = inputAnchor(dstNodeIt->second);
-        }
-
-        QColor edgeColor(120, 200, 255);
-        const auto valueTypeIt = outputValueTypeBySocketId.find(edge.fromSocket.value);
-        if (valueTypeIt != outputValueTypeBySocketId.end()) {
-            edgeColor = valueTypeColor(valueTypeIt->second).lighter(135);
-        }
-
-        QPen edgePen(edgeColor, 2.2);
-        edgePen.setCapStyle(Qt::RoundCap);
-        edgePen.setJoinStyle(Qt::RoundJoin);
-        QGraphicsPathItem* line = addPath(buildEdgePath(src, dst), edgePen);
-        line->setZValue(-1.0);
-        line->setData(EdgeIdRole, static_cast<qulonglong>(edge.id.value));
-        line->setData(EdgeFromSocketRole, static_cast<qulonglong>(edge.fromSocket.value));
-        line->setData(EdgeToSocketRole, static_cast<qulonglong>(edge.toSocket.value));
-        line->setData(EdgeBaseColorRole, static_cast<qulonglong>(edgeColor.rgba()));
+        createEdgeItem(edge);
     }
 
     selectNodesById(selectedNodeIds);
     suppressSelectionChangedNotifications = false;
     notifySelectedNodeChanged();
+}
+
+void NodeGraphScene::applyDelta(const NodeGraphDelta& delta) {
+    if (!bridge) {
+        return;
+    }
+
+    const std::vector<NodeGraphNodeId> selectedNodeIds = selectedTopLevelNodeIds();
+    const NodeGraphState state = bridge->state();
+
+    for (const NodeGraphChange& change : delta.changes) {
+        switch (change.type) {
+        case NodeGraphChangeType::Reset:
+            buildFromState(state);
+            return;
+        case NodeGraphChangeType::NodeUpsert:
+            removeNodeItem(change.node.id);
+            createNodeItem(change.node);
+            for (const NodeGraphEdge& edge : state.edges) {
+                if (edge.fromNode == change.node.id || edge.toNode == change.node.id) {
+                    createEdgeItem(edge);
+                }
+            }
+            break;
+        case NodeGraphChangeType::NodeRemoved:
+            removeNodeItem(change.nodeId);
+            break;
+        case NodeGraphChangeType::EdgeUpsert:
+            createEdgeItem(change.edge);
+            break;
+        case NodeGraphChangeType::EdgeRemoved:
+            removeEdgeItem(change.edgeId);
+            break;
+        }
+    }
+
+    updateEdgePathsFromCurrentLayout();
+    suppressSelectionChangedNotifications = true;
+    selectNodesById(selectedNodeIds);
+    suppressSelectionChangedNotifications = false;
+    notifySelectedNodeChanged();
+}
+
+void NodeGraphScene::clearSceneState() {
+    clearActiveDragLine();
+    hoveredNodeItem = nullptr;
+    hoveredEdgeItem = nullptr;
+    inputSocketItemsBySocket.clear();
+    outputSocketItemsBySocket.clear();
+    outputValueTypeBySocketId.clear();
+    nodeItemsById.clear();
+    edgeItemsById.clear();
+    clear();
+}
+
+QGraphicsRectItem* NodeGraphScene::createNodeItem(const NodeGraphNode& node) {
+    const QColor headerColor = nodegraphscene::categoryColor(node.category);
+    const QColor nodeBorderColor = headerColor.lighter(150);
+
+    QGraphicsRectItem* nodeRect = new NodeGraphNodeRectItem(
+        QRectF(0.0, 0.0, nodegraphscene::nodeWidth, nodegraphscene::nodeHeight),
+        NodeBasePenColorRole,
+        NodeHoveredRole);
+    nodeRect->setBrush(QBrush(QColor(32, 38, 56)));
+    addItem(nodeRect);
+    nodeRect->setPos(node.x, node.y);
+    nodeRect->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
+    nodeRect->setData(NodeBasePenColorRole, static_cast<qulonglong>(nodeBorderColor.rgba()));
+    nodeRect->setData(NodeHoveredRole, false);
+    nodeRect->setFlag(QGraphicsItem::ItemIsMovable, true);
+    nodeRect->setFlag(QGraphicsItem::ItemIsSelectable, true);
+    nodeRect->setZValue(1.0);
+
+    QGraphicsRectItem* headerRect = new QGraphicsRectItem(0.0, 0.0, nodegraphscene::nodeWidth, nodegraphscene::nodeHeaderHeight, nodeRect);
+    headerRect->setPen(QPen(Qt::NoPen));
+    headerRect->setBrush(headerColor);
+    nodegraphscene::setDecorativeItemFlags(headerRect);
+
+    QGraphicsSimpleTextItem* titleItem = new QGraphicsSimpleTextItem(QString::fromStdString(node.title), nodeRect);
+    titleItem->setBrush(QColor(244, 244, 244));
+    titleItem->setPos(10.0, 8.0);
+    nodegraphscene::setDecorativeItemFlags(titleItem);
+
+    for (std::size_t index = 0; index < node.inputs.size(); ++index) {
+        const NodeGraphSocket& socket = node.inputs[index];
+        const qreal y = nodegraphscene::socketY(index);
+
+        QGraphicsSimpleTextItem* inputItem = new QGraphicsSimpleTextItem(QString::fromStdString(socket.name), nodeRect);
+        inputItem->setBrush(QColor(180, 190, 210));
+        inputItem->setPos(12.0, y - 8.0);
+        nodegraphscene::setDecorativeItemFlags(inputItem);
+
+        QGraphicsEllipseItem* inputSocket = new QGraphicsEllipseItem(-nodegraphscene::socketRadius, y - nodegraphscene::socketRadius, nodegraphscene::socketRadius * 2.0, nodegraphscene::socketRadius * 2.0, nodeRect);
+        inputSocket->setPen(QPen(QColor(24, 28, 38), 1.0));
+        inputSocket->setBrush(nodegraphscene::valueTypeColor(socket.valueType));
+        inputSocket->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
+        inputSocket->setData(SocketRole, true);
+        inputSocket->setData(SocketIdRole, static_cast<qulonglong>(socket.id.value));
+        inputSocket->setData(SocketDirectionRole, static_cast<int>(NodeGraphSocketDirection::Input));
+        nodegraphscene::setDecorativeItemFlags(inputSocket);
+
+        inputSocketItemsBySocket[socket.id.value] = inputSocket;
+    }
+
+    for (std::size_t index = 0; index < node.outputs.size(); ++index) {
+        const NodeGraphSocket& socket = node.outputs[index];
+        const qreal y = nodegraphscene::socketY(index);
+
+        QGraphicsSimpleTextItem* outputItem = new QGraphicsSimpleTextItem(QString::fromStdString(socket.name), nodeRect);
+        outputItem->setBrush(QColor(180, 210, 190));
+        outputItem->setPos(nodegraphscene::nodeWidth - outputItem->boundingRect().width() - 12.0, y - 8.0);
+        nodegraphscene::setDecorativeItemFlags(outputItem);
+
+        QGraphicsEllipseItem* outputSocket = new QGraphicsEllipseItem(nodegraphscene::nodeWidth - nodegraphscene::socketRadius, y - nodegraphscene::socketRadius, nodegraphscene::socketRadius * 2.0, nodegraphscene::socketRadius * 2.0, nodeRect);
+        outputSocket->setPen(QPen(QColor(24, 28, 38), 1.0));
+        outputSocket->setBrush(nodegraphscene::valueTypeColor(socket.valueType));
+        outputSocket->setData(NodeIdRole, static_cast<qulonglong>(node.id.value));
+        outputSocket->setData(SocketRole, true);
+        outputSocket->setData(SocketIdRole, static_cast<qulonglong>(socket.id.value));
+        outputSocket->setData(SocketDirectionRole, static_cast<int>(NodeGraphSocketDirection::Output));
+        nodegraphscene::setDecorativeItemFlags(outputSocket);
+
+        outputValueTypeBySocketId[socket.id.value] = socket.valueType;
+        outputSocketItemsBySocket[socket.id.value] = outputSocket;
+    }
+
+    nodeItemsById[node.id.value] = nodeRect;
+    return nodeRect;
+}
+
+void NodeGraphScene::removeEdgesForNode(NodeGraphNodeId nodeId) {
+    std::vector<uint32_t> edgeIdsToRemove;
+    edgeIdsToRemove.reserve(edgeItemsById.size());
+    for (const auto& entry : edgeItemsById) {
+        QGraphicsPathItem* edgeItem = entry.second;
+        if (!edgeItem) {
+            continue;
+        }
+
+        bool srcOk = false;
+        bool dstOk = false;
+        const uint32_t srcSocketValue = static_cast<uint32_t>(edgeItem->data(EdgeFromSocketRole).toULongLong(&srcOk));
+        const uint32_t dstSocketValue = static_cast<uint32_t>(edgeItem->data(EdgeToSocketRole).toULongLong(&dstOk));
+        if (!srcOk || !dstOk) {
+            continue;
+        }
+
+        const auto srcSocketIt = outputSocketItemsBySocket.find(srcSocketValue);
+        if (srcSocketIt != outputSocketItemsBySocket.end()) {
+            const QVariant nodeIdData = srcSocketIt->second->data(NodeIdRole);
+            if (nodeIdData.isValid() && nodeIdData.toULongLong() == nodeId.value) {
+                edgeIdsToRemove.push_back(entry.first);
+                continue;
+            }
+        }
+
+        const auto dstSocketIt = inputSocketItemsBySocket.find(dstSocketValue);
+        if (dstSocketIt != inputSocketItemsBySocket.end()) {
+            const QVariant nodeIdData = dstSocketIt->second->data(NodeIdRole);
+            if (nodeIdData.isValid() && nodeIdData.toULongLong() == nodeId.value) {
+                edgeIdsToRemove.push_back(entry.first);
+            }
+        }
+    }
+
+    for (uint32_t edgeId : edgeIdsToRemove) {
+        removeEdgeItem(NodeGraphEdgeId{edgeId});
+    }
+}
+
+void NodeGraphScene::removeNodeItem(NodeGraphNodeId nodeId) {
+    if (!nodeId.isValid()) {
+        return;
+    }
+
+    auto it = nodeItemsById.find(nodeId.value);
+    if (it == nodeItemsById.end()) {
+        return;
+    }
+
+    removeEdgesForNode(nodeId);
+
+    QGraphicsRectItem* nodeRect = it->second;
+    if (nodeRect) {
+        const QList<QGraphicsItem*> children = nodeRect->childItems();
+        for (QGraphicsItem* child : children) {
+            if (!child || !child->data(SocketRole).isValid()) {
+                continue;
+            }
+            bool socketOk = false;
+            const uint32_t socketId = static_cast<uint32_t>(child->data(SocketIdRole).toULongLong(&socketOk));
+            if (!socketOk) {
+                continue;
+            }
+            const int directionValue = child->data(SocketDirectionRole).toInt();
+            if (directionValue == static_cast<int>(NodeGraphSocketDirection::Input)) {
+                inputSocketItemsBySocket.erase(socketId);
+            } else {
+                outputSocketItemsBySocket.erase(socketId);
+                outputValueTypeBySocketId.erase(socketId);
+            }
+        }
+        removeItem(nodeRect);
+        delete nodeRect;
+    }
+
+    nodeItemsById.erase(it);
+}
+
+QGraphicsPathItem* NodeGraphScene::createEdgeItem(const NodeGraphEdge& edge) {
+    if (edge.id.isValid()) {
+        removeEdgeItem(edge.id);
+    }
+
+    QPointF src{};
+    QPointF dst{};
+
+    const auto srcSocketIt = outputSocketItemsBySocket.find(edge.fromSocket.value);
+    const auto dstSocketIt = inputSocketItemsBySocket.find(edge.toSocket.value);
+    if (srcSocketIt != outputSocketItemsBySocket.end()) {
+        src = srcSocketIt->second->sceneBoundingRect().center();
+    }
+    if (dstSocketIt != inputSocketItemsBySocket.end()) {
+        dst = dstSocketIt->second->sceneBoundingRect().center();
+    }
+
+    if (srcSocketIt == outputSocketItemsBySocket.end() || dstSocketIt == inputSocketItemsBySocket.end()) {
+        const auto srcNodeIt = nodeItemsById.find(edge.fromNode.value);
+        const auto dstNodeIt = nodeItemsById.find(edge.toNode.value);
+        if (srcNodeIt == nodeItemsById.end() || dstNodeIt == nodeItemsById.end()) {
+            return nullptr;
+        }
+
+        src = nodegraphscene::outputAnchor(srcNodeIt->second->sceneBoundingRect());
+        dst = nodegraphscene::inputAnchor(dstNodeIt->second->sceneBoundingRect());
+    }
+
+    QColor edgeColor(120, 200, 255);
+    const auto valueTypeIt = outputValueTypeBySocketId.find(edge.fromSocket.value);
+    if (valueTypeIt != outputValueTypeBySocketId.end()) {
+        edgeColor = nodegraphscene::valueTypeColor(valueTypeIt->second).lighter(135);
+    }
+
+    QPen edgePen(edgeColor, 2.2);
+    edgePen.setCapStyle(Qt::RoundCap);
+    edgePen.setJoinStyle(Qt::RoundJoin);
+    QGraphicsPathItem* line = addPath(nodegraphscene::buildEdgePath(src, dst), edgePen);
+    line->setZValue(-1.0);
+    line->setData(EdgeIdRole, static_cast<qulonglong>(edge.id.value));
+    line->setData(EdgeFromSocketRole, static_cast<qulonglong>(edge.fromSocket.value));
+    line->setData(EdgeToSocketRole, static_cast<qulonglong>(edge.toSocket.value));
+    line->setData(EdgeBaseColorRole, static_cast<qulonglong>(edgeColor.rgba()));
+
+    edgeItemsById[edge.id.value] = line;
+    return line;
+}
+
+void NodeGraphScene::removeEdgeItem(NodeGraphEdgeId edgeId) {
+    if (!edgeId.isValid()) {
+        return;
+    }
+    auto it = edgeItemsById.find(edgeId.value);
+    if (it == edgeItemsById.end()) {
+        return;
+    }
+    QGraphicsPathItem* edgeItem = it->second;
+    if (edgeItem) {
+        removeItem(edgeItem);
+        delete edgeItem;
+    }
+    edgeItemsById.erase(it);
 }
 
 void NodeGraphScene::setSelectedNode(NodeGraphNodeId nodeId) {
@@ -403,7 +415,7 @@ bool NodeGraphScene::copySelectedNodes() {
             continue;
         }
 
-        CopiedNode copiedNode{};
+        NodeGraphEditor::CopiedNode copiedNode{};
         copiedNode.sourceNodeId = node.id;
         copiedNode.typeId = node.typeId;
         copiedNode.title = node.title;
@@ -424,7 +436,7 @@ bool NodeGraphScene::copySelectedNodes() {
     std::sort(
         copiedNodes.begin(),
         copiedNodes.end(),
-        [](const CopiedNode& lhs, const CopiedNode& rhs) {
+        [](const NodeGraphEditor::CopiedNode& lhs, const NodeGraphEditor::CopiedNode& rhs) {
             return lhs.sourceNodeId.value < rhs.sourceNodeId.value;
         });
 
@@ -447,125 +459,12 @@ bool NodeGraphScene::pasteCopiedNodes() {
 
     ++pasteGeneration;
     const float positionOffset = 40.0f * static_cast<float>(pasteGeneration);
-
-    std::unordered_map<uint32_t, NodeGraphNodeId> newNodeIdBySourceNodeId;
-    std::unordered_map<uint32_t, NodeGraphSocketId> newOutputSocketBySourceOutputSocket;
     std::vector<NodeGraphNodeId> createdNodeIds;
-    createdNodeIds.reserve(copiedNodes.size());
-
-    for (const CopiedNode& copiedNode : copiedNodes) {
-        const NodeGraphNodeId newNodeId = bridge->addNode(
-            copiedNode.typeId,
-            copiedNode.title,
-            copiedNode.x + positionOffset,
-            copiedNode.y + positionOffset);
-        if (!newNodeId.isValid()) {
-            continue;
-        }
-
-        newNodeIdBySourceNodeId[copiedNode.sourceNodeId.value] = newNodeId;
-        createdNodeIds.push_back(newNodeId);
-
-        NodeGraphNode newNode{};
-        if (!bridge->getNode(newNodeId, newNode)) {
-            continue;
-        }
-
-        const std::size_t outputSocketCount = std::min(copiedNode.outputSocketIds.size(), newNode.outputs.size());
-        for (std::size_t index = 0; index < outputSocketCount; ++index) {
-            newOutputSocketBySourceOutputSocket[copiedNode.outputSocketIds[index].value] = newNode.outputs[index].id;
-        }
-
-        const NodeTypeDefinition* nodeDefinition = findNodeTypeDefinitionById(canonicalNodeTypeId(copiedNode.typeId));
-        for (const NodeGraphParamValue& originalParameter : copiedNode.parameters) {
-            NodeGraphParamValue parameter = originalParameter;
-
-            if (nodeDefinition) {
-                const NodeGraphParamDefinition* parameterDefinition = findNodeParamDefinition(*nodeDefinition, parameter.id);
-                if (parameterDefinition && parameterDefinition->isAction) {
-                    parameter = makeNodeGraphParamValue(*parameterDefinition);
-                }
-            }
-
-            bridge->setNodeParameter(newNodeId, parameter);
-        }
-    }
-
-    if (createdNodeIds.empty()) {
+    if (!editor.pasteCopiedNodes(copiedNodes, copiedEdges, positionOffset, createdNodeIds)) {
         return false;
     }
 
-    std::vector<CopiedEdge> sortedEdges = copiedEdges;
-    const NodeGraphState originalState = bridge->state();
-    std::sort(
-        sortedEdges.begin(),
-        sortedEdges.end(),
-        [&originalState](const CopiedEdge& lhs, const CopiedEdge& rhs) {
-            const NodeGraphNode* lhsToNode = findStateNodeById(originalState, lhs.toNode);
-            const NodeGraphNode* rhsToNode = findStateNodeById(originalState, rhs.toNode);
-            const int lhsSocketIndex = lhsToNode ? findSocketIndexById(lhsToNode->inputs, lhs.toSocket) : -1;
-            const int rhsSocketIndex = rhsToNode ? findSocketIndexById(rhsToNode->inputs, rhs.toSocket) : -1;
-            if (lhs.toNode.value != rhs.toNode.value) {
-                return lhs.toNode.value < rhs.toNode.value;
-            }
-            return lhsSocketIndex < rhsSocketIndex;
-        });
-
-    for (const CopiedEdge& copiedEdge : sortedEdges) {
-        const auto fromNodeIt = newNodeIdBySourceNodeId.find(copiedEdge.fromNode.value);
-        const auto toNodeIt = newNodeIdBySourceNodeId.find(copiedEdge.toNode.value);
-        if (fromNodeIt == newNodeIdBySourceNodeId.end() || toNodeIt == newNodeIdBySourceNodeId.end()) {
-            continue;
-        }
-
-        const auto fromSocketIt = newOutputSocketBySourceOutputSocket.find(copiedEdge.fromSocket.value);
-        if (fromSocketIt == newOutputSocketBySourceOutputSocket.end()) {
-            continue;
-        }
-
-        NodeGraphSocketId targetInputSocket{};
-        const NodeGraphNode* oldTargetNode = findStateNodeById(originalState, copiedEdge.toNode);
-        if (!oldTargetNode) {
-            continue;
-        }
-
-        const int oldInputSocketIndex = findSocketIndexById(oldTargetNode->inputs, copiedEdge.toSocket);
-        if (oldInputSocketIndex < 0) {
-            continue;
-        }
-
-        NodeGraphNode newTargetNode{};
-        if (!bridge->getNode(toNodeIt->second, newTargetNode)) {
-            continue;
-        }
-
-        targetInputSocket = socketByIndex(newTargetNode.inputs, oldInputSocketIndex);
-        if (!targetInputSocket.isValid()) {
-            const NodeGraphSocket& oldInputSocket = oldTargetNode->inputs[static_cast<std::size_t>(oldInputSocketIndex)];
-            const int oldOrdinal = valueTypeOrdinalAtInputIndex(*oldTargetNode, oldInputSocketIndex);
-            if (oldOrdinal >= 0) {
-                const std::vector<NodeGraphSocketId> matchingSockets =
-                    matchingInputSocketsByType(newTargetNode, oldInputSocket.valueType);
-                if (oldOrdinal < static_cast<int>(matchingSockets.size())) {
-                    targetInputSocket = matchingSockets[static_cast<std::size_t>(oldOrdinal)];
-                }
-            }
-        }
-
-        if (!targetInputSocket.isValid()) {
-            continue;
-        }
-
-        std::string errorMessage;
-        bridge->connectSockets(
-            fromNodeIt->second,
-            fromSocketIt->second,
-            toNodeIt->second,
-            targetInputSocket,
-            errorMessage);
-    }
-
-    refreshFromGraph();
+    applyPendingChanges();
     selectNodesById(createdNodeIds);
     return true;
 }
@@ -582,11 +481,11 @@ bool NodeGraphScene::removeSelectedNodes() {
         }
 
         const NodeGraphNodeId nodeId = itemNodeId(item);
-        removedAny = bridge->removeNode(nodeId) || removedAny;
+        removedAny = editor.removeNode(nodeId) || removedAny;
     }
 
     if (removedAny) {
-        refreshFromGraph();
+        applyPendingChanges();
     }
 
     return removedAny;
@@ -596,6 +495,7 @@ void NodeGraphScene::drawBackground(QPainter* painter, const QRectF& rect) {
     QGraphicsScene::drawBackground(painter, rect);
 
     painter->save();
+    const auto& clearColor = nodegraphscene::clearColor();
     painter->fillRect(rect, QColor::fromRgbF(clearColor[0], clearColor[1], clearColor[2], clearColor[3]));
 
     painter->restore();
@@ -610,9 +510,9 @@ void NodeGraphScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if ((event->modifiers() & Qt::ControlModifier) && bridge) {
         const NodeGraphEdgeId edgeId = itemEdgeId(itemAt(event->scenePos(), QTransform()));
         if (edgeId.isValid()) {
-            if (bridge->removeConnection(edgeId)) {
+            if (editor.removeConnection(edgeId)) {
                 reportStatus("Connection removed.");
-                refreshFromGraph();
+                applyPendingChanges();
             } else {
                 reportStatus("Failed to remove connection.");
             }
@@ -626,12 +526,9 @@ void NodeGraphScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     NodeGraphSocketDirection direction = NodeGraphSocketDirection::Input;
     if (socketAtScenePos(event->scenePos(), nodeId, socketId, direction)) {
         if (direction == NodeGraphSocketDirection::Input && bridge) {
-            const NodeGraphEdgeId existingIncomingEdge = findIncomingEdgeForInput(bridge->state(), nodeId, socketId);
-            if (existingIncomingEdge.isValid()) {
-                if (bridge->removeConnection(existingIncomingEdge)) {
-                    reportStatus("Input disconnected. Drop on an output socket to reconnect.");
-                    refreshFromGraph();
-                }
+            if (editor.disconnectIncomingInput(nodeId, socketId)) {
+                reportStatus("Input disconnected. Drop on an output socket to reconnect.");
+                applyPendingChanges();
             }
         }
 
@@ -659,7 +556,7 @@ void NodeGraphScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         previewPen.setJoinStyle(Qt::RoundJoin);
         const NodeGraphSocketDirection previewEndDirection =
             (activeDragFromDirection == NodeGraphSocketDirection::Output) ? NodeGraphSocketDirection::Input : NodeGraphSocketDirection::Output;
-        activeDragLine = addPath(buildEdgePath(activeDragStartPos, event->scenePos(), activeDragFromDirection, previewEndDirection), previewPen);
+        activeDragLine = addPath(nodegraphscene::buildEdgePath(activeDragStartPos, event->scenePos(), activeDragFromDirection, previewEndDirection), previewPen);
         activeDragLine->setZValue(3.0);
         event->accept();
         return;
@@ -672,7 +569,7 @@ void NodeGraphScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (isDraggingConnection && activeDragLine && event) {
         const NodeGraphSocketDirection previewEndDirection =
             (activeDragFromDirection == NodeGraphSocketDirection::Output) ? NodeGraphSocketDirection::Input : NodeGraphSocketDirection::Output;
-        activeDragLine->setPath(buildEdgePath(activeDragStartPos, event->scenePos(), activeDragFromDirection, previewEndDirection));
+        activeDragLine->setPath(nodegraphscene::buildEdgePath(activeDragStartPos, event->scenePos(), activeDragFromDirection, previewEndDirection));
         updateHoverState(event->scenePos());
         event->accept();
         return;
@@ -713,9 +610,9 @@ void NodeGraphScene::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
                 }
 
                 std::string errorMessage;
-                if (bridge->connectSockets(fromNode, fromSocket, targetNode, targetSocket, errorMessage)) {
+                if (editor.connectSockets(fromNode, fromSocket, targetNode, targetSocket, errorMessage)) {
                     reportStatus("Sockets connected.");
-                    refreshFromGraph();
+                    applyPendingChanges();
                 } else {
                     reportStatus(QString::fromStdString(errorMessage.empty() ? "Failed to connect sockets." : errorMessage));
                 }
@@ -779,11 +676,11 @@ void NodeGraphScene::syncNodePositionsToBridge() {
 
         const NodeGraphNodeId nodeId = itemNodeId(item);
         const QPointF position = item->scenePos();
-        changed = bridge->moveNode(nodeId, static_cast<float>(position.x()), static_cast<float>(position.y())) || changed;
+        changed = editor.moveNode(nodeId, static_cast<float>(position.x()), static_cast<float>(position.y())) || changed;
     }
 
     if (changed) {
-        refreshFromGraph();
+        applyPendingChanges();
     }
 }
 
@@ -815,7 +712,7 @@ void NodeGraphScene::updateEdgePathsFromCurrentLayout() {
 
         const QPointF src = srcIt->second->mapToScene(srcIt->second->boundingRect().center());
         const QPointF dst = dstIt->second->mapToScene(dstIt->second->boundingRect().center());
-        edgeItem->setPath(buildEdgePath(src, dst));
+        edgeItem->setPath(nodegraphscene::buildEdgePath(src, dst));
     }
 }
 
@@ -973,11 +870,7 @@ NodeGraphEdgeId NodeGraphScene::itemEdgeId(const QGraphicsItem* item) {
     return {};
 }
 
-bool NodeGraphScene::extractSocketFromItem(
-    const QGraphicsItem* item,
-    NodeGraphNodeId& outNodeId,
-    NodeGraphSocketId& outSocketId,
-    NodeGraphSocketDirection& outDirection) {
+bool NodeGraphScene::extractSocketFromItem(const QGraphicsItem* item, NodeGraphNodeId& outNodeId, NodeGraphSocketId& outSocketId, NodeGraphSocketDirection& outDirection) {
     const QGraphicsItem* current = item;
     while (current) {
         const QVariant socketMarker = current->data(SocketRole);
@@ -1003,11 +896,7 @@ bool NodeGraphScene::extractSocketFromItem(
     return false;
 }
 
-bool NodeGraphScene::socketAtScenePos(
-    const QPointF& scenePos,
-    NodeGraphNodeId& outNodeId,
-    NodeGraphSocketId& outSocketId,
-    NodeGraphSocketDirection& outDirection) const {
+bool NodeGraphScene::socketAtScenePos(const QPointF& scenePos, NodeGraphNodeId& outNodeId, NodeGraphSocketId& outSocketId, NodeGraphSocketDirection& outDirection) const {
     constexpr qreal socketHitPadding = 8.0;
     const QRectF hitRect(
         scenePos.x() - socketHitPadding,

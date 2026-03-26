@@ -38,35 +38,40 @@ struct ContactSampleGPU
     float wArea;
 };
 
-struct ContactPairGPU
+struct ContactCellMap
 {
-    ContactSampleGPU samples[7];
-    float contactArea;
-    float _pad0;
-    float _pad1;
-    float _pad2;
+    uint sampleIndex;
+    float weight;
+    uint _pad0;
+    uint _pad1;
+};
+
+struct ContactCellRange
+{
+    uint cellIndex;
+    uint startIndex;
+    uint count;
+    uint _pad0;
 };
 
 [[vk::binding(0)]] StructuredBuffer<uint> nodeTemperatureReadBuffer;
-[[vk::binding(1)]] StructuredBuffer<uint> receiverTriangleIndexBuffer;
-[[vk::binding(2)]] StructuredBuffer<SurfacePoint> heatSourceBuffer;
-[[vk::binding(3)]] StructuredBuffer<HeatSourceTriangle> heatSourceTriangleBuffer;
-[[vk::binding(4)]] cbuffer HeatContactParamsBuffer
+[[vk::binding(1)]] cbuffer HeatContactParamsBuffer
 {
     HeatContactParams heatContactParams;
 };
 
-[[vk::binding(5)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
-[[vk::binding(6)]] RWStructuredBuffer<uint> injectionKBuffer;
-[[vk::binding(7)]] RWStructuredBuffer<uint> injectionKTBuffer;
-[[vk::binding(8)]] StructuredBuffer<ContactPairGPU> contactPairBuffer;
-[[vk::binding(9)]] StructuredBuffer<uint> emitterTriangleIndexBuffer;
-[[vk::binding(10)]] StructuredBuffer<VoronoiSurfaceMapping> emitterVoronoiMappingBuffer;
+[[vk::binding(2)]] RWStructuredBuffer<uint> injectionKBuffer;
+[[vk::binding(3)]] RWStructuredBuffer<uint> injectionKTBuffer;
+[[vk::binding(4)]] StructuredBuffer<ContactSampleGPU> contactSampleBuffer;
+[[vk::binding(5)]] StructuredBuffer<ContactCellMap> contactCellMapBuffer;
+[[vk::binding(6)]] StructuredBuffer<ContactCellRange> contactCellRangeBuffer;
+[[vk::binding(7)]] StructuredBuffer<uint> emitterTriangleIndexBuffer;
+[[vk::binding(8)]] StructuredBuffer<VoronoiSurfaceMapping> emitterVoronoiMappingBuffer;
 
 [[vk::push_constant]] cbuffer ContactPushConstants
 {
     uint couplingKind;
-    uint _pcPad0;
+    float heatSourceTemperature;
     uint _pcPad1;
     uint _pcPad2;
 }
@@ -211,82 +216,42 @@ bool trySampleReceiverEmitterTemperature(ContactSampleGPU sample, uint nodeCount
 [numthreads(256, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID)
 {
-    uint triID = dtid.x;
+    uint rangeIndex = dtid.x;
 
-    uint pairCount = 0;
-    uint pairStride = 0;
-    contactPairBuffer.GetDimensions(pairCount, pairStride);
-    if (triID >= pairCount)
+    uint rangeCount = 0;
+    uint rangeStride = 0;
+    contactCellRangeBuffer.GetDimensions(rangeCount, rangeStride);
+    if (rangeIndex >= rangeCount)
     {
         return;
     }
 
-    ContactPairGPU pair = contactPairBuffer[triID];
-    if (pair.contactArea <= 0.0f)
+    ContactCellRange range = contactCellRangeBuffer[rangeIndex];
+    if (range.count == 0u)
     {
         return;
     }
-
-    float contactStrength = 1.0f;
-
-    uint base = triID * 3u;
-
-    uint indexCount = 0;
-    uint indexStride = 0;
-    receiverTriangleIndexBuffer.GetDimensions(indexCount, indexStride);
-    uint triCountFromIndex = indexCount / 3u;
-    if (triID >= triCountFromIndex)
-    {
-        return;
-    }
-
-    if (base + 2u >= indexCount)
-    {
-        return;
-    }
-
-    uint v0 = receiverTriangleIndexBuffer[base + 0u];
-    uint v1 = receiverTriangleIndexBuffer[base + 1u];
-    uint v2 = receiverTriangleIndexBuffer[base + 2u];
-
-    uint receiverMapCount = 0;
-    uint receiverMapStride = 0;
-    voronoiMappingBuffer.GetDimensions(receiverMapCount, receiverMapStride);
-    if (v0 >= receiverMapCount || v1 >= receiverMapCount || v2 >= receiverMapCount)
-    {
-        return;
-    }
-
-    uint c0 = voronoiMappingBuffer[v0].cellIndex;
-    uint c1 = voronoiMappingBuffer[v1].cellIndex;
-    uint c2 = voronoiMappingBuffer[v2].cellIndex;
 
     uint nodeCount = 0;
     uint nodeStride = 0;
     nodeTemperatureReadBuffer.GetDimensions(nodeCount, nodeStride);
-
-    uint heatSourceVertexCount = 0;
-    uint heatSourceVertexStride = 0;
-    heatSourceBuffer.GetDimensions(heatSourceVertexCount, heatSourceVertexStride);
-
-    uint heatSourceTriangleCount = 0;
-    uint heatSourceTriangleStride = 0;
-    heatSourceTriangleBuffer.GetDimensions(heatSourceTriangleCount, heatSourceTriangleStride);
-
-    static const float3 recvBary[7] = {
-        float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f),
-        float3(0.0597158717f, 0.4701420641f, 0.4701420641f),
-        float3(0.4701420641f, 0.0597158717f, 0.4701420641f),
-        float3(0.4701420641f, 0.4701420641f, 0.0597158717f),
-        float3(0.7974269853f, 0.1012865073f, 0.1012865073f),
-        float3(0.1012865073f, 0.7974269853f, 0.1012865073f),
-        float3(0.1012865073f, 0.1012865073f, 0.7974269853f),
-    };
-
-    for (uint si = 0; si < 7u; ++si)
+    if (range.cellIndex == 0xFFFFFFFFu || range.cellIndex >= nodeCount)
     {
-        ContactSampleGPU s = pair.samples[si];
-        if (s.sourceTriangleIndex == 0xFFFFFFFFu || s.wArea <= 0.0f)
+        return;
+    }
+
+    float nodeTemp = asfloat(nodeTemperatureReadBuffer[range.cellIndex]);
+
+    float sumK = 0.0f;
+    float sumKT = 0.0f;
+    float contactStrength = 1.0f;
+
+    uint endIndex = range.startIndex + range.count;
+    for (uint idx = range.startIndex; idx < endIndex; ++idx)
+    {
+        ContactCellMap entry = contactCellMapBuffer[idx];
+        ContactSampleGPU s = contactSampleBuffer[entry.sampleIndex];
+        if (s.sourceTriangleIndex == 0xFFFFFFFFu)
         {
             continue;
         }
@@ -301,35 +266,22 @@ void main(uint3 dtid : SV_DispatchThreadID)
         }
         else
         {
-            if (s.sourceTriangleIndex >= heatSourceTriangleCount)
-            {
-                continue;
-            }
-
-            HeatSourceTriangle tri = heatSourceTriangleBuffer[s.sourceTriangleIndex];
-            uint i0 = tri.indices.x;
-            uint i1 = tri.indices.y;
-            uint i2 = tri.indices.z;
-            if (i0 >= heatSourceVertexCount || i1 >= heatSourceVertexCount || i2 >= heatSourceVertexCount)
-            {
-                continue;
-            }
-
-            float w0s = 1.0f - s.u - s.v;
-            float w1s = s.u;
-            float w2s = s.v;
-
-            float t0 = heatSourceBuffer[i0].temperature;
-            float t1 = heatSourceBuffer[i1].temperature;
-            float t2 = heatSourceBuffer[i2].temperature;
-            effectiveTemp = w0s * t0 + w1s * t1 + w2s * t2;
+            effectiveTemp = contactPushConstants.heatSourceTemperature;
         }
 
-        float area = s.wArea;
-        float3 bw = recvBary[si];
+        if (effectiveTemp <= nodeTemp)
+        {
+            continue;
+        }
 
-        addWeightedInjection(c0, nodeCount, bw.x, effectiveTemp, contactStrength, area);
-        addWeightedInjection(c1, nodeCount, bw.y, effectiveTemp, contactStrength, area);
-        addWeightedInjection(c2, nodeCount, bw.z, effectiveTemp, contactStrength, area);
+        float h_eff = heatContactParams.thermalConductance * contactStrength * entry.weight;
+        sumK += h_eff;
+        sumKT += h_eff * effectiveTemp;
+    }
+
+    if (sumK > 0.0f)
+    {
+        atomicAddFloatK(range.cellIndex, sumK);
+        atomicAddFloatKT(range.cellIndex, sumKT);
     }
 }

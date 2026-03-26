@@ -1,4 +1,4 @@
-﻿#include "VkFrameGraphBackend.hpp"
+#include "VkFrameGraphBackend.hpp"
 
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"

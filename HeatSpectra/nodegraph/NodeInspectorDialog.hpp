@@ -1,6 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "NodeGraphTypes.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include <QWidget>
 
@@ -19,9 +21,12 @@ class QAbstractTableModel;
 class QString;
 class NodeGroupPanel;
 class NodeHeatSolverPanel;
+class NodeHeatSourcePanel;
 class NodeModelPanel;
+class NodeTransformPanel;
 class NodeRemeshPanel;
-class NodeContactPairPanel;
+class NodeContactPanel;
+class NodeVoronoiPanel;
 
 class NodeInspectorDialog : public QWidget {
 public:
@@ -53,15 +58,21 @@ private:
     QStackedWidget* pageStack = nullptr;
     QWidget* genericPage = nullptr;
     QWidget* modelPage = nullptr;
+    QWidget* transformPage = nullptr;
     QWidget* groupPage = nullptr;
     QWidget* remeshPage = nullptr;
-    QWidget* contactPairPage = nullptr;
+    QWidget* voronoiPage = nullptr;
+    QWidget* heatSourcePage = nullptr;
+    QWidget* contactPage = nullptr;
     QWidget* heatPage = nullptr;
 
     NodeModelPanel* modelPanel = nullptr;
+    NodeTransformPanel* transformPanel = nullptr;
     NodeGroupPanel* groupPanel = nullptr;
     NodeRemeshPanel* remeshPanel = nullptr;
-    NodeContactPairPanel* contactPairPanel = nullptr;
+    NodeVoronoiPanel* voronoiPanel = nullptr;
+    NodeContactPanel* contactPanel = nullptr;
+    NodeHeatSourcePanel* heatSourcePanel = nullptr;
     NodeHeatSolverPanel* heatSolverPanel = nullptr;
 
     QTabWidget* mainTabWidget = nullptr;

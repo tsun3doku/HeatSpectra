@@ -1,28 +1,31 @@
 #pragma once
 
-#include <cstdint>
+#include "domain/GeometryData.hpp"
+#include "domain/RemeshData.hpp"
 
-enum class ContactCouplingKind : uint32_t {
+#include <cstdint>
+#include "util/Structs.hpp"
+
+enum class ContactCouplingType : uint32_t {
     SourceToReceiver = 0,
     ReceiverToReceiver = 1
 };
 
-struct ConfiguredContactPair {
-    ContactCouplingKind kind = ContactCouplingKind::SourceToReceiver;
-    uint32_t emitterModelId = 0;
-    uint32_t receiverModelId = 0;
+struct ContactGeometryPayload {
+    NodeDataHandle geometryHandle{};
+    GeometryData geometry{};
+    IntrinsicMeshData intrinsic{};
+};
+
+struct ContactPairPayloadConfig {
+    ContactCouplingType couplingType = ContactCouplingType::SourceToReceiver;
+    ContactGeometryPayload emitter{};
+    ContactGeometryPayload receiver{};
     float minNormalDot = -0.65f;
     float contactRadius = 0.01f;
+};
 
-    bool operator==(const ConfiguredContactPair& rhs) const {
-        return kind == rhs.kind &&
-            emitterModelId == rhs.emitterModelId &&
-            receiverModelId == rhs.receiverModelId &&
-            minNormalDot == rhs.minNormalDot &&
-            contactRadius == rhs.contactRadius;
-    }
-
-    bool operator!=(const ConfiguredContactPair& rhs) const {
-        return !(*this == rhs);
-    }
+struct ContactPair {
+    ContactSampleGPU samples[7];
+    float contactArea;
 };

@@ -77,7 +77,7 @@ void HeatSystemDebugStage::exportCellVolumes(bool debugEnable, uint32_t voronoiN
         return;
     }
 
-    VoronoiNodeGPU* nodes = static_cast<VoronoiNodeGPU*>(mappedVoronoiNodeData);
+    VoronoiNode* nodes = static_cast<VoronoiNode*>(mappedVoronoiNodeData);
 
     std::ofstream volumeFile("cell_volumes.txt");
     volumeFile << "# Cell Index -> Restricted Volume\n";
@@ -109,7 +109,7 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
     double totalRestrictedVolumeNegAbs = 0.0;
     uint32_t negativeVolumeCount = 0;
     if (mappedVoronoiNodeData) {
-        const VoronoiNodeGPU* nodes = static_cast<const VoronoiNodeGPU*>(mappedVoronoiNodeData);
+        const VoronoiNode* nodes = static_cast<const VoronoiNode*>(mappedVoronoiNodeData);
         for (uint32_t i = 0; i < voronoiNodeCount; i++) {
             const double v = (double)nodes[i].volume;
             if (v > 0.0) {

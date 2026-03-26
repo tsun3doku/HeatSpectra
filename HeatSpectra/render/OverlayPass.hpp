@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include "domain/RemeshData.hpp"
 #include "framegraph/FramePass.hpp"
 #include "framegraph/FrameGraphTypes.hpp"
 
@@ -10,11 +11,13 @@
 #include <vector>
 
 class Model;
+class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
 class iODT;
 class VulkanDevice;
 class CommandPool;
+class RuntimeIntrinsicCache;
 class TimingRenderer;
 class GridRenderer;
 class GizmoRenderer;
@@ -31,6 +34,8 @@ class OverlayPass : public Pass {
 public:
     OverlayPass(
         VulkanDevice& device,
+        MemoryAllocator& allocator,
+        RuntimeIntrinsicCache& remeshResources,
         VkFrameGraphRuntime& frameGraphRuntime,
         ResourceManager& resources,
         UniformBufferManager& ubo,
@@ -49,12 +54,7 @@ public:
     void record(const FrameContext& context, const SceneView& sceneView, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) override;
     void destroy() override;
 
-    void allocateDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight);
-    void updateDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight);
-    void allocateNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight);
-    void updateNormalsDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight);
-    void allocateVertexNormalsDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight);
-    void updateVertexNormalsDescriptorSetsForModel(Model* model, iODT* remesher, uint32_t maxFramesInFlight);
+    void updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic, uint32_t maxFramesInFlight);
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
 
@@ -62,6 +62,8 @@ private:
 
     GeometryPass& geometryPass;
     ::VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
+    RuntimeIntrinsicCache& remeshResources;
     VkFrameGraphRuntime& frameGraphRuntime;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;

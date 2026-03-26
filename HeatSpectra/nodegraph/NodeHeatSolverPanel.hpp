@@ -31,13 +31,11 @@ public:
     void stopStatusTimer();
 
 private:
-    void refreshContactBindingRows(const NodeGraphNode& node);
     void toggleHeatSystem();
     void pauseHeatSystem();
     void resetHeatSystem();
     void applySolveSettings();
     void applyMaterialBindings();
-    void applyContactBindings();
     void setStatus(const QString& text) const;
 
     NodeGraphBridge* nodeGraphBridge = nullptr;
@@ -57,8 +55,6 @@ private:
     QPushButton* heatBindingRemoveButton = nullptr;
     QPushButton* heatBindingApplyButton = nullptr;
     QTableWidget* heatBindingsTable = nullptr;
-    QPushButton* heatContactBindingApplyButton = nullptr;
-    QTableWidget* heatContactBindingsTable = nullptr;
     QTimer* heatStatusTimer = nullptr;
 
     std::function<void(const QString&)> statusSink;

@@ -1,17 +1,22 @@
 #include "NodeRemeshPanel.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
 #include "NodePanelUtils.hpp"
+#include "domain/RemeshParams.hpp"
 
 #include <QDoubleSpinBox>
+#include <QSignalBlocker>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QPushButton>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
 NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     : QWidget(parent) {
+    const RemeshParams defaults{};
+
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
@@ -20,7 +25,7 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     iterationsSpinBox = new QSpinBox(this);
     iterationsSpinBox->setMinimum(1);
     iterationsSpinBox->setMaximum(1000);
-    iterationsSpinBox->setValue(1);
+    iterationsSpinBox->setValue(defaults.iterations);
     iterationsRow->addWidget(iterationsSpinBox, 1);
     layout->addLayout(iterationsRow);
 
@@ -30,7 +35,7 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     minAngleSpinBox->setMinimum(0.0);
     minAngleSpinBox->setMaximum(60.0);
     minAngleSpinBox->setSingleStep(1.0);
-    minAngleSpinBox->setValue(30.0);
+    minAngleSpinBox->setValue(defaults.minAngleDegrees);
     minAngleRow->addWidget(minAngleSpinBox, 1);
     layout->addLayout(minAngleRow);
 
@@ -41,7 +46,7 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     maxEdgeLengthSpinBox->setMaximum(10.0);
     maxEdgeLengthSpinBox->setDecimals(4);
     maxEdgeLengthSpinBox->setSingleStep(0.01);
-    maxEdgeLengthSpinBox->setValue(0.1);
+    maxEdgeLengthSpinBox->setValue(defaults.maxEdgeLength);
     maxEdgeRow->addWidget(maxEdgeLengthSpinBox, 1);
     layout->addLayout(maxEdgeRow);
 
@@ -52,24 +57,29 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     stepSizeSpinBox->setMaximum(1.0);
     stepSizeSpinBox->setSingleStep(0.05);
     stepSizeSpinBox->setDecimals(2);
-    stepSizeSpinBox->setValue(0.25);
+    stepSizeSpinBox->setValue(defaults.stepSize);
     stepRow->addWidget(stepSizeSpinBox, 1);
     layout->addLayout(stepRow);
 
-    QHBoxLayout* actionRow = new QHBoxLayout();
-    applyButton = new QPushButton("Apply", this);
-    runButton = new QPushButton("Run Remesh", this);
-    actionRow->addWidget(applyButton);
-    actionRow->addWidget(runButton);
-    layout->addLayout(actionRow);
+    QLabel* hintLabel = new QLabel(
+        "Remesh runs automatically when the input mesh or these parameters change.",
+        this);
+    hintLabel->setWordWrap(true);
+    layout->addWidget(hintLabel);
 
     layout->addStretch();
 
-    connect(applyButton, &QPushButton::clicked, this, [this]() {
-        applySettings();
+    connect(iterationsSpinBox, &QSpinBox::valueChanged, this, [this](int) {
+        onParametersEdited();
     });
-    connect(runButton, &QPushButton::clicked, this, [this]() {
-        executeRemesh();
+    connect(minAngleSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
+        onParametersEdited();
+    });
+    connect(maxEdgeLengthSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
+        onParametersEdited();
+    });
+    connect(stepSizeSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
+        onParametersEdited();
     });
 }
 
@@ -89,20 +99,28 @@ void NodeRemeshPanel::setNode(NodeGraphNodeId nodeId) {
         return;
     }
 
-    iterationsSpinBox->setValue(NodePanelUtils::readIntParam(node, nodegraphparams::remesh::Iterations, 1));
-    minAngleSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, 30.0));
-    maxEdgeLengthSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, 0.1));
-    stepSizeSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::StepSize, 0.25));
+    const RemeshParams defaults{};
+
+    syncingFromNode = true;
+    const QSignalBlocker iterationsBlock(iterationsSpinBox);
+    const QSignalBlocker minAngleBlock(minAngleSpinBox);
+    const QSignalBlocker maxEdgeBlock(maxEdgeLengthSpinBox);
+    const QSignalBlocker stepBlock(stepSizeSpinBox);
+    iterationsSpinBox->setValue(NodePanelUtils::readIntParam(node, nodegraphparams::remesh::Iterations, defaults.iterations));
+    minAngleSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, defaults.minAngleDegrees));
+    maxEdgeLengthSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, defaults.maxEdgeLength));
+    stepSizeSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::StepSize, defaults.stepSize));
+    syncingFromNode = false;
 }
 
 void NodeRemeshPanel::setStatusSink(std::function<void(const QString&)> sink) {
     statusSink = std::move(sink);
 }
 
-void NodeRemeshPanel::applySettings() {
+bool NodeRemeshPanel::writeParameters() {
     if (!nodeGraphBridge) {
-        setStatus("Cannot apply settings for this node");
-        return;
+        setStatus("Cannot update settings for this node");
+        return false;
     }
 
     if (!NodePanelUtils::writeIntParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::Iterations, iterationsSpinBox->value()) ||
@@ -110,25 +128,25 @@ void NodeRemeshPanel::applySettings() {
         !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::MaxEdgeLength, maxEdgeLengthSpinBox->value()) ||
         !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::StepSize, stepSizeSpinBox->value())) {
         setStatus("Failed to update remesh settings");
-        return;
+        return false;
     }
 
-    setStatus("Remesh settings updated");
+    return true;
 }
 
-void NodeRemeshPanel::executeRemesh() {
-    if (!nodeGraphBridge) {
-        setStatus("Cannot run remesh for this node");
+void NodeRemeshPanel::onParametersEdited() {
+    if (syncingFromNode) {
         return;
     }
 
-    applySettings();
-    if (!NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::RunRequested, true)) {
-        setStatus("Failed to request remesh");
+    if (!currentNodeId.isValid()) {
+        setStatus("Cannot update remesh settings for this node");
         return;
     }
 
-    setStatus("Remesh requested through node graph");
+    if (writeParameters()) {
+        setStatus("Remesh settings applied");
+    }
 }
 
 void NodeRemeshPanel::setStatus(const QString& text) const {

@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "NodeGraphEditor.hpp"
 #include "NodeGraphTypes.hpp"
 
 #include <QWidget>
@@ -7,9 +8,9 @@
 class NodeGraphBridge;
 class NodeGraphScene;
 class NodeInspectorDialog;
-class ModelRegistry;
 class ModelSelection;
 class RuntimeQuery;
+class SceneController;
 class QGraphicsView;
 class QLabel;
 class QPointF;
@@ -21,7 +22,7 @@ public:
 
     void setRuntimeQuery(const RuntimeQuery* runtimeQuery);
     void setBridge(NodeGraphBridge* bridge);
-    void setModelRegistry(const ModelRegistry* modelRegistry);
+    void setSceneController(const SceneController* sceneController);
     void setModelSelection(ModelSelection* modelSelection);
     void refreshGraph();
     void syncSelection();
@@ -36,7 +37,8 @@ private:
 
     const RuntimeQuery* runtimeQuery = nullptr;
     NodeGraphBridge* bridge = nullptr;
-    const ModelRegistry* modelRegistry = nullptr;
+    NodeGraphEditor editor;
+    const SceneController* sceneController = nullptr;
     ModelSelection* modelSelection = nullptr;
     NodeGraphScene* graphScene = nullptr;
     NodeInspectorDialog* inspectorDialog = nullptr;

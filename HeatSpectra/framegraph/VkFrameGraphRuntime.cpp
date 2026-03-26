@@ -1,4 +1,4 @@
-﻿#include "VkFrameGraphRuntime.hpp"
+#include "VkFrameGraphRuntime.hpp"
 
 #include <optional>
 #include <iostream>

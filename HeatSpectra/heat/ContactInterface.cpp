@@ -1,17 +1,12 @@
-﻿#include "ContactInterface.hpp"
+#include "ContactInterface.hpp"
 #include "util/GeometryUtils.hpp"
 
-#include "mesh/remesher/Remesher.hpp"
-#include "HeatSource.hpp"
-#include "scene/Model.hpp"
 #include "mesh/remesher/iODT.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "spatial/TriangleHashGrid.hpp"
 
-#include <unordered_map>
 #include <cmath>
 #include <limits>
-#include <iostream>
 #include <algorithm>
 
 namespace {
@@ -24,16 +19,68 @@ glm::vec3 normalizedOrZero(const glm::vec3& vector) {
     return vector * (1.0f / std::sqrt(lengthSquared));
 }
 
+SupportingHalfedge::IntrinsicMesh toIntrinsicMesh(const IntrinsicMeshData& intrinsic) {
+    SupportingHalfedge::IntrinsicMesh mesh{};
+    mesh.vertices.reserve(intrinsic.vertices.size());
+    for (const IntrinsicMeshVertexData& vertex : intrinsic.vertices) {
+        SupportingHalfedge::IntrinsicVertex converted{};
+        converted.intrinsicVertexId = vertex.intrinsicVertexId;
+        converted.position = glm::vec3(vertex.position[0], vertex.position[1], vertex.position[2]);
+        converted.normal = glm::vec3(vertex.normal[0], vertex.normal[1], vertex.normal[2]);
+        converted.inputLocationType = vertex.inputLocationType;
+        converted.inputElementId = vertex.inputElementId;
+        converted.inputBaryCoords = glm::vec3(
+            vertex.inputBaryCoords[0],
+            vertex.inputBaryCoords[1],
+            vertex.inputBaryCoords[2]);
+        mesh.vertices.push_back(converted);
+    }
+    mesh.indices = intrinsic.triangleIndices;
+    mesh.faceIds = intrinsic.faceIds;
+    mesh.triangles.reserve(intrinsic.triangles.size());
+    for (const IntrinsicMeshTriangleData& triangle : intrinsic.triangles) {
+        SupportingHalfedge::IntrinsicTriangle converted{};
+        converted.center = glm::vec3(triangle.center[0], triangle.center[1], triangle.center[2]);
+        converted.normal = glm::vec3(triangle.normal[0], triangle.normal[1], triangle.normal[2]);
+        converted.area = triangle.area;
+        converted.vertexIndices[0] = triangle.vertexIndices[0];
+        converted.vertexIndices[1] = triangle.vertexIndices[1];
+        converted.vertexIndices[2] = triangle.vertexIndices[2];
+        converted.faceId = triangle.faceId;
+        mesh.triangles.push_back(converted);
+    }
+    return mesh;
 }
 
-ContactInterface::ContactInterface(Remesher& remesher)
-	: remesher(remesher) {
+glm::mat4 toMat4(const std::array<float, 16>& values) {
+    glm::mat4 matrix(1.0f);
+    matrix[0][0] = values[0];
+    matrix[0][1] = values[1];
+    matrix[0][2] = values[2];
+    matrix[0][3] = values[3];
+    matrix[1][0] = values[4];
+    matrix[1][1] = values[5];
+    matrix[1][2] = values[6];
+    matrix[1][3] = values[7];
+    matrix[2][0] = values[8];
+    matrix[2][1] = values[9];
+    matrix[2][2] = values[10];
+    matrix[2][3] = values[11];
+    matrix[3][0] = values[12];
+    matrix[3][1] = values[13];
+    matrix[3][2] = values[14];
+    matrix[3][3] = values[15];
+    return matrix;
+}
+
 }
 
 void ContactInterface::mapSurfacePoints(
-    Model& sourceModel,
-    const std::vector<Model*>& receiverModels,
-    std::vector<std::vector<ContactPairGPU>>& receiverContactPairs,
+    const IntrinsicMeshData& sourceIntrinsic,
+    const std::array<float, 16>& sourceLocalToWorld,
+    const std::vector<const IntrinsicMeshData*>& receiverIntrinsics,
+    const std::vector<std::array<float, 16>>& receiverLocalToWorld,
+    std::vector<std::vector<ContactPair>>& receiverContactPairs,
     std::vector<ContactLineVertex>& outOutlineVertices,
     std::vector<ContactLineVertex>& outCorrespondenceVertices,
     const Settings& settings) {
@@ -41,17 +88,7 @@ void ContactInterface::mapSurfacePoints(
     outOutlineVertices.clear();
     outCorrespondenceVertices.clear();
 
-	iODT* sourceIodt = remesher.getRemesherForModel(&sourceModel);
-	if (!sourceIodt) {
-		return;
-	}
-
-	SupportingHalfedge* sourceSupportingHalfedge = sourceIodt->getSupportingHalfedge();
-	if (!sourceSupportingHalfedge) {
-		return;
-	}
-
-	SupportingHalfedge::IntrinsicMesh sourceMesh = sourceSupportingHalfedge->buildIntrinsicMesh();
+	SupportingHalfedge::IntrinsicMesh sourceMesh = toIntrinsicMesh(sourceIntrinsic);
 	if (sourceMesh.triangles.empty()) {
 		return;
 	}
@@ -78,31 +115,26 @@ void ContactInterface::mapSurfacePoints(
 
     std::vector<size_t> candidateTriangles;
 
-    glm::mat4 srcModelMat = sourceModel.getModelMatrix();
+    glm::mat4 srcModelMat = toMat4(sourceLocalToWorld);
     glm::mat4 invSrcModelMat = glm::inverse(srcModelMat);
 	glm::mat3 srcNormalMat = glm::transpose(glm::inverse(glm::mat3(srcModelMat)));
 
-	receiverContactPairs.resize(receiverModels.size());
+	receiverContactPairs.resize(receiverIntrinsics.size());
 
-	for (size_t receiverIdx = 0; receiverIdx < receiverModels.size(); receiverIdx++) {
-		Model* receiverModel = receiverModels[receiverIdx];
-		if (!receiverModel) {
+	for (size_t receiverIdx = 0; receiverIdx < receiverIntrinsics.size(); receiverIdx++) {
+        if (receiverIdx >= receiverLocalToWorld.size()) {
+            continue;
+        }
+
+		const IntrinsicMeshData* receiverIntrinsic = receiverIntrinsics[receiverIdx];
+		if (!receiverIntrinsic) {
 			continue;
 		}
 
-		iODT* receiverIodt = remesher.getRemesherForModel(receiverModel);
-		if (!receiverIodt) {
-			continue;
-		}
-		SupportingHalfedge* receiverSupportingHalfedge = receiverIodt->getSupportingHalfedge();
-		if (!receiverSupportingHalfedge) {
-			continue;
-		}
+		SupportingHalfedge::IntrinsicMesh receiverMesh = toIntrinsicMesh(*receiverIntrinsic);
+		receiverContactPairs[receiverIdx].assign(receiverMesh.triangles.size(), ContactPair{});
 
-		SupportingHalfedge::IntrinsicMesh receiverMesh = receiverSupportingHalfedge->buildIntrinsicMesh();
-		receiverContactPairs[receiverIdx].assign(receiverMesh.triangles.size(), ContactPairGPU{});
-
-		glm::mat4 recvModelMat = receiverModel->getModelMatrix();
+		glm::mat4 recvModelMat = toMat4(receiverLocalToWorld[receiverIdx]);
 		glm::mat3 recvNormalMat = glm::transpose(glm::inverse(glm::mat3(recvModelMat)));
 
 		for (size_t triIdx = 0; triIdx < receiverMesh.triangles.size(); triIdx++) {
@@ -122,7 +154,7 @@ void ContactInterface::mapSurfacePoints(
 			const glm::vec3 n1 = receiverMesh.vertices[rv1].normal;
 			const glm::vec3 n2 = receiverMesh.vertices[rv2].normal;
 
-			ContactPairGPU pair{};
+			ContactPair pair{};
 			for (uint32_t si = 0; si < Quadrature::count; ++si) {
 				pair.samples[si].sourceTriangleIndex = iODT::INVALID_INDEX;
 				pair.samples[si].u = 0.0f;
@@ -232,38 +264,33 @@ void ContactInterface::mapSurfacePoints(
 
 	}
 
-	outOutlineVertices.reserve(receiverModels.size() * 256);
-	outCorrespondenceVertices.reserve(receiverModels.size() * 256);
+	outOutlineVertices.reserve(receiverIntrinsics.size() * 256);
+	outCorrespondenceVertices.reserve(receiverIntrinsics.size() * 256);
 
-	for (size_t receiverIdx = 0; receiverIdx < receiverModels.size(); receiverIdx++) {
-		Model* receiverModel = receiverModels[receiverIdx];
-		if (!receiverModel) {
+	for (size_t receiverIdx = 0; receiverIdx < receiverIntrinsics.size(); receiverIdx++) {
+        if (receiverIdx >= receiverLocalToWorld.size()) {
+            continue;
+        }
+
+		const IntrinsicMeshData* receiverIntrinsic = receiverIntrinsics[receiverIdx];
+		if (!receiverIntrinsic) {
 			continue;
 		}
 
-		iODT* receiverIodt = remesher.getRemesherForModel(receiverModel);
-		if (!receiverIodt) {
-			continue;
-		}
-		SupportingHalfedge* receiverSupportingHalfedge = receiverIodt->getSupportingHalfedge();
-		if (!receiverSupportingHalfedge) {
-			continue;
-		}
-
-		SupportingHalfedge::IntrinsicMesh receiverMesh = receiverSupportingHalfedge->buildIntrinsicMesh();
+		SupportingHalfedge::IntrinsicMesh receiverMesh = toIntrinsicMesh(*receiverIntrinsic);
 		if (receiverIdx >= receiverContactPairs.size()) {
 			continue;
 		}
 		const auto& contactPairs = receiverContactPairs[receiverIdx];
 
-		glm::mat4 recvModel = receiverModel->getModelMatrix();
-		glm::mat4 srcModelMat2 = sourceModel.getModelMatrix();
+		glm::mat4 recvModel = toMat4(receiverLocalToWorld[receiverIdx]);
+		glm::mat4 srcModelMat2 = toMat4(sourceLocalToWorld);
 
 		for (size_t triIdx = 0; triIdx < receiverMesh.triangles.size(); triIdx++) {
 			if (triIdx >= contactPairs.size()) {
 				continue;
 			}
-			const ContactPairGPU& pair = contactPairs[triIdx];
+			const ContactPair& pair = contactPairs[triIdx];
 			if (pair.contactArea <= 0.0f) {
 				continue;
 			}
@@ -388,4 +415,5 @@ void ContactInterface::mapSurfacePoints(
 			}
 		}
 	}
+
 }

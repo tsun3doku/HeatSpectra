@@ -1,4 +1,4 @@
-﻿#include "RenderRuntime.hpp"
+#include "RenderRuntime.hpp"
 
 #include "scene/CameraController.hpp"
 #include "vulkan/CommandBufferManager.hpp"
@@ -23,7 +23,6 @@
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "renderers/WireframeRenderer.hpp"
-#include "framegraph/FrameSimulation.hpp"
 
 RenderRuntime::RenderRuntime(
     const WindowRuntimeState& windowState,
@@ -46,7 +45,7 @@ RenderRuntime::RenderRuntime(
 
 RenderRuntime::~RenderRuntime() = default;
 
-bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ResourceManager& resourceManager, UniformBufferManager& ubo) {
+bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, ResourceManager& resourceManager, UniformBufferManager& ubo) {
     if (swapChainFormat == VK_FORMAT_UNDEFINED || extent.width == 0 || extent.height == 0) {
         return false;
     }
@@ -71,6 +70,8 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
 
     sceneRenderer = std::make_unique<SceneRenderer>(
         vulkanDevice,
+        allocator,
+        remeshResources,
         *frameGraph,
         frameGraphBackend->getRuntime(),
         resourceManager,
@@ -123,7 +124,8 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
         services.resourceManager,
         services.meshModifiers,
         services.uniformBufferManager,
-        services.simulation,
+        services.heatSystem,
+        services.voronoiSystem,
         *modelSelection,
         *gizmoController,
         *wireframeRenderer,
@@ -150,9 +152,15 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
     return frameController != nullptr;
 }
 
-void RenderRuntime::setSimulation(FrameSimulation* simulation) {
+void RenderRuntime::setSystems(HeatSystem* heatSystem, VoronoiSystem* voronoiSystem) {
     if (frameController) {
-        frameController->setSimulation(simulation);
+        frameController->setSystems(heatSystem, voronoiSystem);
+    }
+}
+
+void RenderRuntime::setHeatSystem(HeatSystem* heatSystem) {
+    if (frameController) {
+        frameController->setHeatSystem(heatSystem);
     }
 }
 

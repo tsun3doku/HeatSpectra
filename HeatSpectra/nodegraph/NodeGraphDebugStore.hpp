@@ -41,17 +41,18 @@ public:
     static NodeGraphDebugStore& instance();
     static bool tryGetLatestNodeDebugInfo(NodeGraphNodeId nodeId, NodeGraphRuntimeNodeDebugInfo& outInfo);
 
-    void setState(const NodeGraphState& state);
+    void setState(const NodeGraphState& state, NodePayloadRegistry* registry);
     void publish(uint64_t revision, std::unordered_map<uint64_t, uint64_t>&& srcByInput, std::unordered_map<uint64_t, NodeDataBlock>&& outBySocket);
     bool tryGetNode(NodeGraphNodeId nodeId, NodeGraphRuntimeNodeDebugInfo& outInfo) const;
 
 private:
     static uint64_t socketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
-    static NodeGraphRuntimeSocketDebugInfo socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block);
+    NodeGraphRuntimeSocketDebugInfo socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block) const;
 
     mutable std::mutex mutex;
     NodeGraphState state{};
     uint64_t revision = 0;
     std::unordered_map<uint64_t, uint64_t> srcByInput;
     std::unordered_map<uint64_t, NodeDataBlock> outBySocket;
+    NodePayloadRegistry* payloadRegistry = nullptr;
 };

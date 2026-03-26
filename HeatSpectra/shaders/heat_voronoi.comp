@@ -4,12 +4,6 @@
 layout(local_size_x = 256) in;
 
 struct VoronoiNode {
-    float temperature;        
-    float conductivityPerMass;
-    float thermalMass;
-    float density;
-    float specificHeat;
-    float conductivity;
     float volume;
     uint neighborOffset;
     uint neighborCount;
@@ -21,7 +15,16 @@ struct VoronoiNeighbor {
     float areaOverDistance;
 };
 
-// Binding 0: VoronoiNode metadata (thermal mass, conductivity, etc.)
+struct VoronoiMaterialNode {
+    float temperature;
+    float conductivityPerMass;
+    float thermalMass;
+    float density;
+    float specificHeat;
+    float conductivity;
+};
+
+// Binding 0: VoronoiNode metadata (topology and volume)
 layout(binding = 0) buffer VoronoiNodeBuffer {
     VoronoiNode nodes[];
 };
@@ -31,32 +34,37 @@ layout(binding = 1) buffer VoronoiNeighborBuffer {
     VoronoiNeighbor neighbors[];
 };
 
-// Binding 2: Time uniform
-layout(binding = 2) uniform TimeBuffer {
+// Binding 2: Heat material/state metadata
+layout(binding = 2) buffer VoronoiMaterialNodeBuffer {
+    VoronoiMaterialNode materialNodes[];
+};
+
+// Binding 3: Time uniform
+layout(binding = 3) uniform TimeBuffer {
     float deltaTime;
     float totalTime;
 } timeBuffer;
 
-// Binding 3: Temperature READ buffer
-layout(binding = 3) buffer TemperatureReadBuffer {
+// Binding 4: Temperature READ buffer
+layout(binding = 4) buffer TemperatureReadBuffer {
     uint temperatures[];  // Stored as uint, convert with uintBitsToFloat
 } tempRead;
 
-// Binding 4: Temperature WRITE buffer
-layout(binding = 4) buffer TemperatureWriteBuffer {
+// Binding 5: Temperature WRITE buffer
+layout(binding = 5) buffer TemperatureWriteBuffer {
     uint temperatures[];  // Stored as uint, convert with floatBitsToUint
 } tempWrite;
 
-// Binding 5: Seed flags (bit 0 = isGhost, bit 1 = isSurface)
-layout(binding = 5) readonly buffer SeedFlagsBuffer {
+// Binding 6: Seed flags (bit 0 = isGhost, bit 1 = isSurface)
+layout(binding = 6) readonly buffer SeedFlagsBuffer {
     uint flags[];
 } seedFlags;
 
-layout(binding = 6) buffer InjectionKBuffer {
+layout(binding = 7) buffer InjectionKBuffer {
     uint values[];
 } injectionKBuffer;
 
-layout(binding = 7) buffer InjectionKTBuffer {
+layout(binding = 8) buffer InjectionKTBuffer {
     uint values[];
 } injectionKTBuffer;
 
@@ -83,8 +91,9 @@ void main() {
     }
     
     VoronoiNode node = nodes[nodeID];
+    VoronoiMaterialNode materialNode = materialNodes[nodeID];
     
-    float thermalMass = max(node.thermalMass, 1e-12);   // Minimum thermal mass
+    float thermalMass = max(materialNode.thermalMass, 1e-12);   // Minimum thermal mass
     
     // Read current temperature from ping pong buffer
     float currentTemp = uintBitsToFloat(tempRead.temperatures[nodeID]);
@@ -103,7 +112,7 @@ void main() {
         float neighborTemp = uintBitsToFloat(tempRead.temperatures[neighbor.neighborIndex]);
         
         // Conductance coefficient: (k / thermalMass) * (A / d)
-        float conductance = node.conductivityPerMass * neighbor.areaOverDistance;
+        float conductance = materialNode.conductivityPerMass * neighbor.areaOverDistance;
         
         totalConductance += conductance;
         totalFlux += conductance * neighborTemp;

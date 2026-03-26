@@ -1,4 +1,4 @@
-﻿#include "MainQt.h"
+#include "MainQt.h"
 #include "App.h"
 #include "nodegraph/NodeGraphDock.hpp"
 #include "runtime/RenderSettingsController.hpp"
@@ -118,8 +118,8 @@ void MainWindow::setApp(App* application) {
     if (nodeGraphDock) {
         boundRuntimeQuery = app ? app->runtimeQuery() : nullptr;
         nodeGraphDock->setRuntimeQuery(boundRuntimeQuery);
-        boundModelRegistry = app ? app->getModelRegistry() : nullptr;
-        nodeGraphDock->setModelRegistry(boundModelRegistry);
+        boundSceneController = app ? app->getSceneController() : nullptr;
+        nodeGraphDock->setSceneController(boundSceneController);
         boundModelSelection = app ? app->getModelSelection() : nullptr;
         nodeGraphDock->setModelSelection(boundModelSelection);
     }
@@ -312,10 +312,10 @@ void MainWindow::syncNodeGraphBridge() {
         boundRuntimeQuery = runtimeQuery;
     }
 
-    const ModelRegistry* modelRegistry = app ? app->getModelRegistry() : nullptr;
-    if (modelRegistry != boundModelRegistry) {
-        nodeGraphDock->setModelRegistry(modelRegistry);
-        boundModelRegistry = modelRegistry;
+    const SceneController* sceneController = app ? app->getSceneController() : nullptr;
+    if (sceneController != boundSceneController) {
+        nodeGraphDock->setSceneController(sceneController);
+        boundSceneController = sceneController;
     }
 
     ModelSelection* modelSelection = app ? app->getModelSelection() : nullptr;

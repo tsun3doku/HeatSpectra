@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -78,6 +78,18 @@
     <ClCompile Include="runtime\RenderContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="runtime\ContactPreviewStore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\ComputeCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimePackageCompiler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimePayloadController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="runtime\RuntimeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -103,9 +115,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="scene\SceneController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\ModelRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="framegraph\FrameStats.cpp">
@@ -144,6 +153,12 @@
     <ClCompile Include="heat\HeatSystemRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="heat\HeatSystemSimRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\HeatSystemSurfaceRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="heat\HeatSystemResources.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -151,6 +166,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemContactStage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="contact\ContactSystemRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\HeatContactRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\HeatSystemSimStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemSurfaceStage.cpp">
@@ -162,10 +186,19 @@
     <ClCompile Include="heat\HeatSystemRenderStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSource.cpp">
+    <ClCompile Include="heat\HeatSourceRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\VoronoiSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\VoronoiSystemRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\VoronoiSystemController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vulkan\MemoryAllocator.cpp">
@@ -240,7 +273,22 @@
     <ClCompile Include="spatial\HashGrid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatReceiver.cpp">
+    <ClCompile Include="heat\HeatReceiverRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiGeometryRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiSurfaceStage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiBuilder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiModelRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="voronoi\VoronoiSurfaceRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemPresets.cpp">
@@ -297,10 +345,10 @@
     <ClCompile Include="heat\ContactInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\ContactSystemController.cpp">
+    <ClCompile Include="contact\ContactSystemController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\ContactSystem.cpp">
+    <ClCompile Include="contact\ContactSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderers\ContactLineRenderer.cpp">
@@ -321,7 +369,10 @@
     <ClCompile Include="mesh\MeshModifiers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="renderers\HeatRenderer.cpp">
+    <ClCompile Include="renderers\HeatReceiverRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\HeatSourceRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="util\GlyphText.cpp">
@@ -339,7 +390,13 @@
     <ClCompile Include="nodegraph\NodeGraphDock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphEditor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphDataTypes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphHash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphRuntime.cpp">
@@ -351,13 +408,19 @@
     <ClCompile Include="nodegraph\NodeGraphKernels.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeSolverController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="nodegraph\NodeModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeModelTransform.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeModelPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeTransform.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeTransformPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGroup.cpp">
@@ -372,13 +435,22 @@
     <ClCompile Include="nodegraph\NodeRemeshPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeVoronoiPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatReceiver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeContactPair.cpp">
+    <ClCompile Include="nodegraph\NodeHeatSourcePanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeContact.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeVoronoi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp">
@@ -387,7 +459,7 @@
     <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeContactPairPanel.cpp">
+    <ClCompile Include="nodegraph\NodeContactPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp">
@@ -396,7 +468,7 @@
     <ClCompile Include="nodegraph\NodePanelUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphExecutionPlanner.cpp">
+    <ClCompile Include="nodegraph\NodeGraphCompiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeInspectorDialog.cpp">
@@ -405,10 +477,22 @@
     <ClCompile Include="nodegraph\NodeGraphScene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphSceneStyle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphSceneUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphTypes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphValidator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphRegistry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -471,6 +555,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\heat_buffer.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_source.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\heat_source.vert">
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\intrinsic_normals.frag">
@@ -589,9 +679,6 @@
     <ClInclude Include="framegraph\FrameController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="framegraph\FrameSimulation.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="framegraph\FrameTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -617,6 +704,27 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RenderContext.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\ContactPreviewStore.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\ComputeCache.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimePackageCompiler.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimePackages.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimePayloadController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeContactTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeThermalTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeController.hpp">
@@ -647,9 +755,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scene\SceneController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\ModelRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="framegraph\FrameStats.hpp">
@@ -706,6 +811,15 @@
     <ClInclude Include="heat\HeatSystemContactStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="contact\ContactSystemRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatContactRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatSystemSimStage.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="heat\HeatSystemSurfaceStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -718,13 +832,22 @@
     <ClInclude Include="heat\HeatSystemController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="heat\VoronoiSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\VoronoiSystemRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\VoronoiSystemController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="voronoi\LloydCompute.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\VoronoiGeoCompute.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatSource.hpp">
+    <ClInclude Include="heat\HeatSourceRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\MemoryAllocator.hpp">
@@ -808,7 +931,34 @@
     <ClInclude Include="spatial\HashGrid.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatReceiver.hpp">
+    <ClInclude Include="heat\HeatReceiverRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiGeometryRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiStageContext.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiSurfaceStage.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiSystemResources.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiBuilder.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiDomain.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiModelRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiResources.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\VoronoiSurfaceRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemPresets.hpp">
@@ -865,10 +1015,10 @@
     <ClInclude Include="renderers\ContactLineRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\ContactSystemController.hpp">
+    <ClInclude Include="contact\ContactSystemController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\ContactSystem.hpp">
+    <ClInclude Include="contact\ContactSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\ContactInterface.hpp">
@@ -892,7 +1042,10 @@
     <ClInclude Include="mesh\MeshModifiers.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="renderers\HeatRenderer.hpp">
+    <ClInclude Include="renderers\HeatReceiverRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\HeatSourceRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\VulkanBuffer.hpp">
@@ -913,7 +1066,13 @@
     <ClInclude Include="nodegraph\NodeGraphDock.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphEditor.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphHash.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphRuntime.hpp">
@@ -925,13 +1084,19 @@
     <ClInclude Include="nodegraph\NodeGraphKernels.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeSolverController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="nodegraph\NodeModel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeModelTransform.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeModelPanel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeTransform.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeTransformPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGroup.hpp">
@@ -946,13 +1111,22 @@
     <ClInclude Include="nodegraph\NodeRemeshPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeVoronoiPanel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatReceiver.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatSource.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeContactPair.hpp">
+    <ClInclude Include="nodegraph\NodeHeatSourcePanel.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeContact.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeVoronoi.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp">
@@ -961,7 +1135,7 @@
     <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeContactPairPanel.hpp">
+    <ClInclude Include="nodegraph\NodeContactPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp">
@@ -970,13 +1144,19 @@
     <ClInclude Include="nodegraph\NodePanelUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphExecutionPlanner.hpp">
+    <ClInclude Include="nodegraph\NodeGraphCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeInspectorDialog.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphScene.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphSceneStyle.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphSceneUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphTypes.hpp">
@@ -995,6 +1175,33 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatContactParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="contact\ContactTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="domain\ContactData.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="domain\RemeshParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="domain\VoronoiParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphPayloadTypes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\ContactSampling.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="domain\VoronoiData.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphRegistry.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

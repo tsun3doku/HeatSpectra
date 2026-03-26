@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 
@@ -11,13 +11,16 @@
 #include <vector>
 #include <functional>
 
+#include "domain/RemeshData.hpp"
+
 class Model;
 class UniformBufferManager;
+class MemoryAllocator;
+class RuntimeIntrinsicCache;
 class ResourceManager;
 class FrameGraph;
 class VulkanDevice;
 class CommandPool;
-class Remesher;
 class VkFrameGraphRuntime;
 
 namespace render {
@@ -50,19 +53,12 @@ inline const auto& clearColorValues = clearColorLinear;
 
 class SceneRenderer {
 public:
-    SceneRenderer(VulkanDevice& device, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
+    SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
     ~SceneRenderer();
 
     void resize(VkExtent2D extent);
     void updateDescriptorSets();
-    void allocateDescriptorSetsForModel(Model* model);
-    void updateModelDescriptors(Model* model, Remesher& remesher);
-
-    void updateDescriptorSetsForModel(Model* model, class iODT* remesher);
-    void allocateNormalsDescriptorSetsForModel(Model* model);
-    void updateNormalsDescriptorSetsForModel(Model* model, class iODT* remesher);
-    void allocateVertexNormalsDescriptorSetsForModel(Model* model);
-    void updateVertexNormalsDescriptorSetsForModel(Model* model, class iODT* remesher);
+    void updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic);
 
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
@@ -111,6 +107,8 @@ private:
     void destroyGpuTimingQueryPool();
 
     VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
+    RuntimeIntrinsicCache& remeshResources;
     FrameGraph& frameGraph;
     VkFrameGraphRuntime& frameGraphRuntime;
     ResourceManager& resourceManager;

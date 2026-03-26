@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NodeGraphBridge.hpp"
+#include "NodeGraphEditor.hpp"
 
 #include <functional>
 #include <string>
@@ -30,7 +31,7 @@ public:
     void setNodeActivatedCallback(NodeActivatedCallback callback);
     void setNodeSelectionChangedCallback(NodeSelectionChangedCallback callback);
     void setStatusCallback(StatusCallback callback);
-    void refreshFromGraph();
+    void applyPendingChanges();
     void setSelectedNode(NodeGraphNodeId nodeId);
     void clearNodeSelection();
     bool copySelectedNodes();
@@ -56,39 +57,43 @@ private:
     static constexpr int NodeHoveredRole = 9;
 
     NodeGraphBridge* bridge = nullptr;
+    NodeGraphEditor editor;
     NodeActivatedCallback nodeActivatedCallback;
     NodeSelectionChangedCallback nodeSelectionChangedCallback;
     StatusCallback statusCallback;
+    uint64_t lastSeenRevision = 0;
     QGraphicsPathItem* activeDragLine = nullptr;
     QPointF activeDragStartPos{};
     NodeGraphNodeId activeDragFromNode{};
     NodeGraphSocketId activeDragFromSocket{};
     NodeGraphSocketDirection activeDragFromDirection = NodeGraphSocketDirection::Output;
+
     bool isDraggingConnection = false;
     bool suppressNodeActivationOnRelease = false;
+
+    std::unordered_map<uint32_t, QGraphicsRectItem*> nodeItemsById;
+    std::unordered_map<uint32_t, QGraphicsPathItem*> edgeItemsById;
     std::unordered_map<uint32_t, QGraphicsEllipseItem*> inputSocketItemsBySocket;
     std::unordered_map<uint32_t, QGraphicsEllipseItem*> outputSocketItemsBySocket;
+    std::unordered_map<uint32_t, NodeGraphValueType> outputValueTypeBySocketId;
+
     QGraphicsRectItem* hoveredNodeItem = nullptr;
     QGraphicsPathItem* hoveredEdgeItem = nullptr;
-    struct CopiedNode {
-        NodeGraphNodeId sourceNodeId{};
-        NodeTypeId typeId;
-        std::string title;
-        float x = 0.0f;
-        float y = 0.0f;
-        std::vector<NodeGraphParamValue> parameters;
-        std::vector<NodeGraphSocketId> outputSocketIds;
-    };
-    struct CopiedEdge {
-        NodeGraphNodeId fromNode{};
-        NodeGraphSocketId fromSocket{};
-        NodeGraphNodeId toNode{};
-        NodeGraphSocketId toSocket{};
-    };
-    std::vector<CopiedNode> copiedNodes;
-    std::vector<CopiedEdge> copiedEdges;
+
+    std::vector<NodeGraphEditor::CopiedNode> copiedNodes;
+    std::vector<NodeGraphEditor::CopiedEdge> copiedEdges;
     uint32_t pasteGeneration = 0;
     bool suppressSelectionChangedNotifications = false;
+
+    void buildFromState(const NodeGraphState& state);
+    void applyDelta(const NodeGraphDelta& delta);
+    void clearSceneState();
+
+    QGraphicsRectItem* createNodeItem(const NodeGraphNode& node);
+    void removeNodeItem(NodeGraphNodeId nodeId);
+    void removeEdgesForNode(NodeGraphNodeId nodeId);
+    QGraphicsPathItem* createEdgeItem(const NodeGraphEdge& edge);
+    void removeEdgeItem(NodeGraphEdgeId edgeId);
 
     void syncNodePositionsToBridge();
     void clearActiveDragLine();

@@ -4,6 +4,8 @@
 #include "MemoryAllocator.hpp"
 #include <vulkan/vulkan.h>
 
+class CommandPool;
+
 VkResult createStorageBuffer(
     MemoryAllocator& allocator,
     VulkanDevice& device,
@@ -52,4 +54,15 @@ VkResult createVertexBuffer(
     VkBuffer& outBuffer,
     VkDeviceSize& outOffset,
     VkBufferUsageFlags additionalUsage = 0
+);
+
+VkResult uploadDeviceBuffer(
+    MemoryAllocator& allocator,
+    CommandPool& commandPool,
+    const void* data,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkDeviceSize alignment,
+    VkBuffer& outBuffer,
+    VkDeviceSize& outOffset
 );

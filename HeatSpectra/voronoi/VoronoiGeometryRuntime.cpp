@@ -1,0 +1,362 @@
+#include "voronoi/VoronoiGeometryRuntime.hpp"
+
+#include "runtime/RuntimeIntrinsicCache.hpp"
+#include "scene/Model.hpp"
+#include "util/GeometryUtils.hpp"
+#include "util/Structs.hpp"
+#include "vulkan/CommandBufferManager.hpp"
+#include "vulkan/MemoryAllocator.hpp"
+#include "vulkan/VulkanBuffer.hpp"
+#include "vulkan/VulkanDevice.hpp"
+
+#include <array>
+#include <cstring>
+#include <iostream>
+#include <vector>
+
+VoronoiGeometryRuntime::VoronoiGeometryRuntime(
+    VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator,
+    Model& model,
+    const GeometryData& geometryData,
+    const IntrinsicMeshData& intrinsicMeshData,
+    const RuntimeIntrinsicCache::Entry& intrinsicResources)
+    : vulkanDevice(vulkanDevice),
+      memoryAllocator(memoryAllocator),
+      model(model),
+      geometryData(geometryData),
+      intrinsicMeshData(intrinsicMeshData),
+      intrinsicResources(&intrinsicResources) {
+}
+
+VoronoiGeometryRuntime::~VoronoiGeometryRuntime() {
+}
+
+bool VoronoiGeometryRuntime::createSurfaceBuffers() {
+    if (intrinsicMeshData.vertices.empty()) {
+        std::cerr << "[VoronoiGeometryRuntime] Missing intrinsic state for model" << std::endl;
+        return false;
+    }
+    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    if (vertexCount == 0) {
+        std::cerr << "[VoronoiGeometryRuntime] Model has 0 intrinsic vertices" << std::endl;
+        return false;
+    }
+
+    const VkDeviceSize vertexBufferSize = sizeof(SurfacePoint) * vertexCount;
+    if (createTexelBuffer(
+            memoryAllocator,
+            vulkanDevice,
+            nullptr,
+            vertexBufferSize,
+            VK_FORMAT_R32G32B32A32_SFLOAT,
+            surfaceBuffer,
+            surfaceBufferOffset,
+            surfaceBufferView,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            16) != VK_SUCCESS) {
+        std::cerr << "[VoronoiGeometryRuntime] Failed to create surface texel buffer" << std::endl;
+        cleanup();
+        return false;
+    }
+
+    if (createVertexBuffer(
+            memoryAllocator,
+            vertexBufferSize,
+            surfaceVertexBuffer,
+            surfaceVertexBufferOffset) != VK_SUCCESS) {
+        std::cerr << "[VoronoiGeometryRuntime] Failed to create surface vertex buffer" << std::endl;
+        cleanup();
+        return false;
+    }
+
+    std::vector<glm::vec3> positions(vertexCount);
+    for (size_t i = 0; i < vertexCount; ++i) {
+        positions[i] = glm::vec3(
+            intrinsicMeshData.vertices[i].position[0],
+            intrinsicMeshData.vertices[i].position[1],
+            intrinsicMeshData.vertices[i].position[2]);
+    }
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+
+    std::vector<SurfacePoint> surfacePoints(vertexCount);
+    for (size_t i = 0; i < vertexCount; ++i) {
+        surfacePoints[i].position = positions[i];
+        surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
+        surfacePoints[i].normal = glm::vec3(
+            intrinsicMeshData.vertices[i].normal[0],
+            intrinsicMeshData.vertices[i].normal[1],
+            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].area = vertexAreas[i];
+        surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    if (initStagingBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(initStagingBuffer, initStagingOffset);
+        initStagingBuffer = VK_NULL_HANDLE;
+        initStagingOffset = 0;
+        initBufferSize = 0;
+    }
+    initBufferSize = sizeof(SurfacePoint) * vertexCount;
+    void* initStagingData = nullptr;
+    if (createStagingBuffer(
+            memoryAllocator,
+            initBufferSize,
+            initStagingBuffer,
+            initStagingOffset,
+            &initStagingData) != VK_SUCCESS ||
+        !initStagingData) {
+        std::cerr << "[VoronoiGeometryRuntime] Failed to create initialization staging buffer" << std::endl;
+        cleanup();
+        return false;
+    }
+    std::memcpy(initStagingData, surfacePoints.data(), static_cast<size_t>(initBufferSize));
+    return true;
+}
+
+bool VoronoiGeometryRuntime::initializeSurfaceBuffer() {
+    if (initStagingBuffer != VK_NULL_HANDLE && initBufferSize > 0) {
+        return true;
+    }
+
+    if (intrinsicMeshData.vertices.empty()) {
+        std::cerr << "[VoronoiGeometryRuntime] Missing intrinsic state for model" << std::endl;
+        return false;
+    }
+    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    if (vertexCount == 0 || vertexCount != getIntrinsicVertexCount()) {
+        std::cerr << "[VoronoiGeometryRuntime] Vertex count mismatch or zero vertices." << std::endl;
+        return false;
+    }
+
+    const VkDeviceSize bufferSize = sizeof(SurfacePoint) * vertexCount;
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize stagingOffset = 0;
+    void* stagingData = nullptr;
+    if (createStagingBuffer(
+            memoryAllocator,
+            bufferSize,
+            stagingBuffer,
+            stagingOffset,
+            &stagingData) != VK_SUCCESS ||
+        !stagingData) {
+        std::cerr << "[VoronoiGeometryRuntime] Failed to create surface staging buffer" << std::endl;
+        return false;
+    }
+
+    std::vector<glm::vec3> positions(vertexCount);
+    for (size_t i = 0; i < vertexCount; ++i) {
+        positions[i] = glm::vec3(
+            intrinsicMeshData.vertices[i].position[0],
+            intrinsicMeshData.vertices[i].position[1],
+            intrinsicMeshData.vertices[i].position[2]);
+    }
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+
+    std::vector<SurfacePoint> surfacePoints(vertexCount);
+    for (size_t i = 0; i < vertexCount; ++i) {
+        surfacePoints[i].position = positions[i];
+        surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
+        surfacePoints[i].normal = glm::vec3(
+            intrinsicMeshData.vertices[i].normal[0],
+            intrinsicMeshData.vertices[i].normal[1],
+            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].area = vertexAreas[i];
+        surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    std::memcpy(stagingData, surfacePoints.data(), static_cast<size_t>(bufferSize));
+
+    initStagingBuffer = stagingBuffer;
+    initStagingOffset = stagingOffset;
+    initBufferSize = bufferSize;
+    return true;
+}
+
+bool VoronoiGeometryRuntime::resetSurfaceState() {
+    cleanupStagingBuffers();
+    return initializeSurfaceBuffer();
+}
+
+void VoronoiGeometryRuntime::setVoronoiMapping(VkBuffer mappingBuffer, VkDeviceSize mappingOffset) {
+    voronoiMappingBuffer = mappingBuffer;
+    voronoiMappingBufferOffset = mappingOffset;
+}
+
+void VoronoiGeometryRuntime::updateDescriptors(
+    VkDescriptorSetLayout surfaceLayout,
+    VkDescriptorPool surfacePool,
+    VkBuffer tempBufferA,
+    VkDeviceSize tempBufferAOffset,
+    VkBuffer tempBufferB,
+    VkDeviceSize tempBufferBOffset,
+    VkBuffer timeBuffer,
+    VkDeviceSize timeBufferOffset,
+    uint32_t nodeCount) {
+    const size_t intrinsicVertexCount = getIntrinsicVertexCount();
+    if (intrinsicVertexCount == 0 || voronoiMappingBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    if (surfaceComputeSetA == VK_NULL_HANDLE || surfaceComputeSetB == VK_NULL_HANDLE) {
+        std::vector<VkDescriptorSetLayout> layouts = { surfaceLayout, surfaceLayout };
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = surfacePool;
+        allocInfo.descriptorSetCount = 2;
+        allocInfo.pSetLayouts = layouts.data();
+
+        VkDescriptorSet sets[2] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+        if (vkAllocateDescriptorSets(vulkanDevice.getDevice(), &allocInfo, sets) != VK_SUCCESS) {
+            std::cerr << "[VoronoiGeometryRuntime] Failed to allocate surface ping-pong descriptor sets" << std::endl;
+            return;
+        }
+
+        surfaceComputeSetA = sets[0];
+        surfaceComputeSetB = sets[1];
+    }
+
+    VkDescriptorBufferInfo surfaceInfo{ surfaceBuffer, surfaceBufferOffset, sizeof(SurfacePoint) * intrinsicVertexCount };
+    VkDescriptorBufferInfo timeInfo{ timeBuffer, timeBufferOffset, sizeof(TimeUniform) };
+    VkDescriptorBufferInfo mappingInfo{
+        voronoiMappingBuffer,
+        voronoiMappingBufferOffset,
+        sizeof(VoronoiSurfaceMapping) * intrinsicVertexCount
+    };
+
+    const VkDescriptorSet sets[2] = { surfaceComputeSetA, surfaceComputeSetB };
+    const VkBuffer tempBuffers[2] = { tempBufferA, tempBufferB };
+    const VkDeviceSize tempOffsets[2] = { tempBufferAOffset, tempBufferBOffset };
+
+    for (uint32_t pass = 0; pass < 2; ++pass) {
+        VkDescriptorBufferInfo nodeTempInfo{ tempBuffers[pass], tempOffsets[pass], sizeof(float) * nodeCount };
+        std::array<VkDescriptorBufferInfo*, 4> infos = { &nodeTempInfo, &surfaceInfo, &timeInfo, &mappingInfo };
+        std::array<uint32_t, 4> bindings = { 0u, 1u, 3u, 9u };
+        std::array<VkDescriptorType, 4> types = {
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+        };
+        std::array<VkWriteDescriptorSet, 4> writes{};
+        for (size_t i = 0; i < writes.size(); ++i) {
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet = sets[pass];
+            writes[i].dstBinding = bindings[i];
+            writes[i].dstArrayElement = 0;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = types[i];
+            writes[i].pBufferInfo = infos[i];
+        }
+        vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    }
+}
+
+void VoronoiGeometryRuntime::executeBufferTransfers(VkCommandBuffer commandBuffer) {
+    if (initStagingBuffer == VK_NULL_HANDLE) {
+        return;
+    }
+
+    VkBufferCopy surfaceCopyRegion{ initStagingOffset, surfaceBufferOffset, initBufferSize };
+    vkCmdCopyBuffer(commandBuffer, initStagingBuffer, surfaceBuffer, 1, &surfaceCopyRegion);
+
+    VkBufferCopy vertexCopyRegion{ initStagingOffset, surfaceVertexBufferOffset, initBufferSize };
+    vkCmdCopyBuffer(commandBuffer, initStagingBuffer, surfaceVertexBuffer, 1, &vertexCopyRegion);
+}
+
+void VoronoiGeometryRuntime::recreateDescriptors(
+    VkDescriptorSetLayout surfaceLayout,
+    VkDescriptorPool surfacePool,
+    VkBuffer tempBufferA,
+    VkDeviceSize tempBufferAOffset,
+    VkBuffer tempBufferB,
+    VkDeviceSize tempBufferBOffset,
+    VkBuffer timeBuffer,
+    VkDeviceSize timeBufferOffset,
+    uint32_t nodeCount) {
+    surfaceComputeSetA = VK_NULL_HANDLE;
+    surfaceComputeSetB = VK_NULL_HANDLE;
+
+    updateDescriptors(
+        surfaceLayout,
+        surfacePool,
+        tempBufferA,
+        tempBufferAOffset,
+        tempBufferB,
+        tempBufferBOffset,
+        timeBuffer,
+        timeBufferOffset,
+        nodeCount);
+}
+
+void VoronoiGeometryRuntime::cleanup() {
+    if (surfaceBufferView != VK_NULL_HANDLE) {
+        vkDestroyBufferView(vulkanDevice.getDevice(), surfaceBufferView, nullptr);
+        surfaceBufferView = VK_NULL_HANDLE;
+    }
+    if (surfaceBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(surfaceBuffer, surfaceBufferOffset);
+        surfaceBuffer = VK_NULL_HANDLE;
+        surfaceBufferOffset = 0;
+    }
+    if (surfaceVertexBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(surfaceVertexBuffer, surfaceVertexBufferOffset);
+        surfaceVertexBuffer = VK_NULL_HANDLE;
+        surfaceVertexBufferOffset = 0;
+    }
+
+    voronoiMappingBuffer = VK_NULL_HANDLE;
+    voronoiMappingBufferOffset = 0;
+
+    cleanupStagingBuffers();
+}
+
+VkBufferView VoronoiGeometryRuntime::getSupportingHalfedgeView() const {
+    return intrinsicResources ? intrinsicResources->viewS : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getSupportingAngleView() const {
+    return intrinsicResources ? intrinsicResources->viewA : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getHalfedgeView() const {
+    return intrinsicResources ? intrinsicResources->viewH : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getEdgeView() const {
+    return intrinsicResources ? intrinsicResources->viewE : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getTriangleView() const {
+    return intrinsicResources ? intrinsicResources->viewT : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getLengthView() const {
+    return intrinsicResources ? intrinsicResources->viewL : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getInputHalfedgeView() const {
+    return intrinsicResources ? intrinsicResources->viewHInput : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getInputEdgeView() const {
+    return intrinsicResources ? intrinsicResources->viewEInput : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getInputTriangleView() const {
+    return intrinsicResources ? intrinsicResources->viewTInput : VK_NULL_HANDLE;
+}
+
+VkBufferView VoronoiGeometryRuntime::getInputLengthView() const {
+    return intrinsicResources ? intrinsicResources->viewLInput : VK_NULL_HANDLE;
+}
+
+void VoronoiGeometryRuntime::cleanupStagingBuffers() {
+    if (initStagingBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(initStagingBuffer, initStagingOffset);
+        initStagingBuffer = VK_NULL_HANDLE;
+        initStagingOffset = 0;
+        initBufferSize = 0;
+    }
+}

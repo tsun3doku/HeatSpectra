@@ -1,11 +1,11 @@
 #include "NodeHeatSolverPanel.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeHeatMaterialPresets.hpp"
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"
 #include "NodePanelUtils.hpp"
-#include "heat/HeatContactParams.hpp"
-#include "heat/HeatSystemPresets.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
 
 #include <QAbstractItemView>
@@ -24,49 +24,13 @@
 
 #include <algorithm>
 #include <cctype>
-#include <limits>
-#include <optional>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace {
-
-struct HeatContactBindingRow {
-    NodeGraphSocketId socketId{};
-    std::string socketName;
-    std::string pairSummary;
-    float thermalConductance = HeatContactParams{}.thermalConductance;
-};
-
-void appendReceiverModelNodeIdsFromContactPair(
-    const NodeGraphState& state,
-    const NodeGraphNode& contactPairNode,
-    std::unordered_set<uint32_t>& seenModelNodeIds,
-    std::vector<uint32_t>& outModelNodeIds) {
-    if (contactPairNode.inputs.size() < 2) {
-        return;
-    }
-
-    const NodeGraphEdge* receiverEdge = NodePanelUtils::findIncomingEdgeInState(
-        state,
-        contactPairNode.id,
-        contactPairNode.inputs[1].id);
-    if (!receiverEdge) {
-        return;
-    }
-
-    std::unordered_set<uint32_t> visitedNodeIds;
-    NodePanelUtils::collectUpstreamModelNodeIds(
-        state,
-        receiverEdge->fromNode,
-        visitedNodeIds,
-        seenModelNodeIds,
-        outModelNodeIds);
-}
 
 std::vector<HeatMaterialBindingEntry> parseHeatMaterialBindingsString(const std::string& serializedBindings) {
     std::vector<HeatMaterialBindingEntry> parsedBindings;
@@ -138,106 +102,41 @@ std::string serializeHeatMaterialBindings(const std::vector<HeatMaterialBindingE
     return serialized;
 }
 
-std::unordered_map<uint32_t, float> parseHeatContactBindingsString(const std::string& serializedBindings) {
-    std::unordered_map<uint32_t, float> parsedBindings;
-    if (serializedBindings.empty()) {
-        return parsedBindings;
-    }
-
-    std::stringstream listStream(serializedBindings);
-    std::string token;
-    while (std::getline(listStream, token, ';')) {
-        token = NodePanelUtils::trimCopy(token);
-        if (token.empty()) {
-            continue;
-        }
-
-        const std::size_t separatorIndex = token.find('=');
-        if (separatorIndex == std::string::npos) {
-            continue;
-        }
-
-        uint32_t socketId = 0;
-        if (!NodePanelUtils::tryParseUint32Id(token.substr(0, separatorIndex), socketId) || socketId == 0) {
-            continue;
-        }
-
-        try {
-            parsedBindings[socketId] = std::stof(NodePanelUtils::trimCopy(token.substr(separatorIndex + 1)));
-        } catch (...) {
-            continue;
-        }
-    }
-
-    return parsedBindings;
-}
-
-std::string serializeHeatContactBindings(const std::vector<HeatContactBindingRow>& bindings) {
-    std::string serialized;
-    for (const HeatContactBindingRow& binding : bindings) {
-        if (!binding.socketId.isValid()) {
-            continue;
-        }
-
-        if (!serialized.empty()) {
-            serialized += ";";
-        }
-
-        serialized += std::to_string(binding.socketId.value);
-        serialized += "=";
-        serialized += std::to_string(binding.thermalConductance);
-    }
-
-    return serialized;
-}
-
-std::optional<uint32_t> findFirstUpstreamModelNodeId(
+void collectUpstreamModelNodeIds(
     const NodeGraphState& state,
-    NodeGraphNodeId startNodeId) {
-    std::unordered_set<uint32_t> visitedNodeIds;
-    std::unordered_set<uint32_t> seenModelNodeIds;
-    std::vector<uint32_t> modelNodeIds;
-    NodePanelUtils::collectUpstreamModelNodeIds(
-        state,
-        startNodeId,
-        visitedNodeIds,
-        seenModelNodeIds,
-        modelNodeIds);
-
-    if (modelNodeIds.empty() || modelNodeIds.front() == 0) {
-        return std::nullopt;
+    NodeGraphNodeId startNodeId,
+    std::unordered_set<uint32_t>& visitedNodeIds,
+    std::unordered_set<uint32_t>& seenModelNodeIds,
+    std::vector<uint32_t>& outModelNodeIds) {
+    if (!startNodeId.isValid() || !visitedNodeIds.insert(startNodeId.value).second) {
+        return;
     }
 
-    return modelNodeIds.front();
-}
+    const NodeGraphNode* node = findNodeInState(state, startNodeId);
+    if (!node) {
+        return;
+    }
 
-std::string summarizeContactPairNode(
-    const NodeGraphState& state,
-    const NodeGraphNode& contactPairNode) {
-    std::optional<uint32_t> emitterModelId;
-    std::optional<uint32_t> receiverModelId;
-    if (!contactPairNode.inputs.empty()) {
-        if (const NodeGraphEdge* emitterEdge = NodePanelUtils::findIncomingEdgeInState(
-                state, contactPairNode.id, contactPairNode.inputs[0].id)) {
-            emitterModelId = findFirstUpstreamModelNodeId(state, emitterEdge->fromNode);
+    if (getNodeTypeId(node->typeId) == nodegraphtypes::Model) {
+        if (seenModelNodeIds.insert(node->id.value).second) {
+            outModelNodeIds.push_back(node->id.value);
         }
+        return;
     }
-    if (contactPairNode.inputs.size() >= 2) {
-        if (const NodeGraphEdge* receiverEdge = NodePanelUtils::findIncomingEdgeInState(
-                state, contactPairNode.id, contactPairNode.inputs[1].id)) {
-            receiverModelId = findFirstUpstreamModelNodeId(state, receiverEdge->fromNode);
+
+    for (const NodeGraphSocket& inputSocket : node->inputs) {
+        const NodeGraphEdge* inputEdge = findIncomingEdgeInState(state, node->id, inputSocket.id);
+        if (!inputEdge) {
+            continue;
         }
-    }
 
-    if (emitterModelId.has_value() && receiverModelId.has_value()) {
-        return "Emitter " + std::to_string(*emitterModelId) + " -> Receiver " + std::to_string(*receiverModelId);
+        collectUpstreamModelNodeIds(
+            state,
+            inputEdge->fromNode,
+            visitedNodeIds,
+            seenModelNodeIds,
+            outModelNodeIds);
     }
-
-    if (!contactPairNode.title.empty()) {
-        return contactPairNode.title;
-    }
-
-    return "Contact Pair " + std::to_string(contactPairNode.id.value);
 }
 
 } // namespace
@@ -328,23 +227,7 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
 
     heatBindingApplyButton = new QPushButton("Apply Material Bindings", this);
     layout->addWidget(heatBindingApplyButton);
-
-    layout->addWidget(new QLabel("Contact Parameters:", this));
-
-    heatContactBindingsTable = new QTableWidget(this);
-    heatContactBindingsTable->setColumnCount(3);
-    heatContactBindingsTable->setHorizontalHeaderLabels({"Socket", "Contact Pair", "Conductance"});
-    heatContactBindingsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    heatContactBindingsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    heatContactBindingsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    heatContactBindingsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    heatContactBindingsTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    heatContactBindingsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    heatContactBindingsTable->setMinimumHeight(120);
-    layout->addWidget(heatContactBindingsTable);
-
-    heatContactBindingApplyButton = new QPushButton("Apply Contact Parameters", this);
-    layout->addWidget(heatContactBindingApplyButton);
+    layout->addWidget(new QLabel("Contact parameters are authored on the Contact node.", this));
     layout->addStretch();
 
     heatStatusTimer = new QTimer(this);
@@ -408,9 +291,6 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
     connect(heatBindingApplyButton, &QPushButton::clicked, this, [this]() {
         applyMaterialBindings();
     });
-    connect(heatContactBindingApplyButton, &QPushButton::clicked, this, [this]() {
-        applyContactBindings();
-    });
     connect(heatStatusTimer, &QTimer::timeout, this, [this]() {
         updateHeatStatus();
     });
@@ -437,7 +317,6 @@ void NodeHeatSolverPanel::setNode(NodeGraphNodeId nodeId) {
     }
 
     refreshBindingGroupOptions();
-    refreshContactBindingRows(node);
     if (heatCellSizeSpinBox) {
         heatCellSizeSpinBox->setValue(NodePanelUtils::readFloatParam(
             node,
@@ -474,65 +353,26 @@ void NodeHeatSolverPanel::refreshBindingGroupOptions() {
     std::vector<std::string> receiverModelIds;
     std::unordered_set<std::string> seenReceiverModelIds;
 
-    NodeGraphRuntimeNodeDebugInfo debugInfo{};
-    if (NodeGraphDebugStore::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
-        for (const NodeGraphRuntimeSocketDebugInfo& inputSocket : debugInfo.inputs) {
-            if (!inputSocket.hasValue || inputSocket.dataType != "heat_receiver") {
-                continue;
-            }
-
-            const auto modelIdIt = inputSocket.metadata.find("geometry.model_id");
-            if (modelIdIt == inputSocket.metadata.end()) {
-                continue;
-            }
-
-            uint32_t modelId = 0;
-            if (!NodePanelUtils::tryParseUint32Id(modelIdIt->second, modelId) || modelId == 0) {
-                continue;
-            }
-
-            const std::string modelIdText = std::to_string(modelId);
-            if (seenReceiverModelIds.insert(modelIdText).second) {
-                receiverModelIds.push_back(modelIdText);
-            }
-        }
-    }
-
     if (nodeGraphBridge) {
         const NodeGraphState state = nodeGraphBridge->state();
-        const NodeGraphNode* currentNode = NodePanelUtils::findNodeInState(state, currentNodeId);
+        const NodeGraphNode* currentNode = findNodeInState(state, currentNodeId);
         if (currentNode) {
             std::unordered_set<uint32_t> seenModelNodeIds;
             std::vector<uint32_t> modelNodeIds;
             for (const NodeGraphSocket& inputSocket : currentNode->inputs) {
-                const NodeGraphEdge* inputEdge = NodePanelUtils::findIncomingEdgeInState(state, currentNode->id, inputSocket.id);
+                if (inputSocket.valueType != NodeGraphValueType::Voronoi) {
+                    continue;
+                }
+
+                const NodeGraphEdge* inputEdge = findIncomingEdgeInState(state, currentNode->id, inputSocket.id);
                 if (!inputEdge) {
                     continue;
                 }
 
-                const NodeGraphNode* upstreamNode = NodePanelUtils::findNodeInState(state, inputEdge->fromNode);
-                if (!upstreamNode) {
-                    continue;
-                }
-
-                const std::string upstreamType = canonicalNodeTypeId(upstreamNode->typeId);
-                if (upstreamType == nodegraphtypes::ContactPair) {
-                    appendReceiverModelNodeIdsFromContactPair(
-                        state,
-                        *upstreamNode,
-                        seenModelNodeIds,
-                        modelNodeIds);
-                    continue;
-                }
-
-                if (upstreamType != nodegraphtypes::HeatReceiver) {
-                    continue;
-                }
-
                 std::unordered_set<uint32_t> visitedNodeIds;
-                NodePanelUtils::collectUpstreamModelNodeIds(
+                collectUpstreamModelNodeIds(
                     state,
-                    upstreamNode->id,
+                    inputEdge->fromNode,
                     visitedNodeIds,
                     seenModelNodeIds,
                     modelNodeIds);
@@ -606,53 +446,6 @@ void NodeHeatSolverPanel::refreshBindingGroupOptions() {
     heatBindingGroupComboBox->blockSignals(false);
 }
 
-void NodeHeatSolverPanel::refreshContactBindingRows(const NodeGraphNode& node) {
-    if (!heatContactBindingsTable) {
-        return;
-    }
-
-    heatContactBindingsTable->setRowCount(0);
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
-    const std::unordered_map<uint32_t, float> serializedBindings =
-        parseHeatContactBindingsString(NodePanelUtils::readStringParam(node, nodegraphparams::heatsolve::ContactBindings));
-    const NodeGraphState state = nodeGraphBridge->state();
-
-    for (const NodeGraphSocket& inputSocket : node.inputs) {
-        const NodeGraphEdge* inputEdge = NodePanelUtils::findIncomingEdgeInState(state, node.id, inputSocket.id);
-        if (!inputEdge) {
-            continue;
-        }
-
-        const NodeGraphNode* upstreamNode = NodePanelUtils::findNodeInState(state, inputEdge->fromNode);
-        if (!upstreamNode || canonicalNodeTypeId(upstreamNode->typeId) != nodegraphtypes::ContactPair) {
-            continue;
-        }
-
-        const int row = heatContactBindingsTable->rowCount();
-        heatContactBindingsTable->insertRow(row);
-
-        QTableWidgetItem* socketItem = new QTableWidgetItem(QString::fromStdString(inputSocket.name));
-        socketItem->setData(Qt::UserRole, static_cast<qulonglong>(inputSocket.id.value));
-        socketItem->setFlags(socketItem->flags() & ~Qt::ItemIsEditable);
-        heatContactBindingsTable->setItem(row, 0, socketItem);
-
-        QTableWidgetItem* pairItem = new QTableWidgetItem(QString::fromStdString(summarizeContactPairNode(state, *upstreamNode)));
-        pairItem->setFlags(pairItem->flags() & ~Qt::ItemIsEditable);
-        heatContactBindingsTable->setItem(row, 1, pairItem);
-
-        const auto bindingIt = serializedBindings.find(inputSocket.id.value);
-        const float thermalConductance =
-            (bindingIt != serializedBindings.end()) ? bindingIt->second : HeatContactParams{}.thermalConductance;
-
-        QLineEdit* conductanceEdit = new QLineEdit(QString::number(thermalConductance), heatContactBindingsTable);
-        conductanceEdit->setPlaceholderText(QString::number(HeatContactParams{}.thermalConductance));
-        heatContactBindingsTable->setCellWidget(row, 2, conductanceEdit);
-    }
-}
-
 void NodeHeatSolverPanel::updateHeatStatus() {
     if (!heatStatusValueLabel || !heatToggleButton || !heatPauseButton) {
         return;
@@ -660,7 +453,7 @@ void NodeHeatSolverPanel::updateHeatStatus() {
 
     NodeGraphNode node{};
     const bool hasNodeState = nodeGraphBridge && currentNodeId.isValid() && nodeGraphBridge->getNode(currentNodeId, node);
-    if (!hasNodeState || canonicalNodeTypeId(node.typeId) != nodegraphtypes::HeatSolve) {
+    if (!hasNodeState || getNodeTypeId(node.typeId) != nodegraphtypes::HeatSolve) {
         heatStatusValueLabel->setText("Unavailable");
         heatToggleButton->setEnabled(false);
         heatPauseButton->setEnabled(false);
@@ -876,52 +669,6 @@ void NodeHeatSolverPanel::applyMaterialBindings() {
     } else {
         setStatus("Receiver material bindings applied.");
     }
-}
-
-void NodeHeatSolverPanel::applyContactBindings() {
-    if (!nodeGraphBridge || !currentNodeId.isValid() || !heatContactBindingsTable) {
-        setStatus("Cannot apply contact parameters for this node.");
-        return;
-    }
-
-    std::vector<HeatContactBindingRow> bindings;
-    bindings.reserve(static_cast<std::size_t>(heatContactBindingsTable->rowCount()));
-    for (int row = 0; row < heatContactBindingsTable->rowCount(); ++row) {
-        QTableWidgetItem* socketItem = heatContactBindingsTable->item(row, 0);
-        QLineEdit* conductanceEdit = qobject_cast<QLineEdit*>(heatContactBindingsTable->cellWidget(row, 2));
-        if (!socketItem || !conductanceEdit) {
-            continue;
-        }
-
-        bool ok = false;
-        const float thermalConductance = conductanceEdit->text().trimmed().toFloat(&ok);
-        if (!ok || thermalConductance <= 0.0f) {
-            setStatus("Contact conductance must be a positive number.");
-            return;
-        }
-
-        const qulonglong socketValue = socketItem->data(Qt::UserRole).toULongLong(&ok);
-        if (!ok || socketValue == 0) {
-            continue;
-        }
-
-        HeatContactBindingRow binding{};
-        binding.socketId.value = static_cast<uint32_t>(socketValue);
-        binding.thermalConductance = thermalConductance;
-        bindings.push_back(binding);
-    }
-
-    const std::string serializedBindings = serializeHeatContactBindings(bindings);
-    if (!NodePanelUtils::writeStringParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::heatsolve::ContactBindings,
-            serializedBindings)) {
-        setStatus("Failed to update contact parameters.");
-        return;
-    }
-
-    setStatus("Contact parameters applied.");
 }
 
 void NodeHeatSolverPanel::setStatus(const QString& text) const {

@@ -374,39 +374,6 @@ glm::vec3 Model::getFaceNormal(uint32_t faceIndex) const {
     return glm::normalize(glm::cross(v1 - v0, v2 - v0));
 }
 
-void Model::equalizeFaceAreas() {
-    std::vector<glm::vec3> centroids(indices.size() / 3);
-
-    // Calculate face centroids
-    for (size_t i = 0; i < indices.size(); i += 3) {
-        centroids[i / 3] = (vertices[indices[i]].pos +
-            vertices[indices[i + 1]].pos +
-            vertices[indices[i + 2]].pos) / 3.0f;
-    }
-
-    // Adjust vertices toward centroids
-    const float relaxation = 0.15f; // [0 = no change, 0.5 = full]
-    std::vector<glm::vec3> newPositions(vertices.size(), glm::vec3(0));
-    std::vector<int> vertexCounts(vertices.size(), 0);
-
-    for (size_t i = 0; i < indices.size(); i += 3) {
-        glm::vec3 centroid = centroids[i / 3];
-        for (int j = 0; j < 3; j++) {
-            uint32_t idx = indices[i + j];
-            newPositions[idx] += centroid;
-            vertexCounts[idx]++;
-        }
-    }
-
-    for (size_t i = 0; i < vertices.size(); i++) {
-        if (vertexCounts[i] > 0) {
-            vertices[i].pos = glm::mix(vertices[i].pos,
-                newPositions[i] / float(vertexCounts[i]),
-                relaxation);
-        }
-    }
-}
-
 void Model::recalculateNormals() {
     if (renderVertices.empty() || renderIndices.empty()) {
         return;

@@ -4,7 +4,8 @@
 #include "framegraph/FrameGraph.hpp"
 #include "framegraph/FrameGraphVkTypes.hpp"
 #include "framegraph/FrameSync.hpp"
-#include "framegraph/FrameSimulation.hpp"
+#include "heat/HeatSystem.hpp"
+#include "heat/VoronoiSystem.hpp"
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/SceneRenderer.hpp"
@@ -23,7 +24,8 @@ SwapchainStage::SwapchainStage(
     VkFrameGraphBackend& frameGraphBackend,
     SceneRenderer& sceneRenderer,
     FrameSync& frameSync,
-    FrameSimulation* simulation,
+    HeatSystem* heatSystem,
+    VoronoiSystem* voronoiSystem,
     std::atomic<bool>& isShuttingDown)
     : windowState(windowState),
       vulkanDevice(vulkanDevice),
@@ -32,7 +34,8 @@ SwapchainStage::SwapchainStage(
       frameGraphBackend(frameGraphBackend),
       sceneRenderer(sceneRenderer),
       frameSync(frameSync),
-      simulation(simulation),
+      heatSystem(heatSystem),
+      voronoiSystem(voronoiSystem),
       isShuttingDown(isShuttingDown) {
 }
 
@@ -51,8 +54,13 @@ void SwapchainStage::cleanupSwapChain() {
     swapchainManager.cleanup();
 }
 
-void SwapchainStage::setSimulation(FrameSimulation* updatedSimulation) {
-    simulation = updatedSimulation;
+void SwapchainStage::setSystems(HeatSystem* updatedHeatSystem, VoronoiSystem* updatedVoronoiSystem) {
+    heatSystem = updatedHeatSystem;
+    voronoiSystem = updatedVoronoiSystem;
+}
+
+void SwapchainStage::setHeatSystem(HeatSystem* updatedHeatSystem) {
+    heatSystem = updatedHeatSystem;
 }
 
 bool SwapchainStage::recreateSwapChain() {
@@ -96,8 +104,14 @@ bool SwapchainStage::recreateSwapChain() {
         return false;
     }
 
-    if (simulation) {
-        simulation->recreateResources(
+    if (heatSystem) {
+        heatSystem->recreateResources(
+            renderconfig::MaxFramesInFlight,
+            targetExtent,
+            frameGraphBackend.getRuntime().getRenderPass());
+    }
+    if (voronoiSystem) {
+        voronoiSystem->recreateResources(
             renderconfig::MaxFramesInFlight,
             targetExtent,
             frameGraphBackend.getRuntime().getRenderPass());

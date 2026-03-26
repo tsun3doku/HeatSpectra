@@ -9,10 +9,10 @@
 #include "runtime/RuntimeHost.hpp"
 
 class NodeGraphBridge;
-class ModelRegistry;
 class ModelSelection;
 class RenderSettingsController;
 class RuntimeQuery;
+class SceneController;
 struct WindowRuntimeState;
 
 class App {
@@ -34,8 +34,8 @@ public:
     const RenderSettingsController* getSettingsController() const;
     NodeGraphBridge* getNodeGraphBridge();
     const NodeGraphBridge* getNodeGraphBridge() const;
-    ModelRegistry* getModelRegistry();
-    const ModelRegistry* getModelRegistry() const;
+    SceneController* getSceneController();
+    const SceneController* getSceneController() const;
     ModelSelection* getModelSelection();
     const ModelSelection* getModelSelection() const;
 

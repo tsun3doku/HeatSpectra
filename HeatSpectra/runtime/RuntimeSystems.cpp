@@ -117,18 +117,12 @@ const NodeGraphBridge* RuntimeSystems::getNodeGraphBridge() const {
     return render.nodeGraphBridge();
 }
 
-ModelRegistry* RuntimeSystems::getModelRegistry() {
-    if (!scene.isInitialized()) {
-        return nullptr;
-    }
-    return &scene.modelRegistry();
+SceneController* RuntimeSystems::getSceneController() {
+    return render.sceneController();
 }
 
-const ModelRegistry* RuntimeSystems::getModelRegistry() const {
-    if (!scene.isInitialized()) {
-        return nullptr;
-    }
-    return &scene.modelRegistry();
+const SceneController* RuntimeSystems::getSceneController() const {
+    return render.sceneController();
 }
 
 ModelSelection* RuntimeSystems::getModelSelection() {

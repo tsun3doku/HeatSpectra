@@ -1,12 +1,18 @@
-﻿#include "NodeGraphKernels.hpp"
+#include "NodeGraphKernels.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
-#include "NodeContactPair.hpp"
+#include "NodeContact.hpp"
 #include "NodeHeatReceiver.hpp"
 #include "NodeHeatSolve.hpp"
 #include "NodeHeatSource.hpp"
+#include "NodeVoronoi.hpp"
 #include "NodeGroup.hpp"
 #include "NodeModel.hpp"
+#include "NodeTransform.hpp"
 #include "NodeRemesh.hpp"
+#include "NodeGraphPayloadTypes.hpp"
+#include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -16,7 +22,25 @@ NodeGraphKernels::NodeGraphKernels() {
 }
 
 bool NodeGraphKernels::hasKernel(const NodeTypeId& typeId) const {
-    return kernelByTypeId.find(canonicalNodeTypeId(typeId)) != kernelByTypeId.end();
+    return kernelByTypeId.find(getNodeTypeId(typeId)) != kernelByTypeId.end();
+}
+
+bool NodeGraphKernels::computeInputHash(
+    const NodeGraphNode& node,
+    const NodeGraphKernelExecutionState& executionState,
+    const std::vector<const NodeDataBlock*>& inputs,
+    uint64_t& outHash) const {
+    const NodeTypeId canonicalTypeId = getNodeTypeId(node.typeId);
+    const auto kernelIt = kernelByTypeId.find(canonicalTypeId);
+    if (kernelIt == kernelByTypeId.end() || !kernelIt->second) {
+        return false;
+    }
+
+    NodeGraphKernelHashContext context{
+        node,
+        inputs,
+        executionState};
+    return kernelIt->second->computeInputHash(context, outHash);
 }
 
 bool NodeGraphKernels::executeNode(
@@ -24,7 +48,7 @@ bool NodeGraphKernels::executeNode(
     const NodeGraphKernelExecutionState& executionState,
     const std::vector<const NodeDataBlock*>& inputs,
     std::vector<NodeDataBlock>& outputs) const {
-    const NodeTypeId canonicalTypeId = canonicalNodeTypeId(node.typeId);
+    const NodeTypeId canonicalTypeId = getNodeTypeId(node.typeId);
     const auto kernelIt = kernelByTypeId.find(canonicalTypeId);
     if (kernelIt == kernelByTypeId.end() || !kernelIt->second) {
         return false;
@@ -37,17 +61,19 @@ bool NodeGraphKernels::executeNode(
         executionState};
 
     const bool executed = kernelIt->second->execute(context);
-    normalizeOutputsToSocketContracts(node, outputs);
+    normalizeOutputsToSocketContracts(node, outputs, executionState.services.payloadRegistry);
     return executed;
 }
 
 void NodeGraphKernels::registerDefaultKernels() {
     registerKernel(std::make_unique<NodeModel>());
+    registerKernel(std::make_unique<NodeTransform>());
     registerKernel(std::make_unique<NodeGroup>());
     registerKernel(std::make_unique<NodeRemesh>());
     registerKernel(std::make_unique<NodeHeatReceiver>());
     registerKernel(std::make_unique<NodeHeatSource>());
-    registerKernel(std::make_unique<NodeContactPair>());
+    registerKernel(std::make_unique<NodeContact>());
+    registerKernel(std::make_unique<NodeVoronoi>());
     registerKernel(std::make_unique<NodeHeatSolve>());
 }
 
@@ -56,12 +82,15 @@ void NodeGraphKernels::registerKernel(std::unique_ptr<NodeKernel> kernel) {
         return;
     }
 
-    const NodeTypeId canonicalTypeId = canonicalNodeTypeId(kernel->typeId());
+    const NodeTypeId canonicalTypeId = getNodeTypeId(kernel->typeId());
     kernelByTypeId[canonicalTypeId] = kernel.get();
     kernels.push_back(std::move(kernel));
 }
 
-void NodeGraphKernels::normalizeOutputsToSocketContracts(const NodeGraphNode& node, std::vector<NodeDataBlock>& outputs) {
+void NodeGraphKernels::normalizeOutputsToSocketContracts(
+    const NodeGraphNode& node,
+    std::vector<NodeDataBlock>& outputs,
+    NodePayloadRegistry* payloadRegistry) {
     const std::size_t outputCount = std::min(outputs.size(), node.outputs.size());
     for (std::size_t outputIndex = 0; outputIndex < outputCount; ++outputIndex) {
         NodeDataBlock& output = outputs[outputIndex];
@@ -72,13 +101,28 @@ void NodeGraphKernels::normalizeOutputsToSocketContracts(const NodeGraphNode& no
             output.dataType = contract.producedDataType;
         }
 
-        if (output.dataType == contract.producedDataType) {
-            for (const NodeGraphAttributeContract& guaranteedAttribute : contract.guaranteedAttributes) {
-                ensureGuaranteedAttribute(output.geometry, guaranteedAttribute);
+        if (output.dataType == contract.producedDataType &&
+            payloadRegistry &&
+            output.payloadHandle.key != 0 &&
+            (output.dataType == NodeDataType::Geometry ||
+             output.dataType == NodeDataType::HeatReceiver ||
+             output.dataType == NodeDataType::HeatSource)) {
+            const GeometryData* geometry = payloadRegistry->get<GeometryData>(output.payloadHandle);
+            if (geometry) {
+                GeometryData updated = *geometry;
+                bool changed = false;
+                for (const NodeGraphAttributeContract& guaranteedAttribute : contract.guaranteedAttributes) {
+                    if (ensureGuaranteedAttribute(updated, guaranteedAttribute)) {
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    output.payloadHandle = payloadRegistry->upsert(output.payloadHandle.key, std::move(updated));
+                }
             }
         }
 
-        refreshNodeDataBlockMetadata(output);
+        updateDataBlockMetadata(output, payloadRegistry);
     }
 }
 
@@ -137,11 +181,11 @@ void NodeGraphKernels::resizeAttributeStorage(
     }
 }
 
-void NodeGraphKernels::ensureGuaranteedAttribute(
+bool NodeGraphKernels::ensureGuaranteedAttribute(
     GeometryData& geometry,
     const NodeGraphAttributeContract& guaranteedAttribute) {
     if (hasGuaranteedAttribute(geometry, guaranteedAttribute)) {
-        return;
+        return false;
     }
 
     GeometryAttribute attribute{};
@@ -155,4 +199,5 @@ void NodeGraphKernels::ensureGuaranteedAttribute(
         attributeElementCount(geometry, guaranteedAttribute.domain),
         guaranteedAttribute.tupleSize);
     geometry.attributes.push_back(std::move(attribute));
+    return true;
 }

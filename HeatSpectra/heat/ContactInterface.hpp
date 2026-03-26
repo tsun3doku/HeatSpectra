@@ -1,39 +1,12 @@
-﻿#pragma once
+#pragma once
 
-#include <memory>
-#include <unordered_map>
 #include <vector>
-#include <cstdint>
+
 #include <glm/glm.hpp>
 
-#include "util/Structs.hpp"
+#include "ContactSampling.hpp"
+#include "contact/ContactTypes.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
-
-class HeatSource;
-class Model;
-class Remesher;
-
-struct Quadrature {
-    static constexpr uint32_t count = 7u;
-    static constexpr glm::vec3 bary[count] = {
-        glm::vec3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f),
-        glm::vec3(0.0597158717f, 0.4701420641f, 0.4701420641f),
-        glm::vec3(0.4701420641f, 0.0597158717f, 0.4701420641f),
-        glm::vec3(0.4701420641f, 0.4701420641f, 0.0597158717f),
-        glm::vec3(0.7974269853f, 0.1012865073f, 0.1012865073f),
-        glm::vec3(0.1012865073f, 0.7974269853f, 0.1012865073f),
-        glm::vec3(0.1012865073f, 0.1012865073f, 0.7974269853f),
-    };
-    static constexpr float weights[count] = {
-        0.2250000000f,
-        0.1323941527f,
-        0.1323941527f,
-        0.1323941527f,
-        0.1259391805f,
-        0.1259391805f,
-        0.1259391805f,
-    };
-};
 
 class ContactInterface {
 public:
@@ -47,15 +20,13 @@ public:
         glm::vec3 color;
     };
 
-    explicit ContactInterface(Remesher& remesher);
     void mapSurfacePoints(
-        Model& sourceModel,
-        const std::vector<Model*>& receiverModels,
-        std::vector<std::vector<ContactPairGPU>>& receiverContactPairs,
+        const IntrinsicMeshData& sourceIntrinsic,
+        const std::array<float, 16>& sourceLocalToWorld,
+        const std::vector<const IntrinsicMeshData*>& receiverIntrinsics,
+        const std::vector<std::array<float, 16>>& receiverLocalToWorld,
+        std::vector<std::vector<ContactPair>>& receiverContactPairs,
         std::vector<ContactLineVertex>& outOutlineVertices,
         std::vector<ContactLineVertex>& outCorrespondenceVertices,
         const Settings& settings);
-
-private:
-    Remesher& remesher;
 };

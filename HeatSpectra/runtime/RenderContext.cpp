@@ -5,13 +5,18 @@
 #include "RuntimeSimulationController.hpp"
 #include "app/SwapchainManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
-#include "heat/ContactSystemController.hpp"
+#include "contact/ContactSystemController.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemController.hpp"
+#include "heat/VoronoiSystemController.hpp"
 #include "mesh/MeshModifiers.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
-#include "nodegraph/NodeSolverController.hpp"
+#include "nodegraph/NodeGraphEditor.hpp"
+#include "nodegraph/NodePayloadRegistry.hpp"
+#include "runtime/ContactPreviewStore.hpp"
+#include "runtime/ComputeCache.hpp"
+#include "runtime/RuntimePayloadController.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/RenderRuntime.hpp"
 #include "render/WindowRuntimeState.hpp"
@@ -20,12 +25,8 @@
 
 RenderContext::~RenderContext() = default;
 
-bool RenderContext::initialize(
-    VulkanCoreContext& core,
-    SceneContext& scene,
-    WindowRuntimeState& windowState,
-    std::atomic<bool>& runtimeBusy,
-    std::atomic<bool>& isShuttingDown) {
+bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, WindowRuntimeState& windowState,
+    std::atomic<bool>& runtimeBusy, std::atomic<bool>& isShuttingDown) {
     if (initialized) {
         return true;
     }
@@ -58,10 +59,12 @@ bool RenderContext::initialize(
         runtimeBusy,
         isShuttingDown);
 
+    intrinsicRegistryState = std::make_unique<RuntimeIntrinsicCache>(core.device(), *allocator);
     if (!renderRuntime->initializeBase(
         swapChainImageFormat,
         swapChainExtent,
         *allocator,
+        *intrinsicRegistryState,
         *resourceManager,
         *uniformBufferManager)) {
         shutdown();
@@ -70,61 +73,70 @@ bool RenderContext::initialize(
 
     const VkRenderPass renderPass = renderRuntime->getFrameGraphRuntime().getRenderPass();
 
+    computeCacheState = std::make_unique<ComputeCache>();
+    payloadRegistryState = std::make_unique<NodePayloadRegistry>();
+    runtimePayloadControllerState = std::make_unique<RuntimePayloadController>(
+        core.device(),
+        swapchainManager,
+        *resourceManager,
+        *intrinsicRegistryState,
+        *renderRuntime,
+        runtimeBusy);
     contactSystemControllerState = std::make_unique<ContactSystemController>(
-        scene.modelRegistry(),
+        *computeCacheState);
+    contactPreviewStoreState = std::make_unique<ContactPreviewStore>(core.device(), *allocator, *uniformBufferManager);
+    contactPreviewStoreState->initRenderer(renderPass, renderconfig::MaxFramesInFlight);
+
+    voronoiSystemControllerState = std::make_unique<VoronoiSystemController>(
         core.device(),
         *allocator,
         *resourceManager,
-        meshModifiers->getRemesher(),
         *uniformBufferManager,
-        *commandPool);
-    contactSystemControllerState->initRenderer(renderPass, renderconfig::MaxFramesInFlight);
+        *intrinsicRegistryState,
+        *commandPool,
+        renderconfig::MaxFramesInFlight);
+    voronoiSystemControllerState->createVoronoiSystem(swapChainExtent, renderPass);
 
     heatSystemControllerState = std::make_unique<HeatSystemController>(
         core.device(),
         *allocator,
         *resourceManager,
-        *meshModifiers,
-        *modelUploader,
         *uniformBufferManager,
-        renderRuntime->getSceneRenderer(),
-        swapchainManager,
-        renderRuntime->getFrameGraphRuntime(),
+        *intrinsicRegistryState,
         *commandPool,
-        frameSync,
-        heatSystemState,
-        runtimeBusy,
         renderconfig::MaxFramesInFlight);
-    heatSystemControllerState->setContactSystemController(contactSystemControllerState.get());
+    runtimePayloadControllerState->setHeatSystemController(heatSystemControllerState.get());
+    runtimePayloadControllerState->setContactSystemController(contactSystemControllerState.get());
+    runtimePayloadControllerState->setVoronoiSystemController(voronoiSystemControllerState.get());
+    heatSystemControllerState->setContactPreviewStore(contactPreviewStoreState.get());
     heatSystemControllerState->createHeatSystem(swapChainExtent, renderPass);
 
     sceneControllerState = std::make_unique<SceneController>(
         core.device(),
-        swapchainManager,
         *resourceManager,
-        *meshModifiers,
-        *renderRuntime,
-        *heatSystemControllerState,
+        *modelUploader,
+        *runtimePayloadControllerState,
+        frameSync,
         scene.cameraController(),
         runtimeBusy);
-    modelRegistry = &scene.modelRegistry();
-    modelRegistry->setSceneController(sceneControllerState.get());
+    runtimePayloadControllerState->setSceneController(sceneControllerState.get());
 
-    nodeSolverController = std::make_unique<NodeSolverController>(
-        scene.modelRegistry(),
-        *heatSystemControllerState);
     sceneControllerState->focusOnVisibleModel();
 
     NodeRuntimeServices nodeRuntimeServices{};
-    nodeRuntimeServices.modelRegistry = &scene.modelRegistry();
     nodeRuntimeServices.sceneController = sceneControllerState.get();
+    nodeRuntimeServices.runtimePayloadController = runtimePayloadControllerState.get();
     nodeRuntimeServices.heatSystemController = heatSystemControllerState.get();
     nodeRuntimeServices.contactSystemController = contactSystemControllerState.get();
-    nodeRuntimeServices.nodeSolverController = nodeSolverController.get();
+    nodeRuntimeServices.contactPreviewStore = contactPreviewStoreState.get();
+    nodeRuntimeServices.payloadRegistry = payloadRegistryState.get();
     nodeRuntimeServices.resourceManager = resourceManager;
     nodeRuntimeServices.meshModifiers = meshModifiers;
+    nodeRuntimeServices.remesher = &meshModifiers->getRemesher();
 
     nodeGraphBridgeState = std::make_unique<NodeGraphBridge>();
+    NodeGraphEditor defaultGraphEditor(*nodeGraphBridgeState);
+    defaultGraphEditor.resetToDefaultGraph();
     nodeGraphControllerState = std::make_unique<NodeGraphController>(nodeGraphBridgeState.get(), nodeRuntimeServices);
 
     initialized = true;
@@ -153,6 +165,8 @@ bool RenderContext::initializeInputPipeline(SceneContext& scene, RuntimeSimulati
         renderRuntime->getGizmoController(),
         renderRuntime->getModelSelection(),
         *resourceManager,
+        *sceneControllerState,
+        *nodeGraphBridgeState,
         swapchainManager,
         simulationController);
 
@@ -160,7 +174,8 @@ bool RenderContext::initializeInputPipeline(SceneContext& scene, RuntimeSimulati
         *resourceManager,
         *meshModifiers,
         *uniformBufferManager,
-        heatSystemState.get(),
+        heatSystemControllerState->getHeatSystem(),
+        voronoiSystemControllerState->getVoronoiSystem(),
         *inputControllerState,
         *lightingSystem,
         *materialSystem};
@@ -185,12 +200,13 @@ void RenderContext::shutdown() {
     inputControllerState.reset();
     nodeGraphControllerState.reset();
     nodeGraphBridgeState.reset();
-    nodeSolverController.reset();
-    if (modelRegistry) {
-        modelRegistry->setSceneController(nullptr);
-    }
     sceneControllerState.reset();
+    runtimePayloadControllerState.reset();
     contactSystemControllerState.reset();
+    contactPreviewStoreState.reset();
+    voronoiSystemControllerState.reset();
+    computeCacheState.reset();
+    intrinsicRegistryState.reset();
     heatSystemControllerState.reset();
 
     if (renderRuntime) {
@@ -202,14 +218,6 @@ void RenderContext::shutdown() {
     }
     renderRuntime.reset();
     swapchainManager.cleanup();
-
-    if (heatSystemState) {
-        heatSystemState->cleanupResources();
-        heatSystemState->cleanup();
-        heatSystemState.reset();
-    }
-
-    modelRegistry = nullptr;
     inputPipelineInitialized = false;
     initialized = false;
 }
@@ -239,7 +247,17 @@ const RenderRuntime* RenderContext::runtime() const {
 }
 
 HeatSystem* RenderContext::heatSystem() {
-    return heatSystemState.get();
+    if (!heatSystemControllerState) {
+        return nullptr;
+    }
+    return heatSystemControllerState->getHeatSystem();
+}
+
+VoronoiSystem* RenderContext::voronoiSystem() {
+    if (!voronoiSystemControllerState) {
+        return nullptr;
+    }
+    return voronoiSystemControllerState->getVoronoiSystem();
 }
 
 HeatSystemController* RenderContext::heatSystemController() {
@@ -250,7 +268,19 @@ ContactSystemController* RenderContext::contactSystemController() {
     return contactSystemControllerState.get();
 }
 
+ContactPreviewStore* RenderContext::contactPreviewStore() {
+    return contactPreviewStoreState.get();
+}
+
+RuntimePayloadController* RenderContext::runtimePayloadController() {
+    return runtimePayloadControllerState.get();
+}
+
 SceneController* RenderContext::sceneController() {
+    return sceneControllerState.get();
+}
+
+const SceneController* RenderContext::sceneController() const {
     return sceneControllerState.get();
 }
 

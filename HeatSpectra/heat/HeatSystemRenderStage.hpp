@@ -7,47 +7,33 @@
 
 #include "HeatSystemRuntime.hpp"
 #include "HeatSystemStageContext.hpp"
-#include "HeatSystemVoronoiStage.hpp"
 
 class ContactLineRenderer;
-class HeatReceiver;
-class HeatRenderer;
-class PointRenderer;
-class VoronoiRenderer;
+class HeatReceiverRuntime;
+class HeatReceiverRenderer;
+class HeatSourceRenderer;
 
 class HeatSystemRenderStage {
 public:
     explicit HeatSystemRenderStage(const HeatSystemStageContext& stageContext);
 
     void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, ContactLineRenderer* contactLineRenderer) const;
-    void renderVoronoiSurface(
-        VkCommandBuffer cmdBuffer,
-        uint32_t frameIndex,
-        VoronoiRenderer* voronoiRenderer,
-        const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
-        const std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains,
-        bool isActive) const;
     void renderHeatOverlay(
         VkCommandBuffer cmdBuffer,
         uint32_t frameIndex,
-        HeatRenderer* heatRenderer,
-        const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings,
-        const std::vector<std::unique_ptr<HeatReceiver>>& receivers,
+        HeatSourceRenderer* heatSourceRenderer,
+        HeatReceiverRenderer* heatReceiverRenderer,
+        const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
+        const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
         bool isActive,
         bool isPaused) const;
-    void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, PointRenderer* pointRenderer, bool isActive) const;
     void renderSurfels(
         VkCommandBuffer cmdBuffer,
         uint32_t frameIndex,
         float radius,
-        const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings,
-        const std::vector<std::unique_ptr<HeatReceiver>>& receivers) const;
+        const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
+        const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers) const;
 
 private:
-    const HeatSystemVoronoiDomain* findReceiverDomainByModelId(const std::vector<HeatSystemVoronoiDomain>& receiverVoronoiDomains, uint32_t receiverModelId) const;
-    const HeatSystemRuntime::SourceCoupling* findSourceCouplingForModel(
-        const std::vector<HeatSystemRuntime::SourceCoupling>& sourceCouplings,
-        const class Model* model) const;
-
     HeatSystemStageContext context;
 };

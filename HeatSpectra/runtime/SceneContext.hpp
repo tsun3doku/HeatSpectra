@@ -4,7 +4,6 @@
 
 #include "scene/Camera.hpp"
 #include "scene/CameraController.hpp"
-#include "scene/ModelRegistry.hpp"
 
 class LightingSystem;
 class MaterialSystem;
@@ -37,8 +36,6 @@ public:
     const MaterialSystem* materialSystem() const;
     LightingSystem* lightingSystem();
     const LightingSystem* lightingSystem() const;
-    ModelRegistry& modelRegistry();
-    const ModelRegistry& modelRegistry() const;
 
 private:
     Camera camera;
@@ -49,6 +46,5 @@ private:
     std::unique_ptr<ModelUploader> modelUploaderState;
     std::unique_ptr<MaterialSystem> materialSystemState;
     std::unique_ptr<LightingSystem> lightingSystemState;
-    ModelRegistry modelRegistryState;
     bool initialized = false;
 };

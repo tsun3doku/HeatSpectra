@@ -13,6 +13,7 @@ layout(location = 3) out vec2 outFragTexCoord;
 // Push constant for model matrix (updated per draw call)
 layout(push_constant) uniform PushConstants {
     mat4 modelMatrix;
+    vec4 sourceParams;
 } push;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {

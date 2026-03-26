@@ -3,6 +3,7 @@
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "Model.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -77,6 +78,10 @@ bool ModelSelection::isModelSelected(uint32_t id) const {
 }
 
 const std::vector<uint32_t>& ModelSelection::getSelectedModelIDsRenderThread() const {
+    return selectedModelIDs;
+}
+
+const std::vector<uint32_t>& ModelSelection::getSelectedRuntimeModelIDsRenderThread() const {
     return selectedModelIDs;
 }
 

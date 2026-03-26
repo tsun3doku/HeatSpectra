@@ -1,4 +1,6 @@
 #include "NodeGroupPanel.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"

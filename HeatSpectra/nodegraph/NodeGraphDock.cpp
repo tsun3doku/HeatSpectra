@@ -1,10 +1,12 @@
-﻿#include "NodeGraphDock.hpp"
+#include "NodeGraphDock.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeInspectorDialog.hpp"
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphScene.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
-#include "scene/ModelRegistry.hpp"
+#include "scene/SceneController.hpp"
 #include "scene/ModelSelection.hpp"
 #include "util/UiTheme.hpp"
 
@@ -242,6 +244,7 @@ void NodeGraphDock::setRuntimeQuery(const RuntimeQuery* runtimeQueryPtr) {
 
 void NodeGraphDock::setBridge(NodeGraphBridge* bridgePtr) {
     bridge = bridgePtr;
+    editor.setBridge(bridgePtr);
     if (graphScene) {
         graphScene->setBridge(bridge);
     }
@@ -256,8 +259,8 @@ void NodeGraphDock::setBridge(NodeGraphBridge* bridgePtr) {
     }
 }
 
-void NodeGraphDock::setModelRegistry(const ModelRegistry* modelRegistryPtr) {
-    modelRegistry = modelRegistryPtr;
+void NodeGraphDock::setSceneController(const SceneController* sceneControllerPtr) {
+    sceneController = sceneControllerPtr;
 }
 
 void NodeGraphDock::setModelSelection(ModelSelection* modelSelectionPtr) {
@@ -267,7 +270,7 @@ void NodeGraphDock::setModelSelection(ModelSelection* modelSelectionPtr) {
 
 void NodeGraphDock::refreshGraph() {
     if (graphScene) {
-        graphScene->refreshFromGraph();
+        graphScene->applyPendingChanges();
     }
 }
 
@@ -358,10 +361,10 @@ void NodeGraphDock::handleGraphSelectionChanged(NodeGraphNodeId nodeId) {
     }
 
     uint32_t runtimeModelId = 0;
-    if (bridge && modelRegistry && nodeId.isValid()) {
+    if (bridge && sceneController && nodeId.isValid()) {
         NodeGraphNode node{};
-        if (bridge->getNode(nodeId, node) && canonicalNodeTypeId(node.typeId) == nodegraphtypes::Model) {
-            modelRegistry->tryGetNodeModelRuntimeId(nodeId.value, runtimeModelId);
+        if (bridge->getNode(nodeId, node) && getNodeTypeId(node.typeId) == nodegraphtypes::Model) {
+            sceneController->tryGetNodeModelRuntimeId(nodeId.value, runtimeModelId);
         }
     }
 
@@ -391,7 +394,7 @@ void NodeGraphDock::openInspectorForNode(NodeGraphNodeId nodeId) {
 }
 
 void NodeGraphDock::syncViewportSelectionToGraph() {
-    if (!graphScene || !modelSelection || !modelRegistry) {
+    if (!graphScene || !modelSelection || !sceneController) {
         return;
     }
 
@@ -405,7 +408,7 @@ void NodeGraphDock::syncViewportSelectionToGraph() {
     NodeGraphNodeId nodeId{};
     if (selectedRuntimeModelId != 0) {
         uint32_t nodeModelId = 0;
-        if (modelRegistry->tryGetRuntimeModelNodeId(selectedRuntimeModelId, nodeModelId)) {
+        if (sceneController->tryGetRuntimeModelNodeId(selectedRuntimeModelId, nodeModelId)) {
             nodeId = NodeGraphNodeId{nodeModelId};
         }
     }
@@ -452,7 +455,7 @@ void NodeGraphDock::showCreateNodeMenu(const QPoint& globalPos, const QPointF& s
         return menu;
     };
 
-    const std::vector<NodeTypeDefinition>& definitions = builtInNodeTypeDefinitions();
+    const std::vector<NodeTypeDefinition>& definitions = NodeGraphRegistry::getBuiltInNodes();
     for (const NodeTypeDefinition& definition : definitions) {
         QMenu* categoryMenu = getCategoryMenu(definition.category);
         QAction* action = categoryMenu->addAction(QString::fromStdString(definition.displayName));
@@ -475,8 +478,8 @@ void NodeGraphDock::addNodeAt(const NodeTypeId& typeId, const QPointF& scenePos)
         return;
     }
 
-    bridge->addNode(typeId, "", static_cast<float>(scenePos.x()), static_cast<float>(scenePos.y()));
-    graphScene->refreshFromGraph();
+    editor.addNode(typeId, "", static_cast<float>(scenePos.x()), static_cast<float>(scenePos.y()));
+    graphScene->applyPendingChanges();
     if (statusLabel) {
         statusLabel->setText("Node added.");
     }

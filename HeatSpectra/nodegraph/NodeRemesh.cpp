@@ -1,253 +1,150 @@
-﻿#include "NodeRemesh.hpp"
+#include "NodeRemesh.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
-#include "mesh/MeshModifiers.hpp"
-#include "scene/ModelRegistry.hpp"
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphExecutionPlanner.hpp"
-#include "heat/ContactSystemController.hpp"
-#include "vulkan/ResourceManager.hpp"
-#include "scene/SceneController.hpp"
+#include "NodeGraphHash.hpp"
+#include "NodePanelUtils.hpp"
+#include "domain/RemeshParams.hpp"
+#include "mesh/remesher/Remesher.hpp"
+#include "nodegraph/NodePayloadRegistry.hpp"
 
-#include <iostream>
-#include <unordered_set>
-#include <vector>
+namespace {
+
+NodeDataHandle makeHandleForSocket(const NodeGraphNode& node, NodeGraphSocketId socketId) {
+    NodeDataHandle handle{};
+    handle.key = makeSocketKey(node.id, socketId);
+    return handle;
+}
+
+}
 
 const char* NodeRemesh::typeId() const {
     return nodegraphtypes::Remesh;
 }
 
 bool NodeRemesh::execute(NodeGraphKernelContext& context) const {
-    NodeGraphBridge& bridge = context.executionState.bridge;
-    const NodeRuntimeServices& services = context.executionState.services;
-    ModelRegistry* const modelRegistry = services.modelRegistry;
-    SceneController* const sceneController = services.sceneController;
+    NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
+    Remesher* const remesher = context.executionState.services.remesher;
+    std::vector<NodeDataHandle> outputHandles(context.node.outputs.size());
 
+    const NodeGraphSocket* meshInputSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
     const NodeDataBlock* upstreamGeometryValue = nullptr;
-    std::vector<uint32_t> targetGraphModelIds;
-    std::unordered_set<uint32_t> seenGraphModelIds;
-    for (const NodeDataBlock* inputValue : context.inputs) {
-        if (!inputValue || inputValue->dataType != NodeDataType::Geometry) {
-            continue;
-        }
-
-        if (!upstreamGeometryValue) {
-            upstreamGeometryValue = inputValue;
-        }
-        const uint32_t graphModelId = inputValue->geometry.modelId;
-        if (graphModelId != 0 && seenGraphModelIds.insert(graphModelId).second) {
-            targetGraphModelIds.push_back(graphModelId);
-        }
+    if (meshInputSocket) {
+        upstreamGeometryValue = readInput(context.node, meshInputSocket->id, context.executionState);
+    }
+    if (upstreamGeometryValue && upstreamGeometryValue->dataType != NodeDataType::Geometry) {
+        upstreamGeometryValue = nullptr;
     }
 
-    const bool runRequested = getBoolParamValue(context.node, nodegraphparams::remesh::RunRequested, false);
+    const GeometryData* upstreamGeometry =
+        (payloadRegistry && upstreamGeometryValue)
+        ? payloadRegistry->get<GeometryData>(upstreamGeometryValue->payloadHandle)
+        : nullptr;
+
     bool executed = false;
-    if (runRequested) {
-        if (!NodeGraphExecutionPlanner::nodeHasAllRequiredInputs(context.executionState.state, context.node.id)) {
-            return false;
-        }
-
-        const int iterations = getIntParamValue(context.node, nodegraphparams::remesh::Iterations, 1);
-        const double minAngle = getFloatParamValue(context.node, nodegraphparams::remesh::MinAngleDegrees, 30.0);
-        const double maxEdge = getFloatParamValue(context.node, nodegraphparams::remesh::MaxEdgeLength, 0.1);
-        const double step = getFloatParamValue(context.node, nodegraphparams::remesh::StepSize, 0.25);
-
-        for (uint32_t graphModelId : targetGraphModelIds) {
-            uint32_t runtimeModelId = 0;
-            bool remeshed = false;
-            if (modelRegistry &&
-                modelRegistry->tryGetNodeModelRuntimeId(graphModelId, runtimeModelId) &&
-                runtimeModelId != 0 &&
-                sceneController) {
-                sceneController->performRemeshing(iterations, minAngle, maxEdge, step, runtimeModelId);
-                remeshed = true;
-            }
-
-            if (!remeshed) {
-                const NodeDataBlock* matchingInputValue = nullptr;
-                for (const NodeDataBlock* inputValue : context.inputs) {
-                    if (!inputValue || inputValue->dataType != NodeDataType::Geometry) {
-                        continue;
-                    }
-                    if (inputValue->geometry.modelId == graphModelId) {
-                        matchingInputValue = inputValue;
-                        break;
-                    }
+    if (upstreamGeometry && payloadRegistry && remesher) {
+        const RemeshParams defaults{};
+        RemeshResultData result{};
+        const int iterations = NodePanelUtils::readIntParam(
+            context.node,
+            nodegraphparams::remesh::Iterations,
+            defaults.iterations);
+        const double minAngle = NodePanelUtils::readFloatParam(
+            context.node,
+            nodegraphparams::remesh::MinAngleDegrees,
+            defaults.minAngleDegrees);
+        const double maxEdge = NodePanelUtils::readFloatParam(
+            context.node,
+            nodegraphparams::remesh::MaxEdgeLength,
+            defaults.maxEdgeLength);
+        const double step = NodePanelUtils::readFloatParam(
+            context.node,
+            nodegraphparams::remesh::StepSize,
+            defaults.stepSize);
+        if (remesher->remesh(*upstreamGeometry, iterations, minAngle, maxEdge, step, result)) {
+            NodeDataHandle intrinsicHandle{};
+            for (std::size_t outputIndex = 0; outputIndex < context.node.outputs.size(); ++outputIndex) {
+                const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+                if (outputSocket.contract.producedDataType != NodeDataType::Intrinsic) {
+                    continue;
                 }
 
-                if (modelRegistry && sceneController &&
-                    matchingInputValue && !matchingInputValue->geometry.sourceModelPath.empty()) {
-                    runtimeModelId = modelRegistry->getOrLoadModelID(
-                        graphModelId,
-                        matchingInputValue->geometry.sourceModelPath);
-                    if (runtimeModelId != 0) {
-                        sceneController->performRemeshing(iterations, minAngle, maxEdge, step, runtimeModelId);
-                        remeshed = true;
-                    }
+                const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
+                intrinsicHandle = payloadRegistry->upsert(payloadKey, result.intrinsic);
+                outputHandles[outputIndex] = intrinsicHandle;
+            }
+
+            result.geometry.intrinsicHandle = intrinsicHandle;
+            for (std::size_t outputIndex = 0; outputIndex < context.node.outputs.size(); ++outputIndex) {
+                const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+                if (outputSocket.contract.producedDataType == NodeDataType::Intrinsic) {
+                    continue;
                 }
+                const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
+                outputHandles[outputIndex] = payloadRegistry->upsert(payloadKey, result.geometry);
             }
-
-            if (remeshed) {
-                executed = true;
-            } else {
-                std::cerr << "[NodeRemesh] Failed to remesh graph model ID " << graphModelId
-                          << " (no runtime model binding and no resolvable model path)." << std::endl;
-            }
-        }
-
-        setBoolParameter(bridge, context.node.id, nodegraphparams::remesh::RunRequested, false);
-        if (executed && services.contactSystemController) {
-            services.contactSystemController->clearCache();
+            executed = true;
         }
     }
 
-    GeometryData remeshedGeometry{};
-    const bool hasRemeshedGeometry = tryBuildRemeshedGeometry(services, upstreamGeometryValue, remeshedGeometry);
+    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
+        NodeDataBlock& outputValue = context.outputs[outputIndex];
+        const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+        outputValue.dataType = outputSocket.contract.producedDataType;
+        outputValue.payloadHandle = {};
 
-    for (NodeDataBlock& outputValue : context.outputs) {
-        outputValue.dataType = NodeDataType::Geometry;
-        outputValue.geometry = hasRemeshedGeometry
-            ? remeshedGeometry
-            : (upstreamGeometryValue ? upstreamGeometryValue->geometry : GeometryData{});
-        refreshNodeDataBlockMetadata(outputValue);
+        if (payloadRegistry) {
+            NodeDataHandle outputHandle = outputHandles[outputIndex];
+            if (outputHandle.key == 0) {
+                outputHandle = makeHandleForSocket(context.node, outputSocket.id);
+            }
+            if (outputSocket.contract.producedDataType == NodeDataType::Geometry) {
+                const GeometryData* geometry = payloadRegistry->get<GeometryData>(outputHandle);
+                if (geometry) {
+                    outputValue.payloadHandle = outputHandle;
+                } else if (upstreamGeometryValue) {
+                    outputValue.payloadHandle = upstreamGeometryValue->payloadHandle;
+                }
+            } else if (outputSocket.contract.producedDataType == NodeDataType::Intrinsic) {
+                const IntrinsicMeshData* intrinsic = payloadRegistry->get<IntrinsicMeshData>(outputHandle);
+                if (intrinsic) {
+                    outputValue.payloadHandle = outputHandle;
+                }
+            }
+        }
+
+        updateDataBlockMetadata(outputValue, payloadRegistry);
     }
 
     return executed;
 }
 
-bool NodeRemesh::getBoolParamValue(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue) {
-    bool value = defaultValue;
-    if (tryGetNodeParamBool(node, parameterId, value)) {
-        return value;
+bool NodeRemesh::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
+    const RemeshParams defaults{};
+    outHash = NodeGraphHash::start();
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(NodePanelUtils::readIntParam(
+        context.node, nodegraphparams::remesh::Iterations, defaults.iterations)));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
+        context.node, nodegraphparams::remesh::MinAngleDegrees, defaults.minAngleDegrees)));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
+        context.node, nodegraphparams::remesh::MaxEdgeLength, defaults.maxEdgeLength)));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
+        context.node, nodegraphparams::remesh::StepSize, defaults.stepSize)));
+
+    const NodeGraphSocket* meshInputSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
+    const NodeDataBlock* inputValue = nullptr;
+    if (meshInputSocket) {
+        inputValue = readInput(context.node, meshInputSocket->id, context.executionState);
     }
-
-    return defaultValue;
-}
-
-int NodeRemesh::getIntParamValue(const NodeGraphNode& node, uint32_t parameterId, int defaultValue) {
-    int64_t value = defaultValue;
-    if (tryGetNodeParamInt(node, parameterId, value)) {
-        return static_cast<int>(value);
+    if (!inputValue) {
+        NodeGraphHash::combine(outHash, 0);
+    } else {
+        NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputValue->dataType));
+        NodeGraphHash::combine(outHash, inputValue->payloadHandle.key);
+        NodeGraphHash::combine(outHash, inputValue->payloadHandle.revision);
+        NodeGraphHash::combine(outHash, inputValue->payloadHandle.count);
     }
-
-    return defaultValue;
-}
-
-double NodeRemesh::getFloatParamValue(const NodeGraphNode& node, uint32_t parameterId, double defaultValue) {
-    double value = defaultValue;
-    if (tryGetNodeParamFloat(node, parameterId, value)) {
-        return value;
-    }
-
-    return defaultValue;
-}
-
-bool NodeRemesh::setBoolParameter(NodeGraphBridge& bridge, NodeGraphNodeId nodeId, uint32_t parameterId, bool value) {
-    NodeGraphParamValue parameter{};
-    parameter.id = parameterId;
-    parameter.type = NodeGraphParamType::Bool;
-    parameter.boolValue = value;
-    return bridge.setNodeParameter(nodeId, parameter);
-}
-
-bool NodeRemesh::tryGetRemeshedModelGeometry(
-    const NodeRuntimeServices& services,
-    uint32_t targetRuntimeModelId,
-    std::vector<float>& outPointPositions,
-    std::vector<uint32_t>& outTriangleIndices) {
-    outPointPositions.clear();
-    outTriangleIndices.clear();
-
-    if (targetRuntimeModelId == 0 || !services.resourceManager || !services.meshModifiers) {
-        return false;
-    }
-
-    Model* targetModel = services.resourceManager->getModelByID(targetRuntimeModelId);
-    if (!targetModel) {
-        return false;
-    }
-
-    const iODT* remesher = services.meshModifiers->getRemesher().getRemesherForModel(targetModel);
-    if (!remesher) {
-        return false;
-    }
-
-    const SupportingHalfedge* supportingHalfedge = remesher->getSupportingHalfedge();
-    if (!supportingHalfedge) {
-        return false;
-    }
-
-    const SupportingHalfedge::IntrinsicMesh intrinsicMesh = supportingHalfedge->buildIntrinsicMesh();
-    if (intrinsicMesh.vertices.empty() || intrinsicMesh.indices.empty()) {
-        return false;
-    }
-
-    outPointPositions.reserve(intrinsicMesh.vertices.size() * 3);
-    for (const SupportingHalfedge::IntrinsicVertex& vertex : intrinsicMesh.vertices) {
-        outPointPositions.push_back(vertex.position.x);
-        outPointPositions.push_back(vertex.position.y);
-        outPointPositions.push_back(vertex.position.z);
-    }
-
-    outTriangleIndices = intrinsicMesh.indices;
-    return true;
-}
-
-bool NodeRemesh::tryBuildRemeshedGeometry(
-    const NodeRuntimeServices& services,
-    const NodeDataBlock* upstreamGeometryValue,
-    GeometryData& outGeometry) {
-    outGeometry = {};
-    if (!upstreamGeometryValue || upstreamGeometryValue->geometry.modelId == 0) {
-        return false;
-    }
-
-    return tryBuildRemeshedGeometryForModel(
-        services,
-        upstreamGeometryValue->geometry.modelId,
-        upstreamGeometryValue,
-        outGeometry);
-}
-
-bool NodeRemesh::tryBuildRemeshedGeometryForModel(
-    const NodeRuntimeServices& services,
-    uint32_t targetGraphModelId,
-    const NodeDataBlock* upstreamGeometryValue,
-    GeometryData& outGeometry) {
-    if (!services.modelRegistry) {
-        return false;
-    }
-
-    uint32_t runtimeModelId = 0;
-    if (!services.modelRegistry->tryGetNodeModelRuntimeId(targetGraphModelId, runtimeModelId)) {
-        return false;
-    }
-
-    std::vector<float> pointPositions;
-    std::vector<uint32_t> triangleIndices;
-    if (!tryGetRemeshedModelGeometry(services, runtimeModelId, pointPositions, triangleIndices)) {
-        return false;
-    }
-
-    outGeometry = {};
-    outGeometry.modelId = targetGraphModelId;
-    if (upstreamGeometryValue) {
-        outGeometry.sourceModelPath = upstreamGeometryValue->geometry.sourceModelPath;
-    }
-    outGeometry.pointPositions = std::move(pointPositions);
-    outGeometry.triangleIndices = std::move(triangleIndices);
-    if (upstreamGeometryValue &&
-        upstreamGeometryValue->geometry.triangleGroupIds.size() == (outGeometry.triangleIndices.size() / 3)) {
-        outGeometry.triangleGroupIds = upstreamGeometryValue->geometry.triangleGroupIds;
-        outGeometry.groups = upstreamGeometryValue->geometry.groups;
-    }
-
-    GeometryAttribute positionAttribute{};
-    positionAttribute.name = "P";
-    positionAttribute.domain = GeometryAttributeDomain::Point;
-    positionAttribute.dataType = GeometryAttributeDataType::Float;
-    positionAttribute.tupleSize = 3;
-    positionAttribute.floatValues = outGeometry.pointPositions;
-    outGeometry.attributes.push_back(std::move(positionAttribute));
-    ensureGeometryGroups(outGeometry);
     return true;
 }

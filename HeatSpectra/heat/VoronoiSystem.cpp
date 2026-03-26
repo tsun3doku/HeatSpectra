@@ -1,0 +1,300 @@
+#include "VoronoiSystem.hpp"
+
+#include "domain/GeometryData.hpp"
+#include "domain/RemeshData.hpp"
+#include "renderers/PointRenderer.hpp"
+#include "renderers/VoronoiRenderer.hpp"
+#include "runtime/RuntimeIntrinsicCache.hpp"
+#include "scene/Model.hpp"
+#include "vulkan/CommandBufferManager.hpp"
+#include "vulkan/MemoryAllocator.hpp"
+#include "vulkan/ResourceManager.hpp"
+#include "vulkan/UniformBufferManager.hpp"
+#include "vulkan/VulkanBuffer.hpp"
+#include "vulkan/VulkanDevice.hpp"
+#include "voronoi/VoronoiCandidateCompute.hpp"
+#include "voronoi/VoronoiSurfaceStage.hpp"
+#include "voronoi/VoronoiStageContext.hpp"
+#include "voronoi/VoronoiGeoCompute.hpp"
+#include "voronoi/VoronoiModelRuntime.hpp"
+#include "voronoi/VoronoiSurfaceRuntime.hpp"
+
+#include <glm/mat4x4.hpp>
+#include <iostream>
+
+VoronoiSystem::VoronoiSystem(
+    VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator,
+    ResourceManager& resourceManager,
+    RuntimeIntrinsicCache& intrinsicCache,
+    UniformBufferManager& uniformBufferManager,
+    uint32_t maxFramesInFlight,
+    CommandPool& renderCommandPool,
+    VkExtent2D extent,
+    VkRenderPass renderPass)
+    : vulkanDevice(vulkanDevice),
+      memoryAllocator(memoryAllocator),
+      resourceManager(resourceManager),
+      intrinsicCache(intrinsicCache),
+      uniformBufferManager(uniformBufferManager),
+      renderCommandPool(renderCommandPool),
+      maxFramesInFlight(maxFramesInFlight),
+      voronoiBuilder(vulkanDevice, memoryAllocator, runtime.voronoiResourcesRef()) {
+    (void)extent;
+
+    VoronoiStageContext stageContext{
+        vulkanDevice,
+        memoryAllocator,
+        resourceManager,
+        uniformBufferManager,
+        renderCommandPool,
+        runtime.resourcesRef()
+    };
+
+    surfaceStage = std::make_unique<VoronoiSurfaceStage>(stageContext);
+
+    if (!createSurfaceDescriptorPool(maxFramesInFlight) ||
+        !createSurfaceDescriptorSetLayout() ||
+        !createSurfacePipeline()) {
+        failInitialization("create surface compute resources");
+        return;
+    }
+
+    initializeVoronoiRenderer(renderPass, maxFramesInFlight);
+    initializePointRenderer(renderPass, maxFramesInFlight);
+    initializeVoronoiGeoCompute();
+    initializeVoronoiCandidateCompute();
+
+    initialized = true;
+}
+
+VoronoiSystem::~VoronoiSystem() {
+}
+
+void VoronoiSystem::failInitialization(const char* stage) {
+    std::cerr << "[VoronoiSystem] Initialization failed at stage: " << stage << std::endl;
+    cleanupResources();
+    cleanup();
+}
+
+void VoronoiSystem::setReceiverPayloads(
+    const std::vector<GeometryData>& receiverGeometries,
+    const std::vector<IntrinsicMeshData>& receiverIntrinsics,
+    const std::vector<uint32_t>& receiverModelIds) {
+    runtime.setReceiverPayloads(
+        vulkanDevice,
+        memoryAllocator,
+        resourceManager,
+        intrinsicCache,
+        renderCommandPool,
+        receiverGeometries,
+        receiverIntrinsics,
+        receiverModelIds);
+}
+
+void VoronoiSystem::clearReceiverPayloads() {
+    runtime.clearReceiverPayloads();
+}
+
+void VoronoiSystem::setParams(const VoronoiParams& params) {
+    runtime.setParams(params);
+}
+
+bool VoronoiSystem::ensureConfigured(VoronoiSurfaceRuntime& surfaceRuntime) {
+    if (runtime.isReady()) {
+        runtime.executeBufferTransfers(renderCommandPool, surfaceRuntime, voronoiCandidateCompute.get());
+        return true;
+    }
+
+    if (!prepareVoronoiRuntime()) {
+        std::cout << "[VoronoiSystem] prepareVoronoiRuntime failed" << std::endl;
+        return false;
+    }
+
+    runtime.executeBufferTransfers(renderCommandPool, surfaceRuntime, voronoiCandidateCompute.get());
+    return true;
+}
+
+void VoronoiSystem::initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
+    voronoiRenderer = std::make_unique<VoronoiRenderer>(vulkanDevice, uniformBufferManager, renderCommandPool);
+    if (voronoiRenderer) {
+        voronoiRenderer->initialize(renderPass, maxFramesInFlight);
+    }
+}
+
+void VoronoiSystem::initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
+    pointRenderer = std::make_unique<PointRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
+    if (pointRenderer) {
+        pointRenderer->initialize(renderPass, 2, maxFramesInFlight);
+    }
+}
+
+void VoronoiSystem::initializeVoronoiGeoCompute() {
+    voronoiGeoCompute = std::make_unique<VoronoiGeoCompute>(vulkanDevice, renderCommandPool);
+}
+
+void VoronoiSystem::initializeVoronoiCandidateCompute() {
+    voronoiCandidateCompute = std::make_unique<VoronoiCandidateCompute>(vulkanDevice, renderCommandPool);
+    if (voronoiCandidateCompute) {
+        voronoiCandidateCompute->initialize();
+    }
+}
+
+bool VoronoiSystem::createSurfaceDescriptorPool(uint32_t maxFramesInFlight) {
+    if (!surfaceStage) {
+        return false;
+    }
+    return surfaceStage->createDescriptorPool(maxFramesInFlight);
+}
+
+bool VoronoiSystem::createSurfaceDescriptorSetLayout() {
+    if (!surfaceStage) {
+        return false;
+    }
+    return surfaceStage->createDescriptorSetLayout();
+}
+
+bool VoronoiSystem::createSurfacePipeline() {
+    if (!surfaceStage) {
+        return false;
+    }
+    return surfaceStage->createPipeline();
+}
+
+bool VoronoiSystem::prepareVoronoiRuntime() {
+    const bool prepared = runtime.prepare(
+        voronoiBuilder,
+        debugEnable,
+        K_NEIGHBORS,
+        voronoiGeoCompute.get(),
+        pointRenderer.get());
+
+    std::cout << "[VoronoiSystem] prepareVoronoiRuntime "
+              << (prepared ? "succeeded" : "failed")
+              << " nodeCount=" << runtime.getVoronoiNodeCount()
+              << std::endl;
+    return prepared;
+}
+
+void VoronoiSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass) {
+    (void)extent;
+    this->maxFramesInFlight = maxFramesInFlight;
+
+    VoronoiSystemResources& resources = runtime.resourcesRef();
+    if (runtime.isSeederReady()) {
+        if (resources.surfaceDescriptorPool != VK_NULL_HANDLE) {
+            vkResetDescriptorPool(vulkanDevice.getDevice(), resources.surfaceDescriptorPool, 0);
+        }
+    }
+
+    initializeVoronoiRenderer(renderPass, maxFramesInFlight);
+    initializePointRenderer(renderPass, maxFramesInFlight);
+    if (runtime.isSeederReady()) {
+        if (resources.surfacePipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(vulkanDevice.getDevice(), resources.surfacePipeline, nullptr);
+            resources.surfacePipeline = VK_NULL_HANDLE;
+        }
+        if (resources.surfacePipelineLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(vulkanDevice.getDevice(), resources.surfacePipelineLayout, nullptr);
+            resources.surfacePipelineLayout = VK_NULL_HANDLE;
+        }
+        if (resources.surfaceDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), resources.surfaceDescriptorSetLayout, nullptr);
+            resources.surfaceDescriptorSetLayout = VK_NULL_HANDLE;
+        }
+
+        if (!createSurfaceDescriptorSetLayout() || !createSurfacePipeline()) {
+            std::cerr << "[VoronoiSystem] Failed to recreate surface resources" << std::endl;
+            return;
+        }
+    }
+}
+
+void VoronoiSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
+    if (!voronoiRenderer || !runtime.isReady()) {
+        return;
+    }
+
+    const VoronoiResources& resources = runtime.voronoiResourcesRef();
+    const auto& modelRuntimes = runtime.getModelRuntimes();
+
+    for (const auto& modelRuntime : modelRuntimes) {
+        if (!modelRuntime) {
+            continue;
+        }
+
+        const uint32_t runtimeModelId = modelRuntime->getRuntimeModelId();
+        const VoronoiDomain* receiverDomain = runtime.findReceiverDomain(runtimeModelId);
+        if (!receiverDomain || receiverDomain->nodeCount == 0) {
+            continue;
+        }
+
+        Model& model = modelRuntime->getModel();
+        const uint32_t vertexCount = static_cast<uint32_t>(modelRuntime->getIntrinsicVertexCount());
+        const VkBuffer candidateBuffer = modelRuntime->getVoronoiCandidateBuffer();
+        if (candidateBuffer == VK_NULL_HANDLE || vertexCount == 0) {
+            continue;
+        }
+
+        voronoiRenderer->updateDescriptors(
+            frameIndex,
+            vertexCount,
+            resources.seedPositionBuffer,
+            resources.seedPositionBufferOffset,
+            resources.neighborIndicesBuffer,
+            resources.neighborIndicesBufferOffset,
+            modelRuntime->getSupportingHalfedgeView(),
+            modelRuntime->getSupportingAngleView(),
+            modelRuntime->getHalfedgeView(),
+            modelRuntime->getEdgeView(),
+            modelRuntime->getTriangleView(),
+            modelRuntime->getLengthView(),
+            modelRuntime->getInputHalfedgeView(),
+            modelRuntime->getInputEdgeView(),
+            modelRuntime->getInputTriangleView(),
+            modelRuntime->getInputLengthView(),
+            candidateBuffer,
+            modelRuntime->getVoronoiCandidateBufferOffset());
+
+        voronoiRenderer->render(
+            cmdBuffer,
+            model.getVertexBuffer(),
+            model.getVertexBufferOffset(),
+            model.getIndexBuffer(),
+            model.getIndexBufferOffset(),
+            static_cast<uint32_t>(model.getIndices().size()),
+            frameIndex,
+            model.getModelMatrix());
+    }
+}
+
+void VoronoiSystem::renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
+    if (!pointRenderer) {
+        return;
+    }
+    pointRenderer->render(cmdBuffer, frameIndex, glm::mat4(1.0f), extent);
+}
+
+void VoronoiSystem::cleanupResources() {
+    if (voronoiRenderer) {
+        voronoiRenderer->cleanup();
+        voronoiRenderer.reset();
+    }
+    if (pointRenderer) {
+        pointRenderer->cleanup();
+        pointRenderer.reset();
+    }
+
+    runtime.cleanupResources(vulkanDevice);
+
+    if (voronoiGeoCompute) {
+        voronoiGeoCompute->cleanupResources();
+    }
+    if (voronoiCandidateCompute) {
+        voronoiCandidateCompute->cleanupResources();
+    }
+}
+
+void VoronoiSystem::cleanup() {
+    runtime.cleanup(memoryAllocator);
+}

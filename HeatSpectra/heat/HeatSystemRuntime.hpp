@@ -1,74 +1,41 @@
-﻿#pragma once
+#pragma once
 
-#include "contact/ContactTypes.hpp"
-#include "HeatContactParams.hpp"
-
-#include <vulkan/vulkan.h>
+#include "domain/GeometryData.hpp"
+#include "domain/RemeshData.hpp"
+#include "runtime/RuntimeContactTypes.hpp"
+#include "runtime/RuntimePackages.hpp"
 
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 class CommandPool;
-class HeatReceiver;
-class HeatSource;
+class HeatSourceRuntime;
 class MemoryAllocator;
-class Model;
-class Remesher;
-class ResourceManager;
 class VulkanDevice;
 
 class HeatSystemRuntime {
 public:
-    HeatSystemRuntime();
-    ~HeatSystemRuntime();
+    HeatSystemRuntime() = default;
+    ~HeatSystemRuntime() = default;
 
-    struct SourceCoupling {
-        uint32_t modelId = 0;
-        Model* model = nullptr;
-        std::unique_ptr<HeatSource> heatSource;
+    struct SourceBinding {
+        GeometryPackage geometryPackage{};
+        std::unique_ptr<HeatSourceRuntime> heatSource;
     };
 
-    struct ContactCoupling {
-        ContactCouplingKind kind = ContactCouplingKind::SourceToReceiver;
-        uint32_t emitterModelId = 0;
-        uint32_t receiverModelId = 0;
-        HeatSource* source = nullptr;
-        HeatReceiver* emitterReceiver = nullptr;
-        HeatReceiver* receiver = nullptr;
-        VkBuffer contactPairBuffer = VK_NULL_HANDLE;
-        VkDeviceSize contactPairBufferOffset = 0;
-        uint32_t contactPairCount = 0;
-        HeatContactParams params{};
-        VkBuffer paramsBuffer = VK_NULL_HANDLE;
-        VkDeviceSize paramsBufferOffset = 0;
-        VkDescriptorSet contactComputeSetA = VK_NULL_HANDLE;
-        VkDescriptorSet contactComputeSetB = VK_NULL_HANDLE;
-        bool contactDescriptorsReady = false;
-    };
-
-    const SourceCoupling* findSourceCouplingForModel(const Model* model) const;
-    const SourceCoupling* findPrimarySourceCoupling() const;
-    Model* findPrimaryReceiverModel() const;
+    const SourceBinding* findBaseSourceBinding() const;
 
     void initializeModelBindings(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ResourceManager& resourceManager,
-        Remesher& remesher,
         CommandPool& renderCommandPool,
-        const std::vector<uint32_t>& activeSourceModelIds,
-        const std::vector<uint32_t>& activeReceiverModelIds);
+        const HeatPackage& heatPackage);
 
-    std::vector<SourceCoupling>& getSourceCouplingsMutable() { return sourceCouplings; }
-    std::vector<std::unique_ptr<HeatReceiver>>& getReceiversMutable() { return receivers; }
-    std::vector<uint32_t>& getReceiverModelIdsMutable() { return receiverModelIds; }
+    std::vector<SourceBinding>& getSourceBindingsMutable() { return sourceBindings; }
 
-    void cleanupModelBindings(MemoryAllocator& memoryAllocator);
+    void cleanupModelBindings();
 
 private:
-    void addReceiver(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Remesher& remesher, CommandPool& renderCommandPool, Model* model);
-    std::vector<SourceCoupling> sourceCouplings;
-    std::vector<std::unique_ptr<HeatReceiver>> receivers;
-    std::vector<uint32_t> receiverModelIds;
+    std::vector<SourceBinding> sourceBindings;
 };

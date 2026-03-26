@@ -30,7 +30,6 @@ private:
 
     QLineEdit* pathLineEdit = nullptr;
     QPushButton* browseButton = nullptr;
-    QPushButton* applyButton = nullptr;
 
     std::function<void(const QString&)> statusSink;
 };

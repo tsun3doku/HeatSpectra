@@ -1,4 +1,8 @@
 #include "NodeGroup.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
+#include "NodePanelUtils.hpp"
+#include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -18,48 +22,50 @@ bool NodeGroup::execute(NodeGraphKernelContext& context) const {
         }
     }
 
-    const bool enabled = getBoolParamValue(context.node, nodegraphparams::group::Enabled, true);
-    const std::string sourceGroupName = getStringParamValue(context.node, nodegraphparams::group::SourceName);
-    const std::string targetGroupName = getStringParamValue(context.node, nodegraphparams::group::TargetName);
+    const bool enabled = NodePanelUtils::readBoolParam(context.node, nodegraphparams::group::Enabled, true);
+    const std::string sourceGroupName = NodePanelUtils::readStringParam(context.node, nodegraphparams::group::SourceName);
+    const std::string targetGroupName = NodePanelUtils::readStringParam(context.node, nodegraphparams::group::TargetName);
+    NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
-    for (NodeDataBlock& outputValue : context.outputs) {
+    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
+        NodeDataBlock& outputValue = context.outputs[outputIndex];
         outputValue.dataType = NodeDataType::None;
-        outputValue.geometry = {};
-        if (!inputGeometryValue) {
-            refreshNodeDataBlockMetadata(outputValue);
+        outputValue.payloadHandle = {};
+        if (!inputGeometryValue || !payloadRegistry) {
+            updateDataBlockMetadata(outputValue, payloadRegistry);
+            continue;
+        }
+
+        const GeometryData* inputGeometry = payloadRegistry->get<GeometryData>(inputGeometryValue->payloadHandle);
+        if (!inputGeometry) {
+            updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
         outputValue.dataType = NodeDataType::Geometry;
-        outputValue.geometry = inputGeometryValue->geometry;
-        ensureGeometryGroups(outputValue.geometry);
-        if (enabled && !sourceGroupName.empty() && !targetGroupName.empty()) {
-            applyAssignment(outputValue.geometry, sourceGroupName, targetGroupName);
-            ensureGeometryGroups(outputValue.geometry);
+        if (!enabled || sourceGroupName.empty() || targetGroupName.empty()) {
+            outputValue.payloadHandle = inputGeometryValue->payloadHandle;
+            updateDataBlockMetadata(outputValue, payloadRegistry);
+            continue;
         }
 
-        refreshNodeDataBlockMetadata(outputValue);
+        GeometryData updatedGeometry = *inputGeometry;
+        normalizeGeometryGroups(updatedGeometry);
+        const bool changed = applyAssignment(updatedGeometry, sourceGroupName, targetGroupName);
+        normalizeGeometryGroups(updatedGeometry);
+        if (changed) {
+            bumpGeometryRevision(updatedGeometry);
+            const uint64_t payloadKey = makeSocketKey(
+                context.node.id,
+                context.node.outputs[outputIndex].id);
+            outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(updatedGeometry));
+        } else {
+            outputValue.payloadHandle = inputGeometryValue->payloadHandle;
+        }
+        updateDataBlockMetadata(outputValue, payloadRegistry);
     }
 
     return false;
-}
-
-bool NodeGroup::getBoolParamValue(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue) {
-    bool value = defaultValue;
-    if (tryGetNodeParamBool(node, parameterId, value)) {
-        return value;
-    }
-
-    return defaultValue;
-}
-
-std::string NodeGroup::getStringParamValue(const NodeGraphNode& node, uint32_t parameterId) {
-    std::string value;
-    if (tryGetNodeParamString(node, parameterId, value)) {
-        return value;
-    }
-
-    return {};
 }
 
 bool NodeGroup::equalsIgnoreCase(const std::string& lhs, const std::string& rhs) {
@@ -100,7 +106,7 @@ uint32_t NodeGroup::resolveTargetGroupId(GeometryData& geometry, const std::stri
     return maxGroupId + 1u;
 }
 
-void NodeGroup::applyAssignment(
+bool NodeGroup::applyAssignment(
     GeometryData& geometry,
     const std::string& sourceGroupName,
     const std::string& targetGroupName) {
@@ -112,14 +118,18 @@ void NodeGroup::applyAssignment(
     }
 
     if (matchingGroupIds.empty()) {
-        return;
+        return false;
     }
 
     const uint32_t targetGroupId = resolveTargetGroupId(geometry, targetGroupName);
+    bool changed = false;
 
     for (uint32_t& triangleGroupId : geometry.triangleGroupIds) {
         if (matchingGroupIds.find(triangleGroupId) != matchingGroupIds.end()) {
-            triangleGroupId = targetGroupId;
+            if (triangleGroupId != targetGroupId) {
+                triangleGroupId = targetGroupId;
+                changed = true;
+            }
         }
     }
 
@@ -135,10 +145,17 @@ void NodeGroup::applyAssignment(
         newGroup.name = targetGroupName;
         newGroup.source = "node.group";
         geometry.groups.push_back(std::move(newGroup));
+        changed = true;
     } else {
-        existingIt->name = targetGroupName;
+        if (existingIt->name != targetGroupName) {
+            existingIt->name = targetGroupName;
+            changed = true;
+        }
         if (existingIt->source.empty() || existingIt->source == "generated") {
             existingIt->source = "node.group";
+            changed = true;
         }
     }
+
+    return changed;
 }

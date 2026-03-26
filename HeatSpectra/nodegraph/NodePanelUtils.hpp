@@ -42,13 +42,6 @@ void appendDelimitedNames(
 
 // --- Graph traversal helpers ---
 
-const NodeGraphNode* findNodeInState(const NodeGraphState& state, NodeGraphNodeId nodeId);
-
-const NodeGraphEdge* findIncomingEdgeInState(
-    const NodeGraphState& state,
-    NodeGraphNodeId toNodeId,
-    NodeGraphSocketId toSocketId);
-
 void collectUpstreamModelPaths(
     const NodeGraphState& state,
     NodeGraphNodeId nodeId,

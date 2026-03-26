@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "NodeGraphDataTypes.hpp"
+#include "NodeGraphPayloadTypes.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -11,20 +12,24 @@
 class NodeGraphBridge;
 class HeatSystemController;
 class ContactSystemController;
+class ContactPreviewStore;
 class MeshModifiers;
-class ModelRegistry;
-class NodeSolverController;
+class NodePayloadRegistry;
+class Remesher;
 class ResourceManager;
+class RuntimePayloadController;
 class SceneController;
 
 struct NodeRuntimeServices {
-    ModelRegistry* modelRegistry = nullptr;
     SceneController* sceneController = nullptr;
+    RuntimePayloadController* runtimePayloadController = nullptr;
     HeatSystemController* heatSystemController = nullptr;
     ContactSystemController* contactSystemController = nullptr;
-    NodeSolverController* nodeSolverController = nullptr;
+    ContactPreviewStore* contactPreviewStore = nullptr;
+    NodePayloadRegistry* payloadRegistry = nullptr;
     ResourceManager* resourceManager = nullptr;
     MeshModifiers* meshModifiers = nullptr;
+    Remesher* remesher = nullptr;
 };
 
 struct NodeGraphKernelExecutionState {
@@ -42,11 +47,22 @@ struct NodeGraphKernelContext {
     const NodeGraphKernelExecutionState& executionState;
 };
 
+struct NodeGraphKernelHashContext {
+    const NodeGraphNode& node;
+    const std::vector<const NodeDataBlock*>& inputs;
+    const NodeGraphKernelExecutionState& executionState;
+};
+
 class NodeKernel {
 public:
     virtual ~NodeKernel() = default;
     virtual const char* typeId() const = 0;
     virtual bool execute(NodeGraphKernelContext& context) const = 0;
+    virtual bool computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
+        (void)context;
+        (void)outHash;
+        return false;
+    }
 };
 
 class NodeGraphKernels {
@@ -54,6 +70,11 @@ public:
     NodeGraphKernels();
 
     bool hasKernel(const NodeTypeId& typeId) const;
+    bool computeInputHash(
+        const NodeGraphNode& node,
+        const NodeGraphKernelExecutionState& executionState,
+        const std::vector<const NodeDataBlock*>& inputs,
+        uint64_t& outHash) const;
     bool executeNode(
         const NodeGraphNode& node,
         const NodeGraphKernelExecutionState& executionState,
@@ -63,14 +84,17 @@ public:
 private:
     void registerDefaultKernels();
     void registerKernel(std::unique_ptr<NodeKernel> kernel);
-    static void normalizeOutputsToSocketContracts(const NodeGraphNode& node, std::vector<NodeDataBlock>& outputs);
+    static void normalizeOutputsToSocketContracts(
+        const NodeGraphNode& node,
+        std::vector<NodeDataBlock>& outputs,
+        NodePayloadRegistry* payloadRegistry);
     static bool hasGuaranteedAttribute(
         const GeometryData& geometry,
         const NodeGraphAttributeContract& guaranteedAttribute);
     static std::size_t attributeElementCount(
         const GeometryData& geometry,
         GeometryAttributeDomain domain);
-    static void ensureGuaranteedAttribute(
+    static bool ensureGuaranteedAttribute(
         GeometryData& geometry,
         const NodeGraphAttributeContract& guaranteedAttribute);
     static void resizeAttributeStorage(

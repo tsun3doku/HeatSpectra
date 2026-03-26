@@ -30,12 +30,5 @@ struct HeatMaterialBindingEntry {
     HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
 };
 
-struct HeatModelMaterialBindings {
-    uint32_t runtimeModelId = 0;
-    std::vector<uint32_t> triangleGroupIds;
-    std::vector<HeatMaterialBindingGroup> groups;
-    std::vector<HeatMaterialBindingEntry> bindings;
-};
-
 const HeatMaterialPreset& heatMaterialPresetById(HeatMaterialPresetId id);
 const char* heatMaterialPresetName(HeatMaterialPresetId id);

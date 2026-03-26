@@ -1,12 +1,17 @@
-﻿#include "NodeInspectorDialog.hpp"
+#include "NodeInspectorDialog.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"
-#include "NodeContactPairPanel.hpp"
+#include "NodeContactPanel.hpp"
+#include "NodeHeatSourcePanel.hpp"
 #include "NodeGroupPanel.hpp"
 #include "NodeHeatSolverPanel.hpp"
 #include "NodeModelPanel.hpp"
+#include "NodeTransformPanel.hpp"
 #include "NodeRemeshPanel.hpp"
+#include "NodeVoronoiPanel.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
 
 #include <QAbstractScrollArea>
@@ -164,7 +169,7 @@ private:
 };
 
 QString nodeTypeDisplayName(const NodeTypeId& typeId) {
-    const NodeTypeDefinition* definition = findNodeTypeDefinitionById(typeId);
+    const NodeTypeDefinition* definition = NodeGraphRegistry::findNodeById(typeId);
     if (definition) {
         return QString::fromStdString(definition->displayName);
     }
@@ -237,11 +242,20 @@ void NodeInspectorDialog::bind(NodeGraphBridge* nodeGraphBridgePtr, const Runtim
     if (modelPanel) {
         modelPanel->bind(nodeGraphBridgePtr);
     }
+    if (transformPanel) {
+        transformPanel->bind(nodeGraphBridgePtr);
+    }
     if (remeshPanel) {
         remeshPanel->bind(nodeGraphBridgePtr);
     }
-    if (contactPairPanel) {
-        contactPairPanel->bind(nodeGraphBridgePtr);
+    if (voronoiPanel) {
+        voronoiPanel->bind(nodeGraphBridgePtr);
+    }
+    if (contactPanel) {
+        contactPanel->bind(nodeGraphBridgePtr);
+    }
+    if (heatSourcePanel) {
+        heatSourcePanel->bind(nodeGraphBridgePtr);
     }
     if (heatSolverPanel) {
         heatSolverPanel->bind(nodeGraphBridgePtr, runtimeQueryPtr);
@@ -263,7 +277,7 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
     }
 
     currentNodeId = nodeId;
-    currentNodeTypeId = canonicalNodeTypeId(node.typeId);
+    currentNodeTypeId = getNodeTypeId(node.typeId);
 
     titleLabel->setText(QString::fromStdString(node.title));
     subtitleLabel->setText(nodeTypeDisplayName(currentNodeTypeId));
@@ -273,6 +287,12 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
         pageStack->setCurrentWidget(modelPage);
         if (modelPanel) {
             modelPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
+    } else if (currentNodeTypeId == nodegraphtypes::Transform) {
+        pageStack->setCurrentWidget(transformPage);
+        if (transformPanel) {
+            transformPanel->setNode(currentNodeId);
         }
         if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     } else if (currentNodeTypeId == nodegraphtypes::Group) {
@@ -287,10 +307,22 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
             remeshPanel->setNode(currentNodeId);
         }
         if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
-    } else if (currentNodeTypeId == nodegraphtypes::ContactPair) {
-        pageStack->setCurrentWidget(contactPairPage);
-        if (contactPairPanel) {
-            contactPairPanel->setNode(currentNodeId);
+    } else if (currentNodeTypeId == nodegraphtypes::Voronoi) {
+        pageStack->setCurrentWidget(voronoiPage);
+        if (voronoiPanel) {
+            voronoiPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
+    } else if (currentNodeTypeId == nodegraphtypes::Contact) {
+        pageStack->setCurrentWidget(contactPage);
+        if (contactPanel) {
+            contactPanel->setNode(currentNodeId);
+        }
+        if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
+    } else if (currentNodeTypeId == nodegraphtypes::HeatSource) {
+        pageStack->setCurrentWidget(heatSourcePage);
+        if (heatSourcePanel) {
+            heatSourcePanel->setNode(currentNodeId);
         }
         if (heatSolverPanel) { heatSolverPanel->stopStatusTimer(); }
     } else if (currentNodeTypeId == nodegraphtypes::HeatSolve) {
@@ -373,6 +405,19 @@ void NodeInspectorDialog::buildUi() {
     }
     pageStack->addWidget(modelPage);
 
+    transformPage = new QWidget(inspectorContent);
+    {
+        QVBoxLayout* layout = new QVBoxLayout(transformPage);
+        transformPanel = new NodeTransformPanel(transformPage);
+        transformPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(transformPanel);
+    }
+    pageStack->addWidget(transformPage);
+
     groupPage = new QWidget(inspectorContent);
     {
         QVBoxLayout* layout = new QVBoxLayout(groupPage);
@@ -399,18 +444,44 @@ void NodeInspectorDialog::buildUi() {
     }
     pageStack->addWidget(remeshPage);
 
-    contactPairPage = new QWidget(inspectorContent);
+    voronoiPage = new QWidget(inspectorContent);
     {
-        QVBoxLayout* layout = new QVBoxLayout(contactPairPage);
-        contactPairPanel = new NodeContactPairPanel(contactPairPage);
-        contactPairPanel->setStatusSink([this](const QString& text) {
+        QVBoxLayout* layout = new QVBoxLayout(voronoiPage);
+        voronoiPanel = new NodeVoronoiPanel(voronoiPage);
+        voronoiPanel->setStatusSink([this](const QString& text) {
             if (statusLabel) {
                 statusLabel->setText(text);
             }
         });
-        layout->addWidget(contactPairPanel);
+        layout->addWidget(voronoiPanel);
     }
-    pageStack->addWidget(contactPairPage);
+    pageStack->addWidget(voronoiPage);
+
+    contactPage = new QWidget(inspectorContent);
+    {
+        QVBoxLayout* layout = new QVBoxLayout(contactPage);
+        contactPanel = new NodeContactPanel(contactPage);
+        contactPanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(contactPanel);
+    }
+    pageStack->addWidget(contactPage);
+
+    heatSourcePage = new QWidget(inspectorContent);
+    {
+        QVBoxLayout* layout = new QVBoxLayout(heatSourcePage);
+        heatSourcePanel = new NodeHeatSourcePanel(heatSourcePage);
+        heatSourcePanel->setStatusSink([this](const QString& text) {
+            if (statusLabel) {
+                statusLabel->setText(text);
+            }
+        });
+        layout->addWidget(heatSourcePanel);
+    }
+    pageStack->addWidget(heatSourcePage);
 
     heatPage = new QWidget(inspectorContent);
     {
@@ -625,11 +696,22 @@ void NodeInspectorDialog::updateSpreadsheetView() {
         return;
     }
 
+    QString revisionSuffix;
+    if (selectedSocketDebug.dataType == "geometry" ||
+        selectedSocketDebug.dataType == "heat_receiver" ||
+        selectedSocketDebug.dataType == "heat_source") {
+        const auto revisionIt = selectedSocketDebug.metadata.find("geometry.revision");
+        if (revisionIt != selectedSocketDebug.metadata.end()) {
+            revisionSuffix = QString(" | Revision: %1").arg(QString::fromStdString(revisionIt->second));
+        }
+    }
+
     spreadsheetSummaryLabel->setText(
-        QString("Data Type: %1 | Lineage: %2 | Attributes: %3")
+        QString("Data Type: %1 | Lineage: %2 | Attributes: %3%4")
             .arg(QString::fromStdString(selectedSocketDebug.dataType))
             .arg(QString::fromStdString(formatLineagePath(selectedSocketDebug.lineageNodeIds)))
-            .arg(static_cast<int>(selectedSocketDebug.attributes.size())));
+            .arg(static_cast<int>(selectedSocketDebug.attributes.size()))
+            .arg(revisionSuffix));
 
     spreadsheetAttributesTable->clearContents();
     spreadsheetAttributesTable->setRowCount(static_cast<int>(selectedSocketDebug.attributes.size()));

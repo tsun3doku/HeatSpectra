@@ -28,6 +28,8 @@ C:/VulkanSDK/1.3.283.0/Bin/glslc.exe intrinsic_vertex_normals.geom -o intrinsic_
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe intrinsic_vertex_normals.frag -o intrinsic_vertex_normals_frag.spv
 
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe heat_buffer.frag -o heat_buffer_frag.spv
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe heat_source.vert -o heat_source_vert.spv
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe heat_source.frag -o heat_source_frag.spv
 
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe lighting.vert -o lighting_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe lighting.frag -o lighting_frag.spv

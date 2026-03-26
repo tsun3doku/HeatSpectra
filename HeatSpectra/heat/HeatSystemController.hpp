@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 
@@ -6,27 +6,26 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "contact/ContactTypes.hpp"
-#include "HeatContactParams.hpp"
-#include "HeatSolveParams.hpp"
+#include "domain/HeatData.hpp"
 #include "HeatSystemPresets.hpp"
+#include "HeatSystemResources.hpp"
+#include "domain/RemeshData.hpp"
+#include "runtime/RuntimeContactTypes.hpp"
+#include "runtime/RuntimePackages.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;
 class ResourceManager;
 class UniformBufferManager;
-class SceneRenderer;
-class SwapchainManager;
 class CommandPool;
-class FrameSync;
-class FrameSimulation;
 class HeatSystem;
-class ModelUploader;
-class MeshModifiers;
-class VkFrameGraphRuntime;
-class ContactSystemController;
+class ContactPreviewStore;
+class RenderRuntime;
+class RuntimeIntrinsicCache;
 
 class HeatSystemController {
 public:
@@ -34,66 +33,41 @@ public:
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         ResourceManager& resourceManager,
-        MeshModifiers& meshModifiers,
-        ModelUploader& modelUploader,
         UniformBufferManager& uniformBufferManager,
-        SceneRenderer& sceneRenderer,
-        SwapchainManager& swapchainManager,
-        VkFrameGraphRuntime& frameGraphRuntime,
+        RuntimeIntrinsicCache& remeshResources,
         CommandPool& renderCommandPool,
-        FrameSync& frameSync,
-        std::unique_ptr<HeatSystem>& heatSystem,
-        std::atomic<bool>& isOperating,
         uint32_t maxFramesInFlight);
 
     bool isHeatSystemActive() const;
     bool isHeatSystemPaused() const;
 
-    void toggleHeatSystem();
-    void pauseHeatSystem();
-    void resetHeatSystem();
-    uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
-    bool removeModelByID(uint32_t modelId);
-    void setActiveModels(
-        const std::vector<uint32_t>& sourceModelIds,
-        const std::vector<uint32_t>& receiverModelIds,
-        bool rebuildContactSystem = true);
-    void setContactPairs(const std::vector<HeatContactBinding>& contactPairs, bool forceContactRebuild = false);
-    void setSolveParams(const HeatSolveParams& params);
-    void setMaterialBindings(const std::vector<HeatModelMaterialBindings>& bindings);
-    void setContactSystemController(ContactSystemController* contactSystemController);
+    void applyHeatPackage(const HeatPackage& heatPackage);
+    void applyResolvedContacts(const std::vector<RuntimeContactResult>& resolvedContacts);
+    void setContactPreviewStore(ContactPreviewStore* contactPreviewStore);
+    HeatSystem* getHeatSystem() const;
 
     void createHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
     void recreateHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
-
-    FrameSimulation* getHeatSystem() const;
+    void destroyHeatSystem();
 
 private:
     std::unique_ptr<HeatSystem> buildHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
+    void configureHeatSystem(HeatSystem& system);
+    void applyHeatActivationState(HeatSystem& system);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
-
-    MeshModifiers& meshModifiers;
-    ModelUploader& modelUploader;
-    SceneRenderer& sceneRenderer;
-
-    SwapchainManager& swapchainManager;
-    VkFrameGraphRuntime& frameGraphRuntime;
+    RuntimeIntrinsicCache& remeshResources;
     CommandPool& renderCommandPool;
-    FrameSync& frameSync;
 
-    std::unique_ptr<HeatSystem>& heatSystem;
-    std::vector<uint32_t> configuredSourceModelIds;
-    std::vector<uint32_t> configuredReceiverModelIds;
-    std::vector<HeatContactBinding> configuredContactPairs;
-    HeatSolveParams configuredSolveParams;
-    std::vector<HeatModelMaterialBindings> configuredMaterialBindings;
-    ContactSystemController* contactSystemController = nullptr;
-
-    std::atomic<bool>& isOperating;
+    std::unique_ptr<HeatSystem> heatSystem;
+    HeatSystemResources heatSystemResources;
+    HeatPackage heatPackageStorage{};
+    std::vector<RuntimeContactResult> resolvedContactsStorage;
+    bool hasConfiguredHeatPackage = false;
+    ContactPreviewStore* contactPreviewStore = nullptr;
     const uint32_t maxFramesInFlight;
 };
 

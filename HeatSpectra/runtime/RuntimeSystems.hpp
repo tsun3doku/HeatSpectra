@@ -16,8 +16,8 @@
 
 class NodeGraphBridge;
 class ModelSelection;
-class ModelRegistry;
 class RuntimeQuery;
+class SceneController;
 struct WindowRuntimeState;
 
 class RuntimeSystems {
@@ -39,8 +39,8 @@ public:
     const RenderSettingsController* getSettingsController() const;
     NodeGraphBridge* getNodeGraphBridge();
     const NodeGraphBridge* getNodeGraphBridge() const;
-    ModelRegistry* getModelRegistry();
-    const ModelRegistry* getModelRegistry() const;
+    SceneController* getSceneController();
+    const SceneController* getSceneController() const;
     ModelSelection* getModelSelection();
     const ModelSelection* getModelSelection() const;
 
