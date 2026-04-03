@@ -377,7 +377,7 @@ void NodeInspectorDialog::buildUi() {
     contentLayout->addWidget(titleLabel);
 
     subtitleLabel = new QLabel(inspectorContent);
-    subtitleLabel->setText("Select a node in the graph to inspect parameters and dataflow.");
+    subtitleLabel->setText("Select a node in the graph to inspect parameters and dataflow");
     contentLayout->addWidget(subtitleLabel);
 
     pageStack = new QStackedWidget(inspectorContent);
@@ -385,7 +385,7 @@ void NodeInspectorDialog::buildUi() {
     genericPage = new QWidget(inspectorContent);
     {
         QVBoxLayout* layout = new QVBoxLayout(genericPage);
-        QLabel* msg = new QLabel("This node has no editable actions yet.", genericPage);
+        QLabel* msg = new QLabel("This node has no editable actions yet", genericPage);
         msg->setWordWrap(true);
         layout->addWidget(msg);
         layout->addStretch();
@@ -519,7 +519,7 @@ void NodeInspectorDialog::buildUi() {
 
         spreadsheetSummaryLabel = new QLabel(spreadsheetTab);
         spreadsheetSummaryLabel->setWordWrap(true);
-        spreadsheetSummaryLabel->setText("No node selected.");
+        spreadsheetSummaryLabel->setText("No node selected");
         spreadsheetLayout->addWidget(spreadsheetSummaryLabel);
 
         spreadsheetAttributesTable = new QTableWidget(spreadsheetTab);
@@ -597,13 +597,13 @@ void NodeInspectorDialog::updateDataflowView() {
     }
 
     if (!currentNodeId.isValid()) {
-        dataflowTextEdit->setPlainText("Select a node to inspect dataflow packets.");
+        dataflowTextEdit->setPlainText("Select a node to inspect dataflow packets");
         return;
     }
 
     NodeGraphRuntimeNodeDebugInfo debugInfo{};
     if (!NodeGraphDebugStore::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
-        dataflowTextEdit->setPlainText("No runtime packet data for this node yet.\nRun the graph for at least one frame.");
+        dataflowTextEdit->setPlainText("No runtime packet data for this node yet \n Run the graph for at least one frame");
         return;
     }
 
@@ -642,7 +642,7 @@ void NodeInspectorDialog::updateSpreadsheetView() {
         spreadsheetSocketComboBox->blockSignals(true);
         spreadsheetSocketComboBox->clear();
         spreadsheetSocketComboBox->blockSignals(false);
-        clearSpreadsheetView("Select a node to inspect geometry attributes.");
+        clearSpreadsheetView("Select a node to inspect geometry attributes");
         return;
     }
 
@@ -651,7 +651,7 @@ void NodeInspectorDialog::updateSpreadsheetView() {
         spreadsheetSocketComboBox->blockSignals(true);
         spreadsheetSocketComboBox->clear();
         spreadsheetSocketComboBox->blockSignals(false);
-        clearSpreadsheetView("No runtime geometry data yet. Run the graph for at least one frame.");
+        clearSpreadsheetView("No runtime geometry data yet \n Run the graph for at least one frame");
         return;
     }
 
@@ -692,26 +692,15 @@ void NodeInspectorDialog::updateSpreadsheetView() {
 
     const NodeGraphRuntimeSocketDebugInfo& selectedSocketDebug = debugInfo.outputs[static_cast<std::size_t>(selectedIndex)];
     if (!selectedSocketDebug.hasValue) {
-        clearSpreadsheetView("Selected output socket has no runtime value.");
+        clearSpreadsheetView("Selected output socket has no runtime value");
         return;
     }
 
-    QString revisionSuffix;
-    if (selectedSocketDebug.dataType == "geometry" ||
-        selectedSocketDebug.dataType == "heat_receiver" ||
-        selectedSocketDebug.dataType == "heat_source") {
-        const auto revisionIt = selectedSocketDebug.metadata.find("geometry.revision");
-        if (revisionIt != selectedSocketDebug.metadata.end()) {
-            revisionSuffix = QString(" | Revision: %1").arg(QString::fromStdString(revisionIt->second));
-        }
-    }
-
     spreadsheetSummaryLabel->setText(
-        QString("Data Type: %1 | Lineage: %2 | Attributes: %3%4")
+        QString("Data Type: %1 | Lineage: %2 | Attributes: %3")
             .arg(QString::fromStdString(selectedSocketDebug.dataType))
             .arg(QString::fromStdString(formatLineagePath(selectedSocketDebug.lineageNodeIds)))
-            .arg(static_cast<int>(selectedSocketDebug.attributes.size()))
-            .arg(revisionSuffix));
+            .arg(static_cast<int>(selectedSocketDebug.attributes.size())));
 
     spreadsheetAttributesTable->clearContents();
     spreadsheetAttributesTable->setRowCount(static_cast<int>(selectedSocketDebug.attributes.size()));

@@ -12,112 +12,22 @@
 #include "nodegraph/NodeModelTransform.hpp"
 #include "renderers/HeatReceiverRenderer.hpp"
 #include "renderers/HeatSourceRenderer.hpp"
-#include "renderers/PointRenderer.hpp"
 #include "runtime/ContactPreviewStore.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
-#include "voronoi/VoronoiBuilder.hpp"
-#include "voronoi/VoronoiGeoCompute.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 
-#include <algorithm>
+#include <cmath>
 #include <chrono>
-#include <cstring>
 #include <iostream>
-#include <unordered_set>
-
-bool HeatSystem::isSameContactPairData(const ContactPairData& lhs, const ContactPairData& rhs) {
-    return lhs.hasValidContact == rhs.hasValidContact &&
-        lhs.kind == rhs.kind &&
-        lhs.endpointA.role == rhs.endpointA.role &&
-        lhs.endpointA.payloadHandle.key == rhs.endpointA.payloadHandle.key &&
-        lhs.endpointA.payloadHandle.revision == rhs.endpointA.payloadHandle.revision &&
-        lhs.endpointA.payloadHandle.count == rhs.endpointA.payloadHandle.count &&
-        lhs.endpointA.geometryHandle.key == rhs.endpointA.geometryHandle.key &&
-        lhs.endpointA.geometryHandle.revision == rhs.endpointA.geometryHandle.revision &&
-        lhs.endpointA.geometryHandle.count == rhs.endpointA.geometryHandle.count &&
-        lhs.endpointB.role == rhs.endpointB.role &&
-        lhs.endpointB.payloadHandle.key == rhs.endpointB.payloadHandle.key &&
-        lhs.endpointB.payloadHandle.revision == rhs.endpointB.payloadHandle.revision &&
-        lhs.endpointB.payloadHandle.count == rhs.endpointB.payloadHandle.count &&
-        lhs.endpointB.geometryHandle.key == rhs.endpointB.geometryHandle.key &&
-        lhs.endpointB.geometryHandle.revision == rhs.endpointB.geometryHandle.revision &&
-        lhs.endpointB.geometryHandle.count == rhs.endpointB.geometryHandle.count &&
-        lhs.minNormalDot == rhs.minNormalDot &&
-        lhs.contactRadius == rhs.contactRadius;
-}
-
-bool HeatSystem::isSameRuntimeContactBinding(const RuntimeContactBinding& lhs, const RuntimeContactBinding& rhs) {
-    return isSameContactPairData(lhs.contactPair, rhs.contactPair) &&
-        lhs.emitterRuntimeModelId == rhs.emitterRuntimeModelId &&
-        lhs.receiverRuntimeModelId == rhs.receiverRuntimeModelId;
-}
-
-bool HeatSystem::isSameContactPair(const ContactPair& lhs, const ContactPair& rhs) {
-    return std::memcmp(lhs.samples, rhs.samples, sizeof(lhs.samples)) == 0 &&
-        lhs.contactArea == rhs.contactArea;
-}
-
-bool HeatSystem::isSameRuntimeContactResult(const RuntimeContactResult& lhs, const RuntimeContactResult& rhs) {
-    if (!isSameRuntimeContactBinding(lhs.binding, rhs.binding) ||
-        lhs.contactPairsCPU.size() != rhs.contactPairsCPU.size()) {
-        return false;
-    }
-
-    for (std::size_t index = 0; index < lhs.contactPairsCPU.size(); ++index) {
-        if (!isSameContactPair(lhs.contactPairsCPU[index], rhs.contactPairsCPU[index])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool HeatSystem::areRuntimeContactResultsEqual(const std::vector<RuntimeContactResult>& lhs, const std::vector<RuntimeContactResult>& rhs) {
-    if (lhs.size() != rhs.size()) {
-        return false;
-    }
-    for (std::size_t index = 0; index < lhs.size(); ++index) {
-        if (!isSameRuntimeContactResult(lhs[index], rhs[index])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool HeatSystem::isSameRuntimeThermalMaterial(const RuntimeThermalMaterial& lhs, const RuntimeThermalMaterial& rhs) {
-    return lhs.runtimeModelId == rhs.runtimeModelId &&
-        lhs.density == rhs.density &&
-        lhs.specificHeat == rhs.specificHeat &&
-        lhs.conductivity == rhs.conductivity;
-}
-
-bool HeatSystem::areRuntimeThermalMaterialsEqual(
-    const std::vector<RuntimeThermalMaterial>& lhs,
-    const std::vector<RuntimeThermalMaterial>& rhs) {
-    if (lhs.size() != rhs.size()) {
-        return false;
-    }
-
-    for (std::size_t index = 0; index < lhs.size(); ++index) {
-        if (!isSameRuntimeThermalMaterial(lhs[index], rhs[index])) {
-            return false;
-        }
-    }
-    return true;
-}
 
 HeatSystem::HeatSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
     ResourceManager& resourceManager,
-    RuntimeIntrinsicCache& remeshResources,
     HeatSystemResources& resources,
     UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
@@ -127,13 +37,11 @@ HeatSystem::HeatSystem(
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
-      remeshResources(remeshResources),
       resources(resources),
       uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       runtime(),
       heatSources(runtime.getSourceBindingsMutable()),
-      voronoiBuilder(std::make_unique<VoronoiBuilder>(vulkanDevice, memoryAllocator, resources.voronoi)),
       maxFramesInFlight(maxFramesInFlight) {
     (void)extent;
 
@@ -151,11 +59,11 @@ HeatSystem::HeatSystem(
     surfaceStage = std::make_unique<HeatSystemSurfaceStage>(stageContext);
     voronoiStage = std::make_unique<HeatSystemVoronoiStage>(stageContext);
     renderStage = std::make_unique<HeatSystemRenderStage>(stageContext);
-    voronoiGeoCompute = std::make_unique<VoronoiGeoCompute>(vulkanDevice, renderCommandPool);
 
-    if (!createContactDescriptorPool(maxFramesInFlight) ||
-        !createContactDescriptorSetLayout() ||
-        !createContactPipeline() ||
+    if (!contactStage ||
+        !contactStage->createDescriptorPool(maxFramesInFlight) ||
+        !contactStage->createDescriptorSetLayout() ||
+        !contactStage->createPipeline() ||
         !surfaceStage ||
         !surfaceStage->createDescriptorPool(maxFramesInFlight) ||
         !surfaceStage->createDescriptorSetLayout() ||
@@ -183,13 +91,6 @@ HeatSystem::HeatSystem(
     heatSourceRenderer->initialize(renderPass);
     heatReceiverRenderer->initialize(renderPass, maxFramesInFlight);
 
-    pointRenderer = std::make_unique<PointRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
-    if (!pointRenderer) {
-        failInitialization("create PointRenderer");
-        return;
-    }
-    pointRenderer->initialize(renderPass, 2, maxFramesInFlight);
-
     if (!createComputeCommandBuffers(maxFramesInFlight)) {
         failInitialization("allocate compute command buffers");
         return;
@@ -211,48 +112,138 @@ void HeatSystem::setContactPreviewStore(ContactPreviewStore* store) {
     contactPreviewStore = store;
 }
 
-void HeatSystem::setHeatPackage(const HeatPackage* package) {
-    heatPackage = package;
-    rebuildHeatContactCouplings();
+void HeatSystem::setSourcePayloads(
+    const std::vector<GeometryData>& sourceGeometries,
+    const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
+    const std::vector<uint32_t>& sourceRuntimeModelIds,
+    const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId) {
+    runtime.setSourcePayloads(
+        sourceGeometries,
+        sourceIntrinsicMeshes,
+        sourceRuntimeModelIds,
+        sourceTemperatureByRuntimeId);
 }
 
-void HeatSystem::configureSourceRuntimes(const HeatPackage& heatPackage) {
-    runtime.initializeModelBindings(
-        vulkanDevice,
-        memoryAllocator,
-        renderCommandPool,
-        heatPackage);
-    rebuildHeatContactCouplings();
+void HeatSystem::setReceiverPayloads(
+    const std::vector<GeometryData>& updatedReceiverGeometries,
+    const std::vector<SupportingHalfedge::IntrinsicMesh>& updatedReceiverIntrinsicMeshes,
+    const std::vector<uint32_t>& updatedReceiverRuntimeModelIds,
+    const std::vector<VkBufferView>& supportingHalfedgeViews,
+    const std::vector<VkBufferView>& supportingAngleViews,
+    const std::vector<VkBufferView>& halfedgeViews,
+    const std::vector<VkBufferView>& edgeViews,
+    const std::vector<VkBufferView>& triangleViews,
+    const std::vector<VkBufferView>& lengthViews,
+    const std::vector<VkBufferView>& inputHalfedgeViews,
+    const std::vector<VkBufferView>& inputEdgeViews,
+    const std::vector<VkBufferView>& inputTriangleViews,
+    const std::vector<VkBufferView>& inputLengthViews) {
+    receiverRuntimeModelIds = updatedReceiverRuntimeModelIds;
+    surfaceRuntime.setReceiverPayloads(
+        updatedReceiverGeometries,
+        updatedReceiverIntrinsicMeshes,
+        receiverRuntimeModelIds,
+        supportingHalfedgeViews,
+        supportingAngleViews,
+        halfedgeViews,
+        edgeViews,
+        triangleViews,
+        lengthViews,
+        inputHalfedgeViews,
+        inputEdgeViews,
+        inputTriangleViews,
+        inputLengthViews);
+    voronoiConfigDirty = true;
 }
 
-void HeatSystem::setResolvedContacts(const std::vector<RuntimeContactResult>& contacts) {
-    if (!areRuntimeContactResultsEqual(resolvedContacts, contacts)) {
-        resolvedContacts = contacts;
-        markHeatStructureDirty();
-    }
-
-    rebuildHeatContactCouplings();
+void HeatSystem::setThermalMaterials(const std::vector<RuntimeThermalMaterial>& updatedRuntimeThermalMaterials) {
+    runtimeThermalMaterials = updatedRuntimeThermalMaterials;
+    thermalMaterialsDirty = true;
 }
 
-void HeatSystem::setThermalMaterials(const std::vector<RuntimeThermalMaterial>& materials) {
-    if (areRuntimeThermalMaterialsEqual(configuredThermalMaterials, materials)) {
+void HeatSystem::setContactCouplings(const std::vector<ContactProduct>& contactCouplings) {
+    std::cerr << "[HeatSystem] setContactCouplings"
+              << " receiverRuntimeModelIds=" << receiverRuntimeModelIds.size()
+              << " products=" << contactCouplings.size()
+              << std::endl;
+    heatContactRuntime.setContactCouplings(receiverRuntimeModelIds, contactCouplings);
+}
+
+void HeatSystem::clearVoronoiInputs() {
+    voronoiNodeCount = 0;
+    voronoiNodes = nullptr;
+    voronoiNodeBuffer = VK_NULL_HANDLE;
+    voronoiNodeBufferOffset = 0;
+    voronoiNeighborBuffer = VK_NULL_HANDLE;
+    voronoiNeighborBufferOffset = 0;
+    neighborIndicesBuffer = VK_NULL_HANDLE;
+    neighborIndicesBufferOffset = 0;
+    interfaceAreasBuffer = VK_NULL_HANDLE;
+    interfaceAreasBufferOffset = 0;
+    interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
+    interfaceNeighborIdsBufferOffset = 0;
+    seedFlagsBuffer = VK_NULL_HANDLE;
+    seedFlagsBufferOffset = 0;
+    receiverVoronoiNodeOffsetByModelId.clear();
+    receiverVoronoiNodeCountByModelId.clear();
+    receiverVoronoiSurfaceMappingBufferByModelId.clear();
+    receiverVoronoiSurfaceMappingBufferOffsetByModelId.clear();
+    receiverVoronoiSurfaceCellIndicesByModelId.clear();
+    receiverVoronoiSeedFlagsByModelId.clear();
+    voronoiConfigDirty = true;
+}
+
+void HeatSystem::setVoronoiBuffers(
+    uint32_t nodeCount,
+    const VoronoiNode* inputVoronoiNodes,
+    VkBuffer inputNodeBuffer,
+    VkDeviceSize inputNodeBufferOffset,
+    VkBuffer inputVoronoiNeighborBuffer,
+    VkDeviceSize inputVoronoiNeighborBufferOffset,
+    VkBuffer inputNeighborIndicesBuffer,
+    VkDeviceSize inputNeighborIndicesBufferOffset,
+    VkBuffer inputInterfaceAreasBuffer,
+    VkDeviceSize inputInterfaceAreasBufferOffset,
+    VkBuffer inputInterfaceNeighborIdsBuffer,
+    VkDeviceSize inputInterfaceNeighborIdsBufferOffset,
+    VkBuffer inputSeedFlagsBuffer,
+    VkDeviceSize inputSeedFlagsBufferOffset) {
+    voronoiNodeCount = nodeCount;
+    voronoiNodes = inputVoronoiNodes;
+    voronoiNodeBuffer = inputNodeBuffer;
+    voronoiNodeBufferOffset = inputNodeBufferOffset;
+    voronoiNeighborBuffer = inputVoronoiNeighborBuffer;
+    voronoiNeighborBufferOffset = inputVoronoiNeighborBufferOffset;
+    neighborIndicesBuffer = inputNeighborIndicesBuffer;
+    neighborIndicesBufferOffset = inputNeighborIndicesBufferOffset;
+    interfaceAreasBuffer = inputInterfaceAreasBuffer;
+    interfaceAreasBufferOffset = inputInterfaceAreasBufferOffset;
+    interfaceNeighborIdsBuffer = inputInterfaceNeighborIdsBuffer;
+    interfaceNeighborIdsBufferOffset = inputInterfaceNeighborIdsBufferOffset;
+    seedFlagsBuffer = inputSeedFlagsBuffer;
+    seedFlagsBufferOffset = inputSeedFlagsBufferOffset;
+    voronoiConfigDirty = true;
+}
+
+void HeatSystem::addVoronoiReceiverInput(
+    uint32_t runtimeModelId,
+    uint32_t nodeOffset,
+    uint32_t nodeCount,
+    VkBuffer surfaceMappingBuffer,
+    VkDeviceSize surfaceMappingBufferOffset,
+    const std::vector<uint32_t>& surfaceCellIndices,
+    const std::vector<uint32_t>& seedFlags) {
+    if (runtimeModelId == 0) {
         return;
     }
 
-    configuredThermalMaterials = materials;
-    markHeatStructureDirty();
-}
-
-void HeatSystem::setSourceTemperatures(const std::unordered_map<uint32_t, float>& temperatures) {
-    sourceTemperatureByModelId = temperatures;
-    for (SourceBinding& sourceBinding : heatSources) {
-        if (!sourceBinding.heatSource) {
-            continue;
-        }
-        const auto tempIt = sourceTemperatureByModelId.find(sourceBinding.geometryPackage.runtimeModelId);
-        const float temperature = (tempIt != sourceTemperatureByModelId.end()) ? tempIt->second : 100.0f;
-        sourceBinding.heatSource->setUniformTemperature(temperature);
-    }
+    receiverVoronoiNodeOffsetByModelId[runtimeModelId] = nodeOffset;
+    receiverVoronoiNodeCountByModelId[runtimeModelId] = nodeCount;
+    receiverVoronoiSurfaceMappingBufferByModelId[runtimeModelId] = surfaceMappingBuffer;
+    receiverVoronoiSurfaceMappingBufferOffsetByModelId[runtimeModelId] = surfaceMappingBufferOffset;
+    receiverVoronoiSurfaceCellIndicesByModelId[runtimeModelId] = surfaceCellIndices;
+    receiverVoronoiSeedFlagsByModelId[runtimeModelId] = seedFlags;
+    voronoiConfigDirty = true;
 }
 
 void HeatSystem::update() {
@@ -275,12 +266,12 @@ void HeatSystem::update() {
     }
 
     for (SourceBinding& sourceBinding : heatSources) {
-        if (!sourceBinding.heatSource || sourceBinding.geometryPackage.runtimeModelId == 0) {
+        if (!sourceBinding.heatSource || sourceBinding.runtimeModelId == 0) {
             continue;
         }
 
         sourceBinding.heatSource->setHeatSourcePushConstant(
-            NodeModelTransform::toMat4(sourceBinding.geometryPackage.geometry.localToWorld));
+            NodeModelTransform::toMat4(sourceBinding.geometry.localToWorld));
     }
 }
 
@@ -294,18 +285,12 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
     if (!heatReceiverRenderer) {
         heatReceiverRenderer = std::make_unique<HeatReceiverRenderer>(vulkanDevice, uniformBufferManager);
     }
-    if (!pointRenderer) {
-        pointRenderer = std::make_unique<PointRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
-    }
     if (heatSourceRenderer) {
         heatSourceRenderer->initialize(renderPass);
     }
     if (heatReceiverRenderer) {
         heatReceiverRenderer->initialize(renderPass, maxFramesInFlight);
-        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), resourceManager, maxFramesInFlight, true);
-    }
-    if (pointRenderer) {
-        pointRenderer->initialize(renderPass, 2, maxFramesInFlight);
+        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), maxFramesInFlight, true);
     }
 
     if (contactPreviewStore) {
@@ -352,76 +337,104 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
     }
 }
 
-void HeatSystem::processResetRequest() {
-    processHeatReset();
-}
+void HeatSystem::ensureConfigured() {
+    const bool needsHardRebuild =
+        runtime.needsRebuild() ||
+        surfaceRuntime.needsRebuild() ||
+        heatContactRuntime.needsRebuild() ||
+        voronoiConfigDirty ||
+        thermalMaterialsDirty;
 
-void HeatSystem::processHeatReset() {
-    if (!needsReset.exchange(false, std::memory_order_acq_rel)) {
+    if (!needsHardRebuild) {
         return;
     }
 
     vkDeviceWaitIdle(vulkanDevice.getDevice());
     rebuildHeatStateRuntimes(true);
     resetHeatState();
-    heatStructureDirty = false;
-}
-
-void HeatSystem::requestHeatReset() {
-    needsReset.store(true, std::memory_order_release);
-}
-
-void HeatSystem::markHeatStructureDirty() {
-    heatStructureDirty = true;
-    if (isActive) {
-        requestHeatReset();
-    }
-}
-
-void HeatSystem::rebuildHeatContactCouplings() {
-    heatContactRuntime.rebuildCouplings(
-        memoryAllocator,
-        heatPackage ? heatPackage->receiverRuntimeModelIds : std::vector<uint32_t>{},
-        resolvedContacts,
-        heatSources);
 }
 
 bool HeatSystem::rebuildHeatStateRuntimes(bool forceDescriptorReallocate) {
-    if (!heatPackage) {
+    const bool sourcesReady = runtime.ensureModelBindings(
+        vulkanDevice,
+        memoryAllocator,
+        renderCommandPool);
+    if (!sourcesReady) {
         return false;
     }
 
-    const bool heatVoronoiReady = rebuildVoronoiRuntime();
-    if (heatPackage->voronoiActive && !heatVoronoiReady) {
+    const bool receiversReady = surfaceRuntime.ensureReceiverBindings(
+        vulkanDevice,
+        memoryAllocator);
+
+    if (!receiversReady) {
         return false;
+    }
+
+    surfaceRuntime.executeBufferTransfers(renderCommandPool);
+
+    if (heatReceiverRenderer) {
+        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), maxFramesInFlight, forceDescriptorReallocate);
+    }
+
+    if (!heatContactRuntime.ensureCouplings(
+            vulkanDevice,
+            memoryAllocator,
+            heatSources,
+            receiverVoronoiSurfaceCellIndicesByModelId,
+            receiverVoronoiSurfaceMappingBufferByModelId,
+            receiverVoronoiSurfaceMappingBufferOffsetByModelId)) {
+        std::cerr << "[HeatSystem] rebuildHeatStateRuntimes: ensureCouplings FAILED" << std::endl;
+        return false;
+    }
+
+    std::cerr << "[HeatSystem] rebuildHeatStateRuntimes"
+              << " sourceBindings=" << heatSources.size()
+              << " receiverBindings=" << surfaceRuntime.getReceivers().size()
+              << " contactCouplings=" << heatContactRuntime.getCouplings().size()
+              << std::endl;
+
+    const bool heatVoronoiReady = rebuildVoronoiRuntime();
+    for (const auto& receiver : surfaceRuntime.getReceivers()) {
+        if (!receiver) {
+            continue;
+        }
+
+        const uint32_t runtimeModelId = receiver->getRuntimeModelId();
+        const auto bufferIt = receiverVoronoiSurfaceMappingBufferByModelId.find(runtimeModelId);
+        const auto offsetIt = receiverVoronoiSurfaceMappingBufferOffsetByModelId.find(runtimeModelId);
+        if (!heatVoronoiReady ||
+            bufferIt == receiverVoronoiSurfaceMappingBufferByModelId.end() ||
+            offsetIt == receiverVoronoiSurfaceMappingBufferOffsetByModelId.end()) {
+            receiver->setVoronoiMapping(VK_NULL_HANDLE, 0);
+            continue;
+        }
+
+        receiver->setVoronoiMapping(bufferIt->second, offsetIt->second);
+    }
+
+    if (!heatVoronoiReady) {
+        simRuntime.cleanup(memoryAllocator);
+        resources.voronoiDescriptorSets.clear();
+        resources.voronoiDescriptorSetsB.clear();
+        voronoiConfigDirty = false;
+        thermalMaterialsDirty = false;
+        return true;
     }
 
     const bool simReady =
-        (resources.voronoi.voronoiNodeCount == 0
-             ? (simRuntime.cleanup(memoryAllocator), resources.voronoiDescriptorSets.clear(), resources.voronoiDescriptorSetsB.clear(), true)
-             :
-        (simRuntime.initialize(vulkanDevice, memoryAllocator, resources.voronoi.voronoiNodeCount) &&
-         voronoiStage &&
-         voronoiStage->createDescriptorSets(maxFramesInFlight, simRuntime)));
+        simRuntime.initialize(vulkanDevice, memoryAllocator, resources.voronoi.voronoiNodeCount) &&
+        voronoiStage &&
+        voronoiStage->createDescriptorSets(maxFramesInFlight, simRuntime);
     if (!simReady) {
         return false;
     }
 
-    const bool receiversReady = surfaceRuntime.initializeReceiverBindings(
-        vulkanDevice,
-        memoryAllocator,
-        remeshResources,
-        *heatPackage,
-        resources.voronoi.voronoiNodeCount > 0 ? &voronoiModelRuntimes : nullptr);
-
-    if (receiversReady) {
-        surfaceRuntime.executeBufferTransfers(renderCommandPool);
-    }
-
-    if (receiversReady &&
-        simRuntime.isInitialized() &&
-        resources.surfaceDescriptorSetLayout != VK_NULL_HANDLE &&
+    if (resources.surfaceDescriptorSetLayout != VK_NULL_HANDLE &&
         resources.surfaceDescriptorPool != VK_NULL_HANDLE) {
+        if (forceDescriptorReallocate) {
+            vkResetDescriptorPool(vulkanDevice.getDevice(), resources.surfaceDescriptorPool, 0);
+        }
         surfaceRuntime.refreshDescriptors(
             simRuntime,
             resources.surfaceDescriptorSetLayout,
@@ -429,35 +442,20 @@ bool HeatSystem::rebuildHeatStateRuntimes(bool forceDescriptorReallocate) {
             forceDescriptorReallocate);
     }
 
-    if (heatReceiverRenderer) {
-        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), resourceManager, maxFramesInFlight, forceDescriptorReallocate);
-    }
-
-    if (contactStage && heatPackage && simRuntime.isInitialized()) {
+    if (contactStage && simRuntime.isInitialized()) {
         for (ContactCoupling& coupling : heatContactRuntime.getCouplingsMutable()) {
             contactStage->updateCouplingDescriptors(
                 coupling,
-                simRuntime,
-                *heatPackage,
-                surfaceRuntime.getReceivers(),
-                voronoiModelRuntimes);
+                simRuntime);
         }
     }
 
-    return receiversReady;
+    voronoiConfigDirty = false;
+    thermalMaterialsDirty = false;
+    return true;
 }
 
 void HeatSystem::setActive(bool active) {
-    if (active && !isActive) {
-        vkDeviceWaitIdle(vulkanDevice.getDevice());
-    }
-
-    if (active) {
-        if (heatStructureDirty) {
-            requestHeatReset();
-        }
-        processHeatReset();
-    }
     isActive = active;
 }
 
@@ -470,18 +468,6 @@ void HeatSystem::renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameInd
     if (contactPreviewStore) {
         contactPreviewStore->renderLines(cmdBuffer, frameIndex, extent);
     }
-}
-
-bool HeatSystem::createContactDescriptorPool(uint32_t maxFramesInFlight) {
-    return contactStage && contactStage->createDescriptorPool(maxFramesInFlight);
-}
-
-bool HeatSystem::createContactDescriptorSetLayout() {
-    return contactStage && contactStage->createDescriptorSetLayout();
-}
-
-bool HeatSystem::createContactPipeline() {
-    return contactStage && contactStage->createPipeline();
 }
 
 bool HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
@@ -508,8 +494,7 @@ bool HeatSystem::hasDispatchableComputeWork() const {
 }
 
 bool HeatSystem::voronoiReady() const {
-    return heatPackage &&
-        heatPackage->voronoiActive &&
+    return voronoiNodeCount != 0 &&
         resources.voronoi.voronoiNodeCount > 0 &&
         simRuntime.isInitialized();
 }
@@ -523,11 +508,16 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     }
 
     if (hasDispatchableComputeWork() &&
-        heatPackage &&
         contactStage &&
         simStage &&
         surfaceStage &&
         voronoiStage) {
+        std::cerr << "[HeatSystem] recordComputeCommands dispatching"
+                  << " couplings=" << heatContactRuntime.getCouplings().size()
+                  << " nodeCount=" << simRuntime.getNodeCount()
+                  << " isActive=" << (isActive ? "true" : "false")
+                  << " isPaused=" << (isPaused ? "true" : "false")
+                  << std::endl;
         HeatSourcePushConstant basePushConstant{};
         basePushConstant.heatSourceModelMatrix = glm::mat4(1.0f);
         basePushConstant.visModelMatrix = glm::mat4(1.0f);
@@ -556,8 +546,8 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
             simRuntime,
             basePushConstant,
             heatContactRuntime.getCouplings(),
+            heatSources,
             surfaceRuntime.getReceivers(),
-            *heatPackage,
             *contactStage,
             *voronoiStage,
             *surfaceStage,
@@ -571,6 +561,14 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
                 timingQueryPool,
                 timingQueryBase + 1);
         }
+    } else {
+        std::cerr << "[HeatSystem] recordComputeCommands skipped"
+                  << " hasDispatchableComputeWork=" << (hasDispatchableComputeWork() ? "true" : "false")
+                  << " contactStage=" << (contactStage ? "yes" : "no")
+                  << " simStage=" << (simStage ? "yes" : "no")
+                  << " surfaceStage=" << (surfaceStage ? "yes" : "no")
+                  << " voronoiStage=" << (voronoiStage ? "yes" : "no")
+                  << std::endl;
     }
 
     vkEndCommandBuffer(commandBuffer);
@@ -583,22 +581,12 @@ void HeatSystem::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameInde
     renderStage->renderHeatOverlay(cmdBuffer, frameIndex, heatSourceRenderer.get(), heatReceiverRenderer.get(), heatSources, surfaceRuntime.getReceivers(), isActive, isPaused);
 }
 
-void HeatSystem::renderSurfels(VkCommandBuffer cmdBuffer, uint32_t frameIndex, const glm::mat4& heatSourceModel, float radius) {
-    (void)cmdBuffer;
-    (void)frameIndex;
-    (void)heatSourceModel;
-    (void)radius;
-}
-
 void HeatSystem::cleanupResources() {
     if (heatSourceRenderer) {
         heatSourceRenderer->cleanup();
     }
     if (heatReceiverRenderer) {
         heatReceiverRenderer->cleanup();
-    }
-    if (pointRenderer) {
-        pointRenderer->cleanup();
     }
 
     if (resources.contactPipeline != VK_NULL_HANDLE) {
@@ -651,10 +639,6 @@ void HeatSystem::cleanupResources() {
     }
     resources.voronoiDescriptorSets.clear();
     resources.voronoiDescriptorSetsB.clear();
-
-    if (voronoiGeoCompute) {
-        voronoiGeoCompute->cleanupResources();
-    }
 }
 
 void HeatSystem::cleanup() {
@@ -665,53 +649,8 @@ void HeatSystem::cleanup() {
     runtime.cleanupModelBindings();
 }
 
-bool HeatSystem::initializeVoronoiReceiverRuntimes() {
-    voronoiModelRuntimes.clear();
-    if (!heatPackage) {
-        return false;
-    }
-
-    std::unordered_set<uint32_t> seenReceiverIds;
-    for (std::size_t index = 0; index < heatPackage->receiverGeometries.size(); ++index) {
-        const GeometryData& geometry = heatPackage->receiverGeometries[index];
-        const uint32_t runtimeModelId = heatPackage->receiverRuntimeModelIds[index];
-        if (runtimeModelId == 0 ||
-            geometry.intrinsicHandle.key == 0 ||
-            !seenReceiverIds.insert(runtimeModelId).second) {
-            continue;
-        }
-
-        Model* receiverModel = resourceManager.getModelByID(runtimeModelId);
-        if (!receiverModel) {
-            continue;
-        }
-
-        const RuntimeIntrinsicCache::Entry* intrinsicEntry = remeshResources.get(geometry.intrinsicHandle);
-        if (!intrinsicEntry) {
-            continue;
-        }
-
-        auto modelRuntime = std::make_unique<VoronoiModelRuntime>(
-            vulkanDevice,
-            memoryAllocator,
-            *receiverModel,
-            geometry,
-            heatPackage->receiverIntrinsics[index],
-            *intrinsicEntry,
-            renderCommandPool);
-        if (!modelRuntime->createVoronoiBuffers()) {
-            modelRuntime->cleanup();
-            return false;
-        }
-
-        voronoiModelRuntimes.push_back(std::move(modelRuntime));
-    }
-
-    return !voronoiModelRuntimes.empty();
-}
-
 bool HeatSystem::initializeVoronoiMaterialNodes() {
-    if (!heatPackage || resources.voronoi.voronoiNodeCount == 0) {
+    if (resources.voronoi.voronoiNodeCount == 0) {
         return false;
     }
 
@@ -731,28 +670,37 @@ bool HeatSystem::initializeVoronoiMaterialNodes() {
     }
 
     const RuntimeThermalMaterial defaultMaterial{};
-    for (const VoronoiDomain& domain : receiverVoronoiDomains) {
+    for (const auto& [runtimeModelId, nodeOffset] : receiverVoronoiNodeOffsetByModelId) {
+        const auto countIt = receiverVoronoiNodeCountByModelId.find(runtimeModelId);
+        const auto seedFlagsIt = receiverVoronoiSeedFlagsByModelId.find(runtimeModelId);
+        if (countIt == receiverVoronoiNodeCountByModelId.end() ||
+            seedFlagsIt == receiverVoronoiSeedFlagsByModelId.end()) {
+            continue;
+        }
+
         RuntimeThermalMaterial material = defaultMaterial;
-        const auto materialIt = receiverThermalMaterialByModelId.find(domain.receiverModelId);
+        const auto materialIt = receiverThermalMaterialByModelId.find(runtimeModelId);
         if (materialIt != receiverThermalMaterialByModelId.end()) {
             material = materialIt->second;
         }
 
-        for (uint32_t localNodeIndex = 0; localNodeIndex < domain.nodeCount; ++localNodeIndex) {
-            const uint32_t nodeIndex = domain.nodeOffset + localNodeIndex;
+        for (uint32_t localNodeIndex = 0; localNodeIndex < countIt->second; ++localNodeIndex) {
+            const uint32_t nodeIndex = nodeOffset + localNodeIndex;
             if (nodeIndex >= materialNodes.size()) {
                 continue;
             }
 
             VoronoiMaterialNode& materialNode = materialNodes[nodeIndex];
-            if ((domain.seedFlags[localNodeIndex] & 1u) != 0u) {
+            if (localNodeIndex < seedFlagsIt->second.size() &&
+                (seedFlagsIt->second[localNodeIndex] & 1u) != 0u) {
                 continue;
             }
 
             materialNode.density = material.density;
             materialNode.specificHeat = material.specificHeat;
             materialNode.conductivity = material.conductivity;
-            materialNode.thermalMass = material.density * material.specificHeat * std::abs(voronoiNodes[nodeIndex].volume);
+            const float volume = std::abs(voronoiNodes[nodeIndex].volume);
+            materialNode.thermalMass = material.density * material.specificHeat * volume;
             if (materialNode.thermalMass > 1e-20f) {
                 materialNode.conductivityPerMass = material.conductivity / materialNode.thermalMass;
             }
@@ -777,68 +725,9 @@ bool HeatSystem::initializeVoronoiMaterialNodes() {
         resources.voronoiMaterialNodeBuffer != VK_NULL_HANDLE;
 }
 
-void HeatSystem::uploadVoronoiModelStagingBuffers() {
-    if (voronoiModelRuntimes.empty()) {
-        return;
-    }
-
-    VkCommandBuffer copyCmd = renderCommandPool.beginCommands();
-    if (copyCmd == VK_NULL_HANDLE) {
-        return;
-    }
-
-    bool issuedTransfers = false;
-    for (auto& modelRuntime : voronoiModelRuntimes) {
-        if (!modelRuntime) {
-            continue;
-        }
-
-        modelRuntime->executeBufferTransfers(copyCmd);
-        issuedTransfers = true;
-    }
-
-    if (issuedTransfers) {
-        VkMemoryBarrier memBarrier{};
-        memBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        memBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        memBarrier.dstAccessMask =
-            VK_ACCESS_SHADER_READ_BIT |
-            VK_ACCESS_SHADER_WRITE_BIT |
-            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-
-        vkCmdPipelineBarrier(
-            copyCmd,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            1,
-            &memBarrier,
-            0,
-            nullptr,
-            0,
-            nullptr);
-    }
-
-    renderCommandPool.endCommands(copyCmd);
-
-    for (auto& modelRuntime : voronoiModelRuntimes) {
-        if (modelRuntime) {
-            modelRuntime->cleanupStagingBuffers();
-        }
-    }
-}
-
 void HeatSystem::rebuildReceiverThermalMaterialMap() {
     receiverThermalMaterialByModelId.clear();
-    if (!heatPackage) {
-        return;
-    }
-
-    for (const RuntimeThermalMaterial& material : heatPackage->runtimeThermalMaterials) {
+    for (const RuntimeThermalMaterial& material : runtimeThermalMaterials) {
         if (material.runtimeModelId == 0) {
             continue;
         }
@@ -847,87 +736,80 @@ void HeatSystem::rebuildReceiverThermalMaterialMap() {
 }
 
 void HeatSystem::cleanupVoronoiRuntime() {
-    auto freeBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset) {
-        if (buffer != VK_NULL_HANDLE) {
-            memoryAllocator.free(buffer, offset);
-            buffer = VK_NULL_HANDLE;
-            offset = 0;
-        }
-    };
-
-    freeBuffer(resources.voronoi.voronoiNodeBuffer, resources.voronoi.voronoiNodeBufferOffset);
+    resources.voronoi.voronoiNodeBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voronoiNodeBufferOffset = 0;
     resources.voronoi.mappedVoronoiNodeData = nullptr;
-    freeBuffer(resources.voronoi.voronoiNeighborBuffer, resources.voronoi.voronoiNeighborBufferOffset);
-    freeBuffer(resources.voronoi.neighborIndicesBuffer, resources.voronoi.neighborIndicesBufferOffset);
-    freeBuffer(resources.voronoi.interfaceAreasBuffer, resources.voronoi.interfaceAreasBufferOffset);
+    resources.voronoi.voronoiNeighborBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voronoiNeighborBufferOffset = 0;
+    resources.voronoi.neighborIndicesBuffer = VK_NULL_HANDLE;
+    resources.voronoi.neighborIndicesBufferOffset = 0;
+    resources.voronoi.interfaceAreasBuffer = VK_NULL_HANDLE;
+    resources.voronoi.interfaceAreasBufferOffset = 0;
     resources.voronoi.mappedInterfaceAreasData = nullptr;
-    freeBuffer(resources.voronoi.interfaceNeighborIdsBuffer, resources.voronoi.interfaceNeighborIdsBufferOffset);
+    resources.voronoi.interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
+    resources.voronoi.interfaceNeighborIdsBufferOffset = 0;
     resources.voronoi.mappedInterfaceNeighborIdsData = nullptr;
-    freeBuffer(resources.voronoi.meshTriangleBuffer, resources.voronoi.meshTriangleBufferOffset);
-    freeBuffer(resources.voronoi.seedPositionBuffer, resources.voronoi.seedPositionBufferOffset);
+    resources.voronoi.meshTriangleBuffer = VK_NULL_HANDLE;
+    resources.voronoi.meshTriangleBufferOffset = 0;
+    resources.voronoi.seedPositionBuffer = VK_NULL_HANDLE;
+    resources.voronoi.seedPositionBufferOffset = 0;
     resources.voronoi.mappedSeedPositionData = nullptr;
-    freeBuffer(resources.voronoi.seedFlagsBuffer, resources.voronoi.seedFlagsBufferOffset);
+    resources.voronoi.seedFlagsBuffer = VK_NULL_HANDLE;
+    resources.voronoi.seedFlagsBufferOffset = 0;
     resources.voronoi.mappedSeedFlagsData = nullptr;
-    freeBuffer(resources.voronoi.debugCellGeometryBuffer, resources.voronoi.debugCellGeometryBufferOffset);
+    resources.voronoi.debugCellGeometryBuffer = VK_NULL_HANDLE;
+    resources.voronoi.debugCellGeometryBufferOffset = 0;
     resources.voronoi.mappedDebugCellGeometryData = nullptr;
-    freeBuffer(resources.voronoi.voronoiDumpBuffer, resources.voronoi.voronoiDumpBufferOffset);
+    resources.voronoi.voronoiDumpBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voronoiDumpBufferOffset = 0;
     resources.voronoi.mappedVoronoiDumpData = nullptr;
-    freeBuffer(resources.voronoi.voxelGridParamsBuffer, resources.voronoi.voxelGridParamsBufferOffset);
-    freeBuffer(resources.voronoi.voxelOccupancyBuffer, resources.voronoi.voxelOccupancyBufferOffset);
-    freeBuffer(resources.voronoi.voxelTrianglesListBuffer, resources.voronoi.voxelTrianglesListBufferOffset);
-    freeBuffer(resources.voronoi.voxelOffsetsBuffer, resources.voronoi.voxelOffsetsBufferOffset);
-    freeBuffer(resources.voronoiMaterialNodeBuffer, resources.voronoiMaterialNodeBufferOffset);
+    resources.voronoi.voxelGridParamsBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voxelGridParamsBufferOffset = 0;
+    resources.voronoi.voxelOccupancyBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voxelOccupancyBufferOffset = 0;
+    resources.voronoi.voxelTrianglesListBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voxelTrianglesListBufferOffset = 0;
+    resources.voronoi.voxelOffsetsBuffer = VK_NULL_HANDLE;
+    resources.voronoi.voxelOffsetsBufferOffset = 0;
+    if (resources.voronoiMaterialNodeBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(resources.voronoiMaterialNodeBuffer, resources.voronoiMaterialNodeBufferOffset);
+        resources.voronoiMaterialNodeBuffer = VK_NULL_HANDLE;
+        resources.voronoiMaterialNodeBufferOffset = 0;
+    }
     resources.mappedVoronoiMaterialNodeData = nullptr;
     resources.voronoi.voronoiNodeCount = 0;
-
-    receiverVoronoiDomains.clear();
     receiverThermalMaterialByModelId.clear();
-
-    for (auto& modelRuntime : voronoiModelRuntimes) {
-        if (modelRuntime) {
-            modelRuntime->cleanup();
-        }
-    }
-    voronoiModelRuntimes.clear();
 }
 
 bool HeatSystem::rebuildVoronoiRuntime() {
     cleanupVoronoiRuntime();
 
-    if (!heatPackage || !heatPackage->voronoiActive || heatPackage->receiverRuntimeModelIds.empty()) {
+    if (voronoiNodeCount == 0 || receiverRuntimeModelIds.empty()) {
         return false;
     }
-    if (!voronoiBuilder || !voronoiGeoCompute) {
-        return false;
-    }
-    if (!initializeVoronoiReceiverRuntimes()) {
+
+    resources.voronoi.voronoiNodeCount = voronoiNodeCount;
+    resources.voronoi.voronoiNodeBuffer = voronoiNodeBuffer;
+    resources.voronoi.voronoiNodeBufferOffset = voronoiNodeBufferOffset;
+    resources.voronoi.mappedVoronoiNodeData = const_cast<VoronoiNode*>(voronoiNodes);
+    resources.voronoi.voronoiNeighborBuffer = voronoiNeighborBuffer;
+    resources.voronoi.voronoiNeighborBufferOffset = voronoiNeighborBufferOffset;
+    resources.voronoi.neighborIndicesBuffer = neighborIndicesBuffer;
+    resources.voronoi.neighborIndicesBufferOffset = neighborIndicesBufferOffset;
+    resources.voronoi.interfaceAreasBuffer = interfaceAreasBuffer;
+    resources.voronoi.interfaceAreasBufferOffset = interfaceAreasBufferOffset;
+    resources.voronoi.interfaceNeighborIdsBuffer = interfaceNeighborIdsBuffer;
+    resources.voronoi.interfaceNeighborIdsBufferOffset = interfaceNeighborIdsBufferOffset;
+    resources.voronoi.seedFlagsBuffer = seedFlagsBuffer;
+    resources.voronoi.seedFlagsBufferOffset = seedFlagsBufferOffset;
+
+    if (receiverVoronoiNodeOffsetByModelId.empty()) {
         return false;
     }
 
     rebuildReceiverThermalMaterialMap();
-    if (!voronoiBuilder->buildDomains(
-            voronoiModelRuntimes,
-            receiverVoronoiDomains,
-            heatPackage->voronoiParams,
-            MAX_NODE_NEIGHBORS)) {
-        return false;
-    }
-    if (!voronoiBuilder->generateDiagram(
-            receiverVoronoiDomains,
-            debugEnable,
-            MAX_NODE_NEIGHBORS,
-            voronoiGeoCompute.get(),
-            pointRenderer.get())) {
-        return false;
-    }
     if (!initializeVoronoiMaterialNodes()) {
         return false;
     }
-    if (!voronoiBuilder->stageSurfaceMappings(receiverVoronoiDomains, MAX_NODE_NEIGHBORS)) {
-        return false;
-    }
-
-    uploadVoronoiModelStagingBuffers();
-
     return resources.voronoi.voronoiNodeCount > 0;
 }

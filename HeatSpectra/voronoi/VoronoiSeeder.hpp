@@ -10,8 +10,6 @@
 #include "util/GeometryUtils.hpp"
 #include "util/Structs.hpp"
 
-class Model;
-
 class VoronoiSeeder {
 public:
     struct Seed {
@@ -27,7 +25,13 @@ public:
     VoronoiSeeder();
     ~VoronoiSeeder();
     
-    void generateSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh, const Model& volumeMesh, float targetCellSize, VoxelGrid& voxelGrid, int voxelResolution);
+    void generateSeeds(
+        const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+        const std::vector<glm::vec3>& positions,
+        const std::vector<uint32_t>& indices,
+        float targetCellSize,
+        VoxelGrid& voxelGrid,
+        int voxelResolution);
     void exportSeedsToOBJ(const std::string& filename) const;
 
     const std::vector<Seed>& getSeeds() const { return seeds; }
@@ -61,7 +65,7 @@ private:
     bool isTooCloseToExisting(const glm::vec3& candidatePos, float poissonRadius, float hashCellSize, 
                                const std::unordered_map<size_t, std::vector<glm::vec3>>& spatialHash) const; 
 
-    void buildSDFGrid(const Model& volumeMesh, const TriangleHashGrid& triangleGrid);
+    void buildSDFGrid(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices, const TriangleHashGrid& triangleGrid);
     float sampleSDFGrid(const glm::vec3& pos) const;
-    float computePointToMeshDistance(const glm::vec3& point, const Model& model) const;
+    float computePointToMeshDistance(const glm::vec3& point, const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices) const;
 };

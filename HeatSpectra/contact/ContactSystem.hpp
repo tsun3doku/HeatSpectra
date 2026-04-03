@@ -2,6 +2,7 @@
 
 #include "heat/ContactInterface.hpp"
 #include "ContactTypes.hpp"
+#include "runtime/RuntimeContactTypes.hpp"
 
 #include <vector>
 
@@ -15,10 +16,7 @@ public:
     };
 
     ContactSystem() = default;
-    bool compute(const ContactPairPayloadConfig& pair, Result& outResult);
-
-private:
-    static bool hasUsableContactPairs(const std::vector<ContactPair>& pairs);
+    bool compute(const RuntimeContactPairConfig& pair, Result& outResult);
 
     ContactInterface contactInterface;
 };

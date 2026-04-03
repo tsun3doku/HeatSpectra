@@ -1,6 +1,5 @@
 #include "HeatReceiverRuntime.hpp"
 
-#include "runtime/RuntimeIntrinsicCache.hpp"
 #include "util/GeometryUtils.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/CommandBufferManager.hpp"
@@ -18,25 +17,43 @@ HeatReceiverRuntime::HeatReceiverRuntime(
     MemoryAllocator& memoryAllocator,
     uint32_t runtimeModelId,
     const GeometryData& geometryData,
-    const IntrinsicMeshData& intrinsicMeshData,
-    const RuntimeIntrinsicCache::Entry& intrinsicResources)
+    const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+    VkBufferView supportingHalfedgeView,
+    VkBufferView supportingAngleView,
+    VkBufferView halfedgeView,
+    VkBufferView edgeView,
+    VkBufferView triangleView,
+    VkBufferView lengthView,
+    VkBufferView inputHalfedgeView,
+    VkBufferView inputEdgeView,
+    VkBufferView inputTriangleView,
+    VkBufferView inputLengthView)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       runtimeModelId(runtimeModelId),
       geometryData(geometryData),
-      intrinsicMeshData(intrinsicMeshData),
-      intrinsicResources(&intrinsicResources) {
+      intrinsicMesh(intrinsicMesh),
+      supportingHalfedgeView(supportingHalfedgeView),
+      supportingAngleView(supportingAngleView),
+      halfedgeView(halfedgeView),
+      edgeView(edgeView),
+      triangleView(triangleView),
+      lengthView(lengthView),
+      inputHalfedgeView(inputHalfedgeView),
+      inputEdgeView(inputEdgeView),
+      inputTriangleView(inputTriangleView),
+      inputLengthView(inputLengthView) {
 }
 
 HeatReceiverRuntime::~HeatReceiverRuntime() {
 }
 
 bool HeatReceiverRuntime::createReceiverBuffers() {
-    if (intrinsicMeshData.vertices.empty()) {
+    if (intrinsicMesh.vertices.empty()) {
         std::cerr << "[HeatReceiverRuntime] Missing intrinsic state for model" << std::endl;
         return false;
     }
-    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    const size_t vertexCount = intrinsicMesh.vertices.size();
     if (vertexCount == 0) {
         std::cerr << "[HeatReceiverRuntime] Model has 0 intrinsic vertices" << std::endl;
         return false;
@@ -71,21 +88,15 @@ bool HeatReceiverRuntime::createReceiverBuffers() {
 
     std::vector<glm::vec3> positions(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
-        positions[i] = glm::vec3(
-            intrinsicMeshData.vertices[i].position[0],
-            intrinsicMeshData.vertices[i].position[1],
-            intrinsicMeshData.vertices[i].position[2]);
+        positions[i] = intrinsicMesh.vertices[i].position;
     }
-    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMesh.indices);
 
     std::vector<SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
-        surfacePoints[i].normal = glm::vec3(
-            intrinsicMeshData.vertices[i].normal[0],
-            intrinsicMeshData.vertices[i].normal[1],
-            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].normal = intrinsicMesh.vertices[i].normal;
         surfacePoints[i].area = vertexAreas[i];
         surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
@@ -118,11 +129,11 @@ bool HeatReceiverRuntime::initializeReceiverBuffer() {
         return true;
     }
 
-    if (intrinsicMeshData.vertices.empty()) {
+    if (intrinsicMesh.vertices.empty()) {
         std::cerr << "[HeatReceiverRuntime] Missing intrinsic state for model" << std::endl;
         return false;
     }
-    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    const size_t vertexCount = intrinsicMesh.vertices.size();
     if (vertexCount == 0 || vertexCount != getIntrinsicVertexCount()) {
         std::cerr << "[HeatReceiverRuntime] Vertex count mismatch or zero vertices." << std::endl;
         return false;
@@ -145,21 +156,15 @@ bool HeatReceiverRuntime::initializeReceiverBuffer() {
 
     std::vector<glm::vec3> positions(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
-        positions[i] = glm::vec3(
-            intrinsicMeshData.vertices[i].position[0],
-            intrinsicMeshData.vertices[i].position[1],
-            intrinsicMeshData.vertices[i].position[2]);
+        positions[i] = intrinsicMesh.vertices[i].position;
     }
-    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMesh.indices);
 
     std::vector<SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
-        surfacePoints[i].normal = glm::vec3(
-            intrinsicMeshData.vertices[i].normal[0],
-            intrinsicMeshData.vertices[i].normal[1],
-            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].normal = intrinsicMesh.vertices[i].normal;
         surfacePoints[i].area = vertexAreas[i];
         surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
@@ -191,10 +196,18 @@ void HeatReceiverRuntime::updateDescriptors(
     VkDeviceSize tempBufferBOffset,
     VkBuffer timeBuffer,
     VkDeviceSize timeBufferOffset,
-    uint32_t nodeCount) {
+    uint32_t nodeCount,
+    bool forceReallocate) {
     const size_t intrinsicVertexCount = getIntrinsicVertexCount();
     if (intrinsicVertexCount == 0 || voronoiMappingBuffer == VK_NULL_HANDLE) {
+        surfaceComputeSetA = VK_NULL_HANDLE;
+        surfaceComputeSetB = VK_NULL_HANDLE;
         return;
+    }
+
+    if (forceReallocate) {
+        surfaceComputeSetA = VK_NULL_HANDLE;
+        surfaceComputeSetB = VK_NULL_HANDLE;
     }
 
     if (surfaceComputeSetA == VK_NULL_HANDLE || surfaceComputeSetB == VK_NULL_HANDLE) {
@@ -251,7 +264,6 @@ void HeatReceiverRuntime::updateDescriptors(
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
 
-    std::cout << "[HeatReceiverRuntime] Descriptors updated" << std::endl;
 }
 
 void HeatReceiverRuntime::executeBufferTransfers(VkCommandBuffer commandBuffer) {
@@ -264,31 +276,6 @@ void HeatReceiverRuntime::executeBufferTransfers(VkCommandBuffer commandBuffer) 
 
     VkBufferCopy vertexCopyRegion{ initStagingOffset, surfaceVertexBufferOffset, initBufferSize };
     vkCmdCopyBuffer(commandBuffer, initStagingBuffer, surfaceVertexBuffer, 1, &vertexCopyRegion);
-}
-
-void HeatReceiverRuntime::recreateDescriptors(
-    VkDescriptorSetLayout surfaceLayout,
-    VkDescriptorPool surfacePool,
-    VkBuffer tempBufferA,
-    VkDeviceSize tempBufferAOffset,
-    VkBuffer tempBufferB,
-    VkDeviceSize tempBufferBOffset,
-    VkBuffer timeBuffer,
-    VkDeviceSize timeBufferOffset,
-    uint32_t nodeCount) {
-    surfaceComputeSetA = VK_NULL_HANDLE;
-    surfaceComputeSetB = VK_NULL_HANDLE;
-
-    updateDescriptors(
-        surfaceLayout,
-        surfacePool,
-        tempBufferA,
-        tempBufferAOffset,
-        tempBufferB,
-        tempBufferBOffset,
-        timeBuffer,
-        timeBufferOffset,
-        nodeCount);
 }
 
 void HeatReceiverRuntime::cleanup() {
@@ -314,43 +301,43 @@ void HeatReceiverRuntime::cleanup() {
 }
 
 VkBufferView HeatReceiverRuntime::getSupportingHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewS : VK_NULL_HANDLE;
+    return supportingHalfedgeView;
 }
 
 VkBufferView HeatReceiverRuntime::getSupportingAngleView() const {
-    return intrinsicResources ? intrinsicResources->viewA : VK_NULL_HANDLE;
+    return supportingAngleView;
 }
 
 VkBufferView HeatReceiverRuntime::getHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewH : VK_NULL_HANDLE;
+    return halfedgeView;
 }
 
 VkBufferView HeatReceiverRuntime::getEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewE : VK_NULL_HANDLE;
+    return edgeView;
 }
 
 VkBufferView HeatReceiverRuntime::getTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewT : VK_NULL_HANDLE;
+    return triangleView;
 }
 
 VkBufferView HeatReceiverRuntime::getLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewL : VK_NULL_HANDLE;
+    return lengthView;
 }
 
 VkBufferView HeatReceiverRuntime::getInputHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewHInput : VK_NULL_HANDLE;
+    return inputHalfedgeView;
 }
 
 VkBufferView HeatReceiverRuntime::getInputEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewEInput : VK_NULL_HANDLE;
+    return inputEdgeView;
 }
 
 VkBufferView HeatReceiverRuntime::getInputTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewTInput : VK_NULL_HANDLE;
+    return inputTriangleView;
 }
 
 VkBufferView HeatReceiverRuntime::getInputLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewLInput : VK_NULL_HANDLE;
+    return inputLengthView;
 }
 
 void HeatReceiverRuntime::cleanupStagingBuffers() {

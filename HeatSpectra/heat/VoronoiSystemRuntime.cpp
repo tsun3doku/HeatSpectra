@@ -1,10 +1,9 @@
 #include "VoronoiSystemRuntime.hpp"
 
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
+#include <algorithm>
+
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiCandidateCompute.hpp"
@@ -49,165 +48,33 @@ void VoronoiSystemRuntime::invalidateMaterialization() {
     voronoiSeederReady = false;
 }
 
-bool VoronoiSystemRuntime::isSameGeometryAttribute(const GeometryAttribute& lhs, const GeometryAttribute& rhs) {
-    return lhs.name == rhs.name &&
-        lhs.domain == rhs.domain &&
-        lhs.dataType == rhs.dataType &&
-        lhs.tupleSize == rhs.tupleSize &&
-        lhs.floatValues == rhs.floatValues &&
-        lhs.intValues == rhs.intValues &&
-        lhs.boolValues == rhs.boolValues;
-}
-
-bool VoronoiSystemRuntime::isSameGeometryGroup(const GeometryGroup& lhs, const GeometryGroup& rhs) {
-    return lhs.id == rhs.id &&
-        lhs.name == rhs.name &&
-        lhs.source == rhs.source;
-}
-
-bool VoronoiSystemRuntime::isSameGeometryData(const GeometryData& lhs, const GeometryData& rhs) {
-    const bool sameIntrinsicHandle =
-        lhs.intrinsicHandle.key == rhs.intrinsicHandle.key &&
-        lhs.intrinsicHandle.revision == rhs.intrinsicHandle.revision &&
-        lhs.intrinsicHandle.count == rhs.intrinsicHandle.count;
-
-    if (lhs.baseModelPath != rhs.baseModelPath ||
-        lhs.modelId != rhs.modelId ||
-        lhs.geometryRevision != rhs.geometryRevision ||
-        !sameIntrinsicHandle ||
-        lhs.localToWorld != rhs.localToWorld ||
-        lhs.pointPositions != rhs.pointPositions ||
-        lhs.triangleIndices != rhs.triangleIndices ||
-        lhs.triangleGroupIds != rhs.triangleGroupIds ||
-        lhs.groups.size() != rhs.groups.size() ||
-        lhs.attributes.size() != rhs.attributes.size()) {
-        return false;
-    }
-
-    for (size_t index = 0; index < lhs.groups.size(); ++index) {
-        if (!isSameGeometryGroup(lhs.groups[index], rhs.groups[index])) {
-            return false;
-        }
-    }
-
-    for (size_t index = 0; index < lhs.attributes.size(); ++index) {
-        if (!isSameGeometryAttribute(lhs.attributes[index], rhs.attributes[index])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool VoronoiSystemRuntime::isSameIntrinsicVertexData(const IntrinsicMeshVertexData& lhs, const IntrinsicMeshVertexData& rhs) {
-    return lhs.intrinsicVertexId == rhs.intrinsicVertexId &&
-        lhs.position[0] == rhs.position[0] &&
-        lhs.position[1] == rhs.position[1] &&
-        lhs.position[2] == rhs.position[2] &&
-        lhs.normal[0] == rhs.normal[0] &&
-        lhs.normal[1] == rhs.normal[1] &&
-        lhs.normal[2] == rhs.normal[2] &&
-        lhs.inputLocationType == rhs.inputLocationType &&
-        lhs.inputElementId == rhs.inputElementId &&
-        lhs.inputBaryCoords[0] == rhs.inputBaryCoords[0] &&
-        lhs.inputBaryCoords[1] == rhs.inputBaryCoords[1] &&
-        lhs.inputBaryCoords[2] == rhs.inputBaryCoords[2];
-}
-
-bool VoronoiSystemRuntime::isSameIntrinsicTriangleData(const IntrinsicMeshTriangleData& lhs, const IntrinsicMeshTriangleData& rhs) {
-    return lhs.center[0] == rhs.center[0] &&
-        lhs.center[1] == rhs.center[1] &&
-        lhs.center[2] == rhs.center[2] &&
-        lhs.normal[0] == rhs.normal[0] &&
-        lhs.normal[1] == rhs.normal[1] &&
-        lhs.normal[2] == rhs.normal[2] &&
-        lhs.area == rhs.area &&
-        lhs.vertexIndices[0] == rhs.vertexIndices[0] &&
-        lhs.vertexIndices[1] == rhs.vertexIndices[1] &&
-        lhs.vertexIndices[2] == rhs.vertexIndices[2] &&
-        lhs.faceId == rhs.faceId;
-}
-
-bool VoronoiSystemRuntime::isSameIntrinsicMeshData(const IntrinsicMeshData& lhs, const IntrinsicMeshData& rhs) {
-    if (lhs.vertices.size() != rhs.vertices.size() ||
-        lhs.triangleIndices != rhs.triangleIndices ||
-        lhs.faceIds != rhs.faceIds ||
-        lhs.triangles.size() != rhs.triangles.size() ||
-        lhs.supportingHalfedges != rhs.supportingHalfedges ||
-        lhs.supportingAngles != rhs.supportingAngles ||
-        lhs.intrinsicHalfedges != rhs.intrinsicHalfedges ||
-        lhs.intrinsicEdges != rhs.intrinsicEdges ||
-        lhs.intrinsicTriangles != rhs.intrinsicTriangles ||
-        lhs.intrinsicEdgeLengths != rhs.intrinsicEdgeLengths ||
-        lhs.inputHalfedges != rhs.inputHalfedges ||
-        lhs.inputEdges != rhs.inputEdges ||
-        lhs.inputTriangles != rhs.inputTriangles ||
-        lhs.inputEdgeLengths != rhs.inputEdgeLengths) {
-        return false;
-    }
-
-    for (size_t index = 0; index < lhs.vertices.size(); ++index) {
-        if (!isSameIntrinsicVertexData(lhs.vertices[index], rhs.vertices[index])) {
-            return false;
-        }
-    }
-
-    for (size_t index = 0; index < lhs.triangles.size(); ++index) {
-        if (!isSameIntrinsicTriangleData(lhs.triangles[index], rhs.triangles[index])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool VoronoiSystemRuntime::haveSameReceiverPayloads(
-    const std::vector<GeometryData>& lhsGeometries,
-    const std::vector<IntrinsicMeshData>& lhsIntrinsics,
-    const std::vector<uint32_t>& lhsModelIds,
-    const std::vector<GeometryData>& rhsGeometries,
-    const std::vector<IntrinsicMeshData>& rhsIntrinsics,
-    const std::vector<uint32_t>& rhsModelIds) {
-    if (lhsGeometries.size() != rhsGeometries.size() ||
-        lhsIntrinsics.size() != rhsIntrinsics.size() ||
-        lhsModelIds != rhsModelIds) {
-        return false;
-    }
-
-    for (size_t index = 0; index < lhsGeometries.size(); ++index) {
-        if (!isSameGeometryData(lhsGeometries[index], rhsGeometries[index])) {
-            return false;
-        }
-    }
-
-    for (size_t index = 0; index < lhsIntrinsics.size(); ++index) {
-        if (!isSameIntrinsicMeshData(lhsIntrinsics[index], rhsIntrinsics[index])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 void VoronoiSystemRuntime::setReceiverPayloads(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ResourceManager& resourceManager,
-    const RuntimeIntrinsicCache& intrinsicCache,
     CommandPool& renderCommandPool,
-    const std::vector<GeometryData>& receiverGeometries,
-    const std::vector<IntrinsicMeshData>& receiverIntrinsics,
-    const std::vector<uint32_t>& receiverModelIds) {
-    if (haveSameReceiverPayloads(
-            activeReceiverGeometries,
-            activeReceiverIntrinsics,
-            activeReceiverModelIds,
-            receiverGeometries,
-            receiverIntrinsics,
-            receiverModelIds)) {
-        return;
-    }
-
+    const std::vector<uint32_t>& receiverNodeModelIds,
+    const std::vector<std::vector<glm::vec3>>& receiverGeometryPositions,
+    const std::vector<std::vector<uint32_t>>& receiverGeometryTriangleIndices,
+    const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
+    const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+    const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
+    const std::vector<uint32_t>& receiverModelIds,
+    const std::vector<VkBuffer>& meshVertexBuffers,
+    const std::vector<VkDeviceSize>& meshVertexBufferOffsets,
+    const std::vector<VkBuffer>& meshIndexBuffers,
+    const std::vector<VkDeviceSize>& meshIndexBufferOffsets,
+    const std::vector<uint32_t>& meshIndexCounts,
+    const std::vector<glm::mat4>& meshModelMatrices,
+    const std::vector<VkBufferView>& supportingHalfedgeViews,
+    const std::vector<VkBufferView>& supportingAngleViews,
+    const std::vector<VkBufferView>& halfedgeViews,
+    const std::vector<VkBufferView>& edgeViews,
+    const std::vector<VkBufferView>& triangleViews,
+    const std::vector<VkBufferView>& lengthViews,
+    const std::vector<VkBufferView>& inputHalfedgeViews,
+    const std::vector<VkBufferView>& inputEdgeViews,
+    const std::vector<VkBufferView>& inputTriangleViews,
+    const std::vector<VkBufferView>& inputLengthViews) {
     if (activeReceiverModelIds != receiverModelIds) {
         std::cout << "[VoronoiSystemRuntime] Rebuilding receiver runtimes: oldCount="
                   << activeReceiverModelIds.size()
@@ -217,9 +84,29 @@ void VoronoiSystemRuntime::setReceiverPayloads(
                   << std::endl;
     }
 
-    activeReceiverGeometries = receiverGeometries;
-    activeReceiverIntrinsics = receiverIntrinsics;
+    activeReceiverNodeModelIds = receiverNodeModelIds;
+    activeReceiverGeometryPositions = receiverGeometryPositions;
+    activeReceiverGeometryTriangleIndices = receiverGeometryTriangleIndices;
+    activeReceiverIntrinsicMeshes = receiverIntrinsicMeshes;
+    activeReceiverSurfaceVertices = receiverSurfaceVertices;
+    activeReceiverIntrinsicTriangleIndices = receiverIntrinsicTriangleIndices;
     activeReceiverModelIds = receiverModelIds;
+    activeMeshVertexBuffers = meshVertexBuffers;
+    activeMeshVertexBufferOffsets = meshVertexBufferOffsets;
+    activeMeshIndexBuffers = meshIndexBuffers;
+    activeMeshIndexBufferOffsets = meshIndexBufferOffsets;
+    activeMeshIndexCounts = meshIndexCounts;
+    activeMeshModelMatrices = meshModelMatrices;
+    activeSupportingHalfedgeViews = supportingHalfedgeViews;
+    activeSupportingAngleViews = supportingAngleViews;
+    activeHalfedgeViews = halfedgeViews;
+    activeEdgeViews = edgeViews;
+    activeTriangleViews = triangleViews;
+    activeLengthViews = lengthViews;
+    activeInputHalfedgeViews = inputHalfedgeViews;
+    activeInputEdgeViews = inputEdgeViews;
+    activeInputTriangleViews = inputTriangleViews;
+    activeInputLengthViews = inputLengthViews;
     clearReceiverDomains();
     invalidateMaterialization();
 
@@ -230,34 +117,91 @@ void VoronoiSystemRuntime::setReceiverPayloads(
     }
     modelRuntimes.clear();
 
+    const size_t receiverCount = std::min({
+        receiverNodeModelIds.size(),
+        receiverGeometryPositions.size(),
+        receiverGeometryTriangleIndices.size(),
+        receiverIntrinsicMeshes.size(),
+        receiverSurfaceVertices.size(),
+        receiverIntrinsicTriangleIndices.size(),
+        receiverModelIds.size(),
+        meshVertexBuffers.size(),
+        meshVertexBufferOffsets.size(),
+        meshIndexBuffers.size(),
+        meshIndexBufferOffsets.size(),
+        meshIndexCounts.size(),
+        meshModelMatrices.size(),
+        supportingHalfedgeViews.size(),
+        supportingAngleViews.size(),
+        halfedgeViews.size(),
+        edgeViews.size(),
+        triangleViews.size(),
+        lengthViews.size(),
+        inputHalfedgeViews.size(),
+        inputEdgeViews.size(),
+        inputTriangleViews.size(),
+        inputLengthViews.size()
+    });
+
     std::unordered_set<uint32_t> seenReceiverIds;
-    for (std::size_t index = 0; index < receiverGeometries.size(); ++index) {
+    for (std::size_t index = 0; index < receiverCount; ++index) {
         const uint32_t receiverId = receiverModelIds[index];
         if (receiverId == 0 || !seenReceiverIds.insert(receiverId).second) {
             continue;
         }
 
-        const GeometryData& geometry = receiverGeometries[index];
-        if (geometry.intrinsicHandle.key == 0) {
+        if (supportingHalfedgeViews[index] == VK_NULL_HANDLE ||
+            supportingAngleViews[index] == VK_NULL_HANDLE ||
+            halfedgeViews[index] == VK_NULL_HANDLE ||
+            edgeViews[index] == VK_NULL_HANDLE ||
+            triangleViews[index] == VK_NULL_HANDLE ||
+            lengthViews[index] == VK_NULL_HANDLE ||
+            inputHalfedgeViews[index] == VK_NULL_HANDLE ||
+            inputEdgeViews[index] == VK_NULL_HANDLE ||
+            inputTriangleViews[index] == VK_NULL_HANDLE ||
+            inputLengthViews[index] == VK_NULL_HANDLE) {
+            continue;
+        }
+        if (meshVertexBuffers[index] == VK_NULL_HANDLE ||
+            meshIndexBuffers[index] == VK_NULL_HANDLE ||
+            meshIndexCounts[index] == 0) {
             continue;
         }
 
-        Model* receiverModel = resourceManager.getModelByID(receiverId);
-        if (!receiverModel) {
-            continue;
-        }
-        const RuntimeIntrinsicCache::Entry* intrinsicEntry = intrinsicCache.get(geometry.intrinsicHandle);
-        if (!intrinsicEntry) {
-            continue;
+        std::vector<glm::vec3> intrinsicSurfacePositions;
+        intrinsicSurfacePositions.reserve(receiverSurfaceVertices[index].size());
+        for (const VoronoiGeometryRuntime::SurfaceVertex& vertex : receiverSurfaceVertices[index]) {
+            intrinsicSurfacePositions.push_back(vertex.position);
         }
 
         auto modelRuntime = std::make_unique<VoronoiModelRuntime>(
             vulkanDevice,
             memoryAllocator,
-            *receiverModel,
-            geometry,
-            receiverIntrinsics[index],
-            *intrinsicEntry,
+            receiverId,
+            meshVertexBuffers[index],
+            meshVertexBufferOffsets[index],
+            meshIndexBuffers[index],
+            meshIndexBufferOffsets[index],
+            meshIndexCounts[index],
+            meshModelMatrices[index],
+            VoronoiModelRuntime::CpuData{
+                receiverNodeModelIds[index],
+                receiverIntrinsicMeshes[index],
+                receiverGeometryPositions[index],
+                receiverGeometryTriangleIndices[index],
+                std::move(intrinsicSurfacePositions),
+                receiverIntrinsicTriangleIndices[index]
+            },
+            supportingHalfedgeViews[index],
+            supportingAngleViews[index],
+            halfedgeViews[index],
+            edgeViews[index],
+            triangleViews[index],
+            lengthViews[index],
+            inputHalfedgeViews[index],
+            inputEdgeViews[index],
+            inputTriangleViews[index],
+            inputLengthViews[index],
             renderCommandPool);
         if (!modelRuntime->createVoronoiBuffers()) {
             std::cout << "[VoronoiSystemRuntime] Failed to create Voronoi buffers for runtimeModelId="
@@ -292,9 +236,29 @@ void VoronoiSystemRuntime::clearReceiverPayloads() {
 
     clearReceiverDomains();
     invalidateMaterialization();
-    activeReceiverGeometries.clear();
-    activeReceiverIntrinsics.clear();
+    activeReceiverNodeModelIds.clear();
+    activeReceiverGeometryPositions.clear();
+    activeReceiverGeometryTriangleIndices.clear();
+    activeReceiverIntrinsicMeshes.clear();
+    activeReceiverSurfaceVertices.clear();
+    activeReceiverIntrinsicTriangleIndices.clear();
     activeReceiverModelIds.clear();
+    activeMeshVertexBuffers.clear();
+    activeMeshVertexBufferOffsets.clear();
+    activeMeshIndexBuffers.clear();
+    activeMeshIndexBufferOffsets.clear();
+    activeMeshIndexCounts.clear();
+    activeMeshModelMatrices.clear();
+    activeSupportingHalfedgeViews.clear();
+    activeSupportingAngleViews.clear();
+    activeHalfedgeViews.clear();
+    activeEdgeViews.clear();
+    activeTriangleViews.clear();
+    activeLengthViews.clear();
+    activeInputHalfedgeViews.clear();
+    activeInputEdgeViews.clear();
+    activeInputTriangleViews.clear();
+    activeInputLengthViews.clear();
 
     for (auto& modelRuntime : modelRuntimes) {
         if (modelRuntime) {
@@ -433,7 +397,7 @@ void VoronoiSystemRuntime::dispatchVoronoiCandidateUpdates(const VoronoiSurfaceR
     size_t skippedZeroFaces = 0;
     size_t skippedMissingCandidateBuffer = 0;
     for (const auto& modelRuntime : modelRuntimes) {
-        const uint32_t receiverModelId = modelRuntime->getModel().getRuntimeModelId();
+        const uint32_t receiverModelId = modelRuntime->getRuntimeModelId();
         const VoronoiDomain* receiverDomain = findReceiverDomain(receiverModelId);
         if (!receiverDomain || receiverDomain->nodeCount == 0) {
             ++skippedMissingDomain;
@@ -442,7 +406,7 @@ void VoronoiSystemRuntime::dispatchVoronoiCandidateUpdates(const VoronoiSurfaceR
 
         const VoronoiGeometryRuntime* geometryRuntime = nullptr;
         for (const auto& geometry : geometryRuntimes) {
-            if (geometry && geometry->getModel().getRuntimeModelId() == receiverModelId) {
+            if (geometry && geometry->getRuntimeModelId() == receiverModelId) {
                 geometryRuntime = geometry.get();
                 break;
             }

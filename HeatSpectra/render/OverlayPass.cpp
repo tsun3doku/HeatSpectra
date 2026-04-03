@@ -25,18 +25,16 @@
 #include "renderers/IntrinsicRenderer.hpp"
 #include "renderers/OutlineRenderer.hpp"
 #include "mesh/remesher/iODT.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/VoronoiSystem.hpp"
 
 namespace render {
 
-OverlayPass::OverlayPass(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, VkFrameGraphRuntime& runtime, ResourceManager& resources, UniformBufferManager& ubo, GeometryPass& geometry,
+OverlayPass::OverlayPass(VulkanDevice& device, MemoryAllocator& allocator, VkFrameGraphRuntime& runtime, ResourceManager& resources, UniformBufferManager& ubo, GeometryPass& geometry,
     uint32_t framesInFlight, CommandPool& pool, framegraph::PassId passId, framegraph::ResourceId depthResolveId, framegraph::ResourceId depthMsaaId)
     : geometryPass(geometry),
       vulkanDevice(device),
       memoryAllocator(allocator),
-      remeshResources(remeshResources),
       frameGraphRuntime(runtime),
       resourceManager(resources),
       uniformBufferManager(ubo),
@@ -70,7 +68,6 @@ void OverlayPass::create() {
     intrinsicRenderer = std::make_unique<IntrinsicRenderer>(
         vulkanDevice,
         memoryAllocator,
-        remeshResources,
         uniformBufferManager,
         renderCommandPool,
         frameGraphRuntime.getRenderPass(),
@@ -131,9 +128,15 @@ void OverlayPass::updateGridLabels(const glm::vec3& gridSize) {
     }
 }
 
-void OverlayPass::updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic, uint32_t maxFramesInFlight) {
+void OverlayPass::bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product) {
     if (intrinsicRenderer) {
-        intrinsicRenderer->updatePayloadForModel(model, intrinsic, maxFramesInFlight);
+        intrinsicRenderer->bindRemeshProduct(socketKey, product);
+    }
+}
+
+void OverlayPass::removeIntrinsicPackage(uint64_t packageKey) {
+    if (intrinsicRenderer) {
+        intrinsicRenderer->removeIntrinsicPackage(packageKey);
     }
 }
 
@@ -187,9 +190,6 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
         gridRenderer->renderLabels(commandBuffer, currentFrame);
     }
 
-    if (heatSystem && flags.drawSurfels && (heatSystem->getIsActive() || heatSystem->getIsPaused()) && heatSystem->voronoiReady()) {
-        heatSystem->renderSurfels(commandBuffer, currentFrame, glm::mat4(1.0f), 0.0025f);
-    }
     bool voronoiReady = false;
     if (voronoiSystem) {
         voronoiReady = voronoiSystem->isReady();

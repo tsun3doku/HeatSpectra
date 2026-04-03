@@ -8,6 +8,7 @@
 
 class VulkanDevice;
 class UniformBufferManager;
+class ResourceManager;
 class Model;
 struct UniformBufferObject;
 
@@ -19,7 +20,7 @@ public:
     void initialize(VkRenderPass renderPass);
     void cleanup();
 
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources) const;
+    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ResourceManager& resourceManager) const;
 
 private:
     bool createPipeline(VkRenderPass renderPass);

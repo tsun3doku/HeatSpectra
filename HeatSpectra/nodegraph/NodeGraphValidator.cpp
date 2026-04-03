@@ -8,59 +8,23 @@
 
 namespace {
 
-NodeDataType inferDataTypeFromSocketValueType(NodeGraphValueType valueType) {
-    switch (valueType) {
-    case NodeGraphValueType::Mesh:
-        return NodeDataType::Geometry;
-    case NodeGraphValueType::Intrinsic:
-        return NodeDataType::Intrinsic;
-    case NodeGraphValueType::HeatReceiver:
-        return NodeDataType::HeatReceiver;
-    case NodeGraphValueType::HeatSource:
-        return NodeDataType::HeatSource;
-    case NodeGraphValueType::Contact:
-        return NodeDataType::Contact;
-    case NodeGraphValueType::Heat:
-        return NodeDataType::Heat;
-    case NodeGraphValueType::Voronoi:
-        return NodeDataType::Voronoi;
-    case NodeGraphValueType::ScalarFloat:
-        return NodeDataType::ScalarFloat;
-    case NodeGraphValueType::ScalarInt:
-        return NodeDataType::ScalarInt;
-    case NodeGraphValueType::ScalarBool:
-        return NodeDataType::ScalarBool;
-    case NodeGraphValueType::Point:
-    case NodeGraphValueType::Vector3:
-    case NodeGraphValueType::Unknown:
-    default:
-        return NodeDataType::None;
-    }
-}
-
-const char* nodeDataTypeName(NodeDataType dataType) {
-    switch (dataType) {
-    case NodeDataType::Geometry:
+const char* nodePayloadTypeName(NodePayloadType payloadType) {
+    switch (payloadType) {
+    case NodePayloadType::Geometry:
         return "geometry";
-    case NodeDataType::Intrinsic:
-        return "intrinsic";
-    case NodeDataType::HeatReceiver:
+    case NodePayloadType::Remesh:
+        return "remesh";
+    case NodePayloadType::HeatReceiver:
         return "heat_receiver";
-    case NodeDataType::HeatSource:
+    case NodePayloadType::HeatSource:
         return "heat_source";
-    case NodeDataType::Contact:
+    case NodePayloadType::Contact:
         return "contact";
-    case NodeDataType::Heat:
+    case NodePayloadType::Heat:
         return "heat";
-    case NodeDataType::Voronoi:
+    case NodePayloadType::Voronoi:
         return "voronoi";
-    case NodeDataType::ScalarFloat:
-        return "scalar_float";
-    case NodeDataType::ScalarInt:
-        return "scalar_int";
-    case NodeDataType::ScalarBool:
-        return "scalar_bool";
-    case NodeDataType::None:
+    case NodePayloadType::None:
     default:
         return "none";
     }
@@ -79,20 +43,6 @@ const char* domainName(GeometryAttributeDomain domain) {
     default:
         return "unknown";
     }
-}
-
-bool isAcceptedDataType(const NodeGraphSocket& inputSocket, NodeDataType dataType) {
-    const std::vector<NodeDataType>& acceptedDataTypes = inputSocket.contract.acceptedDataTypes;
-    if (!acceptedDataTypes.empty()) {
-        return std::find(acceptedDataTypes.begin(), acceptedDataTypes.end(), dataType) != acceptedDataTypes.end();
-    }
-
-    const NodeDataType inferredInputType = inferDataTypeFromSocketValueType(inputSocket.valueType);
-    if (inferredInputType == NodeDataType::None || dataType == NodeDataType::None) {
-        return true;
-    }
-
-    return inferredInputType == dataType;
 }
 
 bool guaranteesAttribute(
@@ -146,20 +96,15 @@ bool NodeGraphValidator::canCreateConnection(
         return false;
     }
 
-    if (srcSocket->valueType != NodeGraphValueType::Unknown &&
-        dstSocket->valueType != NodeGraphValueType::Unknown &&
-        srcSocket->valueType != dstSocket->valueType) {
+    if (srcSocket->valueType != dstSocket->valueType) {
         errorMessage = "Socket type mismatch in connection.";
         return false;
     }
 
-    NodeDataType producedDataType = srcSocket->contract.producedDataType;
-    if (producedDataType == NodeDataType::None) {
-        producedDataType = inferDataTypeFromSocketValueType(srcSocket->valueType);
-    }
-    if (!isAcceptedDataType(*dstSocket, producedDataType)) {
+    const NodePayloadType producedPayloadType = srcSocket->contract.producedPayloadType;
+    if (!acceptsPayload(*dstSocket, producedPayloadType)) {
         errorMessage = "Data contract mismatch: output '" + srcSocket->name + "' provides '" +
-            std::string(nodeDataTypeName(producedDataType)) + "' but input '" + dstSocket->name +
+            std::string(nodePayloadTypeName(producedPayloadType)) + "' but input '" + dstSocket->name +
             "' does not accept it.";
         return false;
     }

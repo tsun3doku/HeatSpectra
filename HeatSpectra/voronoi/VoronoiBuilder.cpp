@@ -10,48 +10,8 @@
 
 #include <cstring>
 #include <fstream>
-#include "mesh/remesher/Remesher.hpp"
-#include "scene/Model.hpp"
-
 #include <iostream>
 #include <unordered_set>
-
-namespace {
-
-SupportingHalfedge::IntrinsicMesh toIntrinsicMesh(const IntrinsicMeshData& intrinsic) {
-    SupportingHalfedge::IntrinsicMesh mesh{};
-    mesh.vertices.reserve(intrinsic.vertices.size());
-    for (const IntrinsicMeshVertexData& vertex : intrinsic.vertices) {
-        SupportingHalfedge::IntrinsicVertex converted{};
-        converted.intrinsicVertexId = vertex.intrinsicVertexId;
-        converted.position = glm::vec3(vertex.position[0], vertex.position[1], vertex.position[2]);
-        converted.normal = glm::vec3(vertex.normal[0], vertex.normal[1], vertex.normal[2]);
-        converted.inputLocationType = vertex.inputLocationType;
-        converted.inputElementId = vertex.inputElementId;
-        converted.inputBaryCoords = glm::vec3(
-            vertex.inputBaryCoords[0],
-            vertex.inputBaryCoords[1],
-            vertex.inputBaryCoords[2]);
-        mesh.vertices.push_back(converted);
-    }
-    mesh.indices = intrinsic.triangleIndices;
-    mesh.faceIds = intrinsic.faceIds;
-    mesh.triangles.reserve(intrinsic.triangles.size());
-    for (const IntrinsicMeshTriangleData& triangle : intrinsic.triangles) {
-        SupportingHalfedge::IntrinsicTriangle converted{};
-        converted.center = glm::vec3(triangle.center[0], triangle.center[1], triangle.center[2]);
-        converted.normal = glm::vec3(triangle.normal[0], triangle.normal[1], triangle.normal[2]);
-        converted.area = triangle.area;
-        converted.vertexIndices[0] = triangle.vertexIndices[0];
-        converted.vertexIndices[1] = triangle.vertexIndices[1];
-        converted.vertexIndices[2] = triangle.vertexIndices[2];
-        converted.faceId = triangle.faceId;
-        mesh.triangles.push_back(converted);
-    }
-    return mesh;
-}
-
-}
 
 VoronoiBuilder::VoronoiBuilder(
     VulkanDevice& vulkanDevice,
@@ -103,7 +63,6 @@ bool VoronoiBuilder::buildDomains(
             continue;
         }
 
-        Model& receiverModel = modelRuntime->getModel();
         const uint32_t receiverModelId = modelRuntime->getRuntimeModelId();
         if (receiverModelId == 0 || !seenReceiverModelIds.insert(receiverModelId).second) {
             continue;
@@ -120,10 +79,13 @@ bool VoronoiBuilder::buildDomains(
             continue;
         }
 
-        const SupportingHalfedge::IntrinsicMesh intrinsicMesh = toIntrinsicMesh(modelRuntime->getIntrinsicMeshData());
+        const SupportingHalfedge::IntrinsicMesh& intrinsicMesh = modelRuntime->getIntrinsicMesh();
+        const std::vector<glm::vec3>& geometryPositions = modelRuntime->getGeometryPositions();
+        const std::vector<uint32_t>& geometryIndices = modelRuntime->getGeometryTriangleIndices();
         domain.seeder->generateSeeds(
             intrinsicMesh,
-            receiverModel,
+            geometryPositions,
+            geometryIndices,
             params.cellSize,
             domain.voxelGrid,
             params.voxelResolution);
@@ -153,7 +115,7 @@ bool VoronoiBuilder::buildDomains(
         }
 
         domain.integrator->computeNeighbors(seedPositions, maxNeighbors);
-        domain.integrator->extractMeshTriangles(receiverModel);
+        domain.integrator->extractMeshTriangles(geometryPositions, geometryIndices);
         domain.nodeCount = static_cast<uint32_t>(domain.seedFlags.size());
         receiverVoronoiDomains.push_back(std::move(domain));
     }
@@ -453,7 +415,7 @@ void VoronoiBuilder::uploadOccupancyPoints(
         const VoxelGrid& voxelGrid = domain.voxelGrid;
         const auto& occupancy = voxelGrid.getOccupancyData();
         const auto& params = voxelGrid.getParams();
-        const glm::mat4 modelMatrix = domain.modelRuntime->getModel().getModelMatrix();
+        const glm::mat4 modelMatrix = domain.modelRuntime->getModelMatrix();
         const int dimX = params.gridDim.x;
         const int dimY = params.gridDim.y;
         const int dimZ = params.gridDim.z;

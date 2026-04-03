@@ -14,7 +14,6 @@
 class HeatReceiverRuntime;
 class HeatSystemContactStage;
 class HeatSystemSurfaceStage;
-struct HeatPackage;
 
 class HeatSystemSimStage {
 public:
@@ -26,8 +25,8 @@ public:
         const HeatSystemSimRuntime& simRuntime,
         const HeatSourcePushConstant& basePushConstant,
         const std::vector<HeatContactRuntime::ContactCoupling>& contactCouplings,
+        const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
         const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-        const HeatPackage& heatPackage,
         const HeatSystemContactStage& contactStage,
         const HeatSystemVoronoiStage& voronoiStage,
         const HeatSystemSurfaceStage& surfaceStage,

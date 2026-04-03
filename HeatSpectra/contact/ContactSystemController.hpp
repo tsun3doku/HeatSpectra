@@ -4,16 +4,23 @@
 #include "ContactSystemRuntime.hpp"
 #include "contact/ContactTypes.hpp"
 #include "domain/ContactData.hpp"
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/RuntimeContactTypes.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 class ComputeCache;
-class NodePayloadRegistry;
+class MemoryAllocator;
+class VulkanDevice;
 
 class ContactSystemController {
 public:
+    struct Config {
+        RuntimeContactBinding binding{};
+    };
+
     struct HandleInfo {
         uint64_t key = 0;
         uint64_t revision = 0;
@@ -22,45 +29,37 @@ public:
     };
 
     ContactSystemController(
+        VulkanDevice& vulkanDevice,
+        MemoryAllocator& memoryAllocator,
         ComputeCache& computeCache);
     ~ContactSystemController();
 
-    void applyContactPackage(const ContactPackage& contactPackage);
-    const ContactPackage& getContactPackage() const { return contactPackageStorage; }
+    void configure(const Config& config);
+    void disable();
+    bool exportProduct(ContactProduct& outProduct) const;
     const ContactSystemRuntime& getRuntime() const { return runtime; }
 
-    bool computePreviewForPayload(
-        const NodePayloadRegistry& payloadRegistry,
-        const ContactPairData& pair,
+    bool computePreviewForRuntimePair(
+        const RuntimeContactPairConfig& pair,
         ContactSystem::Result& outPreview,
         HandleInfo& outHandle,
         bool forceRebuild,
         bool& outPreviewUpdated);
 
-    bool computePairsForPayload(
-        const NodePayloadRegistry& payloadRegistry,
-        const ContactPairData& pair,
-        std::vector<ContactPair>& outPairs,
-        bool forceRebuild = false);
-
     bool computePairs(
-        const ContactPairPayloadConfig& pair,
+        const RuntimeContactPairConfig& pair,
         std::vector<ContactPair>& outPairs,
         bool forceRebuild = false);
 
     void clearCache();
 
 private:
-    static uint64_t buildCacheKey(const ContactPairData& pair);
-    static uint64_t buildCacheKey(const ContactPairPayloadConfig& pair);
+    static uint64_t buildCacheKey(const RuntimeContactPairConfig& pair);
     static uint64_t buildDomainKey();
-    static bool resolvePayloadContactPair(
-        const NodePayloadRegistry& payloadRegistry,
-        const ContactPairData& pair,
-        ContactPairPayloadConfig& outPayloadPair);
 
     ContactSystem contactSystem;
+    VulkanDevice& vulkanDevice;
+    MemoryAllocator& memoryAllocator;
     ComputeCache& computeCache;
-    ContactPackage contactPackageStorage{};
     ContactSystemRuntime runtime;
 };

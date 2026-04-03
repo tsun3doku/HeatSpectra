@@ -39,53 +39,34 @@ void HeatSystemRenderStage::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_
         std::vector<HeatOverlayData> sourceRenderBindings;
         sourceRenderBindings.reserve(sourceBindings.size());
         for (const HeatSystemRuntime::SourceBinding& runtimeSourceBinding : sourceBindings) {
-            if (runtimeSourceBinding.geometryPackage.runtimeModelId == 0 || !runtimeSourceBinding.heatSource) {
-                continue;
-            }
-
-            Model* sourceModel = context.resourceManager.getModelByID(runtimeSourceBinding.geometryPackage.runtimeModelId);
-            if (!sourceModel) {
+            if (runtimeSourceBinding.runtimeModelId == 0 || !runtimeSourceBinding.heatSource) {
                 continue;
             }
 
             HeatOverlayData sourceOverlayBinding{};
-            sourceOverlayBinding.model = sourceModel;
+            sourceOverlayBinding.runtimeModelId = runtimeSourceBinding.runtimeModelId;
             sourceOverlayBinding.sourceTemperature = runtimeSourceBinding.heatSource->getUniformTemperature();
             sourceOverlayBinding.sourceBufferView = runtimeSourceBinding.heatSource->getSourceBufferView();
             sourceOverlayBinding.sourceVertexCount = static_cast<uint32_t>(runtimeSourceBinding.heatSource->getVertexCount());
             sourceRenderBindings.push_back(sourceOverlayBinding);
         }
 
-        heatSourceRenderer->render(cmdBuffer, frameIndex, sourceRenderBindings);
+        heatSourceRenderer->render(cmdBuffer, frameIndex, sourceRenderBindings, context.resourceManager);
     }
 
     if (heatReceiverRenderer) {
         std::vector<HeatReceiverRenderer::ReceiverRenderBinding> receiverRenderBindings;
         receiverRenderBindings.reserve(receivers.size());
         for (const auto& receiver : receivers) {
-            if (!receiver) {
-                continue;
-            }
-
-            Model* receiverModel = context.resourceManager.getModelByID(receiver->getRuntimeModelId());
-            if (!receiverModel) {
+            if (!receiver || receiver->getRuntimeModelId() == 0) {
                 continue;
             }
 
             HeatReceiverRenderer::ReceiverRenderBinding receiverBinding{};
-            receiverBinding.model = receiverModel;
+            receiverBinding.runtimeModelId = receiver->getRuntimeModelId();
             receiverRenderBindings.push_back(receiverBinding);
         }
 
-        heatReceiverRenderer->render(cmdBuffer, frameIndex, receiverRenderBindings);
+        heatReceiverRenderer->render(cmdBuffer, frameIndex, receiverRenderBindings, context.resourceManager);
     }
-}
-
-void HeatSystemRenderStage::renderSurfels(VkCommandBuffer cmdBuffer, uint32_t frameIndex, float radius,
-    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings, const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers) const {
-    (void)cmdBuffer;
-    (void)frameIndex;
-    (void)radius;
-    (void)sourceBindings;
-    (void)receivers;
 }

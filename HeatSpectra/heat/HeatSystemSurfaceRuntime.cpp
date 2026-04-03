@@ -2,37 +2,85 @@
 
 #include "HeatReceiverRuntime.hpp"
 #include "HeatSystemSimRuntime.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 
 #include <algorithm>
 #include <iostream>
 
 HeatSystemSurfaceRuntime::~HeatSystemSurfaceRuntime() = default;
 
-bool HeatSystemSurfaceRuntime::initializeReceiverBindings(
+void HeatSystemSurfaceRuntime::setReceiverPayloads(
+    const std::vector<GeometryData>& receiverGeometries,
+    const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
+    const std::vector<uint32_t>& receiverRuntimeModelIds,
+    const std::vector<VkBufferView>& supportingHalfedgeViews,
+    const std::vector<VkBufferView>& supportingAngleViews,
+    const std::vector<VkBufferView>& halfedgeViews,
+    const std::vector<VkBufferView>& edgeViews,
+    const std::vector<VkBufferView>& triangleViews,
+    const std::vector<VkBufferView>& lengthViews,
+    const std::vector<VkBufferView>& inputHalfedgeViews,
+    const std::vector<VkBufferView>& inputEdgeViews,
+    const std::vector<VkBufferView>& inputTriangleViews,
+    const std::vector<VkBufferView>& inputLengthViews) {
+    activeReceiverGeometries = receiverGeometries;
+    activeReceiverIntrinsicMeshes = receiverIntrinsicMeshes;
+    activeReceiverRuntimeModelIds = receiverRuntimeModelIds;
+    activeSupportingHalfedgeViews = supportingHalfedgeViews;
+    activeSupportingAngleViews = supportingAngleViews;
+    activeHalfedgeViews = halfedgeViews;
+    activeEdgeViews = edgeViews;
+    activeTriangleViews = triangleViews;
+    activeLengthViews = lengthViews;
+    activeInputHalfedgeViews = inputHalfedgeViews;
+    activeInputEdgeViews = inputEdgeViews;
+    activeInputTriangleViews = inputTriangleViews;
+    activeInputLengthViews = inputLengthViews;
+    receiverBindingsDirty = true;
+}
+
+bool HeatSystemSurfaceRuntime::ensureReceiverBindings(
     VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    const RuntimeIntrinsicCache& intrinsicCache,
-    const HeatPackage& heatPackage,
-    const std::vector<std::unique_ptr<VoronoiModelRuntime>>* voronoiModelRuntimes) {
+    MemoryAllocator& memoryAllocator) {
+    if (!receiverBindingsDirty) {
+        return true;
+    }
+
     cleanup();
 
-    const size_t receiverCount = heatPackage.receiverGeometries.size();
+    const size_t receiverCount = std::min({
+        activeReceiverGeometries.size(),
+        activeReceiverIntrinsicMeshes.size(),
+        activeReceiverRuntimeModelIds.size(),
+        activeSupportingHalfedgeViews.size(),
+        activeSupportingAngleViews.size(),
+        activeHalfedgeViews.size(),
+        activeEdgeViews.size(),
+        activeTriangleViews.size(),
+        activeLengthViews.size(),
+        activeInputHalfedgeViews.size(),
+        activeInputEdgeViews.size(),
+        activeInputTriangleViews.size(),
+        activeInputLengthViews.size()
+    });
     receiverRuntimes.reserve(receiverCount);
 
     for (size_t index = 0; index < receiverCount; ++index) {
-        const GeometryData& geometry = heatPackage.receiverGeometries[index];
-        const uint32_t runtimeModelId = heatPackage.receiverRuntimeModelIds[index];
-        if (runtimeModelId == 0 || geometry.intrinsicHandle.key == 0) {
-            continue;
-        }
-
-        const RuntimeIntrinsicCache::Entry* intrinsicEntry = intrinsicCache.get(geometry.intrinsicHandle);
-        if (!intrinsicEntry) {
+        const GeometryData& geometry = activeReceiverGeometries[index];
+        const uint32_t runtimeModelId = activeReceiverRuntimeModelIds[index];
+        if (runtimeModelId == 0 ||
+            activeSupportingHalfedgeViews[index] == VK_NULL_HANDLE ||
+            activeSupportingAngleViews[index] == VK_NULL_HANDLE ||
+            activeHalfedgeViews[index] == VK_NULL_HANDLE ||
+            activeEdgeViews[index] == VK_NULL_HANDLE ||
+            activeTriangleViews[index] == VK_NULL_HANDLE ||
+            activeLengthViews[index] == VK_NULL_HANDLE ||
+            activeInputHalfedgeViews[index] == VK_NULL_HANDLE ||
+            activeInputEdgeViews[index] == VK_NULL_HANDLE ||
+            activeInputTriangleViews[index] == VK_NULL_HANDLE ||
+            activeInputLengthViews[index] == VK_NULL_HANDLE) {
             continue;
         }
 
@@ -41,20 +89,17 @@ bool HeatSystemSurfaceRuntime::initializeReceiverBindings(
             memoryAllocator,
             runtimeModelId,
             geometry,
-            heatPackage.receiverIntrinsics[index],
-            *intrinsicEntry);
-        if (voronoiModelRuntimes) {
-            for (const auto& modelRuntime : *voronoiModelRuntimes) {
-                if (!modelRuntime || modelRuntime->getRuntimeModelId() != runtimeModelId) {
-                    continue;
-                }
-
-                receiverRuntime->setVoronoiMapping(
-                    modelRuntime->getVoronoiMappingBuffer(),
-                    modelRuntime->getVoronoiMappingBufferOffset());
-                break;
-            }
-        }
+            activeReceiverIntrinsicMeshes[index],
+            activeSupportingHalfedgeViews[index],
+            activeSupportingAngleViews[index],
+            activeHalfedgeViews[index],
+            activeEdgeViews[index],
+            activeTriangleViews[index],
+            activeLengthViews[index],
+            activeInputHalfedgeViews[index],
+            activeInputEdgeViews[index],
+            activeInputTriangleViews[index],
+            activeInputLengthViews[index]);
         if (!receiverRuntime->createReceiverBuffers() || !receiverRuntime->initializeReceiverBuffer()) {
             receiverRuntime->cleanup();
             return false;
@@ -62,6 +107,7 @@ bool HeatSystemSurfaceRuntime::initializeReceiverBindings(
         receiverRuntimes.push_back(std::move(receiverRuntime));
     }
 
+    receiverBindingsDirty = false;
     return true;
 }
 
@@ -77,17 +123,6 @@ void HeatSystemSurfaceRuntime::refreshDescriptors(
         }
 
         if (forceReallocate) {
-            receiverRuntime->recreateDescriptors(
-                surfaceLayout,
-                surfacePool,
-                simRuntime.getTempBufferA(),
-                simRuntime.getTempBufferAOffset(),
-                simRuntime.getTempBufferB(),
-                simRuntime.getTempBufferBOffset(),
-                simRuntime.getTimeBuffer(),
-                simRuntime.getTimeBufferOffset(),
-                nodeCount);
-        } else {
             receiverRuntime->updateDescriptors(
                 surfaceLayout,
                 surfacePool,
@@ -97,8 +132,21 @@ void HeatSystemSurfaceRuntime::refreshDescriptors(
                 simRuntime.getTempBufferBOffset(),
                 simRuntime.getTimeBuffer(),
                 simRuntime.getTimeBufferOffset(),
-                nodeCount);
+                nodeCount,
+                true);
+            continue;
         }
+
+        receiverRuntime->updateDescriptors(
+            surfaceLayout,
+            surfacePool,
+            simRuntime.getTempBufferA(),
+            simRuntime.getTempBufferAOffset(),
+            simRuntime.getTempBufferB(),
+            simRuntime.getTempBufferBOffset(),
+            simRuntime.getTimeBuffer(),
+            simRuntime.getTimeBufferOffset(),
+            nodeCount);
     }
 }
 
@@ -172,4 +220,5 @@ void HeatSystemSurfaceRuntime::cleanup() {
         }
     }
     receiverRuntimes.clear();
+    receiverBindingsDirty = true;
 }

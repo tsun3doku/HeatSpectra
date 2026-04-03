@@ -3,83 +3,12 @@
 #include <iostream>
 #include <algorithm>
 
-#include "domain/GeometryData.hpp"
-#include "scene/Model.hpp"
 #include "SignPostMesh.hpp"
 
-void SignpostMesh::buildFromModel(const Model& src) {
-    // Build connectivity + vertex positions
-    conn.buildFromModel(src);
-    auto& HEs = conn.getHalfEdges();
-    auto& V = conn.getVertices();
-
-    // Build faceNormals 
-    const auto& connFaces = conn.getFaces();
-    faceNormals.resize(connFaces.size());
-    for (uint32_t fid = 0; fid < connFaces.size(); ++fid) {
-        uint32_t startHe = connFaces[fid].halfEdgeIdx;
-        if (startHe == INVALID_INDEX) {
-            faceNormals[fid] = glm::vec3(0.0f);
-            continue;
-        }
-
-        // walk the three halfedges of this face
-        uint32_t he1 = startHe;
-        uint32_t he2 = HEs[he1].next;
-        uint32_t he3 = HEs[he2].next;
-
-        // get their origin vertex indices
-        uint32_t v0 = HEs[he1].origin;
-        uint32_t v1 = HEs[he2].origin;
-        uint32_t v2 = HEs[he3].origin;
-
-        // sanity check 
-        if (v0 >= V.size() ||
-            v1 >= V.size() ||
-            v2 >= V.size()) {
-            faceNormals[fid] = glm::vec3(0.0f);
-            continue;
-        }
-
-        // compute triangle normal
-        glm::vec3 A = V[v0].position;
-        glm::vec3 B = V[v1].position;
-        glm::vec3 C = V[v2].position;
-        faceNormals[fid] = glm::normalize(glm::cross(B - A, C - A));
-    }
-
-    // set lengths in Edge
-    auto& edges = conn.getEdges();
-    for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
-        uint32_t he = edges[edgeIdx].halfEdgeIdx;
-        if (he == INVALID_INDEX || he >= HEs.size()) 
-            continue;
-        
-        uint32_t v1 = HEs[he].origin;
-        uint32_t heN = HEs[he].next;
-
-        // Check if next is valid
-        if (heN == INVALID_INDEX || v1 == INVALID_INDEX)
-            continue;
-
-        uint32_t v2 = HEs[heN].origin;
-
-        // Check if indices are in range
-        if (v1 >= V.size() || v2 >= V.size())
-            continue;
-
-        // Set intrinsic length in edge object
-        glm::dvec3 dv1(V[v1].position.x, V[v1].position.y, V[v1].position.z);
-        glm::dvec3 dv2(V[v2].position.x, V[v2].position.y, V[v2].position.z);
-        edges[edgeIdx].intrinsicLength = glm::length(dv2 - dv1);
-    }
-    
-    // Compute corner angles 
-    updateAllCornerAngles(std::unordered_set<uint32_t>());
-}
-
-void SignpostMesh::buildFromGeometry(const GeometryData& geometry) {
-    conn.buildFromGeometry(geometry);
+void SignpostMesh::buildFromIndexedData(
+    const std::vector<float>& pointPositions,
+    const std::vector<uint32_t>& triangleIndices) {
+    conn.buildFromIndexedData(pointPositions, triangleIndices);
     auto& HEs = conn.getHalfEdges();
     auto& V = conn.getVertices();
 

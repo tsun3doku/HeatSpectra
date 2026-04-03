@@ -33,4 +33,4 @@ QPainterPath buildEdgePath(
     NodeGraphSocketDirection dstDirection = NodeGraphSocketDirection::Input);
 void setDecorativeItemFlags(QGraphicsItem* item);
 
-} // namespace nodegraphscene
+} 

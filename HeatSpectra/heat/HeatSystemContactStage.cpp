@@ -1,24 +1,17 @@
 #include "HeatSystemContactStage.hpp"
 
-#include "ContactSampling.hpp"
-#include "HeatReceiverRuntime.hpp"
 #include "HeatSystemSimRuntime.hpp"
 #include "HeatSystemResources.hpp"
 #include "HeatContactParams.hpp"
 #include "HeatSourceRuntime.hpp"
 #include "util/file_utils.h"
-#include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstring>
 #include <iostream>
-#include <limits>
-#include <vector>
 
 HeatSystemContactStage::HeatSystemContactStage(const HeatSystemStageContext& stageContext)
     : context(stageContext) {
@@ -47,26 +40,12 @@ bool HeatSystemContactStage::ensureParamsBuffer(HeatContactRuntime::ContactCoupl
     return true;
 }
 
-void HeatSystemContactStage::refreshCouplings() {
-}
-
-const HeatReceiverRuntime* HeatSystemContactStage::findReceiverRuntime(
-    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
+const HeatSystemRuntime::SourceBinding* HeatSystemContactStage::findSourceBindingByRuntimeModelId(
+    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     uint32_t runtimeModelId) const {
-    for (const auto& receiver : receivers) {
-        if (receiver && receiver->getRuntimeModelId() == runtimeModelId) {
-            return receiver.get();
-        }
-    }
-    return nullptr;
-}
-
-const VoronoiModelRuntime* HeatSystemContactStage::findVoronoiModelRuntime(
-    const std::vector<std::unique_ptr<VoronoiModelRuntime>>& voronoiModelRuntimes,
-    uint32_t runtimeModelId) const {
-    for (const auto& modelRuntime : voronoiModelRuntimes) {
-        if (modelRuntime && modelRuntime->getRuntimeModelId() == runtimeModelId) {
-            return modelRuntime.get();
+    for (const HeatSystemRuntime::SourceBinding& sourceBinding : sourceBindings) {
+        if (sourceBinding.runtimeModelId == runtimeModelId && sourceBinding.heatSource) {
+            return &sourceBinding;
         }
     }
     return nullptr;
@@ -193,159 +172,27 @@ bool HeatSystemContactStage::createPipeline() {
 
 void HeatSystemContactStage::updateCouplingDescriptors(
     HeatContactRuntime::ContactCoupling& coupling,
-    const HeatSystemSimRuntime& simRuntime,
-    const HeatPackage& heatPackage,
-    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-    const std::vector<std::unique_ptr<VoronoiModelRuntime>>& voronoiModelRuntimes) {
+    const HeatSystemSimRuntime& simRuntime) {
     coupling.contactDescriptorsReady = false;
-    (void)heatPackage;
-
-    if (coupling.couplingType != ContactCouplingType::SourceToReceiver || !coupling.source) {
-        return;
-    }
-
-    const VoronoiModelRuntime* receiverModelRuntime = findVoronoiModelRuntime(voronoiModelRuntimes, coupling.receiverModelId);
-    if (!findReceiverRuntime(receivers, coupling.receiverModelId) || !receiverModelRuntime) {
-        return;
-    }
-
-    const auto& triangleIndices = receiverModelRuntime->getIntrinsicTriangleIndices();
-    const auto& cellIndices = receiverModelRuntime->getVoronoiSurfaceCellIndices();
-    const std::size_t triangleCount = triangleIndices.size() / 3;
-    const std::size_t contactPairCount = std::min(coupling.contactPairsCPU.size(), triangleCount);
-    if (contactPairCount == 0 || cellIndices.empty()) {
-        return;
-    }
-
-    std::vector<ContactSampleGPU> samples;
-    samples.reserve(contactPairCount * Quadrature::count);
-
-    std::vector<ContactCellWeight> cellWeights;
-    cellWeights.reserve(contactPairCount * Quadrature::count * 3);
-
-    for (std::size_t triangleIndex = 0; triangleIndex < contactPairCount; ++triangleIndex) {
-        const ContactPair& contactPair = coupling.contactPairsCPU[triangleIndex];
-        if (contactPair.contactArea <= 0.0f) {
-            continue;
-        }
-
-        const std::size_t triangleBase = triangleIndex * 3;
-        const uint32_t vertexIndices[3] = {
-            triangleIndices[triangleBase + 0],
-            triangleIndices[triangleBase + 1],
-            triangleIndices[triangleBase + 2],
-        };
-
-        const uint32_t mappedCells[3] = {
-            vertexIndices[0] < cellIndices.size() ? cellIndices[vertexIndices[0]] : std::numeric_limits<uint32_t>::max(),
-            vertexIndices[1] < cellIndices.size() ? cellIndices[vertexIndices[1]] : std::numeric_limits<uint32_t>::max(),
-            vertexIndices[2] < cellIndices.size() ? cellIndices[vertexIndices[2]] : std::numeric_limits<uint32_t>::max(),
-        };
-
-        for (uint32_t sampleIndex = 0; sampleIndex < Quadrature::count; ++sampleIndex) {
-            const ContactSampleGPU& sample = contactPair.samples[sampleIndex];
-            if (sample.sourceTriangleIndex == std::numeric_limits<uint32_t>::max() || sample.wArea <= 0.0f) {
-                continue;
-            }
-
-            const uint32_t flattenedSampleIndex = static_cast<uint32_t>(samples.size());
-            samples.push_back(sample);
-
-            const glm::vec3 barycentric = Quadrature::bary[sampleIndex];
-            const float baryWeights[3] = { barycentric.x, barycentric.y, barycentric.z };
-            for (int cornerIndex = 0; cornerIndex < 3; ++cornerIndex) {
-                const uint32_t cellIndex = mappedCells[cornerIndex];
-                const float weight = sample.wArea * baryWeights[cornerIndex];
-                if (cellIndex == std::numeric_limits<uint32_t>::max() || weight <= 0.0f) {
-                    continue;
-                }
-
-                ContactCellWeight cellWeight{};
-                cellWeight.cellIndex = cellIndex;
-                cellWeight.sampleIndex = flattenedSampleIndex;
-                cellWeight.weight = weight;
-                cellWeights.push_back(cellWeight);
-            }
-        }
-    }
-
-    if (samples.empty() || cellWeights.empty()) {
-        return;
-    }
-
-    std::sort(cellWeights.begin(), cellWeights.end(), [](const ContactCellWeight& lhs, const ContactCellWeight& rhs) {
-        if (lhs.cellIndex != rhs.cellIndex) {
-            return lhs.cellIndex < rhs.cellIndex;
-        }
-        return lhs.sampleIndex < rhs.sampleIndex;
-    });
-
-    std::vector<ContactCellMap> contactCellMap;
-    contactCellMap.reserve(cellWeights.size());
-    std::vector<ContactCellRange> contactCellRanges;
-    contactCellRanges.reserve(cellWeights.size());
-
-    std::size_t rangeStart = 0;
-    while (rangeStart < cellWeights.size()) {
-        const uint32_t cellIndex = cellWeights[rangeStart].cellIndex;
-        std::size_t rangeEnd = rangeStart;
-        while (rangeEnd < cellWeights.size() && cellWeights[rangeEnd].cellIndex == cellIndex) {
-            ContactCellMap mapEntry{};
-            mapEntry.sampleIndex = cellWeights[rangeEnd].sampleIndex;
-            mapEntry.weight = cellWeights[rangeEnd].weight;
-            contactCellMap.push_back(mapEntry);
-            ++rangeEnd;
-        }
-
-        ContactCellRange range{};
-        range.cellIndex = cellIndex;
-        range.startIndex = static_cast<uint32_t>(rangeStart);
-        range.count = static_cast<uint32_t>(rangeEnd - rangeStart);
-        contactCellRanges.push_back(range);
-        rangeStart = rangeEnd;
-    }
-
-    auto recreateBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset, const void* data, VkDeviceSize size) -> bool {
-        if (buffer != VK_NULL_HANDLE) {
-            context.memoryAllocator.free(buffer, offset);
-            buffer = VK_NULL_HANDLE;
-            offset = 0;
-        }
-
-        return createStorageBuffer(
-                   context.memoryAllocator,
-                   context.vulkanDevice,
-                   data,
-                   size,
-                   buffer,
-                   offset,
-                   nullptr,
-                   true) == VK_SUCCESS &&
-            buffer != VK_NULL_HANDLE;
-    };
-
-    if (!recreateBuffer(
-            coupling.contactSampleBuffer,
-            coupling.contactSampleBufferOffset,
-            samples.data(),
-            sizeof(ContactSampleGPU) * samples.size()) ||
-        !recreateBuffer(
-            coupling.contactCellMapBuffer,
-            coupling.contactCellMapBufferOffset,
-            contactCellMap.data(),
-            sizeof(ContactCellMap) * contactCellMap.size()) ||
-        !recreateBuffer(
-            coupling.contactCellRangeBuffer,
-            coupling.contactCellRangeBufferOffset,
-            contactCellRanges.data(),
-            sizeof(ContactCellRange) * contactCellRanges.size()) ||
+    if (coupling.contactSampleBuffer == VK_NULL_HANDLE ||
+        coupling.contactSampleCount == 0 ||
+        coupling.contactCellMapBuffer == VK_NULL_HANDLE ||
+        coupling.contactCellMapCount == 0 ||
+        coupling.contactCellRangeBuffer == VK_NULL_HANDLE ||
+        coupling.contactCellRangeCount == 0 ||
         !ensureParamsBuffer(coupling)) {
+        std::cerr << "[HeatSystemContactStage] updateCouplingDescriptors skipped"
+                  << " emitterRuntimeModelId=" << coupling.emitterModelId
+                  << " receiverRuntimeModelId=" << coupling.receiverModelId
+                  << " sampleBuffer=" << (coupling.contactSampleBuffer != VK_NULL_HANDLE ? "yes" : "no")
+                  << " sampleCount=" << coupling.contactSampleCount
+                  << " cellMapBuffer=" << (coupling.contactCellMapBuffer != VK_NULL_HANDLE ? "yes" : "no")
+                  << " cellMapCount=" << coupling.contactCellMapCount
+                  << " cellRangeBuffer=" << (coupling.contactCellRangeBuffer != VK_NULL_HANDLE ? "yes" : "no")
+                  << " cellRangeCount=" << coupling.contactCellRangeCount
+                  << std::endl;
         return;
     }
-
-    coupling.contactSampleCount = static_cast<uint32_t>(samples.size());
-    coupling.contactCellMapCount = static_cast<uint32_t>(contactCellMap.size());
-    coupling.contactCellRangeCount = static_cast<uint32_t>(contactCellRanges.size());
 
     if (coupling.contactComputeSetA == VK_NULL_HANDLE || coupling.contactComputeSetB == VK_NULL_HANDLE) {
         std::array<VkDescriptorSetLayout, 2> layouts = {
@@ -371,6 +218,23 @@ void HeatSystemContactStage::updateCouplingDescriptors(
     }
 
     auto updateSet = [this, &coupling, &simRuntime](VkDescriptorSet descriptorSet, VkBuffer tempReadBuffer, VkDeviceSize tempReadOffset) {
+        const VkBuffer emitterTriangleIndexBuffer =
+            coupling.emitterTriangleIndexBuffer != VK_NULL_HANDLE
+            ? coupling.emitterTriangleIndexBuffer
+            : simRuntime.getInjectionKBuffer();
+        const VkDeviceSize emitterTriangleIndexBufferOffset =
+            coupling.emitterTriangleIndexBuffer != VK_NULL_HANDLE
+            ? coupling.emitterTriangleIndexBufferOffset
+            : simRuntime.getInjectionKBufferOffset();
+        const VkBuffer emitterVoronoiMappingBuffer =
+            coupling.emitterVoronoiMappingBuffer != VK_NULL_HANDLE
+            ? coupling.emitterVoronoiMappingBuffer
+            : simRuntime.getInjectionKBuffer();
+        const VkDeviceSize emitterVoronoiMappingBufferOffset =
+            coupling.emitterVoronoiMappingBuffer != VK_NULL_HANDLE
+            ? coupling.emitterVoronoiMappingBufferOffset
+            : simRuntime.getInjectionKBufferOffset();
+
         VkDescriptorBufferInfo bufferInfos[9] = {
             { tempReadBuffer, tempReadOffset, sizeof(float) * simRuntime.getNodeCount() },
             { coupling.paramsBuffer, coupling.paramsBufferOffset, sizeof(HeatContactParams) },
@@ -379,8 +243,8 @@ void HeatSystemContactStage::updateCouplingDescriptors(
             { coupling.contactSampleBuffer, coupling.contactSampleBufferOffset, sizeof(ContactSampleGPU) * coupling.contactSampleCount },
             { coupling.contactCellMapBuffer, coupling.contactCellMapBufferOffset, sizeof(ContactCellMap) * coupling.contactCellMapCount },
             { coupling.contactCellRangeBuffer, coupling.contactCellRangeBufferOffset, sizeof(ContactCellRange) * coupling.contactCellRangeCount },
-            { simRuntime.getInjectionKBuffer(), simRuntime.getInjectionKBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
-            { simRuntime.getInjectionKBuffer(), simRuntime.getInjectionKBufferOffset(), sizeof(uint32_t) * simRuntime.getNodeCount() },
+            { emitterTriangleIndexBuffer, emitterTriangleIndexBufferOffset, VK_WHOLE_SIZE },
+            { emitterVoronoiMappingBuffer, emitterVoronoiMappingBufferOffset, VK_WHOLE_SIZE },
         };
 
         VkWriteDescriptorSet writes[9]{};
@@ -400,13 +264,26 @@ void HeatSystemContactStage::updateCouplingDescriptors(
     updateSet(coupling.contactComputeSetB, simRuntime.getTempBufferB(), simRuntime.getTempBufferBOffset());
 
     coupling.contactDescriptorsReady = true;
+    std::cerr << "[HeatSystemContactStage] updateCouplingDescriptors ready"
+              << " emitterRuntimeModelId=" << coupling.emitterModelId
+              << " receiverRuntimeModelId=" << coupling.receiverModelId
+              << " sampleCount=" << coupling.contactSampleCount
+              << " cellRangeCount=" << coupling.contactCellRangeCount
+              << std::endl;
 }
 
 void HeatSystemContactStage::dispatchCoupling(
     VkCommandBuffer commandBuffer,
     const HeatContactRuntime::ContactCoupling& coupling,
+    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     bool evenSubstep) const {
     if (!coupling.contactDescriptorsReady || coupling.contactCellRangeCount == 0) {
+        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped"
+                  << " emitterRuntimeModelId=" << coupling.emitterModelId
+                  << " receiverRuntimeModelId=" << coupling.receiverModelId
+                  << " descriptorsReady=" << (coupling.contactDescriptorsReady ? "true" : "false")
+                  << " cellRangeCount=" << coupling.contactCellRangeCount
+                  << std::endl;
         return;
     }
 
@@ -414,18 +291,39 @@ void HeatSystemContactStage::dispatchCoupling(
     if (descriptorSet == VK_NULL_HANDLE ||
         context.resources.contactPipeline == VK_NULL_HANDLE ||
         context.resources.contactPipelineLayout == VK_NULL_HANDLE) {
+        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped: missing pipeline state"
+                  << " descriptorSet=" << (descriptorSet != VK_NULL_HANDLE ? "yes" : "no")
+                  << " pipeline=" << (context.resources.contactPipeline != VK_NULL_HANDLE ? "yes" : "no")
+                  << " layout=" << (context.resources.contactPipelineLayout != VK_NULL_HANDLE ? "yes" : "no")
+                  << std::endl;
+        return;
+    }
+
+    const HeatSystemRuntime::SourceBinding* sourceBinding =
+        findSourceBindingByRuntimeModelId(sourceBindings, coupling.emitterModelId);
+    if (!sourceBinding || !sourceBinding->heatSource) {
+        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped: source binding missing"
+                  << " emitterRuntimeModelId=" << coupling.emitterModelId
+                  << std::endl;
         return;
     }
 
     ContactPushConstant pushConstant{};
     pushConstant.couplingKind =
         (coupling.couplingType == ContactCouplingType::ReceiverToReceiver) ? 1u : 0u;
-    if (coupling.source) {
-        pushConstant.heatSourceTemperature = coupling.source->getUniformTemperature();
-    }
+    pushConstant.heatSourceTemperature = sourceBinding->heatSource->getUniformTemperature();
 
     const uint32_t workGroupSize = 256;
     const uint32_t workGroupCount = (coupling.contactCellRangeCount + workGroupSize - 1) / workGroupSize;
+
+    std::cerr << "[HeatSystemContactStage] dispatchCoupling"
+              << " couplingKind=" << pushConstant.couplingKind
+              << " emitterRuntimeModelId=" << coupling.emitterModelId
+              << " receiverRuntimeModelId=" << coupling.receiverModelId
+              << " sourceTemp=" << pushConstant.heatSourceTemperature
+              << " cellRangeCount=" << coupling.contactCellRangeCount
+              << " workGroupCount=" << workGroupCount
+              << std::endl;
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.contactPipeline);
     vkCmdPushConstants(

@@ -7,9 +7,6 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
-class VulkanDevice;
-class MemoryAllocator;
-
 // 
 //                          [ This DS enables GPU based rendering of intrinsic triangulations
 //                            Tracks for each input halfedge:
@@ -49,29 +46,69 @@ public:
         std::vector<IntrinsicTriangle> triangles;   // Triangle geometric data
     };
 
+    struct GPUResources {
+        size_t triangleCount = 0;
+        size_t vertexCount = 0;
+        float averageTriangleArea = 0.0f;
+
+        VkBuffer bufferS = VK_NULL_HANDLE;
+        VkBuffer bufferA = VK_NULL_HANDLE;
+        VkBuffer bufferH = VK_NULL_HANDLE;
+        VkBuffer bufferE = VK_NULL_HANDLE;
+        VkBuffer bufferT = VK_NULL_HANDLE;
+        VkBuffer bufferL = VK_NULL_HANDLE;
+        VkBuffer bufferHInput = VK_NULL_HANDLE;
+        VkBuffer bufferEInput = VK_NULL_HANDLE;
+        VkBuffer bufferTInput = VK_NULL_HANDLE;
+        VkBuffer bufferLInput = VK_NULL_HANDLE;
+        VkBuffer intrinsicTriangleBuffer = VK_NULL_HANDLE;
+        VkBuffer intrinsicVertexBuffer = VK_NULL_HANDLE;
+
+        VkDeviceSize offsetS = 0;
+        VkDeviceSize offsetA = 0;
+        VkDeviceSize offsetH = 0;
+        VkDeviceSize offsetE = 0;
+        VkDeviceSize offsetT = 0;
+        VkDeviceSize offsetL = 0;
+        VkDeviceSize offsetHInput = 0;
+        VkDeviceSize offsetEInput = 0;
+        VkDeviceSize offsetTInput = 0;
+        VkDeviceSize offsetLInput = 0;
+        VkDeviceSize triangleGeometryOffset = 0;
+        VkDeviceSize vertexGeometryOffset = 0;
+
+        VkBufferView viewS = VK_NULL_HANDLE;
+        VkBufferView viewA = VK_NULL_HANDLE;
+        VkBufferView viewH = VK_NULL_HANDLE;
+        VkBufferView viewE = VK_NULL_HANDLE;
+        VkBufferView viewT = VK_NULL_HANDLE;
+        VkBufferView viewL = VK_NULL_HANDLE;
+        VkBufferView viewHInput = VK_NULL_HANDLE;
+        VkBufferView viewEInput = VK_NULL_HANDLE;
+        VkBufferView viewTInput = VK_NULL_HANDLE;
+        VkBufferView viewLInput = VK_NULL_HANDLE;
+    };
+
+    struct GPUBuffers {
+        std::vector<int32_t> supportingHalfedges;
+        std::vector<float> supportingAngles;
+        std::vector<int32_t> intrinsicHalfedgeData;
+        std::vector<int32_t> intrinsicEdgeData;
+        std::vector<int32_t> intrinsicTriangleData;
+        std::vector<float> intrinsicLengths;
+        std::vector<int32_t> inputHalfedgeData;
+        std::vector<int32_t> inputEdgeData;
+        std::vector<int32_t> inputTriangleData;
+        std::vector<float> inputLengths;
+    };
+
     struct InsertedVertexLocation {
         uint32_t locationType;      // 0=VERTEX, 1=EDGE, 2=FACE
         uint32_t elementId;         // Input vertex/edge/face index
         glm::vec3 baryCoords;       // Barycentric coordinates
     };
 
-    struct GPUBuffers {
-        std::vector<int32_t> S;      // Supporting halfedge: S[inputHalfedgeIdx] = intrinsicHalfedgeIdx
-        std::vector<float> A;        // Supporting angle: A[inputHalfedgeIdx] = angle
-        std::vector<int32_t> H;      // Intrinsic halfedge data [origin, edge, face, next]
-        std::vector<int32_t> E;      // Intrinsic edge data [he0, he1]
-        std::vector<int32_t> T;      // Intrinsic triangle data [halfedge]
-        std::vector<float> L;        // Intrinsic edge lengths
-
-        // Input mesh data 
-        std::vector<int32_t> H_input;               // Input halfedge data [origin, edge, face, next]
-        std::vector<int32_t> E_input;               // Input edge data [he0, he1]
-        std::vector<int32_t> T_input;               // Input triangle data [halfedge]
-        std::vector<float> L_input;                 // Input edge lengths
-    };
-
-    SupportingHalfedge(const SignpostMesh& inputMesh, SignpostMesh& intrinsicMesh, const GeodesicTracer& tracer,
-        class VulkanDevice& vulkanDevice, class MemoryAllocator& allocator);
+    SupportingHalfedge(const SignpostMesh& inputMesh, SignpostMesh& intrinsicMesh, const GeodesicTracer& tracer);
     ~SupportingHalfedge();
 
     void initialize();
@@ -86,37 +123,11 @@ public:
 
     const SupportingInfo& getSupportingInfo(uint32_t inputHalfedgeIdx) const;
 
+    GPUBuffers buildGPUBuffers() const;
     IntrinsicMesh buildIntrinsicMesh() const;
     void calculateVertexNormals(IntrinsicMesh& meshData) const;
-    GPUBuffers buildGPUBuffers() const;
-    void uploadToGPU();
-    void uploadIntrinsicTriangleData();
-    void uploadIntrinsicVertexData();
-    void cleanup();
-    void invalidateIntrinsicMeshCache() { intrinsicMeshCacheValid = false; }
 
     const std::vector<SupportingInfo>& getAllSupportingInfo() const { return supportingInfoPerHalfedge; }
-    bool isUploadedToGPU() const { return gpuDataUploaded; }
-
-    VkBufferView getSupportingHalfedgeView() const { return bufferViewS; }
-    VkBufferView getSupportingAngleView() const { return bufferViewA; }
-    VkBufferView getHalfedgeView() const { return bufferViewH; }
-    VkBufferView getEdgeView() const { return bufferViewE; }
-    VkBufferView getTriangleView() const { return bufferViewT; }
-    VkBufferView getLengthView() const { return bufferViewL; }
-    VkBufferView getInputHalfedgeView() const { return bufferViewH_input; }
-    VkBufferView getInputEdgeView() const { return bufferViewE_input; }
-    VkBufferView getInputTriangleView() const { return bufferViewT_input; }
-    VkBufferView getInputLengthView() const { return bufferViewL_input; }
-
-    VkBuffer getIntrinsicTriangleBuffer() const { return intrinsicTriangleBuffer; }
-    VkDeviceSize getTriangleGeometryOffset() const { return triangleGeometryOffset; }
-    size_t getTriangleCount() const { return cachedIntrinsicMesh.triangles.size(); }
-    float getAverageTriangleArea() const;
-
-    VkBuffer getIntrinsicVertexBuffer() const { return intrinsicVertexBuffer; }
-    VkDeviceSize getVertexGeometryOffset() const { return vertexGeometryOffset; }
-    size_t getVertexCount() const { return cachedIntrinsicMesh.vertices.size(); }
 
 private:
     void clampSupportingAngle(SupportingInfo& info) const;
@@ -124,50 +135,7 @@ private:
     const SignpostMesh& inputMesh;
     SignpostMesh& intrinsicMesh;
     const GeodesicTracer& tracer;
-    VulkanDevice& vulkanDevice;
-    MemoryAllocator& allocator;
 
     std::vector<SupportingInfo> supportingInfoPerHalfedge;     // One entry per input halfedge
     std::unordered_map<uint32_t, InsertedVertexLocation> insertedVertexLocations;
-
-    bool gpuDataUploaded = false;
-    mutable IntrinsicMesh cachedIntrinsicMesh;
-    mutable bool intrinsicMeshCacheValid = false;
-
-    VkBuffer bufferS = VK_NULL_HANDLE;                  // Supporting halfedge buffer
-    VkBuffer bufferA = VK_NULL_HANDLE;                  // Supporting angle buffer
-    VkBuffer bufferH = VK_NULL_HANDLE;                  // Intrinsic halfedge data buffer
-    VkBuffer bufferE = VK_NULL_HANDLE;                  // Intrinsic edge data buffer
-    VkBuffer bufferT = VK_NULL_HANDLE;                  // Intrinsic triangle data buffer
-    VkBuffer bufferL = VK_NULL_HANDLE;                  // Intrinsic edge length buffer
-    VkBuffer bufferH_input = VK_NULL_HANDLE;            // Input halfedge data buffer
-    VkBuffer bufferE_input = VK_NULL_HANDLE;            // Input edge data buffer
-    VkBuffer bufferT_input = VK_NULL_HANDLE;            // Input triangle data buffer
-    VkBuffer bufferL_input = VK_NULL_HANDLE;            // Input edge length buffer
-    VkBuffer intrinsicTriangleBuffer = VK_NULL_HANDLE;
-    VkBuffer intrinsicVertexBuffer = VK_NULL_HANDLE;  
-
-    VkDeviceSize offsetS = 0;
-    VkDeviceSize offsetA = 0;
-    VkDeviceSize offsetH = 0;
-    VkDeviceSize offsetE = 0;
-    VkDeviceSize offsetT = 0;
-    VkDeviceSize offsetL = 0;
-    VkDeviceSize offsetH_input = 0;
-    VkDeviceSize offsetE_input = 0;
-    VkDeviceSize offsetT_input = 0;
-    VkDeviceSize offsetL_input = 0;
-    VkDeviceSize triangleGeometryOffset = 0;
-    VkDeviceSize vertexGeometryOffset = 0;
-
-    VkBufferView bufferViewS = VK_NULL_HANDLE;
-    VkBufferView bufferViewA = VK_NULL_HANDLE;
-    VkBufferView bufferViewH = VK_NULL_HANDLE;
-    VkBufferView bufferViewE = VK_NULL_HANDLE;
-    VkBufferView bufferViewT = VK_NULL_HANDLE;
-    VkBufferView bufferViewL = VK_NULL_HANDLE;
-    VkBufferView bufferViewH_input = VK_NULL_HANDLE;
-    VkBufferView bufferViewE_input = VK_NULL_HANDLE;
-    VkBufferView bufferViewT_input = VK_NULL_HANDLE;
-    VkBufferView bufferViewL_input = VK_NULL_HANDLE;
 };

@@ -13,10 +13,13 @@
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
 #include "nodegraph/NodeGraphEditor.hpp"
+#include "nodegraph/NodeGraphRuntimeBridge.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 #include "runtime/ContactPreviewStore.hpp"
 #include "runtime/ComputeCache.hpp"
-#include "runtime/RuntimePayloadController.hpp"
+#include "runtime/RemeshController.hpp"
+#include "runtime/RuntimePackageController.hpp"
+#include "runtime/RuntimeRemeshTransport.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/RenderRuntime.hpp"
 #include "render/WindowRuntimeState.hpp"
@@ -59,12 +62,10 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         runtimeBusy,
         isShuttingDown);
 
-    intrinsicRegistryState = std::make_unique<RuntimeIntrinsicCache>(core.device(), *allocator);
     if (!renderRuntime->initializeBase(
         swapChainImageFormat,
         swapChainExtent,
         *allocator,
-        *intrinsicRegistryState,
         *resourceManager,
         *uniformBufferManager)) {
         shutdown();
@@ -75,39 +76,59 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
 
     computeCacheState = std::make_unique<ComputeCache>();
     payloadRegistryState = std::make_unique<NodePayloadRegistry>();
-    runtimePayloadControllerState = std::make_unique<RuntimePayloadController>(
+    nodeGraphRuntimeBridgeState = std::make_unique<NodeGraphRuntimeBridge>();
+    runtimeProductRegistryState = std::make_unique<RuntimeProductRegistry>();
+    runtimePackageControllerState = std::make_unique<RuntimePackageController>(*resourceManager);
+    runtimeModelTransportState = std::make_unique<RuntimeModelTransport>();
+    runtimeRemeshTransportState = std::make_unique<RuntimeRemeshTransport>();
+    remeshControllerState = std::make_unique<RemeshController>(
+        meshModifiers->getRemesher(),
         core.device(),
-        swapchainManager,
         *resourceManager,
-        *intrinsicRegistryState,
         *renderRuntime,
         runtimeBusy);
+    runtimeContactTransportState = std::make_unique<RuntimeContactTransport>();
     contactSystemControllerState = std::make_unique<ContactSystemController>(
+        core.device(),
+        *allocator,
         *computeCacheState);
+    runtimeContactTransportState->setController(contactSystemControllerState.get());
+    runtimeContactTransportState->setProductRegistry(runtimeProductRegistryState.get());
     contactPreviewStoreState = std::make_unique<ContactPreviewStore>(core.device(), *allocator, *uniformBufferManager);
     contactPreviewStoreState->initRenderer(renderPass, renderconfig::MaxFramesInFlight);
 
+    runtimeVoronoiTransportState = std::make_unique<RuntimeVoronoiTransport>();
     voronoiSystemControllerState = std::make_unique<VoronoiSystemController>(
         core.device(),
         *allocator,
         *resourceManager,
         *uniformBufferManager,
-        *intrinsicRegistryState,
         *commandPool,
         renderconfig::MaxFramesInFlight);
     voronoiSystemControllerState->createVoronoiSystem(swapChainExtent, renderPass);
+    runtimeVoronoiTransportState->setController(voronoiSystemControllerState.get());
+    runtimeVoronoiTransportState->setProductRegistry(runtimeProductRegistryState.get());
 
+    runtimeHeatTransportState = std::make_unique<RuntimeHeatTransport>();
     heatSystemControllerState = std::make_unique<HeatSystemController>(
         core.device(),
         *allocator,
         *resourceManager,
         *uniformBufferManager,
-        *intrinsicRegistryState,
         *commandPool,
         renderconfig::MaxFramesInFlight);
-    runtimePayloadControllerState->setHeatSystemController(heatSystemControllerState.get());
-    runtimePayloadControllerState->setContactSystemController(contactSystemControllerState.get());
-    runtimePayloadControllerState->setVoronoiSystemController(voronoiSystemControllerState.get());
+    runtimeHeatTransportState->setController(heatSystemControllerState.get());
+    runtimeHeatTransportState->setProductRegistry(runtimeProductRegistryState.get());
+    runtimeModelTransportState->setResourceManager(resourceManager);
+    runtimeModelTransportState->setProductRegistry(runtimeProductRegistryState.get());
+    runtimeRemeshTransportState->setController(remeshControllerState.get());
+    runtimeRemeshTransportState->setProductRegistry(runtimeProductRegistryState.get());
+    runtimeRemeshTransportState->setModelTransport(runtimeModelTransportState.get());
+    runtimePackageControllerState->setModelTransport(runtimeModelTransportState.get());
+    runtimePackageControllerState->setRemeshTransport(runtimeRemeshTransportState.get());
+    runtimePackageControllerState->setHeatTransport(runtimeHeatTransportState.get());
+    runtimePackageControllerState->setContactTransport(runtimeContactTransportState.get());
+    runtimePackageControllerState->setVoronoiTransport(runtimeVoronoiTransportState.get());
     heatSystemControllerState->setContactPreviewStore(contactPreviewStoreState.get());
     heatSystemControllerState->createHeatSystem(swapChainExtent, renderPass);
 
@@ -115,21 +136,23 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         core.device(),
         *resourceManager,
         *modelUploader,
-        *runtimePayloadControllerState,
         frameSync,
         scene.cameraController(),
         runtimeBusy);
-    runtimePayloadControllerState->setSceneController(sceneControllerState.get());
+    runtimePackageControllerState->setSceneController(sceneControllerState.get());
+    remeshControllerState->setSceneController(sceneControllerState.get());
 
     sceneControllerState->focusOnVisibleModel();
 
     NodeRuntimeServices nodeRuntimeServices{};
     nodeRuntimeServices.sceneController = sceneControllerState.get();
-    nodeRuntimeServices.runtimePayloadController = runtimePayloadControllerState.get();
+    nodeRuntimeServices.runtimePackageController = runtimePackageControllerState.get();
     nodeRuntimeServices.heatSystemController = heatSystemControllerState.get();
     nodeRuntimeServices.contactSystemController = contactSystemControllerState.get();
     nodeRuntimeServices.contactPreviewStore = contactPreviewStoreState.get();
     nodeRuntimeServices.payloadRegistry = payloadRegistryState.get();
+    nodeRuntimeServices.runtimeBridge = nodeGraphRuntimeBridgeState.get();
+    nodeRuntimeServices.runtimeProductRegistry = runtimeProductRegistryState.get();
     nodeRuntimeServices.resourceManager = resourceManager;
     nodeRuntimeServices.meshModifiers = meshModifiers;
     nodeRuntimeServices.remesher = &meshModifiers->getRemesher();
@@ -200,13 +223,20 @@ void RenderContext::shutdown() {
     inputControllerState.reset();
     nodeGraphControllerState.reset();
     nodeGraphBridgeState.reset();
+    nodeGraphRuntimeBridgeState.reset();
     sceneControllerState.reset();
-    runtimePayloadControllerState.reset();
+    runtimePackageControllerState.reset();
+    runtimeModelTransportState.reset();
+    runtimeRemeshTransportState.reset();
+    remeshControllerState.reset();
+    runtimeContactTransportState.reset();
+    runtimeHeatTransportState.reset();
     contactSystemControllerState.reset();
     contactPreviewStoreState.reset();
+    runtimeVoronoiTransportState.reset();
+    runtimeProductRegistryState.reset();
     voronoiSystemControllerState.reset();
     computeCacheState.reset();
-    intrinsicRegistryState.reset();
     heatSystemControllerState.reset();
 
     if (renderRuntime) {
@@ -272,8 +302,8 @@ ContactPreviewStore* RenderContext::contactPreviewStore() {
     return contactPreviewStoreState.get();
 }
 
-RuntimePayloadController* RenderContext::runtimePayloadController() {
-    return runtimePayloadControllerState.get();
+RuntimePackageController* RenderContext::runtimePackageController() {
+    return runtimePackageControllerState.get();
 }
 
 SceneController* RenderContext::sceneController() {

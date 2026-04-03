@@ -28,7 +28,7 @@ bool NodeGraphKernels::hasKernel(const NodeTypeId& typeId) const {
 bool NodeGraphKernels::computeInputHash(
     const NodeGraphNode& node,
     const NodeGraphKernelExecutionState& executionState,
-    const std::vector<const NodeDataBlock*>& inputs,
+    const std::vector<const EvaluatedSocketValue*>& inputs,
     uint64_t& outHash) const {
     const NodeTypeId canonicalTypeId = getNodeTypeId(node.typeId);
     const auto kernelIt = kernelByTypeId.find(canonicalTypeId);
@@ -36,17 +36,14 @@ bool NodeGraphKernels::computeInputHash(
         return false;
     }
 
-    NodeGraphKernelHashContext context{
-        node,
-        inputs,
-        executionState};
+    NodeGraphKernelHashContext context{node, inputs, executionState};
     return kernelIt->second->computeInputHash(context, outHash);
 }
 
 bool NodeGraphKernels::executeNode(
     const NodeGraphNode& node,
     const NodeGraphKernelExecutionState& executionState,
-    const std::vector<const NodeDataBlock*>& inputs,
+    const std::vector<const EvaluatedSocketValue*>& inputs,
     std::vector<NodeDataBlock>& outputs) const {
     const NodeTypeId canonicalTypeId = getNodeTypeId(node.typeId);
     const auto kernelIt = kernelByTypeId.find(canonicalTypeId);
@@ -87,26 +84,23 @@ void NodeGraphKernels::registerKernel(std::unique_ptr<NodeKernel> kernel) {
     kernels.push_back(std::move(kernel));
 }
 
-void NodeGraphKernels::normalizeOutputsToSocketContracts(
-    const NodeGraphNode& node,
-    std::vector<NodeDataBlock>& outputs,
-    NodePayloadRegistry* payloadRegistry) {
+void NodeGraphKernels::normalizeOutputsToSocketContracts(const NodeGraphNode& node, std::vector<NodeDataBlock>& outputs, NodePayloadRegistry* payloadRegistry) {
     const std::size_t outputCount = std::min(outputs.size(), node.outputs.size());
     for (std::size_t outputIndex = 0; outputIndex < outputCount; ++outputIndex) {
         NodeDataBlock& output = outputs[outputIndex];
         const NodeGraphSocket& socket = node.outputs[outputIndex];
         const NodeGraphSocketContract& contract = socket.contract;
 
-        if (contract.producedDataType != NodeDataType::None && output.dataType != NodeDataType::None) {
-            output.dataType = contract.producedDataType;
+        if (contract.producedPayloadType != NodePayloadType::None && output.dataType != NodePayloadType::None) {
+            output.dataType = contract.producedPayloadType;
         }
 
-        if (output.dataType == contract.producedDataType &&
+        if (output.dataType == contract.producedPayloadType &&
             payloadRegistry &&
             output.payloadHandle.key != 0 &&
-            (output.dataType == NodeDataType::Geometry ||
-             output.dataType == NodeDataType::HeatReceiver ||
-             output.dataType == NodeDataType::HeatSource)) {
+            (output.dataType == NodePayloadType::Geometry ||
+             output.dataType == NodePayloadType::HeatReceiver ||
+             output.dataType == NodePayloadType::HeatSource)) {
             const GeometryData* geometry = payloadRegistry->get<GeometryData>(output.payloadHandle);
             if (geometry) {
                 GeometryData updated = *geometry;
@@ -117,6 +111,7 @@ void NodeGraphKernels::normalizeOutputsToSocketContracts(
                     }
                 }
                 if (changed) {
+                    updatePayloadHash(updated);
                     output.payloadHandle = payloadRegistry->upsert(output.payloadHandle.key, std::move(updated));
                 }
             }
@@ -126,9 +121,7 @@ void NodeGraphKernels::normalizeOutputsToSocketContracts(
     }
 }
 
-bool NodeGraphKernels::hasGuaranteedAttribute(
-    const GeometryData& geometry,
-    const NodeGraphAttributeContract& guaranteedAttribute) {
+bool NodeGraphKernels::hasGuaranteedAttribute(const GeometryData& geometry, const NodeGraphAttributeContract& guaranteedAttribute) {
     const auto it = std::find_if(
         geometry.attributes.begin(),
         geometry.attributes.end(),
@@ -141,9 +134,7 @@ bool NodeGraphKernels::hasGuaranteedAttribute(
     return it != geometry.attributes.end();
 }
 
-std::size_t NodeGraphKernels::attributeElementCount(
-    const GeometryData& geometry,
-    GeometryAttributeDomain domain) {
+std::size_t NodeGraphKernels::attributeElementCount(const GeometryData& geometry, GeometryAttributeDomain domain) {
     switch (domain) {
     case GeometryAttributeDomain::Point:
         return geometry.pointPositions.size() / 3;
@@ -157,11 +148,7 @@ std::size_t NodeGraphKernels::attributeElementCount(
     }
 }
 
-void NodeGraphKernels::resizeAttributeStorage(
-    GeometryAttribute& attribute,
-    GeometryAttributeDataType dataType,
-    std::size_t elementCount,
-    uint32_t tupleSize) {
+void NodeGraphKernels::resizeAttributeStorage(GeometryAttribute& attribute, GeometryAttributeDataType dataType,std::size_t elementCount, uint32_t tupleSize) {
     const std::size_t valueCount = elementCount * static_cast<std::size_t>(tupleSize);
     attribute.floatValues.clear();
     attribute.intValues.clear();
@@ -181,9 +168,7 @@ void NodeGraphKernels::resizeAttributeStorage(
     }
 }
 
-bool NodeGraphKernels::ensureGuaranteedAttribute(
-    GeometryData& geometry,
-    const NodeGraphAttributeContract& guaranteedAttribute) {
+bool NodeGraphKernels::ensureGuaranteedAttribute(GeometryData& geometry, const NodeGraphAttributeContract& guaranteedAttribute) {
     if (hasGuaranteedAttribute(geometry, guaranteedAttribute)) {
         return false;
     }
@@ -193,11 +178,7 @@ bool NodeGraphKernels::ensureGuaranteedAttribute(
     attribute.domain = guaranteedAttribute.domain;
     attribute.dataType = guaranteedAttribute.dataType;
     attribute.tupleSize = guaranteedAttribute.tupleSize;
-    resizeAttributeStorage(
-        attribute,
-        guaranteedAttribute.dataType,
-        attributeElementCount(geometry, guaranteedAttribute.domain),
-        guaranteedAttribute.tupleSize);
+    resizeAttributeStorage(attribute, guaranteedAttribute.dataType, attributeElementCount(geometry, guaranteedAttribute.domain), guaranteedAttribute.tupleSize);
     geometry.attributes.push_back(std::move(attribute));
     return true;
 }

@@ -1,6 +1,7 @@
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphKernels.hpp"
 #include "NodeGraphRegistry.hpp"
+#include <algorithm>
 #include <sstream>
 
 uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
@@ -52,7 +53,21 @@ const NodeGraphSocket* findInputSocket(const NodeGraphNode& node, NodeGraphValue
     return nullptr;
 }
 
-const NodeDataBlock* readInput(
+const NodeGraphSocket* findOutputSocketProducingPayload(const NodeGraphNode& node, NodePayloadType payloadType) {
+    for (const NodeGraphSocket& outputSocket : node.outputs) {
+        if (outputSocket.direction != NodeGraphSocketDirection::Output) {
+            continue;
+        }
+
+        if (producesPayload(outputSocket, payloadType)) {
+            return &outputSocket;
+        }
+    }
+
+    return nullptr;
+}
+
+const EvaluatedSocketValue* readEvaluatedInput(
     const NodeGraphNode& node,
     NodeGraphSocketId inputSocketId,
     const NodeGraphKernelExecutionState& executionState) {
@@ -62,12 +77,20 @@ const NodeDataBlock* readInput(
     }
 
     const NodeGraphEdge& edge = *edgeIt->second;
-    const auto valueIt = executionState.outputValueBySocket.find(makeSocketKey(edge.fromNode, edge.fromSocket));
-    if (valueIt == executionState.outputValueBySocket.end()) {
+    const auto valueIt = executionState.outputBySocket.find(makeSocketKey(edge.fromNode, edge.fromSocket));
+    if (valueIt == executionState.outputBySocket.end()) {
         return nullptr;
     }
 
     return &valueIt->second;
+}
+
+const NodeDataBlock* readInputValue(const EvaluatedSocketValue* input) {
+    if (!input || input->status != EvaluatedSocketStatus::Value) {
+        return nullptr;
+    }
+
+    return &input->data;
 }
 
 NodeTypeId getNodeTypeId(const NodeTypeId& requestedTypeId) {

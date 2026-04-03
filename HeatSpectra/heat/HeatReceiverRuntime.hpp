@@ -5,8 +5,7 @@
 #include <vulkan/vulkan.h>
 
 #include "domain/GeometryData.hpp"
-#include "domain/RemeshData.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
+#include "mesh/remesher/SupportingHalfedge.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;
@@ -18,8 +17,17 @@ public:
         MemoryAllocator& memoryAllocator,
         uint32_t runtimeModelId,
         const GeometryData& geometryData,
-        const IntrinsicMeshData& intrinsicMeshData,
-        const RuntimeIntrinsicCache::Entry& intrinsicResources);
+        const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+        VkBufferView supportingHalfedgeView,
+        VkBufferView supportingAngleView,
+        VkBufferView halfedgeView,
+        VkBufferView edgeView,
+        VkBufferView triangleView,
+        VkBufferView lengthView,
+        VkBufferView inputHalfedgeView,
+        VkBufferView inputEdgeView,
+        VkBufferView inputTriangleView,
+        VkBufferView inputLengthView);
     ~HeatReceiverRuntime();
 
     bool createReceiverBuffers();
@@ -35,18 +43,9 @@ public:
         VkDeviceSize tempBufferBOffset,
         VkBuffer timeBuffer,
         VkDeviceSize timeBufferOffset,
-        uint32_t nodeCount);
+        uint32_t nodeCount,
+        bool forceReallocate = false);
     void executeBufferTransfers(VkCommandBuffer commandBuffer);
-    void recreateDescriptors(
-        VkDescriptorSetLayout surfaceLayout,
-        VkDescriptorPool surfacePool,
-        VkBuffer tempBufferA,
-        VkDeviceSize tempBufferAOffset,
-        VkBuffer tempBufferB,
-        VkDeviceSize tempBufferBOffset,
-        VkBuffer timeBuffer,
-        VkDeviceSize timeBufferOffset,
-        uint32_t nodeCount);
 
     void cleanup();
     void cleanupStagingBuffers();
@@ -55,9 +54,9 @@ public:
 
     uint32_t getRuntimeModelId() const { return runtimeModelId; }
 
-    size_t getIntrinsicVertexCount() const { return intrinsicMeshData.vertices.size(); }
+    size_t getIntrinsicVertexCount() const { return intrinsicMesh.vertices.size(); }
     const GeometryData& getGeometryData() const { return geometryData; }
-    const IntrinsicMeshData& getIntrinsicMeshData() const { return intrinsicMeshData; }
+    const SupportingHalfedge::IntrinsicMesh& getIntrinsicMesh() const { return intrinsicMesh; }
 
     VkBuffer getSurfaceBuffer() const { return surfaceBuffer; }
     VkDeviceSize getSurfaceBufferOffset() const { return surfaceBufferOffset; }
@@ -86,8 +85,17 @@ private:
     MemoryAllocator& memoryAllocator;
     uint32_t runtimeModelId = 0;
     GeometryData geometryData{};
-    IntrinsicMeshData intrinsicMeshData{};
-    const RuntimeIntrinsicCache::Entry* intrinsicResources = nullptr;
+    SupportingHalfedge::IntrinsicMesh intrinsicMesh{};
+    VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
+    VkBufferView supportingAngleView = VK_NULL_HANDLE;
+    VkBufferView halfedgeView = VK_NULL_HANDLE;
+    VkBufferView edgeView = VK_NULL_HANDLE;
+    VkBufferView triangleView = VK_NULL_HANDLE;
+    VkBufferView lengthView = VK_NULL_HANDLE;
+    VkBufferView inputHalfedgeView = VK_NULL_HANDLE;
+    VkBufferView inputEdgeView = VK_NULL_HANDLE;
+    VkBufferView inputTriangleView = VK_NULL_HANDLE;
+    VkBufferView inputLengthView = VK_NULL_HANDLE;
 
     static constexpr float AMBIENT_TEMPERATURE = 1.0f;
 

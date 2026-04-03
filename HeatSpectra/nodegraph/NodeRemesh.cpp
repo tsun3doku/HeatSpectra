@@ -6,18 +6,7 @@
 #include "NodeGraphHash.hpp"
 #include "NodePanelUtils.hpp"
 #include "domain/RemeshParams.hpp"
-#include "mesh/remesher/Remesher.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
-
-namespace {
-
-NodeDataHandle makeHandleForSocket(const NodeGraphNode& node, NodeGraphSocketId socketId) {
-    NodeDataHandle handle{};
-    handle.key = makeSocketKey(node.id, socketId);
-    return handle;
-}
-
-}
 
 const char* NodeRemesh::typeId() const {
     return nodegraphtypes::Remesh;
@@ -25,96 +14,63 @@ const char* NodeRemesh::typeId() const {
 
 bool NodeRemesh::execute(NodeGraphKernelContext& context) const {
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
-    Remesher* const remesher = context.executionState.services.remesher;
-    std::vector<NodeDataHandle> outputHandles(context.node.outputs.size());
+    RemeshData remeshData{};
 
     const NodeGraphSocket* meshInputSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
-    const NodeDataBlock* upstreamGeometryValue = nullptr;
-    if (meshInputSocket) {
-        upstreamGeometryValue = readInput(context.node, meshInputSocket->id, context.executionState);
-    }
-    if (upstreamGeometryValue && upstreamGeometryValue->dataType != NodeDataType::Geometry) {
+    const EvaluatedSocketValue* inputMesh =
+        meshInputSocket ? readEvaluatedInput(context.node, meshInputSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* upstreamGeometryValue = readInputValue(inputMesh);
+    if (upstreamGeometryValue && upstreamGeometryValue->dataType != NodePayloadType::Geometry) {
         upstreamGeometryValue = nullptr;
     }
 
-    const GeometryData* upstreamGeometry =
-        (payloadRegistry && upstreamGeometryValue)
-        ? payloadRegistry->get<GeometryData>(upstreamGeometryValue->payloadHandle)
-        : nullptr;
-
     bool executed = false;
-    if (upstreamGeometry && payloadRegistry && remesher) {
+    if (payloadRegistry && upstreamGeometryValue && upstreamGeometryValue->payloadHandle.key != 0) {
         const RemeshParams defaults{};
-        RemeshResultData result{};
-        const int iterations = NodePanelUtils::readIntParam(
+        const uint64_t sourcePayloadHash = payloadHashForDataBlock(*upstreamGeometryValue, payloadRegistry);
+        remeshData.sourceMeshHandle = upstreamGeometryValue->payloadHandle;
+        remeshData.params.iterations = NodePanelUtils::readIntParam(
             context.node,
             nodegraphparams::remesh::Iterations,
             defaults.iterations);
-        const double minAngle = NodePanelUtils::readFloatParam(
+        remeshData.params.minAngleDegrees = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node,
             nodegraphparams::remesh::MinAngleDegrees,
-            defaults.minAngleDegrees);
-        const double maxEdge = NodePanelUtils::readFloatParam(
+            defaults.minAngleDegrees));
+        remeshData.params.maxEdgeLength = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node,
             nodegraphparams::remesh::MaxEdgeLength,
-            defaults.maxEdgeLength);
-        const double step = NodePanelUtils::readFloatParam(
+            defaults.maxEdgeLength));
+        remeshData.params.stepSize = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node,
             nodegraphparams::remesh::StepSize,
-            defaults.stepSize);
-        if (remesher->remesh(*upstreamGeometry, iterations, minAngle, maxEdge, step, result)) {
-            NodeDataHandle intrinsicHandle{};
-            for (std::size_t outputIndex = 0; outputIndex < context.node.outputs.size(); ++outputIndex) {
-                const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
-                if (outputSocket.contract.producedDataType != NodeDataType::Intrinsic) {
-                    continue;
-                }
+            defaults.stepSize));
+        remeshData.active = true;
+        remeshData.payloadHash = NodeGraphHash::start();
+        NodeGraphHash::combine(remeshData.payloadHash, static_cast<uint64_t>(remeshData.active ? 1u : 0u));
+        NodeGraphHash::combine(remeshData.payloadHash, sourcePayloadHash);
+        NodeGraphHash::combine(remeshData.payloadHash, static_cast<uint64_t>(remeshData.params.iterations));
+        NodeGraphHash::combineFloat(remeshData.payloadHash, remeshData.params.minAngleDegrees);
+        NodeGraphHash::combineFloat(remeshData.payloadHash, remeshData.params.maxEdgeLength);
+        NodeGraphHash::combineFloat(remeshData.payloadHash, remeshData.params.stepSize);
 
-                const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
-                intrinsicHandle = payloadRegistry->upsert(payloadKey, result.intrinsic);
-                outputHandles[outputIndex] = intrinsicHandle;
-            }
-
-            result.geometry.intrinsicHandle = intrinsicHandle;
-            for (std::size_t outputIndex = 0; outputIndex < context.node.outputs.size(); ++outputIndex) {
-                const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
-                if (outputSocket.contract.producedDataType == NodeDataType::Intrinsic) {
-                    continue;
-                }
-                const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
-                outputHandles[outputIndex] = payloadRegistry->upsert(payloadKey, result.geometry);
-            }
-            executed = true;
+        const uint64_t outputSocketKey = makeSocketKey(context.node.id, context.node.outputs.front().id);
+        for (std::size_t outputIndex = 0; outputIndex < context.outputs.size() && outputIndex < context.node.outputs.size(); ++outputIndex) {
+            NodeDataBlock& outputValue = context.outputs[outputIndex];
+            outputValue.dataType = NodePayloadType::Remesh;
+            outputValue.payloadHandle = payloadRegistry->upsert(outputSocketKey, remeshData);
+            updateDataBlockMetadata(outputValue, payloadRegistry);
         }
+        executed = true;
     }
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
-        outputValue.dataType = outputSocket.contract.producedDataType;
-        outputValue.payloadHandle = {};
-
-        if (payloadRegistry) {
-            NodeDataHandle outputHandle = outputHandles[outputIndex];
-            if (outputHandle.key == 0) {
-                outputHandle = makeHandleForSocket(context.node, outputSocket.id);
-            }
-            if (outputSocket.contract.producedDataType == NodeDataType::Geometry) {
-                const GeometryData* geometry = payloadRegistry->get<GeometryData>(outputHandle);
-                if (geometry) {
-                    outputValue.payloadHandle = outputHandle;
-                } else if (upstreamGeometryValue) {
-                    outputValue.payloadHandle = upstreamGeometryValue->payloadHandle;
-                }
-            } else if (outputSocket.contract.producedDataType == NodeDataType::Intrinsic) {
-                const IntrinsicMeshData* intrinsic = payloadRegistry->get<IntrinsicMeshData>(outputHandle);
-                if (intrinsic) {
-                    outputValue.payloadHandle = outputHandle;
-                }
-            }
+        if (!executed) {
+            outputValue.dataType = NodePayloadType::Remesh;
+            outputValue.payloadHandle = {};
+            updateDataBlockMetadata(outputValue, payloadRegistry);
         }
-
-        updateDataBlockMetadata(outputValue, payloadRegistry);
     }
 
     return executed;
@@ -134,10 +90,9 @@ bool NodeRemesh::computeInputHash(const NodeGraphKernelHashContext& context, uin
         context.node, nodegraphparams::remesh::StepSize, defaults.stepSize)));
 
     const NodeGraphSocket* meshInputSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
-    const NodeDataBlock* inputValue = nullptr;
-    if (meshInputSocket) {
-        inputValue = readInput(context.node, meshInputSocket->id, context.executionState);
-    }
+    const EvaluatedSocketValue* inputValueState =
+        meshInputSocket ? readEvaluatedInput(context.node, meshInputSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* inputValue = readInputValue(inputValueState);
     if (!inputValue) {
         NodeGraphHash::combine(outHash, 0);
     } else {

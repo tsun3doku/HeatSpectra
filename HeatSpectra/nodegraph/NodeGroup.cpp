@@ -14,10 +14,15 @@ const char* NodeGroup::typeId() const {
 }
 
 bool NodeGroup::execute(NodeGraphKernelContext& context) const {
-    const NodeDataBlock* inputGeometryValue = nullptr;
-    for (const NodeDataBlock* inputValue : context.inputs) {
-        if (inputValue && inputValue->dataType == NodeDataType::Geometry) {
-            inputGeometryValue = inputValue;
+    const NodeDataBlock* inputMeshValue = nullptr;
+    for (const EvaluatedSocketValue* input : context.inputs) {
+        if (!input || input->status != EvaluatedSocketStatus::Value) {
+            continue;
+        }
+
+        const NodeDataBlock& inputValue = input->data;
+        if (valueTypeOf(inputValue.dataType) == NodeGraphValueType::Mesh) {
+            inputMeshValue = &inputValue;
             break;
         }
     }
@@ -29,22 +34,22 @@ bool NodeGroup::execute(NodeGraphKernelContext& context) const {
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodeDataType::None;
+        outputValue.dataType = NodePayloadType::None;
         outputValue.payloadHandle = {};
-        if (!inputGeometryValue || !payloadRegistry) {
+        if (!payloadRegistry) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        const GeometryData* inputGeometry = payloadRegistry->get<GeometryData>(inputGeometryValue->payloadHandle);
+        const GeometryData* inputGeometry = resolveGeometryForDataBlock(*inputMeshValue, payloadRegistry);
         if (!inputGeometry) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        outputValue.dataType = NodeDataType::Geometry;
+        outputValue.dataType = NodePayloadType::Geometry;
         if (!enabled || sourceGroupName.empty() || targetGroupName.empty()) {
-            outputValue.payloadHandle = inputGeometryValue->payloadHandle;
+            outputValue.payloadHandle = inputMeshValue->payloadHandle;
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
@@ -54,13 +59,13 @@ bool NodeGroup::execute(NodeGraphKernelContext& context) const {
         const bool changed = applyAssignment(updatedGeometry, sourceGroupName, targetGroupName);
         normalizeGeometryGroups(updatedGeometry);
         if (changed) {
-            bumpGeometryRevision(updatedGeometry);
+            updatePayloadHash(updatedGeometry);
             const uint64_t payloadKey = makeSocketKey(
                 context.node.id,
                 context.node.outputs[outputIndex].id);
             outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(updatedGeometry));
         } else {
-            outputValue.payloadHandle = inputGeometryValue->payloadHandle;
+            outputValue.payloadHandle = inputMeshValue->payloadHandle;
         }
         updateDataBlockMetadata(outputValue, payloadRegistry);
     }

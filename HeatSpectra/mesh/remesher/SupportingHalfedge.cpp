@@ -1,8 +1,5 @@
 ﻿#include "SupportingHalfedge.hpp"
-#include "vulkan/VulkanDevice.hpp"
-#include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/VulkanBuffer.hpp"
-#include "util/Structs.hpp"
+#include <glm/gtc/constants.hpp>
 #include <cmath>
 #include <iostream>
 #include <algorithm>
@@ -12,19 +9,14 @@
 #include <set>
 #include <unordered_set>
 
-SupportingHalfedge::SupportingHalfedge(const SignpostMesh& inputMesh, SignpostMesh& intrinsicMesh, const GeodesicTracer& tracer,
-    VulkanDevice& vulkanDevice, MemoryAllocator& allocator)
+SupportingHalfedge::SupportingHalfedge(const SignpostMesh& inputMesh, SignpostMesh& intrinsicMesh, const GeodesicTracer& tracer)
     : inputMesh(inputMesh)
     , intrinsicMesh(intrinsicMesh)
     , tracer(tracer)
-    , vulkanDevice(vulkanDevice)
-    , allocator(allocator)
 {
 }
 
-SupportingHalfedge::~SupportingHalfedge() {
-    cleanup();
-}
+SupportingHalfedge::~SupportingHalfedge() = default;
 
 void SupportingHalfedge::initialize() {
     const auto& inputConn = inputMesh.getConnectivity();
@@ -62,8 +54,6 @@ void SupportingHalfedge::initialize() {
         }
     }
 
-    // Invalidate cached intrinsic mesh 
-    intrinsicMeshCacheValid = false;
 }
 
 void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
@@ -154,8 +144,6 @@ void SupportingHalfedge::updateRemoval(uint32_t intrinsicHE) {
         }
     }
 
-    // Invalidate cached intrinsic mesh
-    intrinsicMeshCacheValid = false;
 }
 
 void SupportingHalfedge::updateInsertion(uint32_t h) {
@@ -254,8 +242,6 @@ void SupportingHalfedge::updateInsertion(uint32_t h) {
         }
     }
 
-    // Invalidate cached intrinsic mesh
-    intrinsicMeshCacheValid = false;
 }
 
 bool SupportingHalfedge::flipEdge(uint32_t edgeIdx) {
@@ -435,12 +421,6 @@ void SupportingHalfedge::trackInsertedVertex(uint32_t vertexIdx, const GeodesicT
 }
 
 SupportingHalfedge::IntrinsicMesh SupportingHalfedge::buildIntrinsicMesh() const {
-    if (intrinsicMeshCacheValid) {
-        return cachedIntrinsicMesh;
-    }
-
-    std::cout << "[SupportingHalfedge] Building intrinsic mesh (cache miss)..." << std::endl;
-
     IntrinsicMesh meshData;
 
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
@@ -532,10 +512,6 @@ SupportingHalfedge::IntrinsicMesh SupportingHalfedge::buildIntrinsicMesh() const
     // Calculate area weighted vertex normals from neighboring triangles
     calculateVertexNormals(meshData);
 
-    // Cache the result
-    cachedIntrinsicMesh = meshData;
-    intrinsicMeshCacheValid = true;
-
     return meshData;
 }
 
@@ -588,354 +564,77 @@ SupportingHalfedge::GPUBuffers SupportingHalfedge::buildGPUBuffers() const {
 
     const auto& inputConn = inputMesh.getConnectivity();
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
-
     const auto& inputHalfedges = inputConn.getHalfEdges();
     const auto& inputFaces = inputConn.getFaces();
-
+    const auto& inputEdges = inputConn.getEdges();
     const auto& intrinsicHalfedges = intrinsicConn.getHalfEdges();
     const auto& intrinsicEdges = intrinsicConn.getEdges();
     const auto& intrinsicFaces = intrinsicConn.getFaces();
 
-    // Build S[] and A[] - one entry per input halfedge
-    buffers.S.resize(inputHalfedges.size(), -1);
-    buffers.A.resize(inputHalfedges.size(), 0.0f);
-
-    for (size_t inputHe = 0; inputHe < inputHalfedges.size(); ++inputHe) {
-        if (inputHe >= supportingInfoPerHalfedge.size()) {
-            continue;
-        }
-
+    buffers.supportingHalfedges.resize(inputHalfedges.size(), -1);
+    buffers.supportingAngles.resize(inputHalfedges.size(), 0.0f);
+    for (size_t inputHe = 0; inputHe < inputHalfedges.size() && inputHe < supportingInfoPerHalfedge.size(); ++inputHe) {
         const SupportingInfo& info = supportingInfoPerHalfedge[inputHe];
-        buffers.S[inputHe] = static_cast<int32_t>(info.supportingHE);
-        buffers.A[inputHe] = static_cast<float>(info.supportingAngle);
+        buffers.supportingHalfedges[inputHe] = static_cast<int32_t>(info.supportingHE);
+        buffers.supportingAngles[inputHe] = static_cast<float>(info.supportingAngle);
     }
 
-    // Build H[] - intrinsic halfedge data [origin, edge, face, next] (4 ints per halfedge)
-    buffers.H.reserve(intrinsicHalfedges.size() * 4);
+    buffers.intrinsicHalfedgeData.reserve(intrinsicHalfedges.size() * 4);
     for (const auto& he : intrinsicHalfedges) {
-        buffers.H.push_back(static_cast<int32_t>(he.origin));
-        buffers.H.push_back(static_cast<int32_t>(he.edgeIdx));
-        buffers.H.push_back(static_cast<int32_t>(he.face));
-        buffers.H.push_back(static_cast<int32_t>(he.next));
+        buffers.intrinsicHalfedgeData.push_back(static_cast<int32_t>(he.origin));
+        buffers.intrinsicHalfedgeData.push_back(static_cast<int32_t>(he.edgeIdx));
+        buffers.intrinsicHalfedgeData.push_back(static_cast<int32_t>(he.face));
+        buffers.intrinsicHalfedgeData.push_back(static_cast<int32_t>(he.next));
     }
 
-    // Build E[] - intrinsic edge data [he0, he1] (2 ints per edge)
-    buffers.E.reserve(intrinsicEdges.size() * 2);
+    buffers.intrinsicEdgeData.reserve(intrinsicEdges.size() * 2);
     for (const auto& edge : intrinsicEdges) {
-        buffers.E.push_back(static_cast<int32_t>(edge.halfEdgeIdx));
+        buffers.intrinsicEdgeData.push_back(static_cast<int32_t>(edge.halfEdgeIdx));
         if (edge.halfEdgeIdx != INVALID_INDEX && edge.halfEdgeIdx < intrinsicHalfedges.size()) {
-            buffers.E.push_back(static_cast<int32_t>(intrinsicHalfedges[edge.halfEdgeIdx].opposite));
-        }
-        else {
-            buffers.E.push_back(-1);
+            buffers.intrinsicEdgeData.push_back(static_cast<int32_t>(intrinsicHalfedges[edge.halfEdgeIdx].opposite));
+        } else {
+            buffers.intrinsicEdgeData.push_back(-1);
         }
     }
 
-    // Build T[] - intrinsic triangle data [halfedge] (1 int per triangle)
-    buffers.T.reserve(intrinsicFaces.size());
+    buffers.intrinsicTriangleData.reserve(intrinsicFaces.size());
     for (const auto& face : intrinsicFaces) {
-        buffers.T.push_back(static_cast<int32_t>(face.halfEdgeIdx));
+        buffers.intrinsicTriangleData.push_back(static_cast<int32_t>(face.halfEdgeIdx));
     }
 
-    // Build L[] - intrinsic edge lengths (1 float per edge)
-    buffers.L.reserve(intrinsicEdges.size());
+    buffers.intrinsicLengths.reserve(intrinsicEdges.size());
     for (const auto& edge : intrinsicEdges) {
-        buffers.L.push_back(static_cast<float>(edge.intrinsicLength));
+        buffers.intrinsicLengths.push_back(static_cast<float>(edge.intrinsicLength));
     }
 
-    // Build input mesh buffers 
-    const auto& inputEdges = inputConn.getEdges();
-
-    // Build H_input[] - input halfedge data
-    buffers.H_input.reserve(inputHalfedges.size() * 4);
+    buffers.inputHalfedgeData.reserve(inputHalfedges.size() * 4);
     for (const auto& he : inputHalfedges) {
-        buffers.H_input.push_back(static_cast<int32_t>(he.origin));
-        buffers.H_input.push_back(static_cast<int32_t>(he.edgeIdx));
-        buffers.H_input.push_back(static_cast<int32_t>(he.face));
-        buffers.H_input.push_back(static_cast<int32_t>(he.next));
+        buffers.inputHalfedgeData.push_back(static_cast<int32_t>(he.origin));
+        buffers.inputHalfedgeData.push_back(static_cast<int32_t>(he.edgeIdx));
+        buffers.inputHalfedgeData.push_back(static_cast<int32_t>(he.face));
+        buffers.inputHalfedgeData.push_back(static_cast<int32_t>(he.next));
     }
 
-    // Build E_input[] - input edge data
-    buffers.E_input.reserve(inputEdges.size() * 2);
+    buffers.inputEdgeData.reserve(inputEdges.size() * 2);
     for (const auto& edge : inputEdges) {
-        buffers.E_input.push_back(static_cast<int32_t>(edge.halfEdgeIdx));
+        buffers.inputEdgeData.push_back(static_cast<int32_t>(edge.halfEdgeIdx));
         if (edge.halfEdgeIdx != INVALID_INDEX && edge.halfEdgeIdx < inputHalfedges.size()) {
-            buffers.E_input.push_back(static_cast<int32_t>(inputHalfedges[edge.halfEdgeIdx].opposite));
-        }
-        else {
-            buffers.E_input.push_back(-1);
+            buffers.inputEdgeData.push_back(static_cast<int32_t>(inputHalfedges[edge.halfEdgeIdx].opposite));
+        } else {
+            buffers.inputEdgeData.push_back(-1);
         }
     }
 
-    // Build T_input[] - input triangle data
-    buffers.T_input.reserve(inputFaces.size());
+    buffers.inputTriangleData.reserve(inputFaces.size());
     for (const auto& face : inputFaces) {
-        buffers.T_input.push_back(static_cast<int32_t>(face.halfEdgeIdx));
+        buffers.inputTriangleData.push_back(static_cast<int32_t>(face.halfEdgeIdx));
     }
 
-    // Build L_input[] - input edge lengths
-    buffers.L_input.reserve(inputEdges.size());
+    buffers.inputLengths.reserve(inputEdges.size());
     for (const auto& edge : inputEdges) {
-        buffers.L_input.push_back(static_cast<float>(edge.intrinsicLength));
+        buffers.inputLengths.push_back(static_cast<float>(edge.intrinsicLength));
     }
+
     return buffers;
 }
 
-void SupportingHalfedge::uploadToGPU() {
-    std::cout << "[SupportingHalfedge] Uploading data to GPU..." << std::endl;
-
-    if (gpuDataUploaded) {
-        cleanup();
-    }
-    gpuDataUploaded = false;
-
-    // Build CPU side buffers
-    auto gpuBuffers = buildGPUBuffers();
-
-    auto uploadTexel = [this](const void* data, VkDeviceSize size, VkFormat format,
-        VkBuffer& buffer, VkDeviceSize& offset, VkBufferView& view, const char* label) -> bool {
-            if (createTexelBuffer(allocator, vulkanDevice, data, size, format, buffer, offset, view) != VK_SUCCESS) {
-                std::cerr << "[SupportingHalfedge] Failed to upload " << label << " buffer" << std::endl;
-                return false;
-            }
-            return true;
-        };
-
-    if (!uploadTexel(gpuBuffers.S.data(), gpuBuffers.S.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, bufferS, offsetS, bufferViewS, "S")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.A.data(), gpuBuffers.A.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, bufferA, offsetA, bufferViewA, "A")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.H.data(), gpuBuffers.H.size() * sizeof(int32_t), VK_FORMAT_R32G32B32A32_SINT, bufferH, offsetH, bufferViewH, "H")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.E.data(), gpuBuffers.E.size() * sizeof(int32_t), VK_FORMAT_R32G32_SINT, bufferE, offsetE, bufferViewE, "E")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.T.data(), gpuBuffers.T.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, bufferT, offsetT, bufferViewT, "T")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.L.data(), gpuBuffers.L.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, bufferL, offsetL, bufferViewL, "L")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.H_input.data(), gpuBuffers.H_input.size() * sizeof(int32_t), VK_FORMAT_R32G32B32A32_SINT, bufferH_input, offsetH_input, bufferViewH_input, "H_input")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.E_input.data(), gpuBuffers.E_input.size() * sizeof(int32_t), VK_FORMAT_R32G32_SINT, bufferE_input, offsetE_input, bufferViewE_input, "E_input")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.T_input.data(), gpuBuffers.T_input.size() * sizeof(int32_t), VK_FORMAT_R32_SINT, bufferT_input, offsetT_input, bufferViewT_input, "T_input")) {
-        cleanup();
-        return;
-    }
-    if (!uploadTexel(gpuBuffers.L_input.data(), gpuBuffers.L_input.size() * sizeof(float), VK_FORMAT_R32_SFLOAT, bufferL_input, offsetL_input, bufferViewL_input, "L_input")) {
-        cleanup();
-        return;
-    }
-
-    gpuDataUploaded = true;
-}
-
-void SupportingHalfedge::uploadIntrinsicTriangleData() {
-    auto intrinsicMeshData = buildIntrinsicMesh();
-
-    if (!intrinsicMeshData.triangles.empty()) {
-        // Convert to GPU format
-        std::vector<IntrinsicTriangleData> gpuTriangles;
-        gpuTriangles.reserve(intrinsicMeshData.triangles.size());
-
-        for (const auto& tri : intrinsicMeshData.triangles) {
-            IntrinsicTriangleData gpuTri;
-            gpuTri.center = tri.center;
-            gpuTri.normal = tri.normal;
-            gpuTri.area = tri.area;
-            gpuTri.padding = 0.0f;
-            gpuTriangles.push_back(gpuTri);
-        }
-
-        // Clean up existing buffer if any
-        if (intrinsicTriangleBuffer != VK_NULL_HANDLE) {
-            allocator.free(intrinsicTriangleBuffer, triangleGeometryOffset);
-            intrinsicTriangleBuffer = VK_NULL_HANDLE;
-        }
-
-        // Upload to GPU as storage buffer
-        void* mappedPtr;
-        if (createStorageBuffer(
-            allocator, vulkanDevice,
-            gpuTriangles.data(), gpuTriangles.size() * sizeof(IntrinsicTriangleData),
-            intrinsicTriangleBuffer, triangleGeometryOffset, &mappedPtr
-        ) != VK_SUCCESS) {
-            std::cerr << "[SupportingHalfedge] Failed to upload intrinsic triangle data" << std::endl;
-            intrinsicTriangleBuffer = VK_NULL_HANDLE;
-            triangleGeometryOffset = 0;
-            return;
-        }
-
-        std::cout << "[SupportingHalfedge] Uploaded " << gpuTriangles.size() << " triangle geometries to GPU" << std::endl;
-    }
-}
-
-void SupportingHalfedge::uploadIntrinsicVertexData() {
-    auto intrinsicMeshData = buildIntrinsicMesh();
-
-    if (!intrinsicMeshData.vertices.empty()) {
-        // Convert to GPU format
-        std::vector<IntrinsicVertexData> gpuVertices;
-        gpuVertices.reserve(intrinsicMeshData.vertices.size());
-
-        for (const auto& vertex : intrinsicMeshData.vertices) {
-            IntrinsicVertexData gpuVertex;
-            gpuVertex.position = vertex.position;
-            gpuVertex.intrinsicVertexId = vertex.intrinsicVertexId;
-            gpuVertex.normal = vertex.normal;
-            gpuVertex.padding = 0.0f;
-            gpuVertices.push_back(gpuVertex);
-        }
-
-        // Clean up existing buffer if any
-        if (intrinsicVertexBuffer != VK_NULL_HANDLE) {
-            allocator.free(intrinsicVertexBuffer, vertexGeometryOffset);
-            intrinsicVertexBuffer = VK_NULL_HANDLE;
-        }
-
-        // Upload to GPU as storage buffer
-        void* mappedPtr;
-        if (createStorageBuffer(
-            allocator, vulkanDevice,
-            gpuVertices.data(), gpuVertices.size() * sizeof(IntrinsicVertexData),
-            intrinsicVertexBuffer, vertexGeometryOffset, &mappedPtr
-        ) != VK_SUCCESS) {
-            std::cerr << "[SupportingHalfedge] Failed to upload intrinsic vertex data" << std::endl;
-            intrinsicVertexBuffer = VK_NULL_HANDLE;
-            vertexGeometryOffset = 0;
-            return;
-        }
-
-        std::cout << "[SupportingHalfedge] Uploaded " << gpuVertices.size() << " vertex geometries to GPU" << std::endl;
-    }
-}
-
-float SupportingHalfedge::getAverageTriangleArea() const {
-    if (!intrinsicMeshCacheValid) {
-        buildIntrinsicMesh();
-    }
-    
-    if (cachedIntrinsicMesh.triangles.empty()) {
-        return 0.0f;
-    }
-    
-    float totalArea = 0.0f;
-    for (const auto& tri : cachedIntrinsicMesh.triangles) {
-        totalArea += tri.area;
-    }
-    
-    return totalArea / static_cast<float>(cachedIntrinsicMesh.triangles.size());
-}
-
-void SupportingHalfedge::cleanup() {
-    if (bufferViewS != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewS, nullptr);
-        bufferViewS = VK_NULL_HANDLE;
-    }
-    if (bufferViewA != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewA, nullptr);
-        bufferViewA = VK_NULL_HANDLE;
-    }
-    if (bufferViewH != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewH, nullptr);
-        bufferViewH = VK_NULL_HANDLE;
-    }
-    if (bufferViewE != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewE, nullptr);
-        bufferViewE = VK_NULL_HANDLE;
-    }
-    if (bufferViewT != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewT, nullptr);
-        bufferViewT = VK_NULL_HANDLE;
-    }
-    if (bufferViewL != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewL, nullptr);
-        bufferViewL = VK_NULL_HANDLE;
-    }
-
-    if (bufferViewH_input != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewH_input, nullptr);
-        bufferViewH_input = VK_NULL_HANDLE;
-    }
-    if (bufferViewE_input != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewE_input, nullptr);
-        bufferViewE_input = VK_NULL_HANDLE;
-    }
-    if (bufferViewT_input != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewT_input, nullptr);
-        bufferViewT_input = VK_NULL_HANDLE;
-    }
-    if (bufferViewL_input != VK_NULL_HANDLE) {
-        vkDestroyBufferView(vulkanDevice.getDevice(), bufferViewL_input, nullptr);
-        bufferViewL_input = VK_NULL_HANDLE;
-    }
-
-    if (bufferS != VK_NULL_HANDLE) {
-        allocator.free(bufferS, offsetS);
-        bufferS = VK_NULL_HANDLE;
-    }
-    if (bufferA != VK_NULL_HANDLE) {
-        allocator.free(bufferA, offsetA);
-        bufferA = VK_NULL_HANDLE;
-    }
-    if (bufferH != VK_NULL_HANDLE) {
-        allocator.free(bufferH, offsetH);
-        bufferH = VK_NULL_HANDLE;
-    }
-    if (bufferE != VK_NULL_HANDLE) {
-        allocator.free(bufferE, offsetE);
-        bufferE = VK_NULL_HANDLE;
-    }
-    if (bufferT != VK_NULL_HANDLE) {
-        allocator.free(bufferT, offsetT);
-        bufferT = VK_NULL_HANDLE;
-    }
-    if (bufferL != VK_NULL_HANDLE) {
-        allocator.free(bufferL, offsetL);
-        bufferL = VK_NULL_HANDLE;
-    }
-
-    if (bufferH_input != VK_NULL_HANDLE) {
-        allocator.free(bufferH_input, offsetH_input);
-        bufferH_input = VK_NULL_HANDLE;
-    }
-    if (bufferE_input != VK_NULL_HANDLE) {
-        allocator.free(bufferE_input, offsetE_input);
-        bufferE_input = VK_NULL_HANDLE;
-    }
-    if (bufferT_input != VK_NULL_HANDLE) {
-        allocator.free(bufferT_input, offsetT_input);
-        bufferT_input = VK_NULL_HANDLE;
-    }
-    if (bufferL_input != VK_NULL_HANDLE) {
-        allocator.free(bufferL_input, offsetL_input);
-        bufferL_input = VK_NULL_HANDLE;
-    }
-
-    if (intrinsicTriangleBuffer != VK_NULL_HANDLE) {
-        allocator.free(intrinsicTriangleBuffer, triangleGeometryOffset);
-        intrinsicTriangleBuffer = VK_NULL_HANDLE;
-    }
-
-    if (intrinsicVertexBuffer != VK_NULL_HANDLE) {
-        allocator.free(intrinsicVertexBuffer, vertexGeometryOffset);
-        intrinsicVertexBuffer = VK_NULL_HANDLE;
-    }
-
-    gpuDataUploaded = false;
-}

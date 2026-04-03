@@ -1,20 +1,26 @@
 #pragma once
 
 #include "runtime/RuntimeContactTypes.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 #include <vector>
 
 class ContactSystemController;
+class MemoryAllocator;
+class VulkanDevice;
 
 class ContactSystemRuntime {
 public:
-    const std::vector<RuntimeContactResult>& getResolvedContacts() const { return resolvedContacts; }
+    const ContactProduct* getProduct() const { return productValid ? &product : nullptr; }
 
-    void clearResolvedContacts();
-    void rebuildResolvedContacts(
+    void clear(MemoryAllocator& memoryAllocator);
+    void rebuildProducts(
         ContactSystemController* contactSystemController,
-        const std::vector<RuntimeContactBinding>& configuredContacts);
+        VulkanDevice& vulkanDevice,
+        MemoryAllocator& memoryAllocator,
+        const RuntimeContactBinding& configuredContact);
 
 private:
-    std::vector<RuntimeContactResult> resolvedContacts;
+    ContactProduct product{};
+    bool productValid = false;
 };

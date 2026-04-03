@@ -54,15 +54,6 @@ void SwapchainStage::cleanupSwapChain() {
     swapchainManager.cleanup();
 }
 
-void SwapchainStage::setSystems(HeatSystem* updatedHeatSystem, VoronoiSystem* updatedVoronoiSystem) {
-    heatSystem = updatedHeatSystem;
-    voronoiSystem = updatedVoronoiSystem;
-}
-
-void SwapchainStage::setHeatSystem(HeatSystem* updatedHeatSystem) {
-    heatSystem = updatedHeatSystem;
-}
-
 bool SwapchainStage::recreateSwapChain() {
     if (isShuttingDown.load(std::memory_order_acquire)) {
         return false;

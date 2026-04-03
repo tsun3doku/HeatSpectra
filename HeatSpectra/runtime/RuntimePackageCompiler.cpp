@@ -1,6 +1,11 @@
 #include "RuntimePackageCompiler.hpp"
 
+#include "nodegraph/NodeGraphRuntimeBridge.hpp"
+#include "nodegraph/NodeGraphUtils.hpp"
+#include "nodegraph/NodeGraphHash.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
+#include "runtime/RuntimeProducts.hpp"
+#include "runtime/RuntimeProductRegistry.hpp"
 #include "scene/SceneController.hpp"
 
 #include <algorithm>
@@ -11,30 +16,242 @@
 #include <unordered_map>
 #include <unordered_set>
 
+static uint64_t buildGeometryPackageHash(const GeometryPackage& package) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combine(hash, 1u);
+    NodeGraphHash::combine(hash, package.geometry.payloadHash);
+    return hash;
+}
+
+static uint64_t buildRemeshPackageHash(const RemeshPackage& package) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combine(hash, 2u);
+    NodeGraphHash::combine(hash, package.sourceGeometry.payloadHash);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.params.iterations));
+    NodeGraphHash::combineFloat(hash, package.params.minAngleDegrees);
+    NodeGraphHash::combineFloat(hash, package.params.maxEdgeLength);
+    NodeGraphHash::combineFloat(hash, package.params.stepSize);
+    return hash;
+}
+
+static uint64_t buildVoronoiPackageHash(const VoronoiPackage& package) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combine(hash, 3u);
+    NodeGraphHash::combine(hash, package.authored.payloadHash);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverModelProducts.size()));
+    for (const ProductHandle& handle : package.receiverModelProducts) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
+        NodeGraphHash::combine(hash, handle.outputSocketKey);
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProducts.size()));
+    for (const ProductHandle& handle : package.receiverRemeshProducts) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
+        NodeGraphHash::combine(hash, handle.outputSocketKey);
+    }
+    return hash;
+}
+
+static uint64_t buildContactPackageHash(const ContactPackage& package) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combine(hash, 4u);
+    NodeGraphHash::combine(hash, package.authored.payloadHash);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.emitterRemeshProduct.type));
+    NodeGraphHash::combine(hash, package.emitterRemeshProduct.outputSocketKey);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProduct.type));
+    NodeGraphHash::combine(hash, package.receiverRemeshProduct.outputSocketKey);
+    return hash;
+}
+
+static uint64_t buildHeatPackageHash(const HeatPackage& package) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combine(hash, 5u);
+    NodeGraphHash::combine(hash, package.authored.payloadHash);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.voronoiProduct.type));
+    NodeGraphHash::combine(hash, package.voronoiProduct.outputSocketKey);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.contactProduct.type));
+    NodeGraphHash::combine(hash, package.contactProduct.outputSocketKey);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.sourceRemeshProducts.size()));
+    for (const ProductHandle& handle : package.sourceRemeshProducts) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
+        NodeGraphHash::combine(hash, handle.outputSocketKey);
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProducts.size()));
+    for (const ProductHandle& handle : package.receiverRemeshProducts) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
+        NodeGraphHash::combine(hash, handle.outputSocketKey);
+    }
+    return hash;
+}
+
+namespace {
+
+std::optional<GeometryData> geometryFromHandle(
+    const NodePayloadRegistry* payloadRegistry,
+    const NodeDataHandle& meshHandle) {
+    if (!payloadRegistry || meshHandle.key == 0) {
+        return std::nullopt;
+    }
+
+    if (const GeometryData* geometry = payloadRegistry->resolveGeometryHandle(meshHandle)) {
+        return *geometry;
+    }
+
+    if (const RemeshData* remesh = payloadRegistry->get<RemeshData>(meshHandle)) {
+        if (const GeometryData* geometry = payloadRegistry->resolveGeometryHandle(remesh->sourceMeshHandle)) {
+            return *geometry;
+        }
+    }
+
+    return std::nullopt;
+}
+
+uint64_t socketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
+    return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
+}
+
+ProductHandle remeshProductFromHandle(
+    const NodeGraphRuntimeBridge* runtimeBridge,
+    const NodePayloadRegistry* payloadRegistry,
+    const RuntimeProductRegistry* runtimeProductRegistry,
+    const NodeDataHandle& meshHandle) {
+    if (!runtimeBridge || !payloadRegistry || !runtimeProductRegistry || meshHandle.key == 0) {
+        return {};
+    }
+
+    const ProductHandle handle = runtimeBridge->resolveRemeshProductForPayload(meshHandle);
+    if (!handle.isValid()) {
+        return {};
+    }
+
+    return runtimeProductRegistry->getPublishedHandle(NodeProductType::Remesh, handle.outputSocketKey);
+}
+
+ProductHandle modelProductFromHandle(
+    const NodeGraphRuntimeBridge* runtimeBridge,
+    const NodePayloadRegistry* payloadRegistry,
+    const RuntimeProductRegistry* runtimeProductRegistry,
+    const NodeDataHandle& meshHandle) {
+    if (!runtimeProductRegistry || meshHandle.key == 0) {
+        return {};
+    }
+
+    const ProductHandle remeshHandle = (runtimeBridge && payloadRegistry)
+        ? runtimeBridge->resolveRemeshProductForPayload(meshHandle)
+        : ProductHandle{};
+    if (remeshHandle.isValid()) {
+        return runtimeProductRegistry->getPublishedHandle(NodeProductType::Model, remeshHandle.outputSocketKey);
+    }
+
+    return runtimeProductRegistry->getPublishedHandle(NodeProductType::Model, meshHandle.key);
+}
+
+ProductHandle resolveHeatVoronoiInput(
+    const NodeGraphNode& node,
+    const NodeGraphEvaluationState& evaluationState,
+    const RuntimeProductRegistry* runtimeProductRegistry) {
+    if (!runtimeProductRegistry) {
+        return {};
+    }
+
+    const NodeGraphSocket* volumeSocket = findInputSocket(node, NodeGraphValueType::Volume);
+    if (!volumeSocket) {
+        return {};
+    }
+
+    const auto sourceIt = evaluationState.sourceSocketByInputSocket.find(socketKey(node.id, volumeSocket->id));
+    if (sourceIt == evaluationState.sourceSocketByInputSocket.end()) {
+        return {};
+    }
+
+    const auto outputIt = evaluationState.outputBySocket.find(sourceIt->second);
+    if (outputIt == evaluationState.outputBySocket.end() ||
+        outputIt->second.status != EvaluatedSocketStatus::Value) {
+        return {};
+    }
+
+    const NodeDataBlock& inputBlock = outputIt->second.data;
+    if (inputBlock.dataType != NodePayloadType::Voronoi || inputBlock.payloadHandle.key == 0) {
+        return {};
+    }
+
+    return runtimeProductRegistry->getPublishedHandle(NodeProductType::Voronoi, sourceIt->second);
+}
+
+ProductHandle resolveHeatContactInput(
+    const NodeGraphNode& node,
+    const NodeGraphEvaluationState& evaluationState,
+    const RuntimeProductRegistry* runtimeProductRegistry) {
+    if (!runtimeProductRegistry) {
+        return {};
+    }
+
+    const NodeGraphSocket* fieldSocket = findInputSocket(node, NodeGraphValueType::Field);
+    if (!fieldSocket) {
+        return {};
+    }
+
+    const auto sourceIt = evaluationState.sourceSocketByInputSocket.find(socketKey(node.id, fieldSocket->id));
+    if (sourceIt == evaluationState.sourceSocketByInputSocket.end()) {
+        return {};
+    }
+
+    const auto outputIt = evaluationState.outputBySocket.find(sourceIt->second);
+    if (outputIt == evaluationState.outputBySocket.end() ||
+        outputIt->second.status != EvaluatedSocketStatus::Value) {
+        return {};
+    }
+
+    const NodeDataBlock& inputBlock = outputIt->second.data;
+    if (inputBlock.dataType != NodePayloadType::Contact || inputBlock.payloadHandle.key == 0) {
+        return {};
+    }
+
+    return runtimeProductRegistry->getPublishedHandle(NodeProductType::Contact, sourceIt->second);
+}
+
+}
+
 void RuntimePackageCompiler::setSceneController(SceneController* updatedSceneController) {
     sceneController = updatedSceneController;
 }
 
-bool RuntimePackageCompiler::resolveRuntimeModel(const GeometryData& geometry, uint32_t& outRuntimeModelId) const {
-    outRuntimeModelId = 0;
-    if (geometry.modelId == 0 || !sceneController) {
-        return false;
-    }
-
-    uint32_t runtimeModelId = 0;
-    if (!sceneController->tryGetNodeModelRuntimeId(geometry.modelId, runtimeModelId) ||
-        runtimeModelId == 0) {
-        return false;
-    }
-
-    outRuntimeModelId = runtimeModelId;
-    return true;
+void RuntimePackageCompiler::setRuntimeBridge(const NodeGraphRuntimeBridge* updatedRuntimeBridge) {
+    runtimeBridge = updatedRuntimeBridge;
 }
 
-GeometryPackage RuntimePackageCompiler::buildGeometryPackage(const GeometryData& geometry) const {
+void RuntimePackageCompiler::setRuntimeProductRegistry(const RuntimeProductRegistry* updatedRuntimeProductRegistry) {
+    runtimeProductRegistry = updatedRuntimeProductRegistry;
+}
+
+GeometryPackage RuntimePackageCompiler::buildGeometryPackage(uint64_t socketKey, const GeometryData& geometry) const {
     GeometryPackage package{};
     package.geometry = geometry;
-    resolveRuntimeModel(geometry, package.runtimeModelId);
+    if (socketKey != 0) {
+        package.modelProduct.type = NodeProductType::Model;
+        package.modelProduct.outputSocketKey = socketKey;
+    }
+    package.packageHash = buildGeometryPackageHash(package);
+    return package;
+}
+
+RemeshPackage RuntimePackageCompiler::buildRemeshPackage(
+    const RemeshData& remesh,
+    const NodePayloadRegistry* payloadRegistry,
+    const NodeDataHandle& remeshHandle) const {
+    RemeshPackage package{};
+    if (!payloadRegistry || !remesh.active || remesh.sourceMeshHandle.key == 0) {
+        return package;
+    }
+
+    const std::optional<GeometryData> sourceGeometry = geometryFromHandle(payloadRegistry, remesh.sourceMeshHandle);
+    if (!sourceGeometry.has_value()) {
+        return package;
+    }
+
+    package.sourceGeometry = *sourceGeometry;
+    package.params = remesh.params;
+    package.remeshHandle = remeshHandle;
+    package.packageHash = buildRemeshPackageHash(package);
     return package;
 }
 
@@ -42,251 +259,261 @@ VoronoiPackage RuntimePackageCompiler::buildVoronoiPackage(const NodePayloadRegi
     VoronoiPackage package{};
     package.authored = voronoi;
 
-    if (!payloadRegistry || !voronoi.active || voronoi.receiverGeometryHandles.empty()) {
+    if (!payloadRegistry || !voronoi.active || voronoi.receiverMeshHandles.empty()) {
         return package;
     }
 
-    package.receiverGeometryHandles.reserve(voronoi.receiverGeometryHandles.size());
-    package.receiverGeometries.reserve(voronoi.receiverGeometryHandles.size());
-    package.receiverIntrinsics.reserve(voronoi.receiverGeometryHandles.size());
-    package.receiverRuntimeModelIds.reserve(voronoi.receiverGeometryHandles.size());
+    package.receiverModelProducts.reserve(voronoi.receiverMeshHandles.size());
+    package.receiverRemeshProducts.reserve(voronoi.receiverMeshHandles.size());
 
-    std::set<NodeDataHandle> seenGeometryHandles;
-    for (const NodeDataHandle& geometryHandle : voronoi.receiverGeometryHandles) {
-        if (!seenGeometryHandles.insert(geometryHandle).second) {
+    std::set<NodeDataHandle> seenMeshHandles;
+    for (const NodeDataHandle& meshHandle : voronoi.receiverMeshHandles) {
+        if (!seenMeshHandles.insert(meshHandle).second) {
             continue;
         }
 
-        const GeometryData* geometry = payloadRegistry->get<GeometryData>(geometryHandle);
-        if (!geometry || geometry->intrinsicHandle.key == 0) {
+        const ProductHandle receiverRemeshProduct =
+            remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, meshHandle);
+        if (!receiverRemeshProduct.isValid()) {
             continue;
         }
 
-        const IntrinsicMeshData* intrinsic = payloadRegistry->get<IntrinsicMeshData>(geometry->intrinsicHandle);
-        if (!intrinsic) {
-            continue;
-        }
-
-        uint32_t runtimeModelId = 0;
-        if (!resolveRuntimeModel(*geometry, runtimeModelId) || runtimeModelId == 0) {
-            continue;
-        }
-
-        package.receiverGeometryHandles.push_back(geometryHandle);
-        package.receiverGeometries.push_back(*geometry);
-        package.receiverIntrinsics.push_back(*intrinsic);
-        package.receiverRuntimeModelIds.push_back(runtimeModelId);
+        package.receiverModelProducts.push_back(modelProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, meshHandle));
+        package.receiverRemeshProducts.push_back(receiverRemeshProduct);
     }
 
+    package.packageHash = buildVoronoiPackageHash(package);
     return package;
 }
 
 HeatPackage RuntimePackageCompiler::buildHeatPackage(
     const NodePayloadRegistry* payloadRegistry,
     const HeatData& heat,
-    const VoronoiData* voronoi) const {
+    const ProductHandle& voronoiProduct,
+    const ProductHandle& contactProduct) const {
     HeatPackage package{};
     package.authored = heat;
-    if (voronoi) {
-        package.voronoiActive = voronoi->active;
-        package.voronoiParams = voronoi->params;
-    }
+    package.voronoiProduct = voronoiProduct;
+    package.contactProduct = contactProduct;
 
     if (!payloadRegistry) {
         return package;
     }
 
-    std::unordered_set<uint32_t> seenSourceRuntimeModelIds;
-    package.sourceGeometries.reserve(heat.sourceHandles.size());
-    package.sourceIntrinsics.reserve(heat.sourceHandles.size());
-    package.sourceRuntimeModelIds.reserve(heat.sourceHandles.size());
+    std::unordered_set<uint64_t> seenSourceRemeshSocketKeys;
+    package.sourceRemeshProducts.reserve(heat.sourceHandles.size());
+    package.sourceTemperatures.reserve(heat.sourceHandles.size());
     for (const NodeDataHandle& sourceHandle : heat.sourceHandles) {
         if (sourceHandle.key == 0) {
             continue;
         }
 
         const HeatSourceData* heatSource = payloadRegistry->get<HeatSourceData>(sourceHandle);
-        if (!heatSource || heatSource->geometryHandle.key == 0) {
+        if (!heatSource || heatSource->meshHandle.key == 0) {
             continue;
         }
 
-        const GeometryData* sourceGeometry = payloadRegistry->get<GeometryData>(heatSource->geometryHandle);
-        if (!sourceGeometry || sourceGeometry->intrinsicHandle.key == 0) {
+        const ProductHandle sourceRemeshProduct =
+            remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, heatSource->meshHandle);
+        if (!sourceRemeshProduct.isValid()) {
+            continue;
+        }
+        if (!seenSourceRemeshSocketKeys.insert(sourceRemeshProduct.outputSocketKey).second) {
             continue;
         }
 
-        const IntrinsicMeshData* sourceIntrinsic = payloadRegistry->get<IntrinsicMeshData>(sourceGeometry->intrinsicHandle);
-        if (!sourceIntrinsic) {
-            continue;
-        }
-
-        uint32_t runtimeModelId = 0;
-        if (!resolveRuntimeModel(*sourceGeometry, runtimeModelId) || runtimeModelId == 0) {
-            continue;
-        }
-        if (!seenSourceRuntimeModelIds.insert(runtimeModelId).second) {
-            continue;
-        }
-
-        package.sourceGeometries.push_back(*sourceGeometry);
-        package.sourceIntrinsics.push_back(*sourceIntrinsic);
-        package.sourceRuntimeModelIds.push_back(runtimeModelId);
-        package.sourceTemperatureByRuntimeId.emplace(runtimeModelId, heatSource->temperature);
+        package.sourceRemeshProducts.push_back(sourceRemeshProduct);
+        package.sourceTemperatures.push_back(heatSource->temperature);
     }
 
     std::set<NodeDataHandle> seenReceiverHandles;
-    package.receiverGeometryHandles.reserve(heat.receiverGeometryHandles.size());
-    package.receiverGeometries.reserve(heat.receiverGeometryHandles.size());
-    package.receiverIntrinsics.reserve(heat.receiverGeometryHandles.size());
-    package.receiverRuntimeModelIds.reserve(heat.receiverGeometryHandles.size());
-    for (const NodeDataHandle& geometryHandle : heat.receiverGeometryHandles) {
-        const GeometryData* geometry = payloadRegistry->get<GeometryData>(geometryHandle);
-        if (!geometry || geometry->intrinsicHandle.key == 0) {
-            continue;
-        }
-        if (!seenReceiverHandles.insert(geometryHandle).second) {
+    package.receiverRemeshProducts.reserve(heat.receiverMeshHandles.size());
+    for (const NodeDataHandle& meshHandle : heat.receiverMeshHandles) {
+        if (!seenReceiverHandles.insert(meshHandle).second) {
             continue;
         }
 
-        const IntrinsicMeshData* intrinsic = payloadRegistry->get<IntrinsicMeshData>(geometry->intrinsicHandle);
-        if (!intrinsic) {
+        const ProductHandle receiverRemeshProduct =
+            remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, meshHandle);
+        if (!receiverRemeshProduct.isValid()) {
             continue;
         }
 
-        uint32_t runtimeModelId = 0;
-        if (!resolveRuntimeModel(*geometry, runtimeModelId) || runtimeModelId == 0) {
-            continue;
-        }
-
-        package.receiverGeometryHandles.push_back(geometryHandle);
-        package.receiverGeometries.push_back(*geometry);
-        package.receiverIntrinsics.push_back(*intrinsic);
-        package.receiverRuntimeModelIds.push_back(runtimeModelId);
+        package.receiverRemeshProducts.push_back(receiverRemeshProduct);
     }
 
     package.runtimeThermalMaterials = buildRuntimeThermalMaterials(
-        package.receiverGeometries,
-        package.receiverRuntimeModelIds,
+        package.receiverRemeshProducts,
         heat.materialBindings);
 
+    package.packageHash = buildHeatPackageHash(package);
     return package;
 }
 
-ContactPackage RuntimePackageCompiler::buildContactPackage(
-    const NodePayloadRegistry* payloadRegistry,
-    const ContactData& contact) const {
+ContactPackage RuntimePackageCompiler::buildContactPackage(const NodePayloadRegistry* payloadRegistry, const ContactData& contact) const {
     ContactPackage package{};
     package.authored = contact;
-    if (!payloadRegistry || !contact.active || contact.bindings.empty()) {
+    if (!payloadRegistry || !contact.active || !contact.pair.hasValidContact) {
         return package;
     }
 
-    package.runtimeContactPairs.reserve(contact.bindings.size());
-    for (const ContactBindingData& input : contact.bindings) {
-        const ContactPairData& pair = input.pair;
-        if (!pair.hasValidContact ||
-            pair.endpointA.geometryHandle.key == 0 ||
-            pair.endpointB.geometryHandle.key == 0 ||
-            pair.endpointA.geometryHandle == pair.endpointB.geometryHandle) {
-            continue;
-        }
-
-        const ContactPairEndpoint& emitterEndpoint =
-            (pair.endpointA.role == ContactPairRole::Source)
-            ? pair.endpointA
-            : pair.endpointB;
-        const ContactPairEndpoint& receiverEndpoint =
-            (pair.endpointA.role == ContactPairRole::Source)
-            ? pair.endpointB
-            : pair.endpointA;
-
-        const GeometryData* emitterGeometry = payloadRegistry->get<GeometryData>(emitterEndpoint.geometryHandle);
-        const GeometryData* receiverGeometry = payloadRegistry->get<GeometryData>(receiverEndpoint.geometryHandle);
-        if (!emitterGeometry ||
-            !receiverGeometry ||
-            emitterGeometry->intrinsicHandle.key == 0 ||
-            receiverGeometry->intrinsicHandle.key == 0) {
-            continue;
-        }
-
-        const IntrinsicMeshData* emitterIntrinsic = payloadRegistry->get<IntrinsicMeshData>(emitterGeometry->intrinsicHandle);
-        const IntrinsicMeshData* receiverIntrinsic = payloadRegistry->get<IntrinsicMeshData>(receiverGeometry->intrinsicHandle);
-        if (!emitterIntrinsic || !receiverIntrinsic) {
-            continue;
-        }
-
-        uint32_t emitterRuntimeModelId = 0;
-        uint32_t receiverRuntimeModelId = 0;
-        if (!resolveRuntimeModel(*emitterGeometry, emitterRuntimeModelId) ||
-            !resolveRuntimeModel(*receiverGeometry, receiverRuntimeModelId) ||
-            emitterRuntimeModelId == 0 ||
-            receiverRuntimeModelId == 0 ||
-            emitterRuntimeModelId == receiverRuntimeModelId) {
-            continue;
-        }
-
-        RuntimeContactBinding runtimeContactPair{};
-        runtimeContactPair.contactPair = pair;
-        runtimeContactPair.payloadPair.couplingType = pair.kind;
-        runtimeContactPair.payloadPair.minNormalDot = pair.minNormalDot;
-        runtimeContactPair.payloadPair.contactRadius = pair.contactRadius;
-        runtimeContactPair.payloadPair.emitter.geometryHandle = emitterEndpoint.geometryHandle;
-        runtimeContactPair.payloadPair.emitter.geometry = *emitterGeometry;
-        runtimeContactPair.payloadPair.emitter.intrinsic = *emitterIntrinsic;
-        runtimeContactPair.payloadPair.receiver.geometryHandle = receiverEndpoint.geometryHandle;
-        runtimeContactPair.payloadPair.receiver.geometry = *receiverGeometry;
-        runtimeContactPair.payloadPair.receiver.intrinsic = *receiverIntrinsic;
-        runtimeContactPair.emitterRuntimeModelId = emitterRuntimeModelId;
-        runtimeContactPair.receiverRuntimeModelId = receiverRuntimeModelId;
-        package.runtimeContactPairs.push_back(runtimeContactPair);
+    const ContactPairData& pair = contact.pair;
+    if (!pair.hasValidContact ||
+        pair.endpointA.meshHandle.key == 0 ||
+        pair.endpointB.meshHandle.key == 0 ||
+        pair.endpointA.meshHandle == pair.endpointB.meshHandle) {
+        return package;
     }
 
-    std::sort(
-        package.runtimeContactPairs.begin(),
-        package.runtimeContactPairs.end(),
-        [](const RuntimeContactBinding& lhs, const RuntimeContactBinding& rhs) {
-            return std::tie(
-                       lhs.contactPair.kind,
-                       lhs.contactPair.endpointA.geometryHandle.key,
-                       lhs.contactPair.endpointA.geometryHandle.revision,
-                       lhs.contactPair.endpointA.geometryHandle.count,
-                       lhs.contactPair.endpointB.geometryHandle.key,
-                       lhs.contactPair.endpointB.geometryHandle.revision,
-                       lhs.contactPair.endpointB.geometryHandle.count,
-                       lhs.emitterRuntimeModelId,
-                       lhs.receiverRuntimeModelId,
-                       lhs.contactPair.minNormalDot,
-                       lhs.contactPair.contactRadius) <
-                std::tie(
-                       rhs.contactPair.kind,
-                       rhs.contactPair.endpointA.geometryHandle.key,
-                       rhs.contactPair.endpointA.geometryHandle.revision,
-                       rhs.contactPair.endpointA.geometryHandle.count,
-                       rhs.contactPair.endpointB.geometryHandle.key,
-                       rhs.contactPair.endpointB.geometryHandle.revision,
-                       rhs.contactPair.endpointB.geometryHandle.count,
-                       rhs.emitterRuntimeModelId,
-                       rhs.receiverRuntimeModelId,
-                       rhs.contactPair.minNormalDot,
-                       rhs.contactPair.contactRadius);
-        });
+    const ContactPairEndpoint& emitterEndpoint =
+        (pair.endpointA.role == ContactPairRole::Source)
+        ? pair.endpointA
+        : pair.endpointB;
+    const ContactPairEndpoint& receiverEndpoint =
+        (pair.endpointA.role == ContactPairRole::Source)
+        ? pair.endpointB
+        : pair.endpointA;
 
-    std::unordered_set<uint32_t> seenSourceRuntimeModelIds;
-    package.sourceRuntimeModelIds.reserve(package.runtimeContactPairs.size());
-    package.sourceGeometries.reserve(package.runtimeContactPairs.size());
-    package.sourceIntrinsics.reserve(package.runtimeContactPairs.size());
-    for (const RuntimeContactBinding& contactPair : package.runtimeContactPairs) {
-        const uint32_t runtimeModelId = contactPair.emitterRuntimeModelId;
-        if (runtimeModelId == 0 || !seenSourceRuntimeModelIds.insert(runtimeModelId).second) {
-            continue;
-        }
+    package.emitterRemeshProduct = remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, emitterEndpoint.meshHandle);
+    package.receiverRemeshProduct = remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, receiverEndpoint.meshHandle);
 
-        package.sourceRuntimeModelIds.push_back(runtimeModelId);
-        package.sourceGeometries.push_back(contactPair.payloadPair.emitter.geometry);
-        package.sourceIntrinsics.push_back(contactPair.payloadPair.emitter.intrinsic);
-    }
-
+    package.packageHash = buildContactPackageHash(package);
     return package;
+}
+
+RuntimePackageSet RuntimePackageCompiler::buildRuntimePackageSet(
+    const NodeGraphState& graphState,
+    const NodeGraphEvaluationState& evaluationState,
+    const NodePayloadRegistry* payloadRegistry) const {
+    RuntimePackageSet packageSet{};
+
+    for (const NodeGraphNode& node : graphState.nodes) {
+        for (const NodeGraphSocket& output : node.outputs) {
+            if (output.contract.producedPayloadType == NodePayloadType::None) {
+                continue;
+            }
+
+            const uint64_t outputSocketKey = socketKey(node.id, output.id);
+            const auto valueIt = evaluationState.outputBySocket.find(outputSocketKey);
+            if (valueIt == evaluationState.outputBySocket.end() ||
+                valueIt->second.status != EvaluatedSocketStatus::Value) {
+                continue;
+            }
+
+            const NodeDataBlock& outputBlock = valueIt->second.data;
+            if (outputBlock.payloadHandle.key == 0) {
+                continue;
+            }
+
+            switch (output.contract.producedPayloadType) {
+            case NodePayloadType::Geometry: {
+                const GeometryData* geometry = payloadRegistry
+                    ? payloadRegistry->get<GeometryData>(outputBlock.payloadHandle)
+                    : nullptr;
+                if (!geometry || geometry->modelId == 0) {
+                    break;
+                }
+                packageSet.geometryBySocket.emplace(outputSocketKey, buildGeometryPackage(outputSocketKey, *geometry));
+                break;
+            }
+            case NodePayloadType::Remesh: {
+                const RemeshData* remesh = payloadRegistry
+                    ? payloadRegistry->get<RemeshData>(outputBlock.payloadHandle)
+                    : nullptr;
+                if (!remesh || !remesh->active || remesh->sourceMeshHandle.key == 0) {
+                    break;
+                }
+                packageSet.remeshBySocket.emplace(
+                    outputSocketKey,
+                    buildRemeshPackage(*remesh, payloadRegistry, outputBlock.payloadHandle));
+                break;
+            }
+            case NodePayloadType::Voronoi: {
+                const VoronoiData* voronoi = payloadRegistry
+                    ? payloadRegistry->get<VoronoiData>(outputBlock.payloadHandle)
+                    : nullptr;
+                if (!voronoi) {
+                    break;
+                }
+                packageSet.voronoiBySocket.emplace(
+                    outputSocketKey,
+                    buildVoronoiPackage(payloadRegistry, *voronoi));
+                break;
+            }
+            case NodePayloadType::Contact:
+            case NodePayloadType::Heat:
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    for (const NodeGraphNode& node : graphState.nodes) {
+        for (const NodeGraphSocket& output : node.outputs) {
+            if (output.contract.producedPayloadType != NodePayloadType::Contact) {
+                continue;
+            }
+
+            const uint64_t outputSocketKey = socketKey(node.id, output.id);
+            const auto valueIt = evaluationState.outputBySocket.find(outputSocketKey);
+            if (valueIt == evaluationState.outputBySocket.end() ||
+                valueIt->second.status != EvaluatedSocketStatus::Value) {
+                continue;
+            }
+
+            const NodeDataBlock& outputBlock = valueIt->second.data;
+            if (outputBlock.payloadHandle.key == 0) {
+                continue;
+            }
+
+            const ContactData* contact = payloadRegistry
+                ? payloadRegistry->get<ContactData>(outputBlock.payloadHandle)
+                : nullptr;
+            if (!contact) {
+                continue;
+            }
+
+            packageSet.contactBySocket.emplace(
+                outputSocketKey,
+                buildContactPackage(payloadRegistry, *contact));
+        }
+    }
+
+    for (const NodeGraphNode& node : graphState.nodes) {
+        for (const NodeGraphSocket& output : node.outputs) {
+            if (output.contract.producedPayloadType != NodePayloadType::Heat) {
+                continue;
+            }
+
+            const uint64_t outputSocketKey = socketKey(node.id, output.id);
+            const auto valueIt = evaluationState.outputBySocket.find(outputSocketKey);
+            if (valueIt == evaluationState.outputBySocket.end() ||
+                valueIt->second.status != EvaluatedSocketStatus::Value) {
+                continue;
+            }
+
+            const NodeDataBlock& outputBlock = valueIt->second.data;
+            if (outputBlock.payloadHandle.key == 0) {
+                continue;
+            }
+
+            const HeatData* heat = payloadRegistry
+                ? payloadRegistry->get<HeatData>(outputBlock.payloadHandle)
+                : nullptr;
+            if (!heat) {
+                continue;
+            }
+
+            const ProductHandle voronoiProduct = resolveHeatVoronoiInput(node, evaluationState, runtimeProductRegistry);
+            const ProductHandle contactProduct = resolveHeatContactInput(node, evaluationState, runtimeProductRegistry);
+            packageSet.heatBySocket.emplace(
+                outputSocketKey,
+                buildHeatPackage(payloadRegistry, *heat, voronoiProduct, contactProduct));
+        }
+    }
+
+    return packageSet;
 }
 
 bool RuntimePackageCompiler::tryParseHeatMaterialModelId(const std::string& value, uint32_t& outNodeModelId) const {
@@ -335,8 +562,7 @@ bool RuntimePackageCompiler::tryParseHeatMaterialModelId(const std::string& valu
 }
 
 std::vector<RuntimeThermalMaterial> RuntimePackageCompiler::buildRuntimeThermalMaterials(
-    const std::vector<GeometryData>& receiverGeometries,
-    const std::vector<uint32_t>& receiverRuntimeModelIds,
+    const std::vector<ProductHandle>& receiverRemeshProducts,
     const std::vector<HeatMaterialBindingEntry>& materialBindings) const {
     std::unordered_map<uint32_t, HeatMaterialPresetId> presetByNodeModelId;
     std::optional<HeatMaterialPresetId> fallbackPreset;
@@ -350,11 +576,20 @@ std::vector<RuntimeThermalMaterial> RuntimePackageCompiler::buildRuntimeThermalM
     }
 
     std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
-    runtimeThermalMaterials.reserve(receiverRuntimeModelIds.size());
+    runtimeThermalMaterials.reserve(receiverRemeshProducts.size());
     std::unordered_set<uint32_t> seenRuntimeModelIds;
-    for (size_t index = 0; index < receiverGeometries.size(); ++index) {
-        const GeometryData& geometry = receiverGeometries[index];
-        const uint32_t runtimeModelId = receiverRuntimeModelIds[index];
+    for (const ProductHandle& remeshProductHandle : receiverRemeshProducts) {
+        if (!runtimeProductRegistry) {
+            continue;
+        }
+
+        const RemeshProduct* remeshProduct = runtimeProductRegistry->resolveRemesh(remeshProductHandle);
+        if (!remeshProduct || !remeshProduct->isValid()) {
+            continue;
+        }
+
+        const GeometryData& geometry = remeshProduct->geometry;
+        const uint32_t runtimeModelId = remeshProduct->runtimeModelId;
         if (geometry.modelId == 0 || runtimeModelId == 0) {
             continue;
         }

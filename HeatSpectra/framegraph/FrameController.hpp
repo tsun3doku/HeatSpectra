@@ -71,8 +71,6 @@ public:
     void shutdownSyncObjects();
     void cleanupSwapChain();
     bool recreateSwapChain();
-    void setSystems(HeatSystem* heatSystem, VoronoiSystem* voronoiSystem);
-    void setHeatSystem(HeatSystem* heatSystem);
     void drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve);
 
 private:

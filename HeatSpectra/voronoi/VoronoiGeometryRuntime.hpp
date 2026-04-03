@@ -2,26 +2,37 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
+#include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
-
-#include "domain/GeometryData.hpp"
-#include "domain/RemeshData.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;
-class Model;
 
 class VoronoiGeometryRuntime {
 public:
+    struct SurfaceVertex {
+        glm::vec3 position{0.0f};
+        glm::vec3 normal{0.0f, 0.0f, 1.0f};
+    };
+
     VoronoiGeometryRuntime(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        Model& model,
-        const GeometryData& geometryData,
-        const IntrinsicMeshData& intrinsicMeshData,
-        const RuntimeIntrinsicCache::Entry& intrinsicResources);
+        uint32_t runtimeModelId,
+        std::vector<SurfaceVertex> surfaceVertices,
+        std::vector<uint32_t> intrinsicTriangleIndices,
+        VkBufferView supportingHalfedgeView,
+        VkBufferView supportingAngleView,
+        VkBufferView halfedgeView,
+        VkBufferView edgeView,
+        VkBufferView triangleView,
+        VkBufferView lengthView,
+        VkBufferView inputHalfedgeView,
+        VkBufferView inputEdgeView,
+        VkBufferView inputTriangleView,
+        VkBufferView inputLengthView);
     ~VoronoiGeometryRuntime();
 
     bool createSurfaceBuffers();
@@ -55,12 +66,8 @@ public:
 
     void setVoronoiMapping(VkBuffer mappingBuffer, VkDeviceSize mappingOffset);
 
-    Model& getModel() { return model; }
-    const Model& getModel() const { return model; }
-
-    size_t getIntrinsicVertexCount() const { return intrinsicMeshData.vertices.size(); }
-    const GeometryData& getGeometryData() const { return geometryData; }
-    const IntrinsicMeshData& getIntrinsicMeshData() const { return intrinsicMeshData; }
+    uint32_t getRuntimeModelId() const { return runtimeModelId; }
+    size_t getIntrinsicVertexCount() const { return surfaceVertices.size(); }
 
     VkBuffer getSurfaceBuffer() const { return surfaceBuffer; }
     VkDeviceSize getSurfaceBufferOffset() const { return surfaceBufferOffset; }
@@ -85,10 +92,19 @@ public:
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    Model& model;
-    GeometryData geometryData{};
-    IntrinsicMeshData intrinsicMeshData{};
-    const RuntimeIntrinsicCache::Entry* intrinsicResources = nullptr;
+    uint32_t runtimeModelId = 0;
+    std::vector<SurfaceVertex> surfaceVertices;
+    std::vector<uint32_t> intrinsicTriangleIndices;
+    VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
+    VkBufferView supportingAngleView = VK_NULL_HANDLE;
+    VkBufferView halfedgeView = VK_NULL_HANDLE;
+    VkBufferView edgeView = VK_NULL_HANDLE;
+    VkBufferView triangleView = VK_NULL_HANDLE;
+    VkBufferView lengthView = VK_NULL_HANDLE;
+    VkBufferView inputHalfedgeView = VK_NULL_HANDLE;
+    VkBufferView inputEdgeView = VK_NULL_HANDLE;
+    VkBufferView inputTriangleView = VK_NULL_HANDLE;
+    VkBufferView inputLengthView = VK_NULL_HANDLE;
 
     static constexpr float AMBIENT_TEMPERATURE = 1.0f;
 

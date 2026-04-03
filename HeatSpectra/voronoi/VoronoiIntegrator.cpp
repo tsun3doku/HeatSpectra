@@ -2,13 +2,16 @@
 #include <iostream>
 #include <algorithm>
 #include <set>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 #include <libs/nanoflann/include/nanoflann.hpp>
 
 struct PointCloudAdapter {
     const std::vector<glm::dvec3>& pts;
     inline size_t kdtree_get_point_count() const { return pts.size(); }
-    inline double kdtree_get_pt(const size_t idx, const size_t dim) const { return pts[idx][dim]; }
+    inline double kdtree_get_pt(const size_t idx, const size_t dim) const {
+        return pts[idx][static_cast<glm::dvec3::length_type>(dim)];
+    }
     template <class BBOX> bool kdtree_get_bbox(BBOX&) const { return false; }
 };
 
@@ -94,25 +97,27 @@ void VoronoiIntegrator::computeNeighbors(const std::vector<glm::dvec3>& seedPosi
               << seedPositions.size() << " seeds" << std::endl;
 }
 
-void VoronoiIntegrator::extractMeshTriangles(const Model& surfaceMesh) {
+void VoronoiIntegrator::extractMeshTriangles(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices) {
     meshTriangles.clear();
-    
-    const auto& vertices = surfaceMesh.getVertices();
-    const auto& indices = surfaceMesh.getIndices();
-    
+
     for (size_t i = 0; i < indices.size(); i += 3) {
-        const auto& v0 = vertices[indices[i]];
-        const auto& v1 = vertices[indices[i + 1]];
-        const auto& v2 = vertices[indices[i + 2]];
-        
+        if (i + 2 >= indices.size() ||
+            indices[i] >= positions.size() ||
+            indices[i + 1] >= positions.size() ||
+            indices[i + 2] >= positions.size()) {
+            continue;
+        }
+
         MeshTriangleGPU tri;
-        tri.v0 = glm::vec4(v0.pos, 0.0f);
-        tri.v1 = glm::vec4(v1.pos, 0.0f);
-        tri.v2 = glm::vec4(v2.pos, 0.0f);
-        
+        tri.v0 = glm::vec4(positions[indices[i]], 0.0f);
+        tri.v1 = glm::vec4(positions[indices[i + 1]], 0.0f);
+        tri.v2 = glm::vec4(positions[indices[i + 2]], 0.0f);
+
         meshTriangles.push_back(tri);
     }
-    
+
     std::cout << "[VoronoiIntegrator] Extracted " << meshTriangles.size() << " mesh triangles" << std::endl;
 }
 

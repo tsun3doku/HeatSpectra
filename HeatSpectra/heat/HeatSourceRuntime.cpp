@@ -17,13 +17,13 @@ HeatSourceRuntime::HeatSourceRuntime(
     VulkanDevice& device,
     MemoryAllocator& allocator,
     const GeometryData& geometryData,
-    const IntrinsicMeshData& intrinsicMeshData,
+    const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
     CommandPool& cmdPool,
     float initialTemperatureValue)
     : vulkanDevice(device),
       memoryAllocator(allocator),
       geometryData(geometryData),
-      intrinsicMeshData(intrinsicMeshData),
+      intrinsicMesh(intrinsicMesh),
       renderCommandPool(cmdPool),
       uniformTemperature(initialTemperatureValue) {
     initialized = createSourceBuffer();
@@ -45,20 +45,17 @@ bool HeatSourceRuntime::createSourceBuffer() {
 
     std::vector<SurfacePoint> surfacePoints;
     std::vector<uint32_t> indices;
-    if (intrinsicMeshData.vertices.empty() || intrinsicMeshData.triangleIndices.size() < 3) {
+    if (intrinsicMesh.vertices.empty() || intrinsicMesh.indices.size() < 3) {
         std::cerr << "[HeatSourceRuntime] Missing intrinsic payload for source model; source buffers left empty" << std::endl;
         return false;
     }
 
-    intrinsicVertexCount = intrinsicMeshData.vertices.size();
-    indices = intrinsicMeshData.triangleIndices;
+    intrinsicVertexCount = intrinsicMesh.vertices.size();
+    indices = intrinsicMesh.indices;
 
     std::vector<glm::vec3> positions(intrinsicVertexCount);
     for (size_t i = 0; i < intrinsicVertexCount; ++i) {
-        positions[i] = glm::vec3(
-            intrinsicMeshData.vertices[i].position[0],
-            intrinsicMeshData.vertices[i].position[1],
-            intrinsicMeshData.vertices[i].position[2]);
+        positions[i] = intrinsicMesh.vertices[i].position;
     }
     const std::vector<float> vertexAreas = computeVertexAreas(positions, indices);
 
@@ -66,10 +63,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
     for (size_t i = 0; i < intrinsicVertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = initialTemperatureValue;
-        surfacePoints[i].normal = glm::vec3(
-            intrinsicMeshData.vertices[i].normal[0],
-            intrinsicMeshData.vertices[i].normal[1],
-            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].normal = intrinsicMesh.vertices[i].normal;
         surfacePoints[i].area = (i < vertexAreas.size()) ? vertexAreas[i] : 0.0f;
         surfacePoints[i].color = glm::vec4(1.0f);
     }

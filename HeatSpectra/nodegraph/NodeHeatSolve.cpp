@@ -74,32 +74,23 @@ namespace {
 void appendSourceHandlesFromContact(
     const ContactData& contact,
     std::vector<NodeDataHandle>& sourceHandles) {
-    std::unordered_set<uint64_t> seenSourcePayloadKeys;
-    seenSourcePayloadKeys.reserve(contact.bindings.size());
-
-    for (const ContactBindingData& binding : contact.bindings) {
-        const ContactPairData& pair = binding.pair;
-        if (!pair.hasValidContact) {
-            continue;
-        }
-
-        const ContactPairEndpoint* sourceEndpoint = nullptr;
-        if (pair.endpointA.role == ContactPairRole::Source) {
-            sourceEndpoint = &pair.endpointA;
-        } else if (pair.endpointB.role == ContactPairRole::Source) {
-            sourceEndpoint = &pair.endpointB;
-        }
-
-        if (!sourceEndpoint || sourceEndpoint->payloadHandle.key == 0) {
-            continue;
-        }
-
-        if (!seenSourcePayloadKeys.insert(sourceEndpoint->payloadHandle.key).second) {
-            continue;
-        }
-
-        sourceHandles.push_back(sourceEndpoint->payloadHandle);
+    const ContactPairData& pair = contact.pair;
+    if (!pair.hasValidContact) {
+        return;
     }
+
+    const ContactPairEndpoint* sourceEndpoint = nullptr;
+    if (pair.endpointA.role == ContactPairRole::Source) {
+        sourceEndpoint = &pair.endpointA;
+    } else if (pair.endpointB.role == ContactPairRole::Source) {
+        sourceEndpoint = &pair.endpointB;
+    }
+
+    if (!sourceEndpoint || sourceEndpoint->payloadHandle.key == 0) {
+        return;
+    }
+
+    sourceHandles.push_back(sourceEndpoint->payloadHandle);
 }
 
 const VoronoiData* readVoronoiInput(
@@ -110,16 +101,17 @@ const VoronoiData* readVoronoiInput(
         return nullptr;
     }
 
-    const NodeGraphSocket* inputSocket = findInputSocket(node, NodeGraphValueType::Voronoi);
+    const NodeGraphSocket* inputSocket = findInputSocket(node, NodeGraphValueType::Volume);
     if (!inputSocket) {
         return nullptr;
     }
 
-    const NodeDataBlock* inputValue = readInput(node, inputSocket->id, executionState);
+    const NodeDataBlock* inputValue = readInputValue(
+        readEvaluatedInput(node, inputSocket->id, executionState));
     if (!inputValue) {
         return nullptr;
     }
-    if (inputValue->dataType != NodeDataType::Voronoi) {
+    if (inputValue->dataType != NodePayloadType::Voronoi) {
         return nullptr;
     }
 
@@ -138,21 +130,22 @@ const ContactData* readContactInput(
         return nullptr;
     }
 
-    const NodeGraphSocket* inputSocket = findInputSocket(node, NodeGraphValueType::Contact);
+    const NodeGraphSocket* inputSocket = findInputSocket(node, NodeGraphValueType::Field);
     if (!inputSocket) {
         return nullptr;
     }
 
-    const NodeDataBlock* inputValue = readInput(node, inputSocket->id, executionState);
+    const NodeDataBlock* inputValue = readInputValue(
+        readEvaluatedInput(node, inputSocket->id, executionState));
     if (!inputValue) {
         return nullptr;
     }
-    if (inputValue->dataType != NodeDataType::Contact) {
+    if (inputValue->dataType != NodePayloadType::Contact) {
         return nullptr;
     }
 
     const ContactData* contact = payloadRegistry->get<ContactData>(inputValue->payloadHandle);
-    if (!contact || !contact->active || contact->bindings.empty()) {
+    if (!contact || !contact->active || !contact->pair.hasValidContact) {
         return nullptr;
     }
     return contact;
@@ -166,7 +159,7 @@ const char* NodeHeatSolve::typeId() const {
 
 bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     std::vector<NodeDataHandle> sourceHandles;
-    std::vector<NodeDataHandle> receiverGeometryHandles;
+    std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<HeatMaterialBindingEntry> materialBindings;
 
     const bool resetRequested = NodePanelUtils::readBoolParam(context.node, nodegraphparams::heatsolve::ResetRequested, false);
@@ -177,8 +170,10 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
         populateOutputPayloads(
             context,
             sourceHandles,
-            receiverGeometryHandles,
+            receiverMeshHandles,
             materialBindings,
+            0,
+            0,
             false,
             false,
             false);
@@ -199,8 +194,10 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
         populateOutputPayloads(
             context,
             sourceHandles,
-            receiverGeometryHandles,
+            receiverMeshHandles,
             materialBindings,
+            0,
+            0,
             false,
             false,
             false);
@@ -208,7 +205,7 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     }
 
     appendSourceHandlesFromContact(*contactInput, sourceHandles);
-    receiverGeometryHandles = voronoiInput->receiverGeometryHandles;
+    receiverMeshHandles = voronoiInput->receiverMeshHandles;
     materialBindings = parseMaterialBindings(
         NodePanelUtils::readStringParam(context.node, nodegraphparams::heatsolve::MaterialBindings));
 
@@ -218,8 +215,10 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     populateOutputPayloads(
         context,
         sourceHandles,
-        receiverGeometryHandles,
+        receiverMeshHandles,
         materialBindings,
+        voronoiInput->payloadHash,
+        contactInput->payloadHash,
         true,
         wantsPaused,
         resetRequested);
@@ -229,8 +228,10 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
 void NodeHeatSolve::populateOutputPayloads(
     NodeGraphKernelContext& context,
     const std::vector<NodeDataHandle>& sourceHandles,
-    const std::vector<NodeDataHandle>& receiverGeometryHandles,
+    const std::vector<NodeDataHandle>& receiverMeshHandles,
     const std::vector<HeatMaterialBindingEntry>& materialBindings,
+    uint64_t voronoiPayloadHash,
+    uint64_t contactPayloadHash,
     bool active,
     bool paused,
     bool resetRequested) {
@@ -239,7 +240,7 @@ void NodeHeatSolve::populateOutputPayloads(
         NodeDataBlock& outputValue = context.outputs[outputIndex];
         const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
         outputValue = {};
-        outputValue.dataType = outputSocket.contract.producedDataType;
+        outputValue.dataType = outputSocket.contract.producedPayloadType;
 
         if (!payloadRegistry) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
@@ -247,14 +248,25 @@ void NodeHeatSolve::populateOutputPayloads(
         }
 
         const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
-        if (outputSocket.contract.producedDataType == NodeDataType::Heat) {
+        if (outputSocket.contract.producedPayloadType == NodePayloadType::Heat) {
             HeatData heatData{};
             heatData.sourceHandles = sourceHandles;
-            heatData.receiverGeometryHandles = receiverGeometryHandles;
+            heatData.receiverMeshHandles = receiverMeshHandles;
             heatData.materialBindings = materialBindings;
             heatData.active = active;
             heatData.paused = paused;
             heatData.resetRequested = resetRequested;
+            heatData.payloadHash = NodeGraphHash::start();
+            NodeGraphHash::combine(heatData.payloadHash, voronoiPayloadHash);
+            NodeGraphHash::combine(heatData.payloadHash, contactPayloadHash);
+            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.active ? 1u : 0u));
+            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.paused ? 1u : 0u));
+            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.resetRequested ? 1u : 0u));
+            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.materialBindings.size()));
+            for (const HeatMaterialBindingEntry& binding : heatData.materialBindings) {
+                NodeGraphHash::combineString(heatData.payloadHash, binding.groupName);
+                NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(binding.presetId));
+            }
             outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(heatData));
         }
 
@@ -278,14 +290,15 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
         return false;
     }
 
-    const NodeGraphSocket* voronoiSocket = findInputSocket(context.node, NodeGraphValueType::Voronoi);
-    const NodeGraphSocket* contactSocket = findInputSocket(context.node, NodeGraphValueType::Contact);
+    const NodeGraphSocket* voronoiSocket = findInputSocket(context.node, NodeGraphValueType::Volume);
+    const NodeGraphSocket* contactSocket = findInputSocket(context.node, NodeGraphValueType::Field);
     for (const NodeGraphSocket* inputSocket : {voronoiSocket, contactSocket}) {
         if (!inputSocket) {
             continue;
         }
 
-        const NodeDataBlock* inputValue = readInput(context.node, inputSocket->id, context.executionState);
+        const NodeDataBlock* inputValue = readInputValue(
+            readEvaluatedInput(context.node, inputSocket->id, context.executionState));
         if (!inputValue) {
             continue;
         }
@@ -298,7 +311,7 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
     NodeGraphHash::combineFloat(outHash, voronoi->params.cellSize);
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(voronoi->params.voxelResolution));
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(contact->bindings.size()));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(contact->pair.kind));
 
     NodeGraphHash::combineString(outHash, NodePanelUtils::readStringParam(context.node, nodegraphparams::heatsolve::MaterialBindings));
     std::vector<NodeDataHandle> sourceHandles;
@@ -308,7 +321,7 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
             continue;
         }
 
-        NodeGraphHash::combine(outHash, static_cast<uint64_t>(NodeDataType::HeatSource));
+        NodeGraphHash::combine(outHash, static_cast<uint64_t>(NodePayloadType::HeatSource));
         NodeGraphHash::combine(outHash, sourceHandle.key);
         NodeGraphHash::combine(outHash, sourceHandle.revision);
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(sourceHandle.count));
@@ -325,6 +338,7 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
 NodeGraphNodeId NodeHeatSolve::selectHeatSolveNode(
     const NodeGraphState& state,
     const NodeGraphKernelExecutionState& executionState) {
+    (void)executionState;
     NodeGraphNodeId selectedNodeId{};
     for (const NodeGraphNode& node : state.nodes) {
         if (getNodeTypeId(node.typeId) != nodegraphtypes::HeatSolve) {
@@ -333,15 +347,6 @@ NodeGraphNodeId NodeHeatSolve::selectHeatSolveNode(
 
         bool enabled = false;
         if (!tryGetNodeParamBool(node, nodegraphparams::heatsolve::Enabled, enabled) || !enabled) {
-            continue;
-        }
-
-        const bool hasContact =
-            readContactInput(node, executionState, executionState.services.payloadRegistry) != nullptr;
-        const bool hasVoronoi =
-            readVoronoiInput(node, executionState, executionState.services.payloadRegistry) != nullptr;
-
-        if (!hasContact || !hasVoronoi) {
             continue;
         }
 

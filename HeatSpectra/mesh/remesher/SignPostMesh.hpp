@@ -6,9 +6,6 @@
 
 #include "HalfEdgeMesh.hpp"
 
-struct GeometryData;
-class Model;
-
 class SignpostMesh {
 public:
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
@@ -16,8 +13,9 @@ public:
     using Triangle2D = HalfEdgeMesh::Triangle2D;
 
     // Construction
-    void buildFromModel(const Model& srcModel);
-    void buildFromGeometry(const GeometryData& geometry);
+    void buildFromIndexedData(
+        const std::vector<float>& pointPositions,
+        const std::vector<uint32_t>& triangleIndices);
     Triangle2D layoutTriangle(uint32_t faceIdx) const;
 
     // Intrinsic operations

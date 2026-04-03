@@ -1,5 +1,6 @@
 #include "NodeHeatSource.hpp"
 #include "NodeGraphRegistry.hpp"
+#include "NodeGraphDataTypes.hpp"
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphHash.hpp"
 #include "NodePanelUtils.hpp"
@@ -10,36 +11,36 @@ const char* NodeHeatSource::typeId() const {
 }
 
 bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
-    const NodeDataBlock* inputGeometryValue = nullptr;
-    const NodeGraphSocket* modelSocket = findInputSocket(context.node, "Model");
-    if (modelSocket) {
-        inputGeometryValue = readInput(context.node, modelSocket->id, context.executionState);
-    }
-    if (inputGeometryValue && inputGeometryValue->dataType != NodeDataType::Geometry) {
-        inputGeometryValue = nullptr;
-    }
+    const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
+    const EvaluatedSocketValue* inputMesh =
+        meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);
+    NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodeDataType::None;
+        outputValue.dataType = NodePayloadType::None;
         outputValue.payloadHandle = {};
-        NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
-        if (!inputGeometryValue || !payloadRegistry) {
+        if (!payloadRegistry) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        if (inputGeometryValue->payloadHandle.key == 0) {
+        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        outputValue.dataType = NodeDataType::HeatSource;
+        outputValue.dataType = NodePayloadType::HeatSource;
         const float temperature = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node, nodegraphparams::heatsource::Temperature, 100.0));
+        const uint64_t meshPayloadHash = payloadHashForDataBlock(*inputMeshValue, payloadRegistry);
         HeatSourceData payload{};
-        payload.geometryHandle = inputGeometryValue->payloadHandle;
+        payload.meshHandle = inputMeshValue->payloadHandle;
         payload.temperature = temperature;
+        payload.payloadHash = NodeGraphHash::start();
+        NodeGraphHash::combine(payload.payloadHash, meshPayloadHash);
+        NodeGraphHash::combineFloat(payload.payloadHash, payload.temperature);
         const uint64_t payloadKey = makeSocketKey(
             context.node.id,
             context.node.outputs[outputIndex].id);
@@ -52,27 +53,23 @@ bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
 
 
 bool NodeHeatSource::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
-    const NodeDataBlock* inputGeometryValue = nullptr;
-    const NodeGraphSocket* modelSocket = findInputSocket(context.node, "Model");
-    if (modelSocket) {
-        inputGeometryValue = readInput(context.node, modelSocket->id, context.executionState);
-    }
-    if (inputGeometryValue && inputGeometryValue->dataType != NodeDataType::Geometry) {
-        inputGeometryValue = nullptr;
-    }
+    const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
+    const EvaluatedSocketValue* inputMesh =
+        meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);
 
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
 
-    if (!inputGeometryValue) {
+    if (!inputMeshValue) {
         NodeGraphHash::combine(outHash, 0u);
         return true;
     }
 
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputGeometryValue->dataType));
-    NodeGraphHash::combine(outHash, inputGeometryValue->payloadHandle.key);
-    NodeGraphHash::combine(outHash, inputGeometryValue->payloadHandle.revision);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputGeometryValue->payloadHandle.count));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->dataType));
+    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.key);
+    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.revision);
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->payloadHandle.count));
     NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
         context.node, nodegraphparams::heatsource::Temperature, 100.0)));
     return true;

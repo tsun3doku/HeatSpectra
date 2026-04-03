@@ -17,7 +17,7 @@ class ResourceManager;
 class HeatReceiverRenderer {
 public:
     struct ReceiverRenderBinding {
-        Model* model = nullptr;
+        uint32_t runtimeModelId = 0;
     };
 
     HeatReceiverRenderer(VulkanDevice& device, UniformBufferManager& uniformBufferManager);
@@ -26,8 +26,8 @@ public:
     void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void cleanup();
     void updateDescriptors(const std::vector<HeatOverlayData>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
-    void updateDescriptors(const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers, ResourceManager& resourceManager, uint32_t maxFramesInFlight, bool forceReallocate);
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers) const;
+    void updateDescriptors(const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
+    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ResourceManager& resourceManager) const;
 
 private:
     bool createDescriptorPool(uint32_t maxFramesInFlight);
@@ -45,7 +45,7 @@ private:
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
 
-    std::unordered_map<const Model*, std::vector<VkDescriptorSet>> receiverDescriptorSets;
+    std::unordered_map<uint32_t, std::vector<VkDescriptorSet>> receiverDescriptorSets;
 
     bool initialized = false;
 };

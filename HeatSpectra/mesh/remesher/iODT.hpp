@@ -2,19 +2,13 @@
 #include <glm/glm.hpp>
 #include "GeodesicTracer.hpp"
 #include "SignPostMesh.hpp"
-#include "scene/Model.hpp"
 #include "util/Structs.hpp"
 #include "CommonSubdivision.hpp"
 #include "SupportingHalfedge.hpp"
 
-class VulkanDevice;
-class MemoryAllocator;
-struct GeometryData;
-
 class iODT {
 public:
-    iODT(Model& model, VulkanDevice& vulkanDevice, MemoryAllocator& allocator);
-    iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAllocator& allocator);
+    iODT(const std::vector<float>& pointPositions, const std::vector<uint32_t>& triangleIndices);
     ~iODT();
     
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
@@ -78,8 +72,6 @@ private:
     void initializeVertexLocations();
     SignpostMesh intrinsicMesh;     // Intrinsic mesh 
     SignpostMesh inputMesh;         // Input mesh 
-    VulkanDevice& vulkanDevice;     
-    MemoryAllocator& allocator;    
     GeodesicTracer tracer;          // Tracer for the intrinsic mesh
     GeodesicTracer tracerInput;     // Tracer for the input mesh
 

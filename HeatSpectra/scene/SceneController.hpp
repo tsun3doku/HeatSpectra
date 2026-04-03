@@ -9,7 +9,6 @@
 class CameraController;
 class ModelUploader;
 class ResourceManager;
-class RuntimePayloadController;
 class VulkanDevice;
 class FrameSync;
 
@@ -19,7 +18,6 @@ public:
         VulkanDevice& vulkanDevice,
         ResourceManager& resourceManager,
         ModelUploader& modelUploader,
-        RuntimePayloadController& runtimePayloadController,
         FrameSync& frameSync,
         CameraController& cameraController,
         std::atomic<bool>& isOperating);
@@ -46,7 +44,6 @@ private:
     VulkanDevice& vulkanDevice;
     ResourceManager& resourceManager;
     ModelUploader& modelUploader;
-    RuntimePayloadController& runtimePayloadController;
     FrameSync& frameSync;
     CameraController& cameraController;
     std::atomic<bool>& isOperating;

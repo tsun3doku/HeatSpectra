@@ -27,12 +27,6 @@ public:
         const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
         bool isActive,
         bool isPaused) const;
-    void renderSurfels(
-        VkCommandBuffer cmdBuffer,
-        uint32_t frameIndex,
-        float radius,
-        const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
-        const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers) const;
 
 private:
     HeatSystemStageContext context;

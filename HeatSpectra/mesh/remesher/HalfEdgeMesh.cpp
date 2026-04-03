@@ -6,7 +6,6 @@
 #include <set>
 #include <iostream>
 
-#include "domain/GeometryData.hpp"
 #include "scene/Model.hpp"
 #include "HalfEdgeMesh.hpp"
 
@@ -143,40 +142,21 @@ void buildFromIndexedMesh(
 
 } // namespace
 
-void HalfEdgeMesh::buildFromModel(const class Model& srcModel) {
-	vertices.clear();
-	edges.clear();
-	faces.clear();
-	halfEdges.clear();
-
+void HalfEdgeMesh::buildFromIndexedData(
+	const std::vector<float>& pointPositions,
+	const std::vector<uint32_t>& triangleIndices) {
 	std::vector<glm::vec3> vertexPositions;
-	vertexPositions.reserve(srcModel.getVertexCount());
-	for (const ::Vertex& vertex : srcModel.getVertices()) {
-		vertexPositions.push_back(vertex.pos);
-	}
-	buildFromIndexedMesh(*this, vertexPositions, srcModel.getIndices());
-
-	if (!isManifold()) {
-		std::cerr << "[HalfEdgeMesh] Mesh is not manifold" << std::endl;
-		return;
-	}
-
-	initializeIntrinsicLengths();
-}
-
-void HalfEdgeMesh::buildFromGeometry(const GeometryData& geometry) {
-	std::vector<glm::vec3> vertexPositions;
-	vertexPositions.reserve(geometry.pointPositions.size() / 3);
-	for (size_t index = 0; index + 2 < geometry.pointPositions.size(); index += 3) {
+	vertexPositions.reserve(pointPositions.size() / 3);
+	for (size_t index = 0; index + 2 < pointPositions.size(); index += 3) {
 		vertexPositions.emplace_back(
-			geometry.pointPositions[index],
-			geometry.pointPositions[index + 1],
-			geometry.pointPositions[index + 2]);
+			pointPositions[index],
+			pointPositions[index + 1],
+			pointPositions[index + 2]);
 	}
-	buildFromIndexedMesh(*this, vertexPositions, geometry.triangleIndices);
+	buildFromIndexedMesh(*this, vertexPositions, triangleIndices);
 
 	if (!isManifold()) {
-		std::cerr << "[HalfEdgeMesh] GeometryData mesh is not manifold" << std::endl;
+		std::cerr << "[HalfEdgeMesh] Indexed mesh is not manifold" << std::endl;
 		return;
 	}
 

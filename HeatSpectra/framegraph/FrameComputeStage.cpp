@@ -1,7 +1,5 @@
 #include "FrameComputeStage.hpp"
 
-#include <iostream>
-
 #include "heat/HeatSystem.hpp"
 #include "util/ComputeTiming.hpp"
 #include "FrameSync.hpp"
@@ -21,7 +19,6 @@ FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, HeatSystem* hea
         return FrameStageResult::Continue;
     }
 
-    heatSystem->processResetRequest();
     heatSystem->update();
 
     const bool hasComputeWritesForGraphics = heatSystem->hasDispatchableComputeWork();
@@ -31,7 +28,6 @@ FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, HeatSystem* hea
     if (hasComputeWritesForGraphics) {
         const auto& computeCommandBuffers = heatSystem->getComputeCommandBuffers();
         if (frameIndex >= computeCommandBuffers.size()) {
-            std::cout << "[FrameComputeStage] Missing simulation compute command buffer for frame index" << std::endl;
             syncState = {};
             return FrameStageResult::Fatal;
         }
@@ -45,14 +41,10 @@ FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, HeatSystem* hea
         const VkResult computeSubmitResult = frameSync.submitCompute(vulkanDevice.getComputeQueue(), computeCommandBuffer, !queuesAreShared);
 
         if (computeSubmitResult != VK_SUCCESS) {
-            std::cout << "[FrameComputeStage] compute vkQueueSubmit FAILED with result=" << computeSubmitResult;
             if (computeSubmitResult == VK_ERROR_DEVICE_LOST) {
-                std::cout << " (VK_ERROR_DEVICE_LOST). Treating as fatal." << std::endl;
                 syncState = {};
                 return FrameStageResult::Fatal;
             }
-
-            std::cout << " Triggering swapchain recreation" << std::endl;
             syncState = {};
             return FrameStageResult::RecreateSwapchain;
         }

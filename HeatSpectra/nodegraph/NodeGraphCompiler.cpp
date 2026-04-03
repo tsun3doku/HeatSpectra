@@ -30,39 +30,20 @@ std::vector<std::string> NodeGraphCompiler::findMissingInputSocketNames(
                 continue;
             }
 
-            if (inputSocket.valueType == NodeGraphValueType::Voronoi) {
+            if (inputSocket.valueType == NodeGraphValueType::Volume) {
                 hasVoronoiConnection = true;
             }
-            if (inputSocket.valueType == NodeGraphValueType::Contact) {
+            if (inputSocket.valueType == NodeGraphValueType::Field) {
                 hasContactConnection = true;
             }
         }
 
         std::vector<std::string> missing;
         if (!hasVoronoiConnection) {
-            missing.push_back("Voronoi");
+            missing.push_back("Volume");
         }
         if (!hasContactConnection) {
-            missing.push_back("Contact");
-        }
-        return missing;
-    }
-
-    if (getNodeTypeId(node.typeId) == nodegraphtypes::Voronoi) {
-        bool hasGeometryConnection = false;
-        for (const NodeGraphSocket& inputSocket : node.inputs) {
-            if (inputSocket.valueType != NodeGraphValueType::Mesh) {
-                continue;
-            }
-            if (connectedInputSockets.find(makeSocketKey(node.id, inputSocket.id)) != connectedInputSockets.end()) {
-                hasGeometryConnection = true;
-                break;
-            }
-        }
-
-        std::vector<std::string> missing;
-        if (!hasGeometryConnection) {
-            missing.push_back("Geometry");
+            missing.push_back("Field");
         }
         return missing;
     }
@@ -122,29 +103,15 @@ bool NodeGraphCompiler::nodeHasAllRequiredInputs(const NodeGraphState& state, No
                 continue;
             }
 
-            if (inputSocket.valueType == NodeGraphValueType::Voronoi) {
+            if (inputSocket.valueType == NodeGraphValueType::Volume) {
                 hasVoronoiConnection = true;
             }
-            if (inputSocket.valueType == NodeGraphValueType::Contact) {
+            if (inputSocket.valueType == NodeGraphValueType::Field) {
                 hasContactConnection = true;
             }
         }
 
         return hasVoronoiConnection && hasContactConnection;
-    }
-
-    if (getNodeTypeId(node->typeId) == nodegraphtypes::Voronoi) {
-        for (const NodeGraphSocket& inputSocket : node->inputs) {
-            if (inputSocket.valueType != NodeGraphValueType::Mesh) {
-                continue;
-            }
-
-            if (connectedInputSockets.find(makeSocketKey(node->id, inputSocket.id)) != connectedInputSockets.end()) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     for (const NodeGraphSocket& inputSocket : node->inputs) {

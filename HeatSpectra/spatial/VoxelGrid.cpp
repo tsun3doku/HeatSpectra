@@ -1,5 +1,4 @@
 ﻿#include "VoxelGrid.hpp"
-#include "scene/Model.hpp"
 #include "TriangleHashGrid.hpp"
 #include "util/GeometryUtils.hpp"
 #include <iostream>
@@ -227,21 +226,24 @@ VoxelGrid::VoxelGrid() {
 VoxelGrid::~VoxelGrid() {
 }
 
-void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, int gridSize) {
+void VoxelGrid::build(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices,
+    const TriangleHashGrid& triangleGrid,
+    int gridSize) {
     std::cout << "[VoxelGrid] Building " << gridSize << "^3 voxel grid..." << std::endl;
 
     // Calculate grid parameters from mesh bounding box
-    const auto& vertices = mesh.getVertices();
-    if (vertices.empty()) {
+    if (positions.empty()) {
         std::cerr << "[VoxelGrid] Error: Empty mesh" << std::endl;
         return;
     }
 
     glm::vec3 meshMin(FLT_MAX);
     glm::vec3 meshMax(-FLT_MAX);
-    for (const auto& vertex : vertices) {
-        meshMin = glm::min(meshMin, vertex.pos);
-        meshMax = glm::max(meshMax, vertex.pos);
+    for (const glm::vec3& position : positions) {
+        meshMin = glm::min(meshMin, position);
+        meshMax = glm::max(meshMax, position);
     }
 
     glm::vec3 extent = meshMax - meshMin;
@@ -266,7 +268,7 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     std::cout << "  World voxel size (effective): " << worldVoxelSize << std::endl;
 
     // Build triangle lists 
-    buildTriangleLists(mesh, triangleGrid);
+    buildTriangleLists(positions, indices, triangleGrid);
 
     int numCorners = (gridSize + 1) * (gridSize + 1) * (gridSize + 1);
     occupancy.assign(numCorners, 0);  // Default: OUTSIDE
@@ -288,7 +290,7 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
             for (int x = 0; x <= dimX; x++) {
                 glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
                 glm::vec3 cornerPos = toWorld(canonicalCornerPos);
-                float dist = distanceToNearestTriangle(cornerPos, mesh, triangleGrid);
+                float dist = distanceToNearestTriangle(cornerPos, positions, indices, triangleGrid);
 
                 size_t idx = getCornerIndex(x, y, z);
 
@@ -305,8 +307,7 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     std::cout << " Complete: " << borderCount << " border corners" << std::endl;
     std::cout << " Classifying " << (numCorners - borderCount) << " non-border corners..." << std::endl;
 
-    const auto& meshIndices = mesh.getIndices();
-    const size_t triCount = meshIndices.size() / 3;
+    const size_t triCount = indices.size() / 3;
     const glm::vec3 rayDir(1.0f, 0.0f, 0.0f);
     const float duplicateHitEpsilon = worldVoxelSize * 1e-3f;
 
@@ -318,9 +319,17 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     triV2.reserve(triCount);
     for (size_t t = 0; t < triCount; t++) {
         const size_t base = t * 3;
-        triV0.push_back(vertices[meshIndices[base + 0]].pos);
-        triV1.push_back(vertices[meshIndices[base + 1]].pos);
-        triV2.push_back(vertices[meshIndices[base + 2]].pos);
+        if (indices[base + 0] >= positions.size() ||
+            indices[base + 1] >= positions.size() ||
+            indices[base + 2] >= positions.size()) {
+            triV0.push_back(glm::vec3(0.0f));
+            triV1.push_back(glm::vec3(0.0f));
+            triV2.push_back(glm::vec3(0.0f));
+            continue;
+        }
+        triV0.push_back(positions[indices[base + 0]]);
+        triV1.push_back(positions[indices[base + 1]]);
+        triV2.push_back(positions[indices[base + 2]]);
     }
 
     int insideCount = 0;
@@ -450,10 +459,11 @@ void VoxelGrid::build(const Model& mesh, const TriangleHashGrid& triangleGrid, i
     std::cout << "[VoxelGrid] Build complete" << std::endl;
 }
 
-float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& mesh, const TriangleHashGrid& triangleGrid) const {
-    const auto& vertices = mesh.getVertices();
-    const auto& indices = mesh.getIndices();
-    
+float VoxelGrid::distanceToNearestTriangle(
+    const glm::vec3& point,
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices,
+    const TriangleHashGrid& triangleGrid) const {
     std::vector<size_t> nearbyTriangles;
     triangleGrid.getNearbyTriangles(point, nearbyTriangles);
     
@@ -467,10 +477,15 @@ float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& 
         if (indexBase + 2 >= indices.size()) {
             continue;
         }
+        if (indices[indexBase] >= positions.size() ||
+            indices[indexBase + 1] >= positions.size() ||
+            indices[indexBase + 2] >= positions.size()) {
+            continue;
+        }
 
-        const glm::vec3& v0 = vertices[indices[indexBase]].pos;
-        const glm::vec3& v1 = vertices[indices[indexBase + 1]].pos;
-        const glm::vec3& v2 = vertices[indices[indexBase + 2]].pos;
+        const glm::vec3& v0 = positions[indices[indexBase]];
+        const glm::vec3& v1 = positions[indices[indexBase + 1]];
+        const glm::vec3& v2 = positions[indices[indexBase + 2]];
         
         glm::vec3 closest = closestPointOnTriangle(point, v0, v1, v2);
         float dist = glm::length(point - closest);
@@ -482,15 +497,20 @@ float VoxelGrid::distanceToNearestTriangle(const glm::vec3& point, const Model& 
 
 
 
-void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& triangleGrid) {
+void VoxelGrid::buildTriangleLists(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices,
+    const TriangleHashGrid& triangleGrid) {
     std::cout << "  Building triangle spatial lists..." << std::endl;
 
-    const auto& vertices = mesh.getVertices();
-    const auto& indices = mesh.getIndices();
+    meshPoints.clear();
+    meshTriangles.clear();
+    trianglesList.clear();
+    offsets.clear();
 
-    meshPoints.reserve(vertices.size());
-    for (const auto& vertex : vertices) {
-        meshPoints.push_back(vertex.pos);
+    meshPoints.reserve(positions.size());
+    for (const glm::vec3& position : positions) {
+        meshPoints.push_back(position);
     }
 
     meshTriangles.reserve(indices.size());
@@ -507,9 +527,7 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
     std::vector<std::vector<int32_t>> voxelTriangles(static_cast<size_t>(numVoxels));
     std::vector<std::unordered_map<int, std::vector<int32_t>>> threadLocalVoxelTriangles;
 
-    const auto& meshVertices = mesh.getVertices();
-    const auto& meshIndices = mesh.getIndices();
-    size_t triCount = meshIndices.size() / 3;
+    size_t triCount = indices.size() / 3;
 
     #pragma omp parallel
     {
@@ -523,13 +541,16 @@ void VoxelGrid::buildTriangleLists(const Model& mesh, const TriangleHashGrid& tr
 
         #pragma omp for schedule(static)
         for (int t = 0; t < static_cast<int>(triCount); t++) {
-            uint32_t i0 = meshIndices[3 * t + 0];
-            uint32_t i1 = meshIndices[3 * t + 1];
-            uint32_t i2 = meshIndices[3 * t + 2];
+            uint32_t i0 = indices[3 * t + 0];
+            uint32_t i1 = indices[3 * t + 1];
+            uint32_t i2 = indices[3 * t + 2];
+            if (i0 >= positions.size() || i1 >= positions.size() || i2 >= positions.size()) {
+                continue;
+            }
 
-            glm::vec3 w0 = meshVertices[i0].pos;
-            glm::vec3 w1 = meshVertices[i1].pos;
-            glm::vec3 w2 = meshVertices[i2].pos;
+            glm::vec3 w0 = positions[i0];
+            glm::vec3 w1 = positions[i1];
+            glm::vec3 w2 = positions[i2];
 
             glm::vec3 c0 = toCanonical(w0);
             glm::vec3 c1 = toCanonical(w1);

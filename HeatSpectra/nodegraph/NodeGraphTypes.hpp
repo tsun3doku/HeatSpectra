@@ -52,34 +52,28 @@ inline bool operator!=(NodeGraphEdgeId lhs, NodeGraphEdgeId rhs) {
     return !(lhs == rhs);
 }
 
-enum class NodeGraphValueType {
+enum class NodeGraphValueType : uint8_t {
+    None,
     Mesh,
-    Intrinsic,
-    HeatReceiver,
-    HeatSource,
-    Contact,
-    Heat,
-    Voronoi,
-    Point,
+    Emitter,
+    Receiver,
+    Volume,
+    Field,
     Vector3,
     ScalarFloat,
     ScalarInt,
-    ScalarBool,
-    Unknown
+    ScalarBool
 };
 
-enum class NodeDataType : uint8_t {
+enum class NodePayloadType : uint8_t {
     None = 0,
     Geometry = 1,
-    Intrinsic = 2,
+    Remesh = 2,
     HeatReceiver = 3,
     HeatSource = 4,
     Heat = 5,
     Voronoi = 6,
-    Contact = 7,
-    ScalarFloat = 8,
-    ScalarInt = 9,
-    ScalarBool = 10
+    Contact = 7
 };
 
 enum class GeometryAttributeDomain : uint8_t {
@@ -110,8 +104,6 @@ enum class NodeGraphNodeCategory {
 
 using NodeTypeId = std::string;
 
-
-
 struct NodeGraphAttributeContract {
     std::string name;
     GeometryAttributeDomain domain = GeometryAttributeDomain::Point;
@@ -120,8 +112,7 @@ struct NodeGraphAttributeContract {
 };
 
 struct NodeGraphSocketContract {
-    std::vector<NodeDataType> acceptedDataTypes;
-    NodeDataType producedDataType = NodeDataType::None;
+    NodePayloadType producedPayloadType = NodePayloadType::None;
     std::vector<NodeGraphAttributeContract> requiredAttributes;
     std::vector<NodeGraphAttributeContract> guaranteedAttributes;
 };
@@ -129,7 +120,7 @@ struct NodeGraphSocketContract {
 struct NodeSocketSignature {
     std::string name;
     NodeGraphSocketDirection direction = NodeGraphSocketDirection::Input;
-    NodeGraphValueType valueType = NodeGraphValueType::Unknown;
+    NodeGraphValueType valueType = NodeGraphValueType::None;
     NodeGraphSocketContract contract;
 };
 
@@ -160,8 +151,6 @@ struct NodeGraphParamValue {
     std::string stringValue;
 };
 
-
-
 struct NodeTypeDefinition {
     NodeTypeId id;
     std::string displayName;
@@ -170,12 +159,10 @@ struct NodeTypeDefinition {
     std::vector<NodeGraphParamDefinition> parameters;
 };
 
-
-
 struct NodeGraphSocket {
     NodeGraphSocketId id{};
     std::string name;
-    NodeGraphValueType valueType = NodeGraphValueType::Unknown;
+    NodeGraphValueType valueType = NodeGraphValueType::None;
     NodeGraphSocketDirection direction = NodeGraphSocketDirection::Input;
     NodeGraphSocketContract contract;
 };
@@ -234,5 +221,10 @@ struct NodeGraphDelta {
     uint64_t toRevision = 0;
     std::vector<NodeGraphChange> changes;
 };
+
+NodeGraphValueType valueTypeOf(NodePayloadType payloadType);
+bool acceptsPayload(NodeGraphValueType valueType, NodePayloadType payloadType);
+bool acceptsPayload(const NodeGraphSocket& socket, NodePayloadType payloadType);
+bool producesPayload(const NodeGraphSocket& socket, NodePayloadType payloadType);
 
 

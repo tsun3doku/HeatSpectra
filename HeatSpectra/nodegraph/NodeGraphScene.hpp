@@ -77,8 +77,8 @@ private:
     std::unordered_map<uint32_t, QGraphicsEllipseItem*> outputSocketItemsBySocket;
     std::unordered_map<uint32_t, NodeGraphValueType> outputValueTypeBySocketId;
 
-    QGraphicsRectItem* hoveredNodeItem = nullptr;
-    QGraphicsPathItem* hoveredEdgeItem = nullptr;
+    NodeGraphNodeId hoveredNodeId{};
+    NodeGraphEdgeId hoveredEdgeId{};
 
     std::vector<NodeGraphEditor::CopiedNode> copiedNodes;
     std::vector<NodeGraphEditor::CopiedEdge> copiedEdges;

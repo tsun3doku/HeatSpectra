@@ -5,11 +5,7 @@
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphCompiler.hpp"
 #include "runtime/ContactPreviewStore.hpp"
-#include "runtime/RuntimePayloadController.hpp"
 #include "contact/ContactSystemController.hpp"
-#include "domain/ContactData.hpp"
-#include "domain/HeatData.hpp"
-#include "domain/VoronoiData.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
@@ -24,6 +20,80 @@ NodeGraphRuntime::NodeGraphRuntime(NodeGraphBridge* nodeGraphBridge, const NodeR
 }
 
 NodeGraphRuntime::~NodeGraphRuntime() = default;
+
+EvaluatedSocketValue NodeGraphRuntime::makeMissingSocketValue() const {
+    EvaluatedSocketValue value{};
+    value.status = EvaluatedSocketStatus::Missing;
+    return value;
+}
+
+EvaluatedSocketValue NodeGraphRuntime::makeErrorSocketValue(std::string error) const {
+    EvaluatedSocketValue value{};
+    value.status = EvaluatedSocketStatus::Error;
+    value.error = std::move(error);
+    return value;
+}
+
+EvaluatedSocketValue NodeGraphRuntime::makeValueSocketValue(const NodeDataBlock& data) const {
+    EvaluatedSocketValue value{};
+    value.status = EvaluatedSocketStatus::Value;
+    value.data = data;
+    return value;
+}
+
+void NodeGraphRuntime::propagateSkippedNodeOutputs(
+    const NodeGraphNode& node,
+    EvaluatedSocketStatus status,
+    const std::string& error,
+    NodeGraphEvaluationState& state) const {
+    const EvaluatedSocketValue skippedValue =
+        (status == EvaluatedSocketStatus::Error)
+        ? makeErrorSocketValue(error)
+        : makeMissingSocketValue();
+    for (const NodeGraphSocket& outputSocket : node.outputs) {
+        state.outputBySocket[makeSocketKey(node.id, outputSocket.id)] = skippedValue;
+    }
+}
+
+bool NodeGraphRuntime::evaluateNodeInputs(
+    const NodeGraphNode& node,
+    const std::unordered_map<uint64_t, const NodeGraphEdge*>& incomingEdgeByInputSocket,
+    const NodeGraphEvaluationState& state,
+    std::vector<const EvaluatedSocketValue*>& outInputs,
+    EvaluatedSocketStatus& outStatus,
+    std::string& outError) const {
+    outInputs.assign(node.inputs.size(), nullptr);
+    outStatus = EvaluatedSocketStatus::Value;
+    outError.clear();
+
+    for (std::size_t inputIndex = 0; inputIndex < node.inputs.size(); ++inputIndex) {
+        const NodeGraphSocket& inputSocket = node.inputs[inputIndex];
+        const auto edgeIt = incomingEdgeByInputSocket.find(makeSocketKey(node.id, inputSocket.id));
+        if (edgeIt == incomingEdgeByInputSocket.end() || !edgeIt->second) {
+            outStatus = EvaluatedSocketStatus::Missing;
+            return false;
+        }
+
+        const NodeGraphEdge& edge = *edgeIt->second;
+        const auto outputIt = state.outputBySocket.find(makeSocketKey(edge.fromNode, edge.fromSocket));
+        if (outputIt == state.outputBySocket.end()) {
+            outStatus = EvaluatedSocketStatus::Missing;
+            return false;
+        }
+
+        const EvaluatedSocketValue& inputValue = outputIt->second;
+        outInputs[inputIndex] = &inputValue;
+        if (inputValue.status == EvaluatedSocketStatus::Value) {
+            continue;
+        }
+
+        outStatus = inputValue.status;
+        outError = inputValue.error;
+        return false;
+    }
+
+    return true;
+}
 
 void NodeGraphRuntime::rebuildNodeById() {
     nodeById.clear();
@@ -132,11 +202,11 @@ void NodeGraphRuntime::applyChange(const NodeGraphChange& change) {
     }
 }
 
-void NodeGraphRuntime::tick(NodeGraphRuntimeExecutionState* outState) {
+void NodeGraphRuntime::tick(NodeGraphEvaluationState* outState) {
     if (!bridge) {
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
-            outState->outputValueBySocket.clear();
+            outState->outputBySocket.clear();
         }
         return;
     }
@@ -145,20 +215,15 @@ void NodeGraphRuntime::tick(NodeGraphRuntimeExecutionState* outState) {
 
 }
 
-void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState) {
+void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState) {
     NodeGraphCompiled compiled = NodeGraphCompiler::compile(graphState);
     if (graphState.nodes.size() > 0 && compiled.executionOrder.size() != graphState.nodes.size()) {
-        if (runtimeServices.runtimePayloadController) {
-            runtimeServices.runtimePayloadController->applyContactPayload(ContactData{});
-            runtimeServices.runtimePayloadController->applyHeatPayload(HeatData{});
-            runtimeServices.runtimePayloadController->applyVoronoiPayload(VoronoiData{});
-        }
         if (runtimeServices.contactPreviewStore) {
             runtimeServices.contactPreviewStore->endFrame();
         }
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
-            outState->outputValueBySocket.clear();
+            outState->outputBySocket.clear();
         }
         return;
     }
@@ -166,9 +231,9 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
     const std::vector<NodeGraphNodeId>& executionOrder = compiled.executionOrder;
     std::unordered_map<uint64_t, const NodeGraphEdge*> incomingEdgeByInputSocket;
     incomingEdgeByInputSocket.reserve(graphState.edges.size() * 2);
-    NodeGraphRuntimeExecutionState state{};
+    NodeGraphEvaluationState state{};
     state.sourceSocketByInputSocket.reserve(graphState.edges.size() * 2);
-    state.outputValueBySocket.reserve(graphState.edges.size() * 2);
+    state.outputBySocket.reserve(graphState.edges.size() * 2);
     for (const NodeGraphEdge& edge : graphState.edges) {
         const uint64_t inputKey = makeSocketKey(edge.toNode, edge.toSocket);
         incomingEdgeByInputSocket[inputKey] = &edge;
@@ -184,32 +249,30 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
         const NodeGraphNode& node = *nodeIt->second;
         const NodeTypeId typeId = getNodeTypeId(node.typeId);
 
-        std::vector<const NodeDataBlock*> inputValues(node.inputs.size(), nullptr);
-        for (std::size_t inputIndex = 0; inputIndex < node.inputs.size(); ++inputIndex) {
-            const NodeGraphSocket& inputSocket = node.inputs[inputIndex];
-            const auto edgeIt = incomingEdgeByInputSocket.find(makeSocketKey(node.id, inputSocket.id));
-            if (edgeIt == incomingEdgeByInputSocket.end() || !edgeIt->second) {
-                continue;
-            }
-
-            const NodeGraphEdge& edge = *edgeIt->second;
-            const auto outputIt = state.outputValueBySocket.find(makeSocketKey(edge.fromNode, edge.fromSocket));
-            if (outputIt == state.outputValueBySocket.end()) {
-                continue;
-            }
-
-            inputValues[inputIndex] = &outputIt->second;
+        std::vector<const EvaluatedSocketValue*> inputValues;
+        inputValues.reserve(node.inputs.size());
+        EvaluatedSocketStatus blockedStatus = EvaluatedSocketStatus::Value;
+        std::string blockedError;
+        if (!evaluateNodeInputs(
+                node,
+                incomingEdgeByInputSocket,
+                state,
+                inputValues,
+                blockedStatus,
+                blockedError)) {
+            propagateSkippedNodeOutputs(node, blockedStatus, blockedError, state);
+            continue;
         }
 
-    std::vector<NodeDataBlock> outputValues;
-    outputValues.reserve(node.outputs.size());
-    if (kernels.hasKernel(typeId)) {
+        std::vector<NodeDataBlock> outputValues;
+        outputValues.reserve(node.outputs.size());
+        if (kernels.hasKernel(typeId)) {
             const NodeGraphKernelExecutionState kernelState{
                 graphState,
                 *bridge,
                 runtimeServices,
                 incomingEdgeByInputSocket,
-                state.outputValueBySocket};
+                state.outputBySocket};
 
             uint64_t inputHash = 0;
             bool canHash = kernels.computeInputHash(node, kernelState, inputValues, inputHash);
@@ -228,7 +291,14 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
 
             if (!reusedCache) {
                 outputValues.resize(node.outputs.size());
-                initializeOutputsFromInputs(node, inputValues, outputValues);
+                std::vector<const NodeDataBlock*> inputDataValues(inputValues.size(), nullptr);
+                for (std::size_t inputIndex = 0; inputIndex < inputValues.size(); ++inputIndex) {
+                    const EvaluatedSocketValue* inputValue = inputValues[inputIndex];
+                    if (inputValue && inputValue->status == EvaluatedSocketStatus::Value) {
+                        inputDataValues[inputIndex] = &inputValue->data;
+                    }
+                }
+                initializeOutputsFromInputs(node, inputDataValues, outputValues);
                 kernels.executeNode(node, kernelState, inputValues, outputValues);
 
                 if (canHash) {
@@ -238,8 +308,8 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
             }
 
             for (std::size_t outputIndex = 0; outputIndex < node.outputs.size(); ++outputIndex) {
-                state.outputValueBySocket[makeSocketKey(node.id, node.outputs[outputIndex].id)] =
-                    outputValues[outputIndex];
+                state.outputBySocket[makeSocketKey(node.id, node.outputs[outputIndex].id)] =
+                    makeValueSocketValue(outputValues[outputIndex]);
             }
         }
     }
@@ -250,7 +320,7 @@ void NodeGraphRuntime::executeDataflow(NodeGraphRuntimeExecutionState* outState)
 
     if (outState) {
         outState->sourceSocketByInputSocket = std::move(state.sourceSocketByInputSocket);
-        outState->outputValueBySocket = std::move(state.outputValueBySocket);
+        outState->outputBySocket = std::move(state.outputBySocket);
     }
 }
 

@@ -16,24 +16,7 @@ namespace {
 NodeGraphDebugStore gStore;
 
 const GeometryData* resolveGeometryForDebugBlock(const NodeDataBlock& block, const NodePayloadRegistry* payloadRegistry) {
-    if (!payloadRegistry || block.payloadHandle.key == 0) {
-        return nullptr;
-    }
-
-    switch (block.dataType) {
-    case NodeDataType::Geometry:
-        return payloadRegistry->get<GeometryData>(block.payloadHandle);
-    case NodeDataType::HeatReceiver: {
-        const HeatReceiverData* heatReceiver = payloadRegistry->get<HeatReceiverData>(block.payloadHandle);
-        return heatReceiver ? payloadRegistry->get<GeometryData>(heatReceiver->geometryHandle) : nullptr;
-    }
-    case NodeDataType::HeatSource: {
-        const HeatSourceData* heatSource = payloadRegistry->get<HeatSourceData>(block.payloadHandle);
-        return heatSource ? payloadRegistry->get<GeometryData>(heatSource->geometryHandle) : nullptr;
-    }
-    default:
-        return nullptr;
-    }
+    return resolveGeometryForDataBlock(block, payloadRegistry);
 }
 
 const char* attributeDomainName(GeometryAttributeDomain domain) {
@@ -152,7 +135,7 @@ void NodeGraphDebugStore::setState(const NodeGraphState& graphState, NodePayload
 void NodeGraphDebugStore::publish(
     uint64_t runtimeRevision,
     std::unordered_map<uint64_t, uint64_t>&& inputSources,
-    std::unordered_map<uint64_t, NodeDataBlock>&& outputs) {
+    std::unordered_map<uint64_t, EvaluatedSocketValue>&& outputs) {
     std::lock_guard<std::mutex> lock(mutex);
     revision = runtimeRevision;
     srcByInput = std::move(inputSources);
@@ -182,29 +165,29 @@ bool NodeGraphDebugStore::tryGetNode(NodeGraphNodeId nodeId, NodeGraphRuntimeNod
 
     outInfo.inputs.reserve(nodeIt->inputs.size());
     for (const NodeGraphSocket& socket : nodeIt->inputs) {
-        const NodeDataBlock* block = nullptr;
+        const EvaluatedSocketValue* value = nullptr;
         const uint64_t inputKey = socketKey(nodeIt->id, socket.id);
         const auto srcIt = srcByInput.find(inputKey);
         if (srcIt != srcByInput.end()) {
             const auto dataIt = outBySocket.find(srcIt->second);
             if (dataIt != outBySocket.end()) {
-                block = &dataIt->second;
+                value = &dataIt->second;
             }
         }
 
-        outInfo.inputs.push_back(socketInfo(socket, block));
+        outInfo.inputs.push_back(socketInfo(socket, value));
     }
 
     outInfo.outputs.reserve(nodeIt->outputs.size());
     for (const NodeGraphSocket& socket : nodeIt->outputs) {
-        const NodeDataBlock* block = nullptr;
+        const EvaluatedSocketValue* value = nullptr;
         const uint64_t outputKey = socketKey(nodeIt->id, socket.id);
         const auto outIt = outBySocket.find(outputKey);
         if (outIt != outBySocket.end()) {
-            block = &outIt->second;
+            value = &outIt->second;
         }
 
-        outInfo.outputs.push_back(socketInfo(socket, block));
+        outInfo.outputs.push_back(socketInfo(socket, value));
     }
 
     return true;
@@ -214,17 +197,35 @@ uint64_t NodeGraphDebugStore::socketKey(NodeGraphNodeId nodeId, NodeGraphSocketI
     return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
 }
 
-NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block) const {
+NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphSocket& socket, const EvaluatedSocketValue* value) const {
     NodeGraphRuntimeSocketDebugInfo info{};
     info.socketId = socket.id;
     info.socketName = socket.name;
     info.direction = socket.direction;
-    if (!block) {
+    if (!value) {
         return info;
     }
 
+    switch (value->status) {
+    case EvaluatedSocketStatus::Value:
+        info.status = "value";
+        break;
+    case EvaluatedSocketStatus::Error:
+        info.status = "error";
+        break;
+    case EvaluatedSocketStatus::Missing:
+    default:
+        info.status = "missing";
+        break;
+    }
+    info.error = value->error;
+    if (value->status != EvaluatedSocketStatus::Value) {
+        return info;
+    }
+
+    const NodeDataBlock* block = &value->data;
     info.hasValue = true;
-    info.dataType = nodeDataTypeName(block->dataType);
+    info.dataType = nodePayloadTypeName(block->dataType);
     info.metadata = block->metadata;
     info.lineageNodeIds = block->lineageNodeIds;
 
@@ -232,9 +233,10 @@ NodeGraphRuntimeSocketDebugInfo NodeGraphDebugStore::socketInfo(const NodeGraphS
         return info;
     }
 
-    if (block->dataType == NodeDataType::Geometry ||
-        block->dataType == NodeDataType::HeatReceiver ||
-        block->dataType == NodeDataType::HeatSource) {
+    if (block->dataType == NodePayloadType::Geometry ||
+        block->dataType == NodePayloadType::Remesh ||
+        block->dataType == NodePayloadType::HeatReceiver ||
+        block->dataType == NodePayloadType::HeatSource) {
         const GeometryData* geometry = resolveGeometryForDebugBlock(*block, payloadRegistry);
         if (!geometry) {
             return info;

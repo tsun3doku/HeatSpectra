@@ -7,14 +7,21 @@
 #include "contact/ContactSystemController.hpp"
 #include "runtime/ContactPreviewStore.hpp"
 #include "runtime/ComputeCache.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "runtime/RuntimePayloadController.hpp"
+#include "runtime/RemeshController.hpp"
+#include "runtime/RuntimeContactTransport.hpp"
+#include "runtime/RuntimeHeatTransport.hpp"
+#include "runtime/RuntimeModelTransport.hpp"
+#include "runtime/RuntimePackageController.hpp"
+#include "runtime/RuntimeProductRegistry.hpp"
+#include "runtime/RuntimeRemeshTransport.hpp"
+#include "runtime/RuntimeVoronoiTransport.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemController.hpp"
 #include "heat/VoronoiSystem.hpp"
 #include "heat/VoronoiSystemController.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
+#include "nodegraph/NodeGraphRuntimeBridge.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 #include "app/SwapchainManager.hpp"
 #include "render/RenderRuntime.hpp"
@@ -46,7 +53,7 @@ public:
     HeatSystemController* heatSystemController();
     ContactSystemController* contactSystemController();
     ContactPreviewStore* contactPreviewStore();
-    RuntimePayloadController* runtimePayloadController();
+    RuntimePackageController* runtimePackageController();
     SceneController* sceneController();
     const SceneController* sceneController() const;
     NodeGraphBridge* nodeGraphBridge();
@@ -58,16 +65,23 @@ private:
     SwapchainManager swapchainManager;
     std::unique_ptr<RenderRuntime> renderRuntime;
     FrameSync frameSync;
+    std::unique_ptr<RuntimeContactTransport> runtimeContactTransportState;
+    std::unique_ptr<RuntimeHeatTransport> runtimeHeatTransportState;
+    std::unique_ptr<RuntimeModelTransport> runtimeModelTransportState;
+    std::unique_ptr<RuntimeRemeshTransport> runtimeRemeshTransportState;
+    std::unique_ptr<RuntimeVoronoiTransport> runtimeVoronoiTransportState;
+    std::unique_ptr<RuntimeProductRegistry> runtimeProductRegistryState;
+    std::unique_ptr<RemeshController> remeshControllerState;
     std::unique_ptr<VoronoiSystemController> voronoiSystemControllerState;
     std::unique_ptr<HeatSystemController> heatSystemControllerState;
     std::unique_ptr<ContactSystemController> contactSystemControllerState;
     std::unique_ptr<ContactPreviewStore> contactPreviewStoreState;
     std::unique_ptr<ComputeCache> computeCacheState;
-    std::unique_ptr<RuntimeIntrinsicCache> intrinsicRegistryState;
-    std::unique_ptr<RuntimePayloadController> runtimePayloadControllerState;
+    std::unique_ptr<RuntimePackageController> runtimePackageControllerState;
     std::unique_ptr<SceneController> sceneControllerState;
     std::unique_ptr<InputController> inputControllerState;
     std::unique_ptr<NodeGraphBridge> nodeGraphBridgeState;
+    std::unique_ptr<NodeGraphRuntimeBridge> nodeGraphRuntimeBridgeState;
     std::unique_ptr<NodeGraphController> nodeGraphControllerState;
     std::unique_ptr<NodePayloadRegistry> payloadRegistryState;
     bool initialized = false;

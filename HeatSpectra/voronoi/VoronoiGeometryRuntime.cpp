@@ -1,7 +1,5 @@
 #include "voronoi/VoronoiGeometryRuntime.hpp"
 
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
 #include "util/GeometryUtils.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/CommandBufferManager.hpp"
@@ -17,27 +15,45 @@
 VoronoiGeometryRuntime::VoronoiGeometryRuntime(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    Model& model,
-    const GeometryData& geometryData,
-    const IntrinsicMeshData& intrinsicMeshData,
-    const RuntimeIntrinsicCache::Entry& intrinsicResources)
+    uint32_t runtimeModelId,
+    std::vector<SurfaceVertex> surfaceVertices,
+    std::vector<uint32_t> intrinsicTriangleIndices,
+    VkBufferView supportingHalfedgeView,
+    VkBufferView supportingAngleView,
+    VkBufferView halfedgeView,
+    VkBufferView edgeView,
+    VkBufferView triangleView,
+    VkBufferView lengthView,
+    VkBufferView inputHalfedgeView,
+    VkBufferView inputEdgeView,
+    VkBufferView inputTriangleView,
+    VkBufferView inputLengthView)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      model(model),
-      geometryData(geometryData),
-      intrinsicMeshData(intrinsicMeshData),
-      intrinsicResources(&intrinsicResources) {
+      runtimeModelId(runtimeModelId),
+      surfaceVertices(std::move(surfaceVertices)),
+      intrinsicTriangleIndices(std::move(intrinsicTriangleIndices)),
+      supportingHalfedgeView(supportingHalfedgeView),
+      supportingAngleView(supportingAngleView),
+      halfedgeView(halfedgeView),
+      edgeView(edgeView),
+      triangleView(triangleView),
+      lengthView(lengthView),
+      inputHalfedgeView(inputHalfedgeView),
+      inputEdgeView(inputEdgeView),
+      inputTriangleView(inputTriangleView),
+      inputLengthView(inputLengthView) {
 }
 
 VoronoiGeometryRuntime::~VoronoiGeometryRuntime() {
 }
 
 bool VoronoiGeometryRuntime::createSurfaceBuffers() {
-    if (intrinsicMeshData.vertices.empty()) {
+    if (surfaceVertices.empty()) {
         std::cerr << "[VoronoiGeometryRuntime] Missing intrinsic state for model" << std::endl;
         return false;
     }
-    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    const size_t vertexCount = surfaceVertices.size();
     if (vertexCount == 0) {
         std::cerr << "[VoronoiGeometryRuntime] Model has 0 intrinsic vertices" << std::endl;
         return false;
@@ -72,21 +88,15 @@ bool VoronoiGeometryRuntime::createSurfaceBuffers() {
 
     std::vector<glm::vec3> positions(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
-        positions[i] = glm::vec3(
-            intrinsicMeshData.vertices[i].position[0],
-            intrinsicMeshData.vertices[i].position[1],
-            intrinsicMeshData.vertices[i].position[2]);
+        positions[i] = surfaceVertices[i].position;
     }
-    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicTriangleIndices);
 
     std::vector<SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
-        surfacePoints[i].normal = glm::vec3(
-            intrinsicMeshData.vertices[i].normal[0],
-            intrinsicMeshData.vertices[i].normal[1],
-            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].normal = surfaceVertices[i].normal;
         surfacePoints[i].area = vertexAreas[i];
         surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
@@ -119,11 +129,11 @@ bool VoronoiGeometryRuntime::initializeSurfaceBuffer() {
         return true;
     }
 
-    if (intrinsicMeshData.vertices.empty()) {
+    if (surfaceVertices.empty()) {
         std::cerr << "[VoronoiGeometryRuntime] Missing intrinsic state for model" << std::endl;
         return false;
     }
-    const size_t vertexCount = intrinsicMeshData.vertices.size();
+    const size_t vertexCount = surfaceVertices.size();
     if (vertexCount == 0 || vertexCount != getIntrinsicVertexCount()) {
         std::cerr << "[VoronoiGeometryRuntime] Vertex count mismatch or zero vertices." << std::endl;
         return false;
@@ -146,21 +156,15 @@ bool VoronoiGeometryRuntime::initializeSurfaceBuffer() {
 
     std::vector<glm::vec3> positions(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
-        positions[i] = glm::vec3(
-            intrinsicMeshData.vertices[i].position[0],
-            intrinsicMeshData.vertices[i].position[1],
-            intrinsicMeshData.vertices[i].position[2]);
+        positions[i] = surfaceVertices[i].position;
     }
-    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMeshData.triangleIndices);
+    const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicTriangleIndices);
 
     std::vector<SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
-        surfacePoints[i].normal = glm::vec3(
-            intrinsicMeshData.vertices[i].normal[0],
-            intrinsicMeshData.vertices[i].normal[1],
-            intrinsicMeshData.vertices[i].normal[2]);
+        surfacePoints[i].normal = surfaceVertices[i].normal;
         surfacePoints[i].area = vertexAreas[i];
         surfacePoints[i].color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
@@ -313,43 +317,43 @@ void VoronoiGeometryRuntime::cleanup() {
 }
 
 VkBufferView VoronoiGeometryRuntime::getSupportingHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewS : VK_NULL_HANDLE;
+    return supportingHalfedgeView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getSupportingAngleView() const {
-    return intrinsicResources ? intrinsicResources->viewA : VK_NULL_HANDLE;
+    return supportingAngleView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewH : VK_NULL_HANDLE;
+    return halfedgeView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewE : VK_NULL_HANDLE;
+    return edgeView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewT : VK_NULL_HANDLE;
+    return triangleView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewL : VK_NULL_HANDLE;
+    return lengthView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getInputHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewHInput : VK_NULL_HANDLE;
+    return inputHalfedgeView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getInputEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewEInput : VK_NULL_HANDLE;
+    return inputEdgeView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getInputTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewTInput : VK_NULL_HANDLE;
+    return inputTriangleView;
 }
 
 VkBufferView VoronoiGeometryRuntime::getInputLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewLInput : VK_NULL_HANDLE;
+    return inputLengthView;
 }
 
 void VoronoiGeometryRuntime::cleanupStagingBuffers() {

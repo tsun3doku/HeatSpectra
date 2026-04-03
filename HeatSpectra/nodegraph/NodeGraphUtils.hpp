@@ -4,19 +4,16 @@
 #include <string>
 
 struct NodeGraphKernelExecutionState;
+struct EvaluatedSocketValue;
 
 uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
 const NodeGraphNode* findNodeInState(const NodeGraphState& state, NodeGraphNodeId nodeId);
-const NodeGraphEdge* findIncomingEdgeInState(
-    const NodeGraphState& state,
-    NodeGraphNodeId toNodeId,
-    NodeGraphSocketId toSocketId);
+const NodeGraphEdge* findIncomingEdgeInState(const NodeGraphState& state, NodeGraphNodeId toNodeId, NodeGraphSocketId toSocketId);
 const NodeGraphSocket* findInputSocket(const NodeGraphNode& node, const char* socketName);
 const NodeGraphSocket* findInputSocket(const NodeGraphNode& node, NodeGraphValueType valueType);
-const NodeDataBlock* readInput(
-    const NodeGraphNode& node,
-    NodeGraphSocketId inputSocketId,
-    const NodeGraphKernelExecutionState& executionState);
+const NodeGraphSocket* findOutputSocketProducingPayload(const NodeGraphNode& node, NodePayloadType payloadType);
+const EvaluatedSocketValue* readEvaluatedInput(const NodeGraphNode& node, NodeGraphSocketId inputSocketId, const NodeGraphKernelExecutionState& executionState);
+const NodeDataBlock* readInputValue(const EvaluatedSocketValue* input);
 
 NodeGraphParamValue makeNodeGraphParamValue(const NodeGraphParamDefinition& definition);
 const NodeGraphParamValue* findNodeParamValue(const NodeGraphNode& node, uint32_t paramId);

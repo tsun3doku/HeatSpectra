@@ -1,11 +1,7 @@
 #include "VoronoiSystem.hpp"
 
-#include "domain/GeometryData.hpp"
-#include "domain/RemeshData.hpp"
 #include "renderers/PointRenderer.hpp"
 #include "renderers/VoronoiRenderer.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ResourceManager.hpp"
@@ -26,7 +22,6 @@ VoronoiSystem::VoronoiSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
     ResourceManager& resourceManager,
-    RuntimeIntrinsicCache& intrinsicCache,
     UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
     CommandPool& renderCommandPool,
@@ -35,7 +30,6 @@ VoronoiSystem::VoronoiSystem(
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
-      intrinsicCache(intrinsicCache),
       uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       maxFramesInFlight(maxFramesInFlight),
@@ -78,21 +72,69 @@ void VoronoiSystem::failInitialization(const char* stage) {
 }
 
 void VoronoiSystem::setReceiverPayloads(
-    const std::vector<GeometryData>& receiverGeometries,
-    const std::vector<IntrinsicMeshData>& receiverIntrinsics,
-    const std::vector<uint32_t>& receiverModelIds) {
+    const std::vector<uint32_t>& receiverNodeModelIds,
+    const std::vector<std::vector<glm::vec3>>& receiverGeometryPositions,
+    const std::vector<std::vector<uint32_t>>& receiverGeometryTriangleIndices,
+    const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
+    const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+    const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
+    const std::vector<uint32_t>& receiverModelIds,
+    const std::vector<VkBuffer>& meshVertexBuffers,
+    const std::vector<VkDeviceSize>& meshVertexBufferOffsets,
+    const std::vector<VkBuffer>& meshIndexBuffers,
+    const std::vector<VkDeviceSize>& meshIndexBufferOffsets,
+    const std::vector<uint32_t>& meshIndexCounts,
+    const std::vector<glm::mat4>& meshModelMatrices,
+    const std::vector<VkBufferView>& supportingHalfedgeViews,
+    const std::vector<VkBufferView>& supportingAngleViews,
+    const std::vector<VkBufferView>& halfedgeViews,
+    const std::vector<VkBufferView>& edgeViews,
+    const std::vector<VkBufferView>& triangleViews,
+    const std::vector<VkBufferView>& lengthViews,
+    const std::vector<VkBufferView>& inputHalfedgeViews,
+    const std::vector<VkBufferView>& inputEdgeViews,
+    const std::vector<VkBufferView>& inputTriangleViews,
+    const std::vector<VkBufferView>& inputLengthViews) {
     runtime.setReceiverPayloads(
         vulkanDevice,
         memoryAllocator,
-        resourceManager,
-        intrinsicCache,
         renderCommandPool,
-        receiverGeometries,
-        receiverIntrinsics,
-        receiverModelIds);
+        receiverNodeModelIds,
+        receiverGeometryPositions,
+        receiverGeometryTriangleIndices,
+        receiverIntrinsicMeshes,
+        receiverSurfaceVertices,
+        receiverIntrinsicTriangleIndices,
+        receiverModelIds,
+        meshVertexBuffers,
+        meshVertexBufferOffsets,
+        meshIndexBuffers,
+        meshIndexBufferOffsets,
+        meshIndexCounts,
+        meshModelMatrices,
+        supportingHalfedgeViews,
+        supportingAngleViews,
+        halfedgeViews,
+        edgeViews,
+        triangleViews,
+        lengthViews,
+        inputHalfedgeViews,
+        inputEdgeViews,
+        inputTriangleViews,
+        inputLengthViews);
+
+    surfaceRuntime.cleanup();
+    surfaceRuntime.initializeGeometryBindings(
+        vulkanDevice,
+        memoryAllocator,
+        receiverSurfaceVertices,
+        receiverIntrinsicTriangleIndices,
+        receiverModelIds,
+        runtime.getModelRuntimes());
 }
 
 void VoronoiSystem::clearReceiverPayloads() {
+    surfaceRuntime.cleanup();
     runtime.clearReceiverPayloads();
 }
 
@@ -100,7 +142,7 @@ void VoronoiSystem::setParams(const VoronoiParams& params) {
     runtime.setParams(params);
 }
 
-bool VoronoiSystem::ensureConfigured(VoronoiSurfaceRuntime& surfaceRuntime) {
+bool VoronoiSystem::ensureConfigured() {
     if (runtime.isReady()) {
         runtime.executeBufferTransfers(renderCommandPool, surfaceRuntime, voronoiCandidateCompute.get());
         return true;
@@ -229,7 +271,6 @@ void VoronoiSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t fra
             continue;
         }
 
-        Model& model = modelRuntime->getModel();
         const uint32_t vertexCount = static_cast<uint32_t>(modelRuntime->getIntrinsicVertexCount());
         const VkBuffer candidateBuffer = modelRuntime->getVoronoiCandidateBuffer();
         if (candidateBuffer == VK_NULL_HANDLE || vertexCount == 0) {
@@ -258,13 +299,13 @@ void VoronoiSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t fra
 
         voronoiRenderer->render(
             cmdBuffer,
-            model.getVertexBuffer(),
-            model.getVertexBufferOffset(),
-            model.getIndexBuffer(),
-            model.getIndexBufferOffset(),
-            static_cast<uint32_t>(model.getIndices().size()),
+            modelRuntime->getVertexBuffer(),
+            modelRuntime->getVertexBufferOffset(),
+            modelRuntime->getIndexBuffer(),
+            modelRuntime->getIndexBufferOffset(),
+            modelRuntime->getIndexCount(),
             frameIndex,
-            model.getModelMatrix());
+            modelRuntime->getModelMatrix());
     }
 }
 
@@ -296,5 +337,6 @@ void VoronoiSystem::cleanupResources() {
 }
 
 void VoronoiSystem::cleanup() {
+    surfaceRuntime.cleanup();
     runtime.cleanup(memoryAllocator);
 }

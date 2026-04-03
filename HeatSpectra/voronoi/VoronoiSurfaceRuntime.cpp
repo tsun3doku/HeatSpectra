@@ -1,51 +1,61 @@
 #include "voronoi/VoronoiSurfaceRuntime.hpp"
 
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiModelRuntime.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 
 VoronoiSurfaceRuntime::~VoronoiSurfaceRuntime() = default;
 
 bool VoronoiSurfaceRuntime::initializeGeometryBindings(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    const RuntimeIntrinsicCache& intrinsicCache,
-    const VoronoiPackage& voronoiPackage,
+    const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+    const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
+    const std::vector<uint32_t>& receiverRuntimeModelIds,
     const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes) {
     cleanup();
 
-    const size_t geometryCount = std::min(voronoiPackage.receiverRuntimeModelIds.size(), modelRuntimes.size());
-    geometryRuntimes.reserve(geometryCount);
-
-    for (size_t index = 0; index < geometryCount; ++index) {
-        const auto& modelRuntime = modelRuntimes[index];
+    std::unordered_map<uint32_t, const VoronoiModelRuntime*> modelRuntimesById;
+    modelRuntimesById.reserve(modelRuntimes.size());
+    for (const auto& modelRuntime : modelRuntimes) {
         if (!modelRuntime) {
             continue;
         }
 
-        Model* const model = &modelRuntime->getModel();
-        const GeometryData& geometry = voronoiPackage.receiverGeometries[index];
-        if (!model || geometry.intrinsicHandle.key == 0) {
-            continue;
-        }
+        modelRuntimesById[modelRuntime->getRuntimeModelId()] = modelRuntime.get();
+    }
 
-        const RuntimeIntrinsicCache::Entry* intrinsicEntry = intrinsicCache.get(geometry.intrinsicHandle);
-        if (!intrinsicEntry) {
+    const size_t geometryCount = std::min({ receiverRuntimeModelIds.size(), receiverSurfaceVertices.size(), receiverIntrinsicTriangleIndices.size() });
+    geometryRuntimes.reserve(geometryCount);
+
+    for (size_t index = 0; index < geometryCount; ++index) {
+        const uint32_t runtimeModelId = receiverRuntimeModelIds[index];
+        const auto modelRuntimeIt = modelRuntimesById.find(runtimeModelId);
+        if (runtimeModelId == 0 || modelRuntimeIt == modelRuntimesById.end() || !modelRuntimeIt->second) {
             continue;
         }
+        const VoronoiModelRuntime* modelRuntime = modelRuntimeIt->second;
 
         auto geometryRuntime = std::make_unique<VoronoiGeometryRuntime>(
             vulkanDevice,
             memoryAllocator,
-            *model,
-            geometry,
-            voronoiPackage.receiverIntrinsics[index],
-            *intrinsicEntry);
+            runtimeModelId,
+            receiverSurfaceVertices[index],
+            receiverIntrinsicTriangleIndices[index],
+            modelRuntime->getSupportingHalfedgeView(),
+            modelRuntime->getSupportingAngleView(),
+            modelRuntime->getHalfedgeView(),
+            modelRuntime->getEdgeView(),
+            modelRuntime->getTriangleView(),
+            modelRuntime->getLengthView(),
+            modelRuntime->getInputHalfedgeView(),
+            modelRuntime->getInputEdgeView(),
+            modelRuntime->getInputTriangleView(),
+            modelRuntime->getInputLengthView());
         geometryRuntime->setVoronoiMapping(
             modelRuntime->getVoronoiMappingBuffer(),
             modelRuntime->getVoronoiMappingBufferOffset());

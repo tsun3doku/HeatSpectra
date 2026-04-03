@@ -35,8 +35,6 @@ public:
     void shutdownSyncObjects();
     void cleanupSwapChain();
     bool recreateSwapChain();
-    void setSystems(HeatSystem* heatSystem, VoronoiSystem* voronoiSystem);
-    void setHeatSystem(HeatSystem* heatSystem);
 
     FrameStageResult acquireFrameImage(uint32_t& imageIndex);
     FrameStageResult presentFrame(uint32_t imageIndex);

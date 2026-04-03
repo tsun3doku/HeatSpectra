@@ -360,7 +360,7 @@ void NodeHeatSolverPanel::refreshBindingGroupOptions() {
             std::unordered_set<uint32_t> seenModelNodeIds;
             std::vector<uint32_t> modelNodeIds;
             for (const NodeGraphSocket& inputSocket : currentNode->inputs) {
-                if (inputSocket.valueType != NodeGraphValueType::Voronoi) {
+                if (inputSocket.valueType != NodeGraphValueType::Volume) {
                     continue;
                 }
 

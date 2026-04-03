@@ -68,10 +68,9 @@ void recordComputeToGraphicsBarrier(VkCommandBuffer commandBuffer, VkPipelineSta
 }
 }
 
-SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, FrameGraph& graph, VkFrameGraphRuntime& runtime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
+SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& runtime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
     : vulkanDevice(device),
       memoryAllocator(allocator),
-      remeshResources(remeshResources),
       frameGraph(graph),
       frameGraphRuntime(runtime),
       resourceManager(manager),
@@ -154,7 +153,6 @@ bool SceneRenderer::initializePasses() {
     auto overlay = std::make_unique<render::OverlayPass>(
         vulkanDevice,
         memoryAllocator,
-        remeshResources,
         frameGraphRuntime,
         resourceManager,
         uniformBufferManager,
@@ -316,9 +314,19 @@ void SceneRenderer::updateDescriptorSets() {
     updatePassDescriptors();
 }
 
-void SceneRenderer::updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic) {
+void SceneRenderer::bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product) {
     if (overlayPass) {
-        overlayPass->updateIntrinsicPayloadForModel(model, intrinsic, maxFramesInFlight);
+        std::cout << "[SceneRenderer] bindRemeshProduct"
+                  << " socketKey=" << socketKey
+                  << " runtimeModelId=" << product.runtimeModelId
+                  << std::endl;
+        overlayPass->bindRemeshProduct(socketKey, product);
+    }
+}
+
+void SceneRenderer::removeIntrinsicPackage(uint64_t packageKey) {
+    if (overlayPass) {
+        overlayPass->removeIntrinsicPackage(packageKey);
     }
 }
 

@@ -1,8 +1,12 @@
 #include "ContactSystem.hpp"
 
+#include <glm/glm.hpp>
+
 #include <vector>
 
-bool ContactSystem::hasUsableContactPairs(const std::vector<ContactPair>& pairs) {
+namespace {
+
+bool hasUsableContactPairs(const std::vector<ContactPair>& pairs) {
     for (const ContactPair& pair : pairs) {
         if (pair.contactArea > 0.0f) {
             return true;
@@ -11,31 +15,42 @@ bool ContactSystem::hasUsableContactPairs(const std::vector<ContactPair>& pairs)
 
     return false;
 }
+}
 
-bool ContactSystem::compute(const ContactPairPayloadConfig& pair, Result& outResult) {
+static bool computeContactPairs(
+    ContactInterface& contactInterface,
+    const GeometryData& emitterGeometry,
+    const SupportingHalfedge::IntrinsicMesh& emitterIntrinsicMesh,
+    const GeometryData& receiverGeometry,
+    const SupportingHalfedge::IntrinsicMesh& receiverIntrinsicMesh,
+    ContactCouplingType couplingType,
+    float minNormalDot,
+    float contactRadius,
+    ContactSystem::Result& outResult) {
+    (void)couplingType;
     outResult = {};
-    if (pair.emitter.geometryHandle.key == 0 ||
-        pair.receiver.geometryHandle.key == 0 ||
-        pair.emitter.geometryHandle == pair.receiver.geometryHandle ||
-        pair.emitter.intrinsic.vertices.empty() ||
-        pair.receiver.intrinsic.vertices.empty()) {
+    if (emitterGeometry.modelId == 0 ||
+        receiverGeometry.modelId == 0 ||
+        emitterGeometry.modelId == receiverGeometry.modelId ||
+        emitterIntrinsicMesh.vertices.empty() ||
+        receiverIntrinsicMesh.vertices.empty()) {
         return false;
     }
 
     ContactInterface::Settings settings{};
-    settings.minNormalDot = pair.minNormalDot;
-    settings.contactRadius = pair.contactRadius;
+    settings.minNormalDot = minNormalDot;
+    settings.contactRadius = contactRadius;
 
     std::vector<std::vector<ContactPair>> receiverContactPairs;
-    std::vector<const IntrinsicMeshData*> receiverIntrinsics;
+    std::vector<const SupportingHalfedge::IntrinsicMesh*> receiverIntrinsicMeshes;
     std::vector<std::array<float, 16>> receiverLocalToWorld;
-    receiverIntrinsics.push_back(&pair.receiver.intrinsic);
-    receiverLocalToWorld.push_back(pair.receiver.geometry.localToWorld);
+    receiverIntrinsicMeshes.push_back(&receiverIntrinsicMesh);
+    receiverLocalToWorld.push_back(receiverGeometry.localToWorld);
 
     contactInterface.mapSurfacePoints(
-        pair.emitter.intrinsic,
-        pair.emitter.geometry.localToWorld,
-        receiverIntrinsics,
+        emitterIntrinsicMesh,
+        emitterGeometry.localToWorld,
+        receiverIntrinsicMeshes,
         receiverLocalToWorld,
         receiverContactPairs,
         outResult.outlineVertices,
@@ -47,4 +62,17 @@ bool ContactSystem::compute(const ContactPairPayloadConfig& pair, Result& outRes
     }
     outResult.hasContact = hasUsableContactPairs(outResult.pairs);
     return outResult.hasContact;
+}
+
+bool ContactSystem::compute(const RuntimeContactPairConfig& pair, Result& outResult) {
+    return computeContactPairs(
+        contactInterface,
+        pair.emitter.geometry,
+        pair.emitter.intrinsicMesh,
+        pair.receiver.geometry,
+        pair.receiver.intrinsicMesh,
+        pair.couplingType,
+        pair.minNormalDot,
+        pair.contactRadius,
+        outResult);
 }

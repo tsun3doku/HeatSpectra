@@ -1,10 +1,10 @@
 ﻿#pragma once
 
 #include <cstdint>
-#include <vector>
 #include <map>
+#include <vector>
+
 #include <glm/glm.hpp>
-#include "scene/Model.hpp"
 #include "spatial/VoxelGrid.hpp"
 
 struct MeshTriangleGPU {
@@ -16,7 +16,7 @@ public:
     VoronoiIntegrator() = default;
     
     void extractNeighborIndices(const std::vector<std::vector<uint32_t>>& neighborIndices, const std::vector<glm::dvec3>& seedPositions, int K);
-    void extractMeshTriangles(const Model& surfaceMesh); 
+    void extractMeshTriangles(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices);
     void computeNeighbors(const std::vector<glm::dvec3>& seedPositions,int K);  
     
     void computeSurfacePointMapping(

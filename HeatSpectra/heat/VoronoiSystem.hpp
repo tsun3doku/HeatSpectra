@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -15,7 +16,6 @@ class VoronoiModelRuntime;
 class MemoryAllocator;
 class PointRenderer;
 class ResourceManager;
-class RuntimeIntrinsicCache;
 class UniformBufferManager;
 class VulkanDevice;
 class CommandPool;
@@ -30,7 +30,6 @@ public:
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         ResourceManager& resourceManager,
-        RuntimeIntrinsicCache& intrinsicCache,
         UniformBufferManager& uniformBufferManager,
         uint32_t maxFramesInFlight,
         CommandPool& renderCommandPool,
@@ -44,12 +43,32 @@ public:
     void recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass);
 
     void setReceiverPayloads(
-        const std::vector<GeometryData>& receiverGeometries,
-        const std::vector<IntrinsicMeshData>& receiverIntrinsics,
-        const std::vector<uint32_t>& receiverModelIds);
+        const std::vector<uint32_t>& receiverNodeModelIds,
+        const std::vector<std::vector<glm::vec3>>& receiverGeometryPositions,
+        const std::vector<std::vector<uint32_t>>& receiverGeometryTriangleIndices,
+        const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
+        const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+        const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
+        const std::vector<uint32_t>& receiverModelIds,
+        const std::vector<VkBuffer>& meshVertexBuffers,
+        const std::vector<VkDeviceSize>& meshVertexBufferOffsets,
+        const std::vector<VkBuffer>& meshIndexBuffers,
+        const std::vector<VkDeviceSize>& meshIndexBufferOffsets,
+        const std::vector<uint32_t>& meshIndexCounts,
+        const std::vector<glm::mat4>& meshModelMatrices,
+        const std::vector<VkBufferView>& supportingHalfedgeViews,
+        const std::vector<VkBufferView>& supportingAngleViews,
+        const std::vector<VkBufferView>& halfedgeViews,
+        const std::vector<VkBufferView>& edgeViews,
+        const std::vector<VkBufferView>& triangleViews,
+        const std::vector<VkBufferView>& lengthViews,
+        const std::vector<VkBufferView>& inputHalfedgeViews,
+        const std::vector<VkBufferView>& inputEdgeViews,
+        const std::vector<VkBufferView>& inputTriangleViews,
+        const std::vector<VkBufferView>& inputLengthViews);
     void clearReceiverPayloads();
     void setParams(const VoronoiParams& params);
-    bool ensureConfigured(VoronoiSurfaceRuntime& surfaceRuntime);
+    bool ensureConfigured();
 
     void renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
@@ -90,10 +109,10 @@ private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ResourceManager& resourceManager;
-    RuntimeIntrinsicCache& intrinsicCache;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     VoronoiSystemRuntime runtime;
+    VoronoiSurfaceRuntime surfaceRuntime;
 
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;

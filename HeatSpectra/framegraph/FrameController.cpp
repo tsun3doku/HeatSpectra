@@ -90,17 +90,6 @@ bool FrameController::recreateSwapChain() {
     return swapchainStage.recreateSwapChain();
 }
 
-void FrameController::setSystems(HeatSystem* updatedHeatSystem, VoronoiSystem* updatedVoronoiSystem) {
-    heatSystem = updatedHeatSystem;
-    voronoiSystem = updatedVoronoiSystem;
-    swapchainStage.setSystems(updatedHeatSystem, updatedVoronoiSystem);
-}
-
-void FrameController::setHeatSystem(HeatSystem* updatedHeatSystem) {
-    heatSystem = updatedHeatSystem;
-    swapchainStage.setHeatSystem(updatedHeatSystem);
-}
-
 void FrameController::drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve) {
     if (isShuttingDown.load(std::memory_order_acquire) || isOperating.load(std::memory_order_acquire)) {
         return;

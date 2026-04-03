@@ -1,16 +1,15 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
 #include <vulkan/vulkan.h>
 
-#include "runtime/RuntimePackages.hpp"
 #include "voronoi/VoronoiGeometryRuntime.hpp"
 
 class CommandPool;
 class MemoryAllocator;
-class RuntimeIntrinsicCache;
 class VulkanDevice;
 class VoronoiModelRuntime;
 
@@ -24,8 +23,9 @@ public:
     bool initializeGeometryBindings(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        const RuntimeIntrinsicCache& intrinsicCache,
-        const VoronoiPackage& voronoiPackage,
+        const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+        const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
+        const std::vector<uint32_t>& receiverRuntimeModelIds,
         const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes);
     void executeBufferTransfers(CommandPool& renderCommandPool);
     void cleanup();

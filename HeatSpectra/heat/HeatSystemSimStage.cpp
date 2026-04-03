@@ -5,7 +5,7 @@
 #include "HeatSourceRuntime.hpp"
 #include "HeatSystemResources.hpp"
 #include "HeatSystemSurfaceStage.hpp"
-#include "runtime/RuntimePayloadController.hpp"
+#include "runtime/RuntimePackageController.hpp"
 
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -21,15 +21,14 @@ void HeatSystemSimStage::recordComputeCommands(
     const HeatSystemSimRuntime& simRuntime,
     const HeatSourcePushConstant& basePushConstant,
     const std::vector<HeatContactRuntime::ContactCoupling>& contactCouplings,
+    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-    const HeatPackage& heatPackage,
     const HeatSystemContactStage& contactStage,
     const HeatSystemVoronoiStage& voronoiStage,
     const HeatSystemSurfaceStage& surfaceStage,
     uint32_t maxNodeNeighbors,
     uint32_t numSubsteps) const {
     (void)currentFrame;
-    (void)heatPackage;
 
     const uint32_t nodeCount = simRuntime.getNodeCount();
     if (nodeCount == 0 || numSubsteps == 0) {
@@ -44,7 +43,7 @@ void HeatSystemSimStage::recordComputeCommands(
     for (uint32_t substepIndex = 0; substepIndex < numSubsteps; ++substepIndex) {
         const bool evenSubstep = ((substepIndex % 2) == 0);
         for (const HeatContactRuntime::ContactCoupling& coupling : contactCouplings) {
-            contactStage.dispatchCoupling(commandBuffer, coupling, evenSubstep);
+            contactStage.dispatchCoupling(commandBuffer, coupling, sourceBindings, evenSubstep);
         }
         if (!contactCouplings.empty()) {
             contactStage.insertInjectionBarrier(commandBuffer, simRuntime);

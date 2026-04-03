@@ -76,26 +76,25 @@ const char* NodeTransform::typeId() const {
 
 bool NodeTransform::execute(NodeGraphKernelContext& context) const {
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
-    const NodeDataBlock* inputGeometryValue = nullptr;
-    if (meshSocket) {
-        inputGeometryValue = readInput(context.node, meshSocket->id, context.executionState);
-    }
-    if (inputGeometryValue && inputGeometryValue->dataType != NodeDataType::Geometry) {
-        inputGeometryValue = nullptr;
+    const EvaluatedSocketValue* inputMesh =
+        meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);
+    if (inputMeshValue && valueTypeOf(inputMeshValue->dataType) != NodeGraphValueType::Mesh) {
+        inputMeshValue = nullptr;
     }
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodeDataType::None;
+        outputValue.dataType = NodePayloadType::None;
         outputValue.payloadHandle = {};
 
-        if (!inputGeometryValue || !payloadRegistry || inputGeometryValue->payloadHandle.key == 0) {
+        if (!payloadRegistry || !inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        const GeometryData* inputGeometry = payloadRegistry->get<GeometryData>(inputGeometryValue->payloadHandle);
+        const GeometryData* inputGeometry = resolveGeometryForDataBlock(*inputMeshValue, payloadRegistry);
         if (!inputGeometry) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
@@ -104,9 +103,9 @@ bool NodeTransform::execute(NodeGraphKernelContext& context) const {
         GeometryData transformedGeometry = *inputGeometry;
         transformedGeometry.localToWorld = NodeModelTransform::toMatrixArray(
             NodeModelTransform::toMat4(inputGeometry->localToWorld) * buildLocalTransform(context.node));
-        bumpGeometryRevision(transformedGeometry);
+        updatePayloadHash(transformedGeometry);
 
-        outputValue.dataType = NodeDataType::Geometry;
+        outputValue.dataType = NodePayloadType::Geometry;
         const uint64_t payloadKey = makeSocketKey(
             context.node.id,
             context.node.outputs[outputIndex].id);
@@ -119,26 +118,25 @@ bool NodeTransform::execute(NodeGraphKernelContext& context) const {
 
 bool NodeTransform::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
-    const NodeDataBlock* inputGeometryValue = nullptr;
-    if (meshSocket) {
-        inputGeometryValue = readInput(context.node, meshSocket->id, context.executionState);
-    }
-    if (inputGeometryValue && inputGeometryValue->dataType != NodeDataType::Geometry) {
-        inputGeometryValue = nullptr;
+    const EvaluatedSocketValue* inputMesh =
+        meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);
+    if (inputMeshValue && valueTypeOf(inputMeshValue->dataType) != NodeGraphValueType::Mesh) {
+        inputMeshValue = nullptr;
     }
 
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-    if (!inputGeometryValue) {
+    if (!inputMeshValue) {
         NodeGraphHash::combine(outHash, 0u);
         combineTransformParams(context.node, outHash);
         return true;
     }
 
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputGeometryValue->dataType));
-    NodeGraphHash::combine(outHash, inputGeometryValue->payloadHandle.key);
-    NodeGraphHash::combine(outHash, inputGeometryValue->payloadHandle.revision);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputGeometryValue->payloadHandle.count));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->dataType));
+    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.key);
+    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.revision);
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->payloadHandle.count));
     combineTransformParams(context.node, outHash);
     return true;
 }

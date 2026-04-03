@@ -6,6 +6,13 @@
 #include <cstdint>
 #include <vector>
 
+//                                                      [ Invariant:
+//                                                        - Payloads are node graph authored data
+//                                                        - They may contain authored values and NodeDataHandle values
+//                                                        - They must not contain runtime objects/ids, scene objects, 
+//                                                          backend/controller objects or GPU resources 
+//                                                        - They must not be used directly by any backends ]
+
 enum class ContactPairRole : uint8_t {
     Source = 0,
     Receiver = 1
@@ -14,7 +21,7 @@ enum class ContactPairRole : uint8_t {
 struct ContactPairEndpoint {
     ContactPairRole role = ContactPairRole::Receiver;
     NodeDataHandle payloadHandle{};
-    NodeDataHandle geometryHandle{};
+    NodeDataHandle meshHandle{};
 };
 
 struct ContactPairData {
@@ -28,15 +35,12 @@ struct ContactPairData {
     NodeDataHandle contactPairsHandle{};
 };
 
-struct ContactBindingData {
-    ContactPairData pair{};
-};
-
 struct ContactData {
-    std::vector<ContactBindingData> bindings;
+    uint64_t payloadHash = 0;
+    ContactPairData pair{};
     bool active = false;
 
     std::size_t size() const {
-        return bindings.size();
+        return (active && pair.hasValidContact) ? 1u : 0u;
     }
 };

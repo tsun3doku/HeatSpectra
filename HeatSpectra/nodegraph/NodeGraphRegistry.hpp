@@ -94,13 +94,12 @@ private:
     static NodeSocketSignature makeInputSocket(
         const char* name,
         NodeGraphValueType valueType,
-        std::vector<NodeDataType> acceptedDataTypes,
         std::vector<NodeGraphAttributeContract> requiredAttributes = {});
 
     static NodeSocketSignature makeOutputSocket(
         const char* name,
         NodeGraphValueType valueType,
-        NodeDataType producedDataType,
+        NodePayloadType producedPayloadType,
         std::vector<NodeGraphAttributeContract> guaranteedAttributes = {});
 
     static NodeTypeDefinition buildModelNode();

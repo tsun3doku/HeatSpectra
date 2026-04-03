@@ -1,12 +1,12 @@
 ﻿#pragma once
 
-#include <glm/glm.hpp>
-#include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <string>
-#include <algorithm>
+#include <vector>
 
-class Model;
+#include <glm/glm.hpp>
+
 class TriangleHashGrid;
 
 class VoxelGrid {
@@ -21,7 +21,11 @@ public:
     VoxelGrid();
     ~VoxelGrid();
 
-    void build(const Model& mesh, const TriangleHashGrid& triangleGrid, int gridSize);
+    void build(
+        const std::vector<glm::vec3>& positions,
+        const std::vector<uint32_t>& indices,
+        const TriangleHashGrid& triangleGrid,
+        int gridSize);
     uint8_t getOccupancy(int x, int y, int z) const;
     glm::vec3 getCornerPosition(int x, int y, int z) const;
     glm::ivec3 worldToVoxel(const glm::vec3& pos) const;
@@ -47,11 +51,18 @@ private:
     static int clampInt(int v, int lo, int hi) { return std::max(lo, std::min(v, hi)); }
     
     static bool triBoxOverlap(const float boxcenter[3], const float boxhalfsize[3], const float triverts[3][3]);
-    float distanceToNearestTriangle(const glm::vec3& point, const Model& mesh, const TriangleHashGrid& triangleGrid) const;
+    float distanceToNearestTriangle(
+        const glm::vec3& point,
+        const std::vector<glm::vec3>& positions,
+        const std::vector<uint32_t>& indices,
+        const TriangleHashGrid& triangleGrid) const;
 
     size_t getCornerIndex(int x, int y, int z) const;
 
-    void buildTriangleLists(const Model& mesh, const TriangleHashGrid& triangleGrid);
+    void buildTriangleLists(
+        const std::vector<glm::vec3>& positions,
+        const std::vector<uint32_t>& indices,
+        const TriangleHashGrid& triangleGrid);
 
     VoxelGridParams params;  
     std::vector<uint8_t> occupancy;

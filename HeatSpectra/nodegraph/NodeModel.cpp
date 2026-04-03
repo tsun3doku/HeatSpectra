@@ -30,18 +30,19 @@ bool NodeModel::execute(NodeGraphKernelContext& context) const {
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodeDataType::None;
+        outputValue.dataType = NodePayloadType::None;
         outputValue.payloadHandle = {};
         if (modelPath.empty()) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        outputValue.dataType = NodeDataType::Geometry;
+        outputValue.dataType = NodePayloadType::Geometry;
         GeometryData geometry{};
         geometry.baseModelPath = modelPath;
         geometry.modelId = context.node.id.value;
         populateGeometryFromModelPath(modelPath, geometry);
+        updatePayloadHash(geometry);
         if (payloadRegistry) {
             const uint64_t payloadKey = makeSocketKey(
                 context.node.id,
@@ -192,7 +193,6 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geo
     }
 
     normalizeGeometryGroups(geometry);
-    bumpGeometryRevision(geometry);
     return true;
 }
 

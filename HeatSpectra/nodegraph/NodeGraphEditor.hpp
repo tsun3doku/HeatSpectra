@@ -63,9 +63,5 @@ public:
     bool writeTransformRotation(NodeGraphNodeId nodeId, const glm::vec3& rotationDegrees);
 
 private:
-    bool ensureHeatSolveSpareInputs(NodeGraphNodeId nodeId);
-    bool ensureVoronoiSpareInputs(NodeGraphNodeId nodeId);
-    bool ensureSpareInput(NodeGraphNodeId nodeId, NodeGraphValueType valueType);
-
     NodeGraphBridge* bridge = nullptr;
 };

@@ -1,11 +1,9 @@
 ﻿#pragma once
+#include <array>
 #include <vector>
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <functional>
-
-struct GeometryData;
-class Model;
 
 class HalfEdgeMesh {
 public:
@@ -77,8 +75,9 @@ public:
 	};
 
 	// Construction
-	void buildFromModel(const class Model& srcModel);
-	void buildFromGeometry(const GeometryData& geometry);
+	void buildFromIndexedData(
+		const std::vector<float>& pointPositions,
+		const std::vector<uint32_t>& triangleIndices);
 	void applyToModel(class Model& dstModel) const;
 	void initializeIntrinsicLengths();
 	void rebuildFaceConnectivity(uint32_t faceIdx);

@@ -2,47 +2,37 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphUtils.hpp"
 
+#include "NodeGraphHash.hpp"
 #include "NodeGraphPayloadTypes.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <unordered_map>
 #include <unordered_set>
 
-static std::atomic<uint64_t> geometryRevisionCounter{1};
-
-const char* nodeDataTypeName(NodeDataType dataType) {
-    switch (dataType) {
-    case NodeDataType::Geometry:
+const char* nodePayloadTypeName(NodePayloadType payloadType) {
+    switch (payloadType) {
+    case NodePayloadType::Geometry:
         return "geometry";
-    case NodeDataType::Intrinsic:
-        return "intrinsic";
-    case NodeDataType::HeatReceiver:
+    case NodePayloadType::Remesh:
+        return "remesh";
+    case NodePayloadType::HeatReceiver:
         return "heat_receiver";
-    case NodeDataType::HeatSource:
+    case NodePayloadType::HeatSource:
         return "heat_source";
-    case NodeDataType::Contact:
+    case NodePayloadType::Contact:
         return "contact";
-    case NodeDataType::Heat:
+    case NodePayloadType::Heat:
         return "heat";
-    case NodeDataType::Voronoi:
+    case NodePayloadType::Voronoi:
         return "voronoi";
-    case NodeDataType::ScalarFloat:
-        return "scalar_float";
-    case NodeDataType::ScalarInt:
-        return "scalar_int";
-    case NodeDataType::ScalarBool:
-        return "scalar_bool";
-    case NodeDataType::None:
+    case NodePayloadType::None:
     default:
         return "none";
     }
 }
-
-namespace {
 
 const GeometryData* resolveGeometryForDataBlock(const NodeDataBlock& dataBlock, const NodePayloadRegistry* registry) {
     if (!registry || dataBlock.payloadHandle.key == 0) {
@@ -50,20 +40,49 @@ const GeometryData* resolveGeometryForDataBlock(const NodeDataBlock& dataBlock, 
     }
 
     switch (dataBlock.dataType) {
-    case NodeDataType::Geometry:
-        return registry->get<GeometryData>(dataBlock.payloadHandle);
-    case NodeDataType::HeatReceiver: {
-        const HeatReceiverData* heatReceiver = registry->get<HeatReceiverData>(dataBlock.payloadHandle);
-        return heatReceiver ? registry->get<GeometryData>(heatReceiver->geometryHandle) : nullptr;
+    case NodePayloadType::Geometry:
+        return registry->resolveGeometryHandle(dataBlock.payloadHandle);
+    case NodePayloadType::Remesh: {
+        const RemeshData* remesh = registry->get<RemeshData>(dataBlock.payloadHandle);
+        if (!remesh) {
+            return nullptr;
+        }
+        return registry->resolveGeometryHandle(remesh->sourceMeshHandle);
     }
-    case NodeDataType::HeatSource: {
+    case NodePayloadType::HeatReceiver: {
+        const HeatReceiverData* heatReceiver = registry->get<HeatReceiverData>(dataBlock.payloadHandle);
+        if (!heatReceiver) {
+            return nullptr;
+        }
+        NodeDataBlock meshBlock{};
+        meshBlock.payloadHandle = heatReceiver->meshHandle;
+        if (registry->get<RemeshData>(heatReceiver->meshHandle) != nullptr) {
+            meshBlock.dataType = NodePayloadType::Remesh;
+        } else {
+            meshBlock.dataType = NodePayloadType::Geometry;
+        }
+        return resolveGeometryForDataBlock(meshBlock, registry);
+    }
+    case NodePayloadType::HeatSource: {
         const HeatSourceData* heatSource = registry->get<HeatSourceData>(dataBlock.payloadHandle);
-        return heatSource ? registry->get<GeometryData>(heatSource->geometryHandle) : nullptr;
+        if (!heatSource) {
+            return nullptr;
+        }
+        NodeDataBlock meshBlock{};
+        meshBlock.payloadHandle = heatSource->meshHandle;
+        if (registry->get<RemeshData>(heatSource->meshHandle) != nullptr) {
+            meshBlock.dataType = NodePayloadType::Remesh;
+        } else {
+            meshBlock.dataType = NodePayloadType::Geometry;
+        }
+        return resolveGeometryForDataBlock(meshBlock, registry);
     }
     default:
         return nullptr;
     }
 }
+
+namespace {
 
 GeometryAttribute* findAttribute(
     GeometryData& geometry,
@@ -221,22 +240,6 @@ std::string geometryGroupNamesListForType(const GeometryData& geometry, const ch
 
 } // namespace
 
-void setGeometryDetailBool(GeometryData& geometry, const std::string& name, bool value) {
-    GeometryAttribute* attribute = findAttribute(geometry, name, GeometryAttributeDomain::Detail);
-    if (!attribute) {
-        geometry.attributes.push_back({});
-        attribute = &geometry.attributes.back();
-    }
-
-    attribute->name = name;
-    attribute->domain = GeometryAttributeDomain::Detail;
-    attribute->dataType = GeometryAttributeDataType::Bool;
-    attribute->tupleSize = 1;
-    attribute->floatValues.clear();
-    attribute->intValues.clear();
-    attribute->boolValues.assign(1, value ? 1 : 0);
-}
-
 void setGeometryPrimitiveIntAttribute(
     GeometryData& geometry,
     const std::string& name,
@@ -320,16 +323,100 @@ void normalizeGeometryGroups(GeometryData& geometry) {
     setGeometryPrimitiveIntAttribute(geometry, "group.id", geometry.triangleGroupIds);
 }
 
-void bumpGeometryRevision(GeometryData& geometry) {
-    geometry.geometryRevision = geometryRevisionCounter.fetch_add(1, std::memory_order_relaxed);
+void updatePayloadHash(GeometryData& geometry) {
+    uint64_t hash = NodeGraphHash::start();
+    NodeGraphHash::combineString(hash, geometry.baseModelPath);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.modelId));
+    for (float value : geometry.localToWorld) {
+        NodeGraphHash::combineFloat(hash, value);
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.pointPositions.size()));
+    for (float value : geometry.pointPositions) {
+        NodeGraphHash::combineFloat(hash, value);
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.triangleIndices.size()));
+    for (uint32_t value : geometry.triangleIndices) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(value));
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.triangleGroupIds.size()));
+    for (uint32_t value : geometry.triangleGroupIds) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(value));
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.groups.size()));
+    for (const GeometryGroup& group : geometry.groups) {
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(group.id));
+        NodeGraphHash::combineString(hash, group.name);
+        NodeGraphHash::combineString(hash, group.source);
+    }
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.attributes.size()));
+    for (const GeometryAttribute& attribute : geometry.attributes) {
+        NodeGraphHash::combineString(hash, attribute.name);
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.domain));
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.dataType));
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.tupleSize));
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.floatValues.size()));
+        for (float value : attribute.floatValues) {
+            NodeGraphHash::combineFloat(hash, value);
+        }
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.intValues.size()));
+        for (int64_t value : attribute.intValues) {
+            NodeGraphHash::combine(hash, static_cast<uint64_t>(value));
+        }
+        NodeGraphHash::combine(hash, static_cast<uint64_t>(attribute.boolValues.size()));
+        for (uint8_t value : attribute.boolValues) {
+            NodeGraphHash::combine(hash, static_cast<uint64_t>(value));
+        }
+    }
+    geometry.payloadHash = hash;
+}
+
+uint64_t payloadHashForDataBlock(const NodeDataBlock& dataBlock, const NodePayloadRegistry* registry) {
+    if (!registry || dataBlock.payloadHandle.key == 0) {
+        return 0;
+    }
+
+    switch (dataBlock.dataType) {
+    case NodePayloadType::Geometry: {
+        const GeometryData* payload = registry->get<GeometryData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::Remesh: {
+        const RemeshData* payload = registry->get<RemeshData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::HeatReceiver: {
+        const HeatReceiverData* payload = registry->get<HeatReceiverData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::HeatSource: {
+        const HeatSourceData* payload = registry->get<HeatSourceData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::Contact: {
+        const ContactData* payload = registry->get<ContactData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::Heat: {
+        const HeatData* payload = registry->get<HeatData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::Voronoi: {
+        const VoronoiData* payload = registry->get<VoronoiData>(dataBlock.payloadHandle);
+        return payload ? payload->payloadHash : 0;
+    }
+    case NodePayloadType::None:
+    default:
+        return 0;
+    }
 }
 
 void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* registry) {
-    dataBlock.metadata["data.type"] = nodeDataTypeName(dataBlock.dataType);
+    dataBlock.metadata["data.type"] = nodePayloadTypeName(dataBlock.dataType);
 
-    if (dataBlock.dataType == NodeDataType::Geometry ||
-        dataBlock.dataType == NodeDataType::HeatReceiver ||
-        dataBlock.dataType == NodeDataType::HeatSource) {
+    if (dataBlock.dataType == NodePayloadType::Geometry ||
+        dataBlock.dataType == NodePayloadType::Remesh ||
+        dataBlock.dataType == NodePayloadType::HeatReceiver ||
+        dataBlock.dataType == NodePayloadType::HeatSource) {
         const GeometryData* geometry = resolveGeometryForDataBlock(dataBlock, registry);
         if (!geometry || geometry->baseModelPath.empty()) {
             dataBlock.metadata.erase("geometry.model_path");
@@ -337,12 +424,10 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
             dataBlock.metadata["geometry.model_path"] = geometry->baseModelPath;
         }
         const uint32_t modelId = geometry ? geometry->modelId : 0u;
-        const uint64_t revision = geometry ? geometry->geometryRevision : 0u;
         const size_t pointCount = geometry ? geometry->pointPositions.size() / 3 : 0u;
         const size_t triangleCount = geometry ? geometry->triangleIndices.size() / 3 : 0u;
         const size_t groupCount = geometry ? geometry->groups.size() : 0u;
         dataBlock.metadata["geometry.model_id"] = std::to_string(modelId);
-        dataBlock.metadata["geometry.revision"] = std::to_string(revision);
         dataBlock.metadata["geometry.point_count"] = std::to_string(pointCount);
         dataBlock.metadata["geometry.triangle_count"] = std::to_string(triangleCount);
         dataBlock.metadata["geometry.group_count"] = std::to_string(groupCount);
@@ -361,7 +446,6 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
     } else {
         dataBlock.metadata.erase("geometry.model_path");
         dataBlock.metadata.erase("geometry.model_id");
-        dataBlock.metadata.erase("geometry.revision");
         dataBlock.metadata.erase("geometry.point_count");
         dataBlock.metadata.erase("geometry.triangle_count");
         dataBlock.metadata.erase("geometry.group_count");
@@ -375,20 +459,15 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
         dataBlock.metadata.erase("geometry.attributes");
     }
 
-    if (dataBlock.dataType == NodeDataType::Intrinsic) {
-        const IntrinsicMeshData* intrinsic = registry ? registry->get<IntrinsicMeshData>(dataBlock.payloadHandle) : nullptr;
-        const size_t vertexCount = intrinsic ? intrinsic->vertices.size() : 0u;
-        const size_t triangleCount = intrinsic ? intrinsic->triangleIndices.size() / 3 : 0u;
-        dataBlock.metadata["intrinsic.vertex_count"] = std::to_string(vertexCount);
-        dataBlock.metadata["intrinsic.triangle_count"] = std::to_string(triangleCount);
-        dataBlock.metadata["intrinsic.face_count"] = std::to_string(intrinsic ? intrinsic->faceIds.size() : 0u);
-    } else {
-        dataBlock.metadata.erase("intrinsic.vertex_count");
-        dataBlock.metadata.erase("intrinsic.triangle_count");
-        dataBlock.metadata.erase("intrinsic.face_count");
-    }
+    dataBlock.metadata.erase("intrinsic.vertex_count");
+    dataBlock.metadata.erase("intrinsic.triangle_count");
+    dataBlock.metadata.erase("intrinsic.face_count");
 
-    if (dataBlock.dataType == NodeDataType::HeatSource) {
+    dataBlock.metadata.erase("remesh.vertex_count");
+    dataBlock.metadata.erase("remesh.triangle_count");
+    dataBlock.metadata.erase("remesh.face_count");
+
+    if (dataBlock.dataType == NodePayloadType::HeatSource) {
         const HeatSourceData* heatSource = registry ? registry->get<HeatSourceData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["heat_source.temperature"] =
             heatSource ? std::to_string(heatSource->temperature) : std::string();
@@ -396,14 +475,14 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
         dataBlock.metadata.erase("heat_source.temperature");
     }
 
-    if (dataBlock.dataType == NodeDataType::HeatReceiver) {
+    if (dataBlock.dataType == NodePayloadType::HeatReceiver) {
         const HeatReceiverData* heatReceiver = registry ? registry->get<HeatReceiverData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["heat_receiver.active"] = heatReceiver ? "true" : "false";
     } else {
         dataBlock.metadata.erase("heat_receiver.active");
     }
 
-    if (dataBlock.dataType == NodeDataType::Heat) {
+    if (dataBlock.dataType == NodePayloadType::Heat) {
         const HeatData* heatData = registry ? registry->get<HeatData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["heat.active"] = (heatData && heatData->active) ? "true" : "false";
         dataBlock.metadata["heat.paused"] = (heatData && heatData->paused) ? "true" : "false";
@@ -411,7 +490,7 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
         dataBlock.metadata["heat.source_count"] =
             std::to_string(heatData ? heatData->sourceHandles.size() : 0u);
         dataBlock.metadata["heat.receiver_count"] =
-            std::to_string(heatData ? heatData->receiverGeometryHandles.size() : 0u);
+            std::to_string(heatData ? heatData->receiverMeshHandles.size() : 0u);
         dataBlock.metadata["heat.material_binding_count"] =
             std::to_string(heatData ? heatData->materialBindings.size() : 0u);
     } else {
@@ -423,21 +502,21 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
         dataBlock.metadata.erase("heat.material_binding_count");
     }
 
-    if (dataBlock.dataType == NodeDataType::Contact) {
+    if (dataBlock.dataType == NodePayloadType::Contact) {
         const ContactData* contactData = registry ? registry->get<ContactData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["contact.active"] = (contactData && contactData->active) ? "true" : "false";
         dataBlock.metadata["contact.binding_count"] =
-            std::to_string(contactData ? contactData->bindings.size() : 0u);
+            std::to_string((contactData && contactData->pair.hasValidContact) ? 1u : 0u);
     } else {
         dataBlock.metadata.erase("contact.active");
         dataBlock.metadata.erase("contact.binding_count");
     }
 
-    if (dataBlock.dataType == NodeDataType::Voronoi) {
+    if (dataBlock.dataType == NodePayloadType::Voronoi) {
         const VoronoiData* voronoiData = registry ? registry->get<VoronoiData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["voronoi.active"] = (voronoiData && voronoiData->active) ? "true" : "false";
         dataBlock.metadata["voronoi.receiver_count"] =
-            std::to_string(voronoiData ? voronoiData->receiverGeometryHandles.size() : 0u);
+            std::to_string(voronoiData ? voronoiData->receiverMeshHandles.size() : 0u);
         dataBlock.metadata["voronoi.cell_size"] =
             voronoiData ? std::to_string(voronoiData->params.cellSize) : std::string();
         dataBlock.metadata["voronoi.voxel_resolution"] =

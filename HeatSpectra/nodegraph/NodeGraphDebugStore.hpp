@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NodeGraphDataTypes.hpp"
+#include "NodeGraphKernels.hpp"
 
 #include <cstdint>
 #include <mutex>
@@ -21,7 +21,9 @@ struct NodeGraphRuntimeSocketDebugInfo {
     NodeGraphSocketId socketId{};
     std::string socketName;
     NodeGraphSocketDirection direction = NodeGraphSocketDirection::Input;
+    std::string status = "missing";
     bool hasValue = false;
+    std::string error;
     std::string dataType = "none";
     std::unordered_map<std::string, std::string> metadata;
     std::vector<NodeGraphNodeId> lineageNodeIds;
@@ -42,17 +44,17 @@ public:
     static bool tryGetLatestNodeDebugInfo(NodeGraphNodeId nodeId, NodeGraphRuntimeNodeDebugInfo& outInfo);
 
     void setState(const NodeGraphState& state, NodePayloadRegistry* registry);
-    void publish(uint64_t revision, std::unordered_map<uint64_t, uint64_t>&& srcByInput, std::unordered_map<uint64_t, NodeDataBlock>&& outBySocket);
+    void publish(uint64_t revision, std::unordered_map<uint64_t, uint64_t>&& srcByInput, std::unordered_map<uint64_t, EvaluatedSocketValue>&& outBySocket);
     bool tryGetNode(NodeGraphNodeId nodeId, NodeGraphRuntimeNodeDebugInfo& outInfo) const;
 
 private:
     static uint64_t socketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
-    NodeGraphRuntimeSocketDebugInfo socketInfo(const NodeGraphSocket& socket, const NodeDataBlock* block) const;
+    NodeGraphRuntimeSocketDebugInfo socketInfo(const NodeGraphSocket& socket, const EvaluatedSocketValue* value) const;
 
     mutable std::mutex mutex;
     NodeGraphState state{};
     uint64_t revision = 0;
     std::unordered_map<uint64_t, uint64_t> srcByInput;
-    std::unordered_map<uint64_t, NodeDataBlock> outBySocket;
+    std::unordered_map<uint64_t, EvaluatedSocketValue> outBySocket;
     NodePayloadRegistry* payloadRegistry = nullptr;
 };

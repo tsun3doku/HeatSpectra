@@ -1,11 +1,11 @@
 ﻿#include "VoronoiSeeder.hpp"
-#include "scene/Model.hpp"
 #include <iostream>
 #include <algorithm>
 #include <random>
 #include <fstream>
 #include <omp.h>
 #include <unordered_set>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
 
 VoronoiSeeder::VoronoiSeeder() {
@@ -14,11 +14,17 @@ VoronoiSeeder::VoronoiSeeder() {
 VoronoiSeeder::~VoronoiSeeder() {
 }
 
-void VoronoiSeeder::generateSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh, const Model& volumeMesh, float targetCellSize, VoxelGrid& voxelGrid, int voxelResolution) {
+void VoronoiSeeder::generateSeeds(
+    const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices,
+    float targetCellSize,
+    VoxelGrid& voxelGrid,
+    int voxelResolution) {
     seeds.clear();
     cellSize = targetCellSize;
 
-    if (intrinsicMesh.vertices.empty() || intrinsicMesh.triangles.empty()) {
+    if (intrinsicMesh.vertices.empty() || intrinsicMesh.triangles.empty() || positions.empty() || indices.empty()) {
         std::cout << "[VoronoiSeeder] Empty intrinsic mesh" << std::endl;
         return;
     }
@@ -29,11 +35,9 @@ void VoronoiSeeder::generateSeeds(const SupportingHalfedge::IntrinsicMesh& intri
     glm::vec3 minBounds(FLT_MAX);
     glm::vec3 maxBounds(-FLT_MAX);
 
-    // Include volume mesh
-    const auto& vertices = volumeMesh.getVertices();
-    for (const auto& vertex : vertices) {
-        minBounds = glm::min(minBounds, vertex.pos);
-        maxBounds = glm::max(maxBounds, vertex.pos);
+    for (const glm::vec3& position : positions) {
+        minBounds = glm::min(minBounds, position);
+        maxBounds = glm::max(maxBounds, position);
     }
     // Padding to allow ghost seeds beyond mesh bounds
     float padding = cellSize * 3.0f;
@@ -51,12 +55,11 @@ void VoronoiSeeder::generateSeeds(const SupportingHalfedge::IntrinsicMesh& intri
     generateSurfaceSeeds(intrinsicMesh);
 
     TriangleHashGrid sharedTriGrid;
-    sharedTriGrid.build(volumeMesh, gridMin, gridMax, cellSize);
+    sharedTriGrid.build(positions, indices, gridMin, gridMax, cellSize);
 
-    buildSDFGrid(volumeMesh, sharedTriGrid);
+    buildSDFGrid(positions, indices, sharedTriGrid);
 
-    // Build voxel grid for in/out classification (owned by HeatSystem)
-    voxelGrid.build(volumeMesh, sharedTriGrid, voxelResolution);
+    voxelGrid.build(positions, indices, sharedTriGrid, voxelResolution);
     const VoxelGrid* voxelGridRef = (voxelGrid.getGridSize() > 0) ? &voxelGrid : nullptr;
     
     // Only generate seeds within this distance
@@ -90,10 +93,10 @@ void VoronoiSeeder::exportSeedsToOBJ(const std::string& filename) const {
     std::cout << "[VoronoiSeeder] Exported seeds to: " << filename << std::endl;
 }
 
-float VoronoiSeeder::computePointToMeshDistance(const glm::vec3& point, const Model& model) const {
-    const auto& vertices = model.getVertices();
-    const auto& indices = model.getIndices();
-
+float VoronoiSeeder::computePointToMeshDistance(
+    const glm::vec3& point,
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices) const {
     float minDistSq = FLT_MAX;
 
     // Get nearby triangles from spatial hash
@@ -110,10 +113,15 @@ float VoronoiSeeder::computePointToMeshDistance(const glm::vec3& point, const Mo
         if (indexBase + 2 >= indices.size()) {
             continue;
         }
+        if (indices[indexBase] >= positions.size() ||
+            indices[indexBase + 1] >= positions.size() ||
+            indices[indexBase + 2] >= positions.size()) {
+            continue;
+        }
 
-        glm::vec3 v0 = vertices[indices[indexBase]].pos;
-        glm::vec3 v1 = vertices[indices[indexBase + 1]].pos;
-        glm::vec3 v2 = vertices[indices[indexBase + 2]].pos;
+        const glm::vec3& v0 = positions[indices[indexBase]];
+        const glm::vec3& v1 = positions[indices[indexBase + 1]];
+        const glm::vec3& v2 = positions[indices[indexBase + 2]];
 
         glm::vec3 closestPoint = closestPointOnTriangle(point, v0, v1, v2);
         float distSq = glm::distance2(point, closestPoint);
@@ -124,7 +132,10 @@ float VoronoiSeeder::computePointToMeshDistance(const glm::vec3& point, const Mo
     return std::sqrt(minDistSq);
 }
 
-void VoronoiSeeder::buildSDFGrid(const Model& volumeMesh, const TriangleHashGrid& triangleGrid) {
+void VoronoiSeeder::buildSDFGrid(
+    const std::vector<glm::vec3>& positions,
+    const std::vector<uint32_t>& indices,
+    const TriangleHashGrid& triangleGrid) {
     sdfGridDim = gridDim;
     sdfCellSize = cellSize;
 
@@ -140,7 +151,7 @@ void VoronoiSeeder::buildSDFGrid(const Model& volumeMesh, const TriangleHashGrid
             for (int x = 0; x < sdfGridDim.x; x++) {
                 glm::vec3 gridPoint = gridMin + glm::vec3(x, y, z) * sdfCellSize;  
 
-                float unsignedDist = computePointToMeshDistance(gridPoint, volumeMesh);
+                float unsignedDist = computePointToMeshDistance(gridPoint, positions, indices);
 
                 // Use sdfGridDim for indexing
                 size_t idx = z * sdfGridDim.y * sdfGridDim.x + y * sdfGridDim.x + x;

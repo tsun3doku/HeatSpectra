@@ -6,10 +6,8 @@
 
 #include "heat/HeatDefaults.hpp"
 
-class Model;
-
 struct HeatOverlayData {
-    Model* model = nullptr;
+    uint32_t runtimeModelId = 0;
     VkBufferView surfaceBufferView = VK_NULL_HANDLE;
     uint32_t intrinsicVertexCount = 0;
     float sourceTemperature = defaultSourceTemperature;

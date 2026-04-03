@@ -29,22 +29,18 @@ QColor categoryColor(NodeGraphNodeCategory category) {
 
 QColor valueTypeColor(NodeGraphValueType valueType) {
     switch (valueType) {
+    case NodeGraphValueType::None:
+        return QColor(152, 162, 180);
     case NodeGraphValueType::Mesh:
         return QColor(113, 104, 232);
-    case NodeGraphValueType::Intrinsic:
-        return QColor(90, 198, 208);
-    case NodeGraphValueType::HeatReceiver:
-        return QColor(250, 120, 96);
-    case NodeGraphValueType::HeatSource:
-        return QColor(247, 174, 92);
-    case NodeGraphValueType::Contact:
-        return QColor(204, 118, 212);
-    case NodeGraphValueType::Heat:
-        return QColor(242, 88, 74);
-    case NodeGraphValueType::Voronoi:
-        return QColor(92, 196, 154);
-    case NodeGraphValueType::Point:
-        return QColor(96, 204, 120);
+    case NodeGraphValueType::Emitter:
+        return QColor(226, 117, 56);
+    case NodeGraphValueType::Receiver:
+        return QColor(240, 166, 66);
+    case NodeGraphValueType::Volume:
+        return QColor(63, 173, 143);
+    case NodeGraphValueType::Field:
+        return QColor(78, 173, 219);
     case NodeGraphValueType::Vector3:
         return QColor(92, 188, 224);
     case NodeGraphValueType::ScalarFloat:
@@ -53,8 +49,6 @@ QColor valueTypeColor(NodeGraphValueType valueType) {
         return QColor(230, 142, 74);
     case NodeGraphValueType::ScalarBool:
         return QColor(235, 214, 97);
-    case NodeGraphValueType::Unknown:
-        return QColor(152, 162, 180);
     }
 
     return QColor(152, 162, 180);

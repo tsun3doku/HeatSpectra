@@ -1,6 +1,8 @@
 #pragma once
 
 #include "NodeGraphCoreTypes.hpp"
+#include "domain/GeometryData.hpp"
+#include "domain/RemeshData.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -51,6 +53,22 @@ public:
 
     void clear() {
         entries.clear();
+    }
+
+    const GeometryData* resolveGeometryHandle(const NodeDataHandle& handle) const {
+        if (handle.key == 0) {
+            return nullptr;
+        }
+
+        return get<GeometryData>(handle);
+    }
+
+    bool hasRemeshHandle(const NodeDataHandle& handle) const {
+        if (handle.key == 0) {
+            return false;
+        }
+
+        return get<RemeshData>(handle) != nullptr;
     }
 
 private:

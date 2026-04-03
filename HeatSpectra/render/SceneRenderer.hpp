@@ -11,12 +11,12 @@
 #include <vector>
 #include <functional>
 
-#include "domain/RemeshData.hpp"
+#include "nodegraph/NodeGraphCoreTypes.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 class Model;
 class UniformBufferManager;
 class MemoryAllocator;
-class RuntimeIntrinsicCache;
 class ResourceManager;
 class FrameGraph;
 class VulkanDevice;
@@ -53,12 +53,13 @@ inline const auto& clearColorValues = clearColorLinear;
 
 class SceneRenderer {
 public:
-    SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
+    SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
     ~SceneRenderer();
 
     void resize(VkExtent2D extent);
     void updateDescriptorSets();
-    void updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic);
+    void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
+    void removeIntrinsicPackage(uint64_t packageKey);
 
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
@@ -108,7 +109,6 @@ private:
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    RuntimeIntrinsicCache& remeshResources;
     FrameGraph& frameGraph;
     VkFrameGraphRuntime& frameGraphRuntime;
     ResourceManager& resourceManager;

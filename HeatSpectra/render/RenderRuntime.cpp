@@ -45,7 +45,7 @@ RenderRuntime::RenderRuntime(
 
 RenderRuntime::~RenderRuntime() = default;
 
-bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, RuntimeIntrinsicCache& remeshResources, ResourceManager& resourceManager, UniformBufferManager& ubo) {
+bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ResourceManager& resourceManager, UniformBufferManager& ubo) {
     if (swapChainFormat == VK_FORMAT_UNDEFINED || extent.width == 0 || extent.height == 0) {
         return false;
     }
@@ -71,7 +71,6 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
     sceneRenderer = std::make_unique<SceneRenderer>(
         vulkanDevice,
         allocator,
-        remeshResources,
         *frameGraph,
         frameGraphBackend->getRuntime(),
         resourceManager,
@@ -150,18 +149,6 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
         isShuttingDown);
 
     return frameController != nullptr;
-}
-
-void RenderRuntime::setSystems(HeatSystem* heatSystem, VoronoiSystem* voronoiSystem) {
-    if (frameController) {
-        frameController->setSystems(heatSystem, voronoiSystem);
-    }
-}
-
-void RenderRuntime::setHeatSystem(HeatSystem* heatSystem) {
-    if (frameController) {
-        frameController->setHeatSystem(heatSystem);
-    }
 }
 
 bool RenderRuntime::initializeSyncObjects() {

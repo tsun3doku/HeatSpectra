@@ -2,84 +2,125 @@
 
 #include "HeatSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "render/RenderRuntime.hpp"
 #include "vulkan/ResourceManager.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "runtime/ContactPreviewStore.hpp"
 
-#include <iostream>
-
 HeatSystemController::HeatSystemController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager,
-    UniformBufferManager& uniformBufferManager, RuntimeIntrinsicCache& remeshResources,
+    UniformBufferManager& uniformBufferManager,
     CommandPool& renderCommandPool,
     uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
       uniformBufferManager(uniformBufferManager),
-      remeshResources(remeshResources),
       renderCommandPool(renderCommandPool),
       maxFramesInFlight(maxFramesInFlight) {
 }
 
 void HeatSystemController::configureHeatSystem(HeatSystem& system) {
-    system.setHeatPackage(&heatPackageStorage);
-    system.setThermalMaterials(heatPackageStorage.runtimeThermalMaterials);
-    system.configureSourceRuntimes(heatPackageStorage);
-    system.setResolvedContacts(resolvedContactsStorage);
-    system.setSourceTemperatures(heatPackageStorage.sourceTemperatureByRuntimeId);
-}
+    system.clearVoronoiInputs();
+    if (configuredConfig.voronoiNodeCount != 0 && configuredConfig.voronoiNodes) {
+        system.setVoronoiBuffers(
+            configuredConfig.voronoiNodeCount,
+            configuredConfig.voronoiNodes,
+            configuredConfig.voronoiNodeBuffer,
+            configuredConfig.voronoiNodeBufferOffset,
+            configuredConfig.voronoiNeighborBuffer,
+            configuredConfig.voronoiNeighborBufferOffset,
+            configuredConfig.neighborIndicesBuffer,
+            configuredConfig.neighborIndicesBufferOffset,
+            configuredConfig.interfaceAreasBuffer,
+            configuredConfig.interfaceAreasBufferOffset,
+            configuredConfig.interfaceNeighborIdsBuffer,
+            configuredConfig.interfaceNeighborIdsBufferOffset,
+            configuredConfig.seedFlagsBuffer,
+            configuredConfig.seedFlagsBufferOffset);
 
-void HeatSystemController::applyHeatActivationState(HeatSystem& system) {
-    if (!heatPackageStorage.authored.active) {
-        system.setIsPaused(false);
-        if (system.getIsActive()) {
-            system.setActive(false);
+        for (const auto& [runtimeModelId, nodeOffset] : configuredConfig.receiverVoronoiNodeOffsetByModelId) {
+            const auto countIt = configuredConfig.receiverVoronoiNodeCountByModelId.find(runtimeModelId);
+            const auto bufferIt = configuredConfig.receiverVoronoiSurfaceMappingBufferByModelId.find(runtimeModelId);
+            const auto bufferOffsetIt = configuredConfig.receiverVoronoiSurfaceMappingBufferOffsetByModelId.find(runtimeModelId);
+            const auto cellIndicesIt = configuredConfig.receiverVoronoiSurfaceCellIndicesByModelId.find(runtimeModelId);
+            const auto seedFlagsIt = configuredConfig.receiverVoronoiSeedFlagsByModelId.find(runtimeModelId);
+            if (countIt == configuredConfig.receiverVoronoiNodeCountByModelId.end() ||
+                bufferIt == configuredConfig.receiverVoronoiSurfaceMappingBufferByModelId.end() ||
+                bufferOffsetIt == configuredConfig.receiverVoronoiSurfaceMappingBufferOffsetByModelId.end() ||
+                cellIndicesIt == configuredConfig.receiverVoronoiSurfaceCellIndicesByModelId.end() ||
+                seedFlagsIt == configuredConfig.receiverVoronoiSeedFlagsByModelId.end()) {
+                continue;
+            }
+
+            system.addVoronoiReceiverInput(
+                runtimeModelId,
+                nodeOffset,
+                countIt->second,
+                bufferIt->second,
+                bufferOffsetIt->second,
+                cellIndicesIt->second,
+                seedFlagsIt->second);
         }
-        system.requestHeatReset();
-        return;
     }
-
-    system.setActive(true);
-    system.setIsPaused(heatPackageStorage.authored.paused);
-    if (heatPackageStorage.authored.resetRequested) {
-        system.requestHeatReset();
-    }
+    system.setSourcePayloads(
+        configuredConfig.sourceGeometries,
+        configuredConfig.sourceIntrinsicMeshes,
+        configuredConfig.sourceRuntimeModelIds,
+        configuredConfig.sourceTemperatureByRuntimeId);
+    system.setReceiverPayloads(
+        configuredConfig.receiverGeometries,
+        configuredConfig.receiverIntrinsicMeshes,
+        configuredConfig.receiverRuntimeModelIds,
+        configuredConfig.supportingHalfedgeViews,
+        configuredConfig.supportingAngleViews,
+        configuredConfig.halfedgeViews,
+        configuredConfig.edgeViews,
+        configuredConfig.triangleViews,
+        configuredConfig.lengthViews,
+        configuredConfig.inputHalfedgeViews,
+        configuredConfig.inputEdgeViews,
+        configuredConfig.inputTriangleViews,
+        configuredConfig.inputLengthViews);
+    system.setThermalMaterials(configuredConfig.runtimeThermalMaterials);
+    system.setContactCouplings(configuredConfig.contactCouplings);
 }
 
-void HeatSystemController::applyHeatPackage(const HeatPackage& heatPackage) {
-    heatPackageStorage = heatPackage;
-    hasConfiguredHeatPackage = true;
+void HeatSystemController::configure(const Config& config) {
+    configuredConfig = config;
+    hasConfiguredHeatConfig = true;
 
     if (!heatSystem) {
         return;
     }
 
     configureHeatSystem(*heatSystem);
-    applyHeatActivationState(*heatSystem);
+    heatSystem->setActive(configuredConfig.authored.active);
+    heatSystem->setIsPaused(configuredConfig.authored.active && configuredConfig.authored.paused);
+    heatSystem->ensureConfigured();
 }
 
-void HeatSystemController::applyResolvedContacts(const std::vector<RuntimeContactResult>& resolvedContacts) {
-    resolvedContactsStorage = resolvedContacts;
+void HeatSystemController::disable() {
+    configuredConfig = {};
+    hasConfiguredHeatConfig = true;
 
-    if (!heatSystem || !hasConfiguredHeatPackage) {
+    if (!heatSystem) {
         return;
     }
 
     configureHeatSystem(*heatSystem);
-    applyHeatActivationState(*heatSystem);
+    heatSystem->setIsPaused(false);
+    heatSystem->setActive(false);
+    heatSystem->ensureConfigured();
 }
 
 bool HeatSystemController::isHeatSystemActive() const {
-    return hasConfiguredHeatPackage && heatPackageStorage.authored.active;
+    return hasConfiguredHeatConfig && configuredConfig.authored.active;
 }
 
 bool HeatSystemController::isHeatSystemPaused() const {
-    return hasConfiguredHeatPackage &&
-           heatPackageStorage.authored.active &&
-           heatPackageStorage.authored.paused;
+    return hasConfiguredHeatConfig &&
+           configuredConfig.authored.active &&
+           configuredConfig.authored.paused;
 }
 
 std::unique_ptr<HeatSystem> HeatSystemController::buildHeatSystem(VkExtent2D extent, VkRenderPass renderPass) {
@@ -87,7 +128,6 @@ std::unique_ptr<HeatSystem> HeatSystemController::buildHeatSystem(VkExtent2D ext
         vulkanDevice,
         memoryAllocator,
         resourceManager,
-        remeshResources,
         heatSystemResources,
         uniformBufferManager,
         maxFramesInFlight,
@@ -100,9 +140,11 @@ std::unique_ptr<HeatSystem> HeatSystemController::buildHeatSystem(VkExtent2D ext
     }
     system->setContactPreviewStore(contactPreviewStore);
 
-    if (hasConfiguredHeatPackage) {
+    if (hasConfiguredHeatConfig) {
         configureHeatSystem(*system);
-        applyHeatActivationState(*system);
+        system->setActive(configuredConfig.authored.active);
+        system->setIsPaused(configuredConfig.authored.active && configuredConfig.authored.paused);
+        system->ensureConfigured();
     }
     return system;
 }

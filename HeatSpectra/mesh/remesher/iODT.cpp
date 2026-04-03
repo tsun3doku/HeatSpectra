@@ -11,55 +11,10 @@
 #include <future>
 
 #include "iODT.hpp"
-#include "domain/GeometryData.hpp"
-#include "vulkan/VulkanDevice.hpp"
-#include "vulkan/MemoryAllocator.hpp"
+iODT::iODT(const std::vector<float>& pointPositions, const std::vector<uint32_t>& triangleIndices)
+    : tracer(intrinsicMesh), tracerInput(inputMesh) {
 
-iODT::iODT(Model& model, VulkanDevice& vulkanDevice, MemoryAllocator& allocator) 
-    : vulkanDevice(vulkanDevice), allocator(allocator), tracer(intrinsicMesh), tracerInput(inputMesh) {
-    
-    // Build the input mesh 
-    inputMesh.buildFromModel(model);
-    inputMesh.updateAllCornerAngles({});
-    inputMesh.computeCornerScaledAngles();
-    inputMesh.updateAllSignposts();
-
-    inputMesh.computeVertexAngleScales();
-    inputMesh.buildHalfedgeVectorsInVertex();
-    inputMesh.buildHalfedgeVectorsInFace();
-
-    // Build the intrinsic mesh 
-    intrinsicMesh.buildFromModel(model);
-    auto& conn = intrinsicMesh.getConnectivity();
-    intrinsicMesh.updateAllCornerAngles({});
-    intrinsicMesh.computeCornerScaledAngles();
-    intrinsicMesh.updateAllSignposts();
-
-    intrinsicMesh.computeVertexAngleScales();
-    intrinsicMesh.buildHalfedgeVectorsInVertex();
-    intrinsicMesh.buildHalfedgeVectorsInFace();
-
-    // Initialize vertex locations for tracing   
-    initializeVertexLocations();
-
-    // All edges start as original
-    const auto& edges = conn.getEdges();
-    for (size_t i = 0; i < edges.size(); ++i) {
-        if (edges[i].halfEdgeIdx != INVALID_INDEX) {
-            conn.getEdges()[i].isOriginal = true;
-        }
-    }
-    
-    // Initialize supporting halfedge
-    supportingHalfedge = std::make_unique<SupportingHalfedge>(inputMesh, intrinsicMesh, tracer, vulkanDevice, allocator);
-    supportingHalfedge->initialize();
-    supportingHalfedge->uploadToGPU();
-}
-
-iODT::iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAllocator& allocator)
-    : vulkanDevice(vulkanDevice), allocator(allocator), tracer(intrinsicMesh), tracerInput(inputMesh) {
-
-    inputMesh.buildFromGeometry(geometry);
+    inputMesh.buildFromIndexedData(pointPositions, triangleIndices);
     inputMesh.updateAllCornerAngles({});
     inputMesh.computeCornerScaledAngles();
     inputMesh.updateAllSignposts();
@@ -67,7 +22,7 @@ iODT::iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAlloc
     inputMesh.buildHalfedgeVectorsInVertex();
     inputMesh.buildHalfedgeVectorsInFace();
 
-    intrinsicMesh.buildFromGeometry(geometry);
+    intrinsicMesh.buildFromIndexedData(pointPositions, triangleIndices);
     auto& conn = intrinsicMesh.getConnectivity();
     intrinsicMesh.updateAllCornerAngles({});
     intrinsicMesh.computeCornerScaledAngles();
@@ -85,9 +40,8 @@ iODT::iODT(const GeometryData& geometry, VulkanDevice& vulkanDevice, MemoryAlloc
         }
     }
 
-    supportingHalfedge = std::make_unique<SupportingHalfedge>(inputMesh, intrinsicMesh, tracer, vulkanDevice, allocator);
+    supportingHalfedge = std::make_unique<SupportingHalfedge>(inputMesh, intrinsicMesh, tracer);
     supportingHalfedge->initialize();
-    supportingHalfedge->uploadToGPU();
 }
 
 iODT::~iODT() {
@@ -127,14 +81,6 @@ bool iODT::optimalDelaunayTriangulation(int maxIterations, double minAngleDegree
     // Repositioning phae
     std::cout << "[iODT] Reposition phase" << std::endl;
     optimalReposition(maxIterations, 1e-4, maxEdgeLength, stepSize);
-
-    // Upload updated supporting map to GPU
-    std::cout << "[iODT] Upload phase" << std::endl;
-    if (supportingHalfedge) {
-        supportingHalfedge->uploadToGPU();
-        supportingHalfedge->uploadIntrinsicTriangleData();
-        supportingHalfedge->uploadIntrinsicVertexData();
-    }
 
     std::cout << "[iODT] optimalDelaunayTriangulation done" << std::endl;
     return true;
@@ -1871,10 +1817,6 @@ void iODT::createCommonSubdivision(Model& overlayModel, std::vector<CommonSubdiv
 }
 
 void iODT::cleanup() {
-    if (supportingHalfedge) {
-        supportingHalfedge->cleanup();
-    }
-
     supportingHalfedge.reset();
     commonSubdivision.reset();
 }

@@ -5,7 +5,6 @@
 #include "Model.hpp"
 #include "ModelUploader.hpp"
 #include "render/RenderConfig.hpp"
-#include "runtime/RuntimePayloadController.hpp"
 #include "vulkan/ResourceManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
@@ -17,14 +16,12 @@ SceneController::SceneController(
     VulkanDevice& vulkanDevice,
     ResourceManager& resourceManager,
     ModelUploader& modelUploader,
-    RuntimePayloadController& runtimePayloadController,
     FrameSync& frameSync,
     CameraController& cameraController,
     std::atomic<bool>& isOperating)
     : vulkanDevice(vulkanDevice),
       resourceManager(resourceManager),
       modelUploader(modelUploader),
-      runtimePayloadController(runtimePayloadController),
       frameSync(frameSync),
       cameraController(cameraController),
       isOperating(isOperating) {
@@ -43,7 +40,6 @@ uint32_t SceneController::loadModel(const std::string& modelPath, uint32_t prefe
     }
 
     const uint32_t modelId = modelUploader.addModel(resourceManager, modelPath, preferredModelId);
-    runtimePayloadController.rebuildHeatSystemSinks();
 
     if (Model* loadedModel = resourceManager.getModelByID(modelId)) {
         cameraController.focusOn(loadedModel->getBoundingBoxCenter());
@@ -69,7 +65,6 @@ bool SceneController::removeModelByID(uint32_t modelId) {
 
     const bool removed = resourceManager.removeModelByID(modelId);
     if (removed) {
-        runtimePayloadController.rebuildHeatSystemSinks();
         focusOnVisibleModel();
     }
 

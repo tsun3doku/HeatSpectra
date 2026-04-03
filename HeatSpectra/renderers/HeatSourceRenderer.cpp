@@ -1,5 +1,6 @@
 #include "HeatSourceRenderer.hpp"
 
+#include "vulkan/ResourceManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "scene/Model.hpp"
@@ -227,7 +228,7 @@ void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, Model& model,f
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getRenderIndices().size()), 1, 0, 0, 0);
 }
 
-void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources) const {
+void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ResourceManager& resourceManager) const {
     if (!initialized || pipeline == VK_NULL_HANDLE || pipelineLayout == VK_NULL_HANDLE) {
         return;
     }
@@ -244,10 +245,8 @@ void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameInd
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    uint32_t renderedSourceCount = 0;
     for (const HeatOverlayData& sourceBinding : sources) {
-        Model* sourceModel = sourceBinding.model;
-        if (!sourceModel) {
+        if (sourceBinding.runtimeModelId == 0) {
             continue;
         }
 
@@ -255,15 +254,14 @@ void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameInd
             continue;
         }
 
+        Model* sourceModel = resourceManager.getModelByID(sourceBinding.runtimeModelId);
+        if (!sourceModel) {
+            continue;
+        }
+
         drawModel(commandBuffer, *sourceModel, sourceBinding.sourceTemperature, *ubo);
-        ++renderedSourceCount;
     }
 
-    std::cout << "[HeatSourceRenderer] render"
-              << " frame=" << frameIndex
-              << " requested=" << sources.size()
-              << " rendered=" << renderedSourceCount
-              << std::endl;
 }
 
 void HeatSourceRenderer::cleanup() {

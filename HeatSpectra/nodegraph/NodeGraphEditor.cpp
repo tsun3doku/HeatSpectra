@@ -69,43 +69,6 @@ bool findFirstSocketByValueType(
     return false;
 }
 
-std::string makeHeatSolveSocketName(NodeGraphValueType valueType, std::size_t socketOrdinal) {
-    const char* baseName = "Input";
-    if (valueType == NodeGraphValueType::HeatReceiver) {
-        baseName = "Receiver";
-    } else if (valueType == NodeGraphValueType::HeatSource) {
-        baseName = "Source";
-    }
-
-    if (socketOrdinal <= 1) {
-        return baseName;
-    }
-
-    return std::string(baseName) + " " + std::to_string(socketOrdinal);
-}
-
-std::string makeVoronoiSocketName(std::size_t socketOrdinal) {
-    if (socketOrdinal <= 1) {
-        return "Geometry";
-    }
-
-    return std::string("Geometry ") + std::to_string(socketOrdinal);
-}
-
-NodeGraphSocketId findFirstInputSocketByName(const NodeGraphNode& node, const char* name) {
-    if (!name || name[0] == '\0') {
-        return {};
-    }
-
-    for (const NodeGraphSocket& socket : node.inputs) {
-        if (socket.id.isValid() && socket.name == name) {
-            return socket.id;
-        }
-    }
-
-    return {};
-}
-
 }
 
 NodeGraphEditor::NodeGraphEditor(NodeGraphBridge* bridgePtr)
@@ -194,14 +157,22 @@ void NodeGraphEditor::resetToDefaultGraph() {
         !findFirstSocketByValueType(heatReceiver.inputs, NodeGraphValueType::Mesh, heatReceiverInputId) ||
         !findFirstSocketByValueType(heatSource.inputs, NodeGraphValueType::Mesh, heatSourceInputId) ||
         !findFirstSocketByValueType(voronoi.inputs, NodeGraphValueType::Mesh, voronoiGeometryInputId) ||
-        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Voronoi, heatSolveVoronoiInputId) ||
-        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Contact, heatSolveContactInputId) ||
+        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Volume, heatSolveVoronoiInputId) ||
+        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Field, heatSolveContactInputId) ||
         heatReceiver.outputs.empty() || heatSource.outputs.empty() || contact.outputs.empty() || voronoi.outputs.empty()) {
         return;
     }
 
-    const NodeGraphSocketId contactEmitterInputId = findFirstInputSocketByName(contact, "Emitter");
-    const NodeGraphSocketId contactReceiverInputId = findFirstInputSocketByName(contact, "Receiver");
+    const NodeGraphSocketId contactEmitterInputId = [&]() {
+        NodeGraphSocketId socketId{};
+        findFirstSocketByValueType(contact.inputs, NodeGraphValueType::Emitter, socketId);
+        return socketId;
+    }();
+    const NodeGraphSocketId contactReceiverInputId = [&]() {
+        NodeGraphSocketId socketId{};
+        findFirstSocketByValueType(contact.inputs, NodeGraphValueType::Receiver, socketId);
+        return socketId;
+    }();
     if (!contactEmitterInputId.isValid() || !contactReceiverInputId.isValid()) {
         return;
     }
@@ -271,13 +242,6 @@ bool NodeGraphEditor::connectSockets(
     NodeGraphNode targetNode{};
     if (!bridge->getNode(toNode, targetNode)) {
         return true;
-    }
-
-    const NodeTypeId targetTypeId = getNodeTypeId(targetNode.typeId);
-    if (targetTypeId == nodegraphtypes::HeatSolve) {
-        ensureHeatSolveSpareInputs(toNode);
-    } else if (targetTypeId == nodegraphtypes::Voronoi) {
-        ensureVoronoiSpareInputs(toNode);
     }
 
     return true;
@@ -543,61 +507,4 @@ bool NodeGraphEditor::writeTransformRotation(NodeGraphNodeId nodeId, const glm::
         NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateXDegrees, rotationDegrees.x) &&
         NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateYDegrees, rotationDegrees.y) &&
         NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateZDegrees, rotationDegrees.z);
-}
-
-bool NodeGraphEditor::ensureHeatSolveSpareInputs(NodeGraphNodeId nodeId) {
-    (void)nodeId;
-    return false;
-}
-
-bool NodeGraphEditor::ensureVoronoiSpareInputs(NodeGraphNodeId nodeId) {
-    return ensureSpareInput(nodeId, NodeGraphValueType::Mesh);
-}
-
-bool NodeGraphEditor::ensureSpareInput(NodeGraphNodeId nodeId, NodeGraphValueType valueType) {
-    if (!bridge) {
-        return false;
-    }
-
-    const NodeGraphState state = bridge->state();
-    const NodeGraphNode* node = findNodeInState(state, nodeId);
-    if (!node) {
-        return false;
-    }
-
-    NodeSocketSignature socketTemplate{};
-    bool hasTemplate = false;
-    std::size_t socketCount = 0;
-    bool hasSpare = false;
-    for (const NodeGraphSocket& inputSocket : node->inputs) {
-        if (inputSocket.valueType != valueType) {
-            continue;
-        }
-
-        ++socketCount;
-        if (!hasTemplate) {
-            socketTemplate.name = inputSocket.name;
-            socketTemplate.direction = NodeGraphSocketDirection::Input;
-            socketTemplate.valueType = inputSocket.valueType;
-            socketTemplate.contract = inputSocket.contract;
-            hasTemplate = true;
-        }
-
-        if (!nodegraphsceneutils::findIncomingEdgeForInput(state, nodeId, inputSocket.id).isValid()) {
-            hasSpare = true;
-            break;
-        }
-    }
-
-    if (!hasTemplate || hasSpare) {
-        return false;
-    }
-
-    if (getNodeTypeId(node->typeId) == nodegraphtypes::HeatSolve) {
-        socketTemplate.name = makeHeatSolveSocketName(valueType, socketCount + 1);
-    } else if (getNodeTypeId(node->typeId) == nodegraphtypes::Voronoi) {
-        socketTemplate.name = makeVoronoiSocketName(socketCount + 1);
-    }
-
-    return bridge->appendSocket(nodeId, socketTemplate, nullptr);
 }

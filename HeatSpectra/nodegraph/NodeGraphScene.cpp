@@ -136,8 +136,8 @@ void NodeGraphScene::applyDelta(const NodeGraphDelta& delta) {
 
 void NodeGraphScene::clearSceneState() {
     clearActiveDragLine();
-    hoveredNodeItem = nullptr;
-    hoveredEdgeItem = nullptr;
+    hoveredNodeId = {};
+    hoveredEdgeId = {};
     inputSocketItemsBySocket.clear();
     outputSocketItemsBySocket.clear();
     outputValueTypeBySocketId.clear();
@@ -297,6 +297,9 @@ void NodeGraphScene::removeNodeItem(NodeGraphNodeId nodeId) {
         delete nodeRect;
     }
 
+    if (hoveredNodeId == nodeId) {
+        hoveredNodeId = {};
+    }
     nodeItemsById.erase(it);
 }
 
@@ -360,6 +363,9 @@ void NodeGraphScene::removeEdgeItem(NodeGraphEdgeId edgeId) {
     if (edgeItem) {
         removeItem(edgeItem);
         delete edgeItem;
+    }
+    if (hoveredEdgeId == edgeId) {
+        hoveredEdgeId = {};
     }
     edgeItemsById.erase(it);
 }
@@ -717,40 +723,56 @@ void NodeGraphScene::updateEdgePathsFromCurrentLayout() {
 }
 
 void NodeGraphScene::updateHoverState(const QPointF& scenePos) {
-    QGraphicsPathItem* nextHoveredEdge = nullptr;
-    QGraphicsRectItem* nextHoveredNode = nullptr;
+    NodeGraphEdgeId nextHoveredEdgeId{};
+    NodeGraphNodeId nextHoveredNodeId{};
 
     const QList<QGraphicsItem*> hitItems = items(scenePos, Qt::IntersectsItemShape, Qt::DescendingOrder, QTransform());
     for (QGraphicsItem* hitItem : hitItems) {
         QGraphicsItem* current = hitItem;
         while (current) {
-            if (!nextHoveredEdge && current->data(EdgeIdRole).isValid()) {
-                nextHoveredEdge = dynamic_cast<QGraphicsPathItem*>(current);
+            if (!nextHoveredEdgeId.isValid() && current->data(EdgeIdRole).isValid()) {
+                nextHoveredEdgeId = itemEdgeId(current);
             }
 
-            if (!nextHoveredNode && current->data(NodeIdRole).isValid() &&
+            if (!nextHoveredNodeId.isValid() && current->data(NodeIdRole).isValid() &&
                 (!current->data(SocketRole).isValid() || !current->data(SocketRole).toBool())) {
-                nextHoveredNode = dynamic_cast<QGraphicsRectItem*>(current);
+                nextHoveredNodeId = itemNodeId(current);
             }
 
             current = current->parentItem();
         }
 
-        if (nextHoveredEdge && nextHoveredNode) {
+        if (nextHoveredEdgeId.isValid() && nextHoveredNodeId.isValid()) {
             break;
         }
     }
 
-    if (hoveredEdgeItem != nextHoveredEdge) {
-        setEdgeHovered(hoveredEdgeItem, false);
-        hoveredEdgeItem = nextHoveredEdge;
-        setEdgeHovered(hoveredEdgeItem, true);
+    if (hoveredEdgeId != nextHoveredEdgeId) {
+        auto previousIt = edgeItemsById.find(hoveredEdgeId.value);
+        if (hoveredEdgeId.isValid() && previousIt != edgeItemsById.end()) {
+            setEdgeHovered(previousIt->second, false);
+        }
+
+        hoveredEdgeId = nextHoveredEdgeId;
+
+        auto nextIt = edgeItemsById.find(hoveredEdgeId.value);
+        if (hoveredEdgeId.isValid() && nextIt != edgeItemsById.end()) {
+            setEdgeHovered(nextIt->second, true);
+        }
     }
 
-    if (hoveredNodeItem != nextHoveredNode) {
-        setNodeHovered(hoveredNodeItem, false);
-        hoveredNodeItem = nextHoveredNode;
-        setNodeHovered(hoveredNodeItem, true);
+    if (hoveredNodeId != nextHoveredNodeId) {
+        auto previousIt = nodeItemsById.find(hoveredNodeId.value);
+        if (hoveredNodeId.isValid() && previousIt != nodeItemsById.end()) {
+            setNodeHovered(previousIt->second, false);
+        }
+
+        hoveredNodeId = nextHoveredNodeId;
+
+        auto nextIt = nodeItemsById.find(hoveredNodeId.value);
+        if (hoveredNodeId.isValid() && nextIt != nodeItemsById.end()) {
+            setNodeHovered(nextIt->second, true);
+        }
     }
 }
 

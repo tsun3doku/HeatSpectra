@@ -21,9 +21,9 @@ public:
     };
 
     void mapSurfacePoints(
-        const IntrinsicMeshData& sourceIntrinsic,
+        const SupportingHalfedge::IntrinsicMesh& sourceIntrinsicMesh,
         const std::array<float, 16>& sourceLocalToWorld,
-        const std::vector<const IntrinsicMeshData*>& receiverIntrinsics,
+        const std::vector<const SupportingHalfedge::IntrinsicMesh*>& receiverIntrinsicMeshes,
         const std::vector<std::array<float, 16>>& receiverLocalToWorld,
         std::vector<std::vector<ContactPair>>& receiverContactPairs,
         std::vector<ContactLineVertex>& outOutlineVertices,

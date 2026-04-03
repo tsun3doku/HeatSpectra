@@ -1,5 +1,6 @@
 #include "NodeContact.hpp"
 #include "NodeGraphRegistry.hpp"
+#include "NodeGraphDataTypes.hpp"
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
@@ -20,61 +21,57 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
         context.executionState.services.contactPreviewStore;
     const NodeGraphSocket* emitterSocket = findInputSocket(context.node, "Emitter");
     const NodeGraphSocket* receiverSocket = findInputSocket(context.node, "Receiver");
-    const NodeDataBlock* emitterInput = nullptr;
-    if (emitterSocket) {
-        emitterInput = readInput(context.node, emitterSocket->id, context.executionState);
-    }
-    const NodeDataBlock* receiverInput = nullptr;
-    if (receiverSocket) {
-        receiverInput = readInput(context.node, receiverSocket->id, context.executionState);
-    }
+    const EvaluatedSocketValue* emitterInputValue =
+        emitterSocket ? readEvaluatedInput(context.node, emitterSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* emitterInput = readInputValue(emitterInputValue);
+    const EvaluatedSocketValue* receiverInputValue =
+        receiverSocket ? readEvaluatedInput(context.node, receiverSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* receiverInput = readInputValue(receiverInputValue);
 
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
-    const GeometryData* emitterGeometry = nullptr;
-    NodeDataHandle emitterGeometryHandle{};
+    NodeDataHandle emitterMeshHandle{};
     if (payloadRegistry && emitterInput) {
-        if (emitterInput->dataType == NodeDataType::HeatSource) {
+        if (emitterInput->dataType == NodePayloadType::HeatSource) {
             const HeatSourceData* heatSource = payloadRegistry->get<HeatSourceData>(emitterInput->payloadHandle);
             if (heatSource) {
-                emitterGeometryHandle = heatSource->geometryHandle;
-                emitterGeometry = payloadRegistry->get<GeometryData>(emitterGeometryHandle);
+                emitterMeshHandle = heatSource->meshHandle;
             }
-        } else if (emitterInput->dataType == NodeDataType::HeatReceiver) {
+        } else if (emitterInput->dataType == NodePayloadType::HeatReceiver) {
             const HeatReceiverData* heatReceiver = payloadRegistry->get<HeatReceiverData>(emitterInput->payloadHandle);
             if (heatReceiver) {
-                emitterGeometryHandle = heatReceiver->geometryHandle;
-                emitterGeometry = payloadRegistry->get<GeometryData>(emitterGeometryHandle);
+                emitterMeshHandle = heatReceiver->meshHandle;
             }
-        } else {
-            emitterGeometryHandle = emitterInput->payloadHandle;
-            emitterGeometry = payloadRegistry->get<GeometryData>(emitterGeometryHandle);
         }
     }
 
-    const GeometryData* receiverGeometry = nullptr;
-    NodeDataHandle receiverGeometryHandle{};
-    if (payloadRegistry && receiverInput && receiverInput->dataType == NodeDataType::HeatReceiver) {
+    NodeDataHandle receiverMeshHandle{};
+    if (payloadRegistry && receiverInput && receiverInput->dataType == NodePayloadType::HeatReceiver) {
         const HeatReceiverData* heatReceiver = payloadRegistry->get<HeatReceiverData>(receiverInput->payloadHandle);
         if (heatReceiver) {
-            receiverGeometryHandle = heatReceiver->geometryHandle;
-            receiverGeometry = payloadRegistry->get<GeometryData>(receiverGeometryHandle);
+            receiverMeshHandle = heatReceiver->meshHandle;
         }
     }
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodeDataType::Contact;
+        outputValue.dataType = NodePayloadType::Contact;
         outputValue.payloadHandle = {};
 
         ContactData contactData{};
-        if (!emitterInput || !receiverInput || !emitterGeometry || !receiverGeometry ||
-            emitterGeometryHandle.key == 0 || receiverGeometryHandle.key == 0 ||
-            receiverInput->dataType != NodeDataType::HeatReceiver ||
-            (emitterInput->dataType != NodeDataType::HeatSource &&
-             emitterInput->dataType != NodeDataType::HeatReceiver)) {
+        uint64_t emitterPayloadHash = 0;
+        uint64_t receiverPayloadHash = 0;
+        if (!emitterInput || !receiverInput ||
+            emitterInput->payloadHandle.key == 0 ||
+            receiverInput->payloadHandle.key == 0 ||
+            emitterMeshHandle.key == 0 || receiverMeshHandle.key == 0 ||
+            receiverInput->dataType != NodePayloadType::HeatReceiver ||
+            (emitterInput->dataType != NodePayloadType::HeatSource &&
+             emitterInput->dataType != NodePayloadType::HeatReceiver)) {
             if (contactPreviewStore) {
                 contactPreviewStore->clearPreviewForNode(context.node.id.value);
             }
+            contactData.payloadHash = NodeGraphHash::start();
+            NodeGraphHash::combine(contactData.payloadHash, 0u);
             if (payloadRegistry) {
                 const uint64_t payloadKey = makeSocketKey(
                     context.node.id,
@@ -85,37 +82,47 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
             continue;
         }
 
-        ContactBindingData binding{};
         const ContactPairRole roleA =
-            (emitterInput->dataType == NodeDataType::HeatSource)
+            (emitterInput->dataType == NodePayloadType::HeatSource)
             ? ContactPairRole::Source
             : ContactPairRole::Receiver;
-        binding.pair.endpointA.role = roleA;
-        binding.pair.endpointA.payloadHandle = emitterInput->payloadHandle;
-        binding.pair.endpointA.geometryHandle = emitterGeometryHandle;
-        binding.pair.endpointB.role = ContactPairRole::Receiver;
-        binding.pair.endpointB.payloadHandle = receiverInput->payloadHandle;
-        binding.pair.endpointB.geometryHandle = receiverGeometryHandle;
-        binding.pair.minNormalDot = static_cast<float>(NodePanelUtils::readFloatParam(
+        contactData.pair.endpointA.role = roleA;
+        contactData.pair.endpointA.payloadHandle = emitterInput->payloadHandle;
+        contactData.pair.endpointA.meshHandle = emitterMeshHandle;
+        contactData.pair.endpointB.role = ContactPairRole::Receiver;
+        contactData.pair.endpointB.payloadHandle = receiverInput->payloadHandle;
+        contactData.pair.endpointB.meshHandle = receiverMeshHandle;
+        emitterPayloadHash = payloadHashForDataBlock(*emitterInput, payloadRegistry);
+        receiverPayloadHash = payloadHashForDataBlock(*receiverInput, payloadRegistry);
+        contactData.pair.minNormalDot = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node, nodegraphparams::contact::MinNormalDot, -0.65));
-        binding.pair.contactRadius = static_cast<float>(NodePanelUtils::readFloatParam(
+        contactData.pair.contactRadius = static_cast<float>(NodePanelUtils::readFloatParam(
             context.node, nodegraphparams::contact::ContactRadius, 0.01));
 
         if (roleA == ContactPairRole::Source) {
-            binding.pair.kind = ContactCouplingType::SourceToReceiver;
+            contactData.pair.kind = ContactCouplingType::SourceToReceiver;
         } else {
-            binding.pair.kind = ContactCouplingType::ReceiverToReceiver;
+            contactData.pair.kind = ContactCouplingType::ReceiverToReceiver;
         }
 
-        binding.pair.hasValidContact =
-            binding.pair.endpointA.geometryHandle.key != 0 &&
-            binding.pair.endpointB.geometryHandle.key != 0 &&
-            !(binding.pair.endpointA.geometryHandle == binding.pair.endpointB.geometryHandle);
+        contactData.pair.hasValidContact =
+            contactData.pair.endpointA.meshHandle.key != 0 &&
+            contactData.pair.endpointB.meshHandle.key != 0 &&
+            !(contactData.pair.endpointA.meshHandle == contactData.pair.endpointB.meshHandle);
 
-        if (binding.pair.hasValidContact) {
-            contactData.bindings.push_back(binding);
+        if (contactData.pair.hasValidContact) {
             contactData.active = true;
         }
+        contactData.payloadHash = NodeGraphHash::start();
+        NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.active ? 1u : 0u));
+        NodeGraphHash::combine(contactData.payloadHash, emitterPayloadHash);
+        NodeGraphHash::combine(contactData.payloadHash, receiverPayloadHash);
+        NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.pair.endpointA.role));
+        NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.pair.endpointB.role));
+        NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.pair.kind));
+        NodeGraphHash::combineFloat(contactData.payloadHash, contactData.pair.minNormalDot);
+        NodeGraphHash::combineFloat(contactData.payloadHash, contactData.pair.contactRadius);
+        NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.pair.hasValidContact ? 1u : 0u));
 
         if (contactPreviewStore) {
             contactPreviewStore->clearPreviewForNode(context.node.id.value);
@@ -135,14 +142,12 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
 bool NodeContact::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
     const NodeGraphSocket* emitterSocket = findInputSocket(context.node, "Emitter");
     const NodeGraphSocket* receiverSocket = findInputSocket(context.node, "Receiver");
-    const NodeDataBlock* emitterInput = nullptr;
-    if (emitterSocket) {
-        emitterInput = readInput(context.node, emitterSocket->id, context.executionState);
-    }
-    const NodeDataBlock* receiverInput = nullptr;
-    if (receiverSocket) {
-        receiverInput = readInput(context.node, receiverSocket->id, context.executionState);
-    }
+    const EvaluatedSocketValue* emitterInputValue =
+        emitterSocket ? readEvaluatedInput(context.node, emitterSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* emitterInput = readInputValue(emitterInputValue);
+    const EvaluatedSocketValue* receiverInputValue =
+        receiverSocket ? readEvaluatedInput(context.node, receiverSocket->id, context.executionState) : nullptr;
+    const NodeDataBlock* receiverInput = readInputValue(receiverInputValue);
 
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
@@ -166,7 +171,7 @@ bool NodeContact::computeInputHash(const NodeGraphKernelHashContext& context, ui
     }
 
     const ContactPairRole roleA =
-        (emitterInput && emitterInput->dataType == NodeDataType::HeatSource)
+        (emitterInput && emitterInput->dataType == NodePayloadType::HeatSource)
         ? ContactPairRole::Source
         : ContactPairRole::Receiver;
     const ContactCouplingType kind =

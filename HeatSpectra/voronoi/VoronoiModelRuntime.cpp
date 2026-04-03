@@ -1,8 +1,6 @@
 #include "VoronoiModelRuntime.hpp"
 
 #include "mesh/remesher/iODT.hpp"
-#include "runtime/RuntimeIntrinsicCache.hpp"
-#include "scene/Model.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
@@ -16,19 +14,50 @@
 VoronoiModelRuntime::VoronoiModelRuntime(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    Model& model,
-    const GeometryData& geometryData,
-    const IntrinsicMeshData& intrinsicMeshData,
-    const RuntimeIntrinsicCache::Entry& intrinsicResources,
+    uint32_t runtimeModelId,
+    VkBuffer vertexBuffer,
+    VkDeviceSize vertexBufferOffset,
+    VkBuffer indexBuffer,
+    VkDeviceSize indexBufferOffset,
+    uint32_t indexCount,
+    const glm::mat4& modelMatrix,
+    CpuData cpuData,
+    VkBufferView supportingHalfedgeView,
+    VkBufferView supportingAngleView,
+    VkBufferView halfedgeView,
+    VkBufferView edgeView,
+    VkBufferView triangleView,
+    VkBufferView lengthView,
+    VkBufferView inputHalfedgeView,
+    VkBufferView inputEdgeView,
+    VkBufferView inputTriangleView,
+    VkBufferView inputLengthView,
     CommandPool& renderCommandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      model(model),
-      nodeModelId(geometryData.modelId),
-      runtimeModelId(model.getRuntimeModelId()),
-      geometryData(geometryData),
-      intrinsicMeshData(intrinsicMeshData),
-      intrinsicResources(&intrinsicResources),
+      nodeModelId(cpuData.nodeModelId),
+      runtimeModelId(runtimeModelId),
+      vertexBuffer(vertexBuffer),
+      vertexBufferOffset(vertexBufferOffset),
+      indexBuffer(indexBuffer),
+      indexBufferOffset(indexBufferOffset),
+      indexCount(indexCount),
+      modelMatrix(modelMatrix),
+      intrinsicMesh(std::move(cpuData.intrinsicMesh)),
+      geometryPositions(std::move(cpuData.geometryPositions)),
+      geometryTriangleIndices(std::move(cpuData.geometryTriangleIndices)),
+      intrinsicSurfacePositions(std::move(cpuData.intrinsicSurfacePositions)),
+      intrinsicTriangleIndices(std::move(cpuData.intrinsicTriangleIndices)),
+      supportingHalfedgeView(supportingHalfedgeView),
+      supportingAngleView(supportingAngleView),
+      halfedgeView(halfedgeView),
+      edgeView(edgeView),
+      triangleView(triangleView),
+      lengthView(lengthView),
+      inputHalfedgeView(inputHalfedgeView),
+      inputEdgeView(inputEdgeView),
+      inputTriangleView(inputTriangleView),
+      inputLengthView(inputLengthView),
       renderCommandPool(renderCommandPool) {
 }
 
@@ -36,13 +65,13 @@ VoronoiModelRuntime::~VoronoiModelRuntime() {
 }
 
 bool VoronoiModelRuntime::createVoronoiBuffers() {
-    if (intrinsicMeshData.vertices.empty()) {
+    if (intrinsicMesh.vertices.empty()) {
         std::cerr << "[VoronoiModelRuntime] Missing intrinsic state for model" << std::endl;
         return false;
     }
 
-    const size_t vertexCount = intrinsicMeshData.vertices.size();
-    const size_t triangleCount = intrinsicMeshData.triangleIndices.size() / 3;
+    const size_t vertexCount = intrinsicMesh.vertices.size();
+    const size_t triangleCount = intrinsicMesh.indices.size() / 3;
     if (vertexCount == 0) {
         std::cerr << "[VoronoiModelRuntime] Model has 0 intrinsic vertices" << std::endl;
         return false;
@@ -50,15 +79,9 @@ bool VoronoiModelRuntime::createVoronoiBuffers() {
 
     intrinsicVertexCount = vertexCount;
     intrinsicTriangleCount = triangleCount;
-    intrinsicSurfacePositions.clear();
-    intrinsicSurfacePositions.reserve(vertexCount);
-    intrinsicTriangleIndices = intrinsicMeshData.triangleIndices;
-    for (const auto& vertex : intrinsicMeshData.vertices) {
-        intrinsicSurfacePositions.push_back(glm::vec3(vertex.position[0], vertex.position[1], vertex.position[2]));
-    }
 
     constexpr uint32_t K_CANDIDATES = 64;
-    const VkDeviceSize triangleIndicesBufferSize = sizeof(uint32_t) * intrinsicMeshData.triangleIndices.size();
+    const VkDeviceSize triangleIndicesBufferSize = sizeof(uint32_t) * intrinsicTriangleIndices.size();
     const VkDeviceSize candidateBufferSize = sizeof(uint32_t) * triangleCount * K_CANDIDATES;
     const VkDeviceSize storageAlignment = vulkanDevice.getPhysicalDeviceProperties().limits.minStorageBufferOffsetAlignment;
 
@@ -94,7 +117,7 @@ bool VoronoiModelRuntime::createVoronoiBuffers() {
         cleanup();
         return false;
     }
-    std::memcpy(triIdxStagingData, intrinsicMeshData.triangleIndices.data(), static_cast<size_t>(triangleIndicesBufferSize));
+    std::memcpy(triIdxStagingData, intrinsicTriangleIndices.data(), static_cast<size_t>(triangleIndicesBufferSize));
 
     const VkDeviceSize voronoiMappingSize = sizeof(VoronoiSurfaceMapping) * vertexCount;
     void* voronoiMappedPtr = nullptr;
@@ -273,41 +296,41 @@ void VoronoiModelRuntime::cleanupStagingBuffers() {
 }
 
 VkBufferView VoronoiModelRuntime::getSupportingHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewS : VK_NULL_HANDLE;
+    return supportingHalfedgeView;
 }
 
 VkBufferView VoronoiModelRuntime::getSupportingAngleView() const {
-    return intrinsicResources ? intrinsicResources->viewA : VK_NULL_HANDLE;
+    return supportingAngleView;
 }
 
 VkBufferView VoronoiModelRuntime::getHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewH : VK_NULL_HANDLE;
+    return halfedgeView;
 }
 
 VkBufferView VoronoiModelRuntime::getEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewE : VK_NULL_HANDLE;
+    return edgeView;
 }
 
 VkBufferView VoronoiModelRuntime::getTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewT : VK_NULL_HANDLE;
+    return triangleView;
 }
 
 VkBufferView VoronoiModelRuntime::getLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewL : VK_NULL_HANDLE;
+    return lengthView;
 }
 
 VkBufferView VoronoiModelRuntime::getInputHalfedgeView() const {
-    return intrinsicResources ? intrinsicResources->viewHInput : VK_NULL_HANDLE;
+    return inputHalfedgeView;
 }
 
 VkBufferView VoronoiModelRuntime::getInputEdgeView() const {
-    return intrinsicResources ? intrinsicResources->viewEInput : VK_NULL_HANDLE;
+    return inputEdgeView;
 }
 
 VkBufferView VoronoiModelRuntime::getInputTriangleView() const {
-    return intrinsicResources ? intrinsicResources->viewTInput : VK_NULL_HANDLE;
+    return inputTriangleView;
 }
 
 VkBufferView VoronoiModelRuntime::getInputLengthView() const {
-    return intrinsicResources ? intrinsicResources->viewLInput : VK_NULL_HANDLE;
+    return inputLengthView;
 }

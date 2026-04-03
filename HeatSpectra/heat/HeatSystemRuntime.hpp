@@ -1,12 +1,12 @@
 #pragma once
 
 #include "domain/GeometryData.hpp"
-#include "domain/RemeshData.hpp"
+#include "mesh/remesher/SupportingHalfedge.hpp"
 #include "runtime/RuntimeContactTypes.hpp"
-#include "runtime/RuntimePackages.hpp"
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 class CommandPool;
@@ -20,22 +20,33 @@ public:
     ~HeatSystemRuntime() = default;
 
     struct SourceBinding {
-        GeometryPackage geometryPackage{};
+        GeometryData geometry{};
+        uint32_t runtimeModelId = 0;
         std::unique_ptr<HeatSourceRuntime> heatSource;
     };
 
     const SourceBinding* findBaseSourceBinding() const;
 
-    void initializeModelBindings(
+    void setSourcePayloads(
+        const std::vector<GeometryData>& sourceGeometries,
+        const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
+        const std::vector<uint32_t>& sourceRuntimeModelIds,
+        const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId);
+    bool ensureModelBindings(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        CommandPool& renderCommandPool,
-        const HeatPackage& heatPackage);
+        CommandPool& renderCommandPool);
+    bool needsRebuild() const { return modelBindingsDirty; }
 
     std::vector<SourceBinding>& getSourceBindingsMutable() { return sourceBindings; }
 
     void cleanupModelBindings();
 
 private:
+    std::vector<GeometryData> activeSourceGeometries;
+    std::vector<SupportingHalfedge::IntrinsicMesh> activeSourceIntrinsicMeshes;
+    std::vector<uint32_t> activeSourceRuntimeModelIds;
+    std::unordered_map<uint32_t, float> activeSourceTemperatureByRuntimeId;
     std::vector<SourceBinding> sourceBindings;
+    bool modelBindingsDirty = true;
 };

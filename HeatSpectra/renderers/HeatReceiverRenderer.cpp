@@ -360,21 +360,26 @@ void HeatReceiverRenderer::updateDescriptors(const std::vector<HeatOverlayData>&
         return;
     }
 
-    std::unordered_set<const Model*> liveReceivers;
+    if (forceReallocate && descriptorPool != VK_NULL_HANDLE) {
+        vkResetDescriptorPool(vulkanDevice.getDevice(), descriptorPool, 0);
+        receiverDescriptorSets.clear();
+    }
+
+    std::unordered_set<uint32_t> liveReceivers;
     liveReceivers.reserve(receivers.size());
 
     for (const HeatOverlayData& receiver : receivers) {
-        if (!receiver.model) {
+        if (receiver.runtimeModelId == 0) {
             continue;
         }
 
-        liveReceivers.insert(receiver.model);
+        liveReceivers.insert(receiver.runtimeModelId);
         if (receiver.surfaceBufferView == VK_NULL_HANDLE) {
-            receiverDescriptorSets.erase(receiver.model);
+            receiverDescriptorSets.erase(receiver.runtimeModelId);
             continue;
         }
 
-        auto& receiverSets = receiverDescriptorSets[receiver.model];
+        auto& receiverSets = receiverDescriptorSets[receiver.runtimeModelId];
         const std::array<VkBufferView, 11> receiverViews = {
             receiver.supportingHalfedgeView,
             receiver.supportingAngleView,
@@ -390,8 +395,10 @@ void HeatReceiverRenderer::updateDescriptors(const std::vector<HeatOverlayData>&
         };
 
         if (!updateDescriptorSetVector(receiverViews, maxFramesInFlight, receiverSets, forceReallocate)) {
-            receiverDescriptorSets.erase(receiver.model);
-            std::cerr << "HeatReceiverRenderer: Failed to allocate/update receiver descriptor sets" << std::endl;
+            receiverDescriptorSets.erase(receiver.runtimeModelId);
+            std::cerr << "HeatReceiverRenderer: Failed to allocate/update receiver descriptor sets"
+                      << " runtimeModelId=" << receiver.runtimeModelId
+                      << std::endl;
             continue;
         }
     }
@@ -407,7 +414,6 @@ void HeatReceiverRenderer::updateDescriptors(const std::vector<HeatOverlayData>&
 
 void HeatReceiverRenderer::updateDescriptors(
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-    ResourceManager& resourceManager,
     uint32_t maxFramesInFlight,
     bool forceReallocate) {
     std::vector<HeatOverlayData> overlayReceivers;
@@ -418,13 +424,8 @@ void HeatReceiverRenderer::updateDescriptors(
             continue;
         }
 
-        Model* model = resourceManager.getModelByID(receiver->getRuntimeModelId());
-        if (!model) {
-            continue;
-        }
-
         HeatOverlayData overlay{};
-        overlay.model = model;
+        overlay.runtimeModelId = receiver->getRuntimeModelId();
         overlay.surfaceBufferView = receiver->getSurfaceBufferView();
         overlay.intrinsicVertexCount = static_cast<uint32_t>(receiver->getIntrinsicVertexCount());
         overlay.supportingHalfedgeView = receiver->getSupportingHalfedgeView();
@@ -443,20 +444,19 @@ void HeatReceiverRenderer::updateDescriptors(
     updateDescriptors(overlayReceivers, maxFramesInFlight, forceReallocate);
 }
 
-void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers) const {
+void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ResourceManager& resourceManager) const {
     if (!initialized || pipeline == VK_NULL_HANDLE || pipelineLayout == VK_NULL_HANDLE) {
         return;
     }
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    uint32_t renderedReceiverCount = 0;
     for (const ReceiverRenderBinding& receiverBinding : receivers) {
-        if (!receiverBinding.model) {
+        if (receiverBinding.runtimeModelId == 0) {
             continue;
         }
 
-        auto it = receiverDescriptorSets.find(receiverBinding.model);
+        auto it = receiverDescriptorSets.find(receiverBinding.runtimeModelId);
         if (it == receiverDescriptorSets.end()) {
             continue;
         }
@@ -465,15 +465,13 @@ void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameI
             continue;
         }
 
-        drawModel(commandBuffer, receiverHeatSets[frameIndex], *receiverBinding.model);
-        ++renderedReceiverCount;
-    }
+        Model* model = resourceManager.getModelByID(receiverBinding.runtimeModelId);
+        if (!model) {
+            continue;
+        }
 
-    std::cout << "[HeatReceiverRenderer] render"
-              << " frame=" << frameIndex
-              << " requested=" << receivers.size()
-              << " rendered=" << renderedReceiverCount
-              << std::endl;
+        drawModel(commandBuffer, receiverHeatSets[frameIndex], *model);
+    }
 }
 
 void HeatReceiverRenderer::cleanup() {

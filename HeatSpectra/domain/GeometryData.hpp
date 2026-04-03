@@ -8,6 +8,13 @@
 #include <string>
 #include <vector>
 
+//                                                      [ Invariant:
+//                                                        - Payloads are node graph authored data
+//                                                        - They may contain authored values and NodeDataHandle values
+//                                                        - They must not contain runtime objects/ids, scene objects, 
+//                                                          backend/controller objects or GPU resources 
+//                                                        - They must not be used directly by any backends ]
+
 struct GeometryAttribute {
     std::string name;
     GeometryAttributeDomain domain = GeometryAttributeDomain::Point;
@@ -25,10 +32,9 @@ struct GeometryGroup {
 };
 
 struct GeometryData {
+    uint64_t payloadHash = 0;
     std::string baseModelPath;
     uint32_t modelId = 0;
-    uint64_t geometryRevision = 0;
-    NodeDataHandle intrinsicHandle{};
     std::array<float, 16> localToWorld{
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,

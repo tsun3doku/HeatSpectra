@@ -1,8 +1,8 @@
 #pragma once
 
-#include "domain/RemeshData.hpp"
 #include "framegraph/FramePass.hpp"
 #include "framegraph/FrameGraphTypes.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 #include <glm/glm.hpp>
 
@@ -17,7 +17,6 @@ class UniformBufferManager;
 class iODT;
 class VulkanDevice;
 class CommandPool;
-class RuntimeIntrinsicCache;
 class TimingRenderer;
 class GridRenderer;
 class GizmoRenderer;
@@ -35,7 +34,6 @@ public:
     OverlayPass(
         VulkanDevice& device,
         MemoryAllocator& allocator,
-        RuntimeIntrinsicCache& remeshResources,
         VkFrameGraphRuntime& frameGraphRuntime,
         ResourceManager& resources,
         UniformBufferManager& ubo,
@@ -54,7 +52,8 @@ public:
     void record(const FrameContext& context, const SceneView& sceneView, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) override;
     void destroy() override;
 
-    void updateIntrinsicPayloadForModel(Model* model, const IntrinsicMeshData& intrinsic, uint32_t maxFramesInFlight);
+    void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
+    void removeIntrinsicPackage(uint64_t packageKey);
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
 
@@ -63,7 +62,6 @@ private:
     GeometryPass& geometryPass;
     ::VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    RuntimeIntrinsicCache& remeshResources;
     VkFrameGraphRuntime& frameGraphRuntime;
     ResourceManager& resourceManager;
     UniformBufferManager& uniformBufferManager;
