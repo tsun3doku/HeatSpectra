@@ -22,12 +22,14 @@ public:
     void setStatusSink(std::function<void(const QString&)> statusSink);
 
 private:
+    bool writeParameters();
     void browseModelFile();
     void applySettings();
     void setStatus(const QString& text) const;
 
     NodeGraphBridge* nodeGraphBridge = nullptr;
     NodeGraphNodeId currentNodeId{};
+    bool syncingFromNode = false;
 
     QLineEdit* pathLineEdit = nullptr;
     QPushButton* browseButton = nullptr;

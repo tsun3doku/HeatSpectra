@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeGraphTypes.hpp"
+#include "NodeHeatSolveParams.hpp"
 
 #include <QWidget>
 
@@ -32,6 +33,8 @@ public:
     void stopStatusTimer();
 
 private:
+    bool writeNodeParams(const HeatSolveNodeParams& params);
+    bool tryLoadNodeParams(HeatSolveNodeParams& outParams) const;
     void toggleHeatSystem();
     void pauseHeatSystem();
     void resetHeatSystem();
@@ -42,6 +45,7 @@ private:
     NodeGraphBridge* nodeGraphBridge = nullptr;
     const RuntimeQuery* runtimeQuery = nullptr;
     NodeGraphNodeId currentNodeId{};
+    bool syncingFromNode = false;
 
     QLabel* heatStatusValueLabel = nullptr;
     QPushButton* heatToggleButton = nullptr;

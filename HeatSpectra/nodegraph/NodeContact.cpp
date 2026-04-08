@@ -5,7 +5,7 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeContactParams.hpp"
 #include "nodegraph/NodeGraphPayloadTypes.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 
@@ -49,6 +49,8 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
         }
     }
 
+    const ContactNodeParams params = readContactNodeParams(context.node);
+
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
         outputValue.dataType = NodePayloadType::Contact;
@@ -88,10 +90,8 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
         contactData.pair.endpointB.meshHandle = receiverMeshHandle;
         emitterPayloadHash = payloadHashForDataBlock(*emitterInput, payloadRegistry);
         receiverPayloadHash = payloadHashForDataBlock(*receiverInput, payloadRegistry);
-        contactData.pair.minNormalDot = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node, nodegraphparams::contact::MinNormalDot, -0.65));
-        contactData.pair.contactRadius = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node, nodegraphparams::contact::ContactRadius, 0.01));
+        contactData.pair.minNormalDot = static_cast<float>(params.minNormalDot);
+        contactData.pair.contactRadius = static_cast<float>(params.contactRadius);
 
         if (roleA == ContactPairRole::Source) {
             contactData.pair.kind = ContactCouplingType::SourceToReceiver;
@@ -170,9 +170,8 @@ bool NodeContact::computeInputHash(const NodeGraphKernelHashContext& context, ui
         : ContactCouplingType::ReceiverToReceiver;
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(kind));
 
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::contact::MinNormalDot, -0.65)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::contact::ContactRadius, 0.01)));
+    const ContactNodeParams params = readContactNodeParams(context.node);
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.minNormalDot));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.contactRadius));
     return true;
 }

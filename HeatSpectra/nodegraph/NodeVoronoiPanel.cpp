@@ -2,7 +2,9 @@
 
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphBridge.hpp"
+#include "NodeGraphEditor.hpp"
 #include "NodePanelUtils.hpp"
+#include "NodeVoronoiParams.hpp"
 #include "domain/VoronoiParams.hpp"
 
 #include <QCheckBox>
@@ -80,29 +82,16 @@ void NodeVoronoiPanel::setNode(NodeGraphNodeId nodeId) {
         return;
     }
 
-    const VoronoiParams defaults{};
-
     syncingFromNode = true;
     const QSignalBlocker cellSizeBlock(cellSizeSpinBox);
     const QSignalBlocker voxelResolutionBlock(voxelResolutionSpinBox);
     const QSignalBlocker showVoronoiBlock(showVoronoiCheckBox);
     const QSignalBlocker showPointsBlock(showPointsCheckBox);
-    cellSizeSpinBox->setValue(NodePanelUtils::readFloatParam(
-        node,
-        nodegraphparams::voronoi::CellSize,
-        defaults.cellSize));
-    voxelResolutionSpinBox->setValue(NodePanelUtils::readIntParam(
-        node,
-        nodegraphparams::voronoi::VoxelResolution,
-        defaults.voxelResolution));
-    showVoronoiCheckBox->setChecked(NodePanelUtils::readBoolParam(
-        node,
-        nodegraphparams::voronoi::ShowVoronoi,
-        false));
-    showPointsCheckBox->setChecked(NodePanelUtils::readBoolParam(
-        node,
-        nodegraphparams::voronoi::ShowPoints,
-        false));
+    const VoronoiNodeParams params = readVoronoiNodeParams(node);
+    cellSizeSpinBox->setValue(params.cellSize);
+    voxelResolutionSpinBox->setValue(params.voxelResolution);
+    showVoronoiCheckBox->setChecked(params.preview.showVoronoi);
+    showPointsCheckBox->setChecked(params.preview.showPoints);
     syncingFromNode = false;
 }
 
@@ -111,47 +100,21 @@ void NodeVoronoiPanel::setStatusSink(std::function<void(const QString&)> statusS
 }
 
 bool NodeVoronoiPanel::writeParameters() {
-    if (!NodePanelUtils::canEditNode(nodeGraphBridge, currentNodeId)) {
+    if (!nodeGraphBridge || !currentNodeId.isValid()) {
         setStatus("Cannot update Voronoi settings for this node");
         return false;
     }
 
-    if (!NodePanelUtils::writeFloatParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::voronoi::CellSize,
-            cellSizeSpinBox->value())) {
-        setStatus("Failed to update Voronoi cell size");
+    NodeGraphEditor editor(nodeGraphBridge);
+    const VoronoiNodeParams params{
+        cellSizeSpinBox->value(),
+        voxelResolutionSpinBox->value(),
+        {showVoronoiCheckBox->isChecked(), showPointsCheckBox->isChecked()},
+    };
+    if (!writeVoronoiNodeParams(editor, currentNodeId, params)) {
+        setStatus("Failed to update Voronoi settings");
         return false;
     }
-
-    if (!NodePanelUtils::writeIntParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::voronoi::VoxelResolution,
-            voxelResolutionSpinBox->value())) {
-        setStatus("Failed to update Voronoi voxel resolution");
-        return false;
-    }
-
-    if (!NodePanelUtils::writeBoolParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::voronoi::ShowVoronoi,
-            showVoronoiCheckBox->isChecked())) {
-        setStatus("Failed to update Voronoi overlay state");
-        return false;
-    }
-
-    if (!NodePanelUtils::writeBoolParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::voronoi::ShowPoints,
-            showPointsCheckBox->isChecked())) {
-        setStatus("Failed to update Voronoi points state");
-        return false;
-    }
-
     return true;
 }
 

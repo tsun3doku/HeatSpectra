@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -128,7 +129,17 @@ enum class NodeGraphParamType {
     Float,
     Int,
     Bool,
-    String
+    String,
+    Enum,
+    Struct,
+    Array
+};
+
+struct NodeGraphParamDefinition;
+
+struct NodeGraphParamField {
+    std::string name;
+    std::shared_ptr<NodeGraphParamDefinition> definition;
 };
 
 struct NodeGraphParamDefinition {
@@ -140,6 +151,16 @@ struct NodeGraphParamDefinition {
     bool defaultBoolValue = false;
     std::string defaultStringValue;
     bool isAction = false;
+    std::vector<std::string> enumOptions;
+    std::vector<NodeGraphParamField> fields;
+    std::shared_ptr<NodeGraphParamDefinition> elementDefinition;
+};
+
+struct NodeGraphParamValue;
+
+struct NodeGraphParamFieldValue {
+    std::string name;
+    std::shared_ptr<NodeGraphParamValue> value;
 };
 
 struct NodeGraphParamValue {
@@ -149,6 +170,9 @@ struct NodeGraphParamValue {
     int64_t intValue = 0;
     bool boolValue = false;
     std::string stringValue;
+    std::string enumValue;
+    std::vector<NodeGraphParamFieldValue> fieldValues;
+    std::vector<NodeGraphParamValue> arrayValues;
 };
 
 struct NodeTypeDefinition {

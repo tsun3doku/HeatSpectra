@@ -1,8 +1,49 @@
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphKernels.hpp"
+#include "NodeGraphParamUtils.hpp"
 #include "NodeGraphRegistry.hpp"
 #include <algorithm>
+#include <unordered_set>
 #include <sstream>
+
+bool validateNodeGraphParamValue(const NodeGraphParamDefinition& definition, const NodeGraphParamValue& value);
+
+namespace {
+
+bool validateNodeGraphParamFieldValues(
+    const std::vector<NodeGraphParamField>& fields,
+    const std::vector<NodeGraphParamFieldValue>& fieldValues) {
+    if (fields.size() != fieldValues.size()) {
+        return false;
+    }
+
+    std::unordered_set<std::string> seenFieldNames;
+    for (const NodeGraphParamField& field : fields) {
+        if (!field.definition || field.name.empty()) {
+            return false;
+        }
+
+        const auto fieldValueIt = std::find_if(
+            fieldValues.begin(),
+            fieldValues.end(),
+            [&field](const NodeGraphParamFieldValue& fieldValue) {
+                return fieldValue.name == field.name;
+            });
+        if (fieldValueIt == fieldValues.end() || !fieldValueIt->value) {
+            return false;
+        }
+        if (!seenFieldNames.insert(field.name).second) {
+            return false;
+        }
+        if (!validateNodeGraphParamValue(*field.definition, *fieldValueIt->value)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+} // namespace
 
 uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
     return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
@@ -131,6 +172,18 @@ NodeGraphParamValue makeNodeGraphParamValue(const NodeGraphParamDefinition& defi
     value.intValue = definition.defaultIntValue;
     value.boolValue = definition.defaultBoolValue;
     value.stringValue = definition.defaultStringValue;
+    value.enumValue = definition.defaultStringValue;
+    if (value.type == NodeGraphParamType::Enum && value.enumValue.empty() && !definition.enumOptions.empty()) {
+        value.enumValue = definition.enumOptions.front();
+    }
+    if (value.type == NodeGraphParamType::Struct) {
+        for (const NodeGraphParamField& field : definition.fields) {
+            if (!field.definition) {
+                continue;
+            }
+            value.fieldValues.push_back(makeParamFieldValue(field.name.c_str(), makeNodeGraphParamValue(*field.definition)));
+        }
+    }
     return value;
 }
 
@@ -150,6 +203,38 @@ NodeGraphParamValue* findNodeParamValue(NodeGraphNode& node, uint32_t paramId) {
         }
     }
     return nullptr;
+}
+
+bool validateNodeGraphParamValue(const NodeGraphParamDefinition& definition, const NodeGraphParamValue& value) {
+    if (definition.type != value.type) {
+        return false;
+    }
+
+    switch (definition.type) {
+    case NodeGraphParamType::Float:
+    case NodeGraphParamType::Int:
+    case NodeGraphParamType::Bool:
+    case NodeGraphParamType::String:
+        return true;
+    case NodeGraphParamType::Enum:
+        return !value.enumValue.empty()
+            && std::find(definition.enumOptions.begin(), definition.enumOptions.end(), value.enumValue)
+                != definition.enumOptions.end();
+    case NodeGraphParamType::Struct:
+        return validateNodeGraphParamFieldValues(definition.fields, value.fieldValues);
+    case NodeGraphParamType::Array:
+        if (!definition.elementDefinition) {
+            return false;
+        }
+        return std::all_of(
+            value.arrayValues.begin(),
+            value.arrayValues.end(),
+            [&definition](const NodeGraphParamValue& elementValue) {
+                return validateNodeGraphParamValue(*definition.elementDefinition, elementValue);
+            });
+    }
+
+    return false;
 }
 
 bool tryGetNodeParamFloat(const NodeGraphNode& node, uint32_t paramId, double& outValue) {
@@ -185,5 +270,14 @@ bool tryGetNodeParamString(const NodeGraphNode& node, uint32_t paramId, std::str
         return false;
     }
     outValue = parameter->stringValue;
+    return true;
+}
+
+bool tryGetNodeParamEnum(const NodeGraphNode& node, uint32_t paramId, std::string& outValue) {
+    const NodeGraphParamValue* parameter = findNodeParamValue(node, paramId);
+    if (!parameter || parameter->type != NodeGraphParamType::Enum) {
+        return false;
+    }
+    outValue = parameter->enumValue;
     return true;
 }

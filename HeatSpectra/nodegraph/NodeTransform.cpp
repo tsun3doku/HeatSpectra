@@ -4,9 +4,9 @@
 
 #include "NodeGraphHash.hpp"
 #include "NodeGraphDataTypes.hpp"
-#include "NodePanelUtils.hpp"
 #include "NodeModelTransform.hpp"
 #include "NodePayloadRegistry.hpp"
+#include "NodeTransformParams.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
@@ -17,26 +17,16 @@
 namespace {
 
 glm::mat4 buildLocalTransform(const NodeGraphNode& node) {
-    const float translateX = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateX, 0.0));
-    const float translateY = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateY, 0.0));
-    const float translateZ = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateZ, 0.0));
-
-    const float rotateXDegrees = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateXDegrees, 0.0));
-    const float rotateYDegrees = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateYDegrees, 0.0));
-    const float rotateZDegrees = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateZDegrees, 0.0));
-
-    const float scaleX = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleX, 1.0));
-    const float scaleY = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleY, 1.0));
-    const float scaleZ = static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleZ, 1.0));
+    const TransformNodeParams params = readTransformNodeParams(node);
+    const float translateX = static_cast<float>(params.translateX);
+    const float translateY = static_cast<float>(params.translateY);
+    const float translateZ = static_cast<float>(params.translateZ);
+    const float rotateXDegrees = static_cast<float>(params.rotateXDegrees);
+    const float rotateYDegrees = static_cast<float>(params.rotateYDegrees);
+    const float rotateZDegrees = static_cast<float>(params.rotateZDegrees);
+    const float scaleX = static_cast<float>(params.scaleX);
+    const float scaleY = static_cast<float>(params.scaleY);
+    const float scaleZ = static_cast<float>(params.scaleZ);
 
     glm::mat4 transform(1.0f);
     transform = glm::translate(transform, glm::vec3(translateX, translateY, translateZ));
@@ -48,24 +38,16 @@ glm::mat4 buildLocalTransform(const NodeGraphNode& node) {
 }
 
 void combineTransformParams(const NodeGraphNode& node, uint64_t& outHash) {
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateX, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateY, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::TranslateZ, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateXDegrees, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateYDegrees, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::RotateZDegrees, 0.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleX, 1.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleY, 1.0)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        node, nodegraphparams::transform::ScaleZ, 1.0)));
+    const TransformNodeParams params = readTransformNodeParams(node);
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.translateX));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.translateY));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.translateZ));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.rotateXDegrees));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.rotateYDegrees));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.rotateZDegrees));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.scaleX));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.scaleY));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.scaleZ));
 }
 
 }

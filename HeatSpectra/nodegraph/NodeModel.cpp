@@ -3,7 +3,7 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeModelParams.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <tiny_obj_loader.h>
@@ -15,10 +15,6 @@
 #include <utility>
 #include <vector>
 
-namespace {
-
-}
-
 const char* NodeModel::typeId() const {
     return nodegraphtypes::Model;
 }
@@ -26,7 +22,8 @@ const char* NodeModel::typeId() const {
 bool NodeModel::execute(NodeGraphKernelContext& context) const {
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
-    const std::string modelPath = NodePanelUtils::readStringParam(context.node, nodegraphparams::model::Path);
+    const ModelNodeParams params = readModelNodeParams(context.node);
+    const std::string& modelPath = params.path;
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
@@ -58,9 +55,7 @@ bool NodeModel::execute(NodeGraphKernelContext& context) const {
 bool NodeModel::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-    NodeGraphHash::combineString(
-        outHash,
-        NodePanelUtils::readStringParam(context.node, nodegraphparams::model::Path));
+    NodeGraphHash::combineString(outHash, readModelNodeParams(context.node).path);
     return true;
 }
 

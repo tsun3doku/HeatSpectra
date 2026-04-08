@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NodeGraphKernels.hpp"
-#include "NodeHeatMaterialPresets.hpp"
+#include "heat/HeatSystemPresets.hpp"
 
 #include <vector>
 
@@ -25,5 +25,4 @@ private:
     static NodeGraphNodeId selectHeatSolveNode(
         const NodeGraphState& state,
         const NodeGraphKernelExecutionState& executionState);
-    static std::vector<HeatMaterialBindingEntry> parseMaterialBindings(const std::string& serializedBindings);
 };

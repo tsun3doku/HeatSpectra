@@ -3,8 +3,11 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
+#include "NodeGraphEditor.hpp"
+#include "NodeModelParams.hpp"
 #include "NodePanelUtils.hpp"
 
+#include <QSignalBlocker>
 #include <QCheckBox>
 #include <QDir>
 #include <QFileDialog>
@@ -64,14 +67,41 @@ void NodeModelPanel::setNode(NodeGraphNodeId nodeId) {
         return;
     }
 
-    pathLineEdit->setText(QString::fromStdString(
-        NodePanelUtils::readStringParam(node, nodegraphparams::model::Path)));
-    wireframeCheckBox->setChecked(
-        NodePanelUtils::readBoolParam(node, nodegraphparams::model::ShowWireframe, false));
+    const ModelNodeParams params = readModelNodeParams(node);
+    syncingFromNode = true;
+    const QSignalBlocker wireframeBlocker(wireframeCheckBox);
+    pathLineEdit->setText(QString::fromStdString(params.path));
+    wireframeCheckBox->setChecked(params.preview.showWireframe);
+    syncingFromNode = false;
 }
 
 void NodeModelPanel::setStatusSink(std::function<void(const QString&)> sink) {
     statusSink = std::move(sink);
+}
+
+bool NodeModelPanel::writeParameters() {
+    if (!nodeGraphBridge || !currentNodeId.isValid() || !pathLineEdit) {
+        setStatus("Cannot apply model settings for this node.");
+        return false;
+    }
+
+    const std::string modelPath = pathLineEdit->text().trimmed().toStdString();
+    if (modelPath.empty()) {
+        setStatus("Model path cannot be empty.");
+        return false;
+    }
+
+    NodeGraphEditor editor(nodeGraphBridge);
+    const ModelNodeParams params{
+        modelPath,
+        {wireframeCheckBox && wireframeCheckBox->isChecked()},
+    };
+    if (!writeModelNodeParams(editor, currentNodeId, params)) {
+        setStatus("Failed to update model settings.");
+        return false;
+    }
+
+    return true;
 }
 
 void NodeModelPanel::browseModelFile() {
@@ -100,28 +130,11 @@ void NodeModelPanel::browseModelFile() {
 }
 
 void NodeModelPanel::applySettings() {
-    if (!nodeGraphBridge || !pathLineEdit) {
-        setStatus("Cannot apply model settings for this node.");
+    if (syncingFromNode) {
         return;
     }
 
-    const std::string modelPath = pathLineEdit->text().trimmed().toStdString();
-    if (modelPath.empty()) {
-        setStatus("Model path cannot be empty.");
-        return;
-    }
-
-    if (!NodePanelUtils::writeStringParam(nodeGraphBridge, currentNodeId, nodegraphparams::model::Path, modelPath)) {
-        setStatus("Failed to update model settings.");
-        return;
-    }
-
-    if (!NodePanelUtils::writeBoolParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::model::ShowWireframe,
-            wireframeCheckBox && wireframeCheckBox->isChecked())) {
-        setStatus("Failed to update model wireframe view.");
+    if (!writeParameters()) {
         return;
     }
 

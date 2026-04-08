@@ -80,7 +80,7 @@ bool NodeGraphDocument::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraph
     }
 
     const NodeGraphParamDefinition* parameterDefinition = findNodeParamDefinition(*definition, parameter.id);
-    if (!parameterDefinition || parameterDefinition->type != parameter.type) {
+    if (!parameterDefinition || !validateNodeGraphParamValue(*parameterDefinition, parameter)) {
         return false;
     }
 

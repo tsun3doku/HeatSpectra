@@ -5,6 +5,8 @@
 #include "NodeHeatMaterialPresets.hpp"
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphDebugStore.hpp"
+#include "NodeGraphEditor.hpp"
+#include "NodeHeatSolveParams.hpp"
 #include "NodePanelUtils.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
 
@@ -17,6 +19,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -24,86 +27,9 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
-#include <cctype>
-#include <sstream>
 #include <string>
 #include <unordered_set>
-#include <utility>
 #include <vector>
-
-namespace {
-
-std::vector<HeatMaterialBindingEntry> parseHeatMaterialBindingsString(const std::string& serializedBindings) {
-    std::vector<HeatMaterialBindingEntry> parsedBindings;
-    if (serializedBindings.empty()) {
-        return parsedBindings;
-    }
-
-    std::stringstream listStream(serializedBindings);
-    std::string token;
-    std::unordered_set<std::string> seenGroups;
-    while (std::getline(listStream, token, ';')) {
-        token = NodePanelUtils::trimCopy(token);
-        if (token.empty()) {
-            continue;
-        }
-
-        const std::size_t separatorIndex = token.find('=');
-        if (separatorIndex == std::string::npos) {
-            continue;
-        }
-
-        std::string groupName = NodePanelUtils::trimCopy(token.substr(0, separatorIndex));
-        std::string presetName = NodePanelUtils::trimCopy(token.substr(separatorIndex + 1));
-        if (groupName.empty() || presetName.empty()) {
-            continue;
-        }
-
-        std::string normalizedGroupName;
-        normalizedGroupName.reserve(groupName.size());
-        for (char character : groupName) {
-            const unsigned char u = static_cast<unsigned char>(character);
-            if (std::isspace(u) != 0) {
-                continue;
-            }
-            normalizedGroupName.push_back(static_cast<char>(std::tolower(u)));
-        }
-        if (normalizedGroupName.empty() || !seenGroups.insert(normalizedGroupName).second) {
-            continue;
-        }
-
-        HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
-        if (!tryResolveHeatPresetId(presetName, presetId)) {
-            continue;
-        }
-
-        HeatMaterialBindingEntry binding{};
-        binding.groupName = std::move(groupName);
-        binding.presetId = presetId;
-        parsedBindings.push_back(std::move(binding));
-    }
-
-    return parsedBindings;
-}
-
-std::string serializeHeatMaterialBindings(const std::vector<HeatMaterialBindingEntry>& bindings) {
-    std::string serialized;
-    for (const HeatMaterialBindingEntry& binding : bindings) {
-        if (binding.groupName.empty()) {
-            continue;
-        }
-        
-        if (!serialized.empty()) {
-            serialized += ";";
-        }
-        serialized += binding.groupName;
-        serialized += "=";
-        serialized += heatMaterialPresetName(binding.presetId);
-    }
-    return serialized;
-}
-
-} // namespace
 
 NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
     : QWidget(parent) {
@@ -213,16 +139,18 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
         applySolveSettings();
     });
     connect(heatOverlayCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        if (!nodeGraphBridge || !currentNodeId.isValid()) {
+        if (syncingFromNode) {
+            return;
+        }
+
+        HeatSolveNodeParams params{};
+        if (!tryLoadNodeParams(params)) {
             setStatus("Cannot update heat overlay settings for this node.");
             return;
         }
 
-        if (!NodePanelUtils::writeBoolParam(
-                nodeGraphBridge,
-                currentNodeId,
-                nodegraphparams::heatsolve::ShowHeatOverlay,
-                checked)) {
+        params.preview.showHeatOverlay = checked;
+        if (!writeNodeParams(params)) {
             setStatus("Failed to update heat overlay settings.");
             return;
         }
@@ -290,43 +218,36 @@ void NodeHeatSolverPanel::bind(NodeGraphBridge* nodeGraphBridgePtr, const Runtim
 
 void NodeHeatSolverPanel::setNode(NodeGraphNodeId nodeId) {
     currentNodeId = nodeId;
-    NodeGraphNode node{};
-    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
         setStatus("Failed to read HeatSolve node.");
         return;
     }
 
     refreshBindingGroupOptions();
+    syncingFromNode = true;
+    const QSignalBlocker heatOverlayBlock(heatOverlayCheckBox);
     if (heatCellSizeSpinBox) {
-        heatCellSizeSpinBox->setValue(NodePanelUtils::readFloatParam(
-            node,
-            nodegraphparams::heatsolve::CellSize,
-            0.005));
+        heatCellSizeSpinBox->setValue(params.cellSize);
     }
     if (heatVoxelResolutionSpinBox) {
-        heatVoxelResolutionSpinBox->setValue(NodePanelUtils::readIntParam(
-            node,
-            nodegraphparams::heatsolve::VoxelResolution,
-            128));
+        heatVoxelResolutionSpinBox->setValue(params.voxelResolution);
     }
     if (heatOverlayCheckBox) {
-        heatOverlayCheckBox->setChecked(NodePanelUtils::readBoolParam(
-            node,
-            nodegraphparams::heatsolve::ShowHeatOverlay,
-            false));
+        heatOverlayCheckBox->setChecked(params.preview.showHeatOverlay);
     }
 
-    const std::vector<HeatMaterialBindingEntry> bindings =
-        parseHeatMaterialBindingsString(NodePanelUtils::readStringParam(node, nodegraphparams::heatsolve::MaterialBindings));
+    const std::vector<HeatMaterialBindingRow>& bindingRows = params.materialBindingRows;
     if (heatBindingsTable) {
         heatBindingsTable->setRowCount(0);
-        for (const HeatMaterialBindingEntry& binding : bindings) {
-            const int row = heatBindingsTable->rowCount();
-            heatBindingsTable->insertRow(row);
-            heatBindingsTable->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(binding.groupName)));
-            heatBindingsTable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(heatMaterialPresetName(binding.presetId))));
+        heatBindingsTable->setRowCount(static_cast<int>(bindingRows.size()));
+        for (int row = 0; row < static_cast<int>(bindingRows.size()); ++row) {
+            const HeatMaterialBindingRow& bindingRow = bindingRows[static_cast<std::size_t>(row)];
+            heatBindingsTable->setItem(row, 0, new QTableWidgetItem(QString::number(bindingRow.receiverModelNodeId)));
+            heatBindingsTable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(heatMaterialPresetName(bindingRow.presetId))));
         }
     }
+    syncingFromNode = false;
 
     updateHeatStatus();
 }
@@ -447,8 +368,9 @@ void NodeHeatSolverPanel::updateHeatStatus() {
         return;
     }
 
-    const bool desiredEnabled = NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::Enabled, false);
-    const bool desiredPaused = NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::Paused, false);
+    const HeatSolveNodeParams params = readHeatSolveNodeParams(node);
+    const bool desiredEnabled = params.enabled;
+    const bool desiredPaused = params.paused;
 
     heatToggleButton->setEnabled(true);
     heatToggleButton->setText(desiredEnabled ? "Stop" : "Start");
@@ -505,60 +427,52 @@ void NodeHeatSolverPanel::stopStatusTimer() {
 }
 
 void NodeHeatSolverPanel::toggleHeatSystem() {
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
         setStatus("Cannot control heat system for this node.");
         return;
     }
 
-    NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
-        setStatus("Failed to read node state.");
-        return;
+    params.enabled = !params.enabled;
+    if (!params.enabled) {
+        params.paused = false;
     }
-
-    const bool enable = !NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::Enabled, false);
-    if (!NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Enabled, enable)) {
+    if (!writeNodeParams(params)) {
         setStatus("Failed to update heat node state.");
         return;
     }
-    if (!enable) {
-        NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, false);
-    }
 
     updateHeatStatus();
-    setStatus(enable ? "Heat solve enabled through node graph." : "Heat solve disabled through node graph.");
+    setStatus(params.enabled ? "Heat solve enabled through node graph." : "Heat solve disabled through node graph.");
 }
 
 void NodeHeatSolverPanel::pauseHeatSystem() {
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
         setStatus("Cannot control heat system for this node.");
         return;
     }
 
-    NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
-        setStatus("Failed to read node state.");
-        return;
-    }
-
-    const bool pause = !NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::Paused, false);
-    if (!NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, pause)) {
+    params.paused = !params.paused;
+    if (!writeNodeParams(params)) {
         setStatus("Failed to update heat pause state.");
         return;
     }
 
     updateHeatStatus();
-    setStatus(pause ? "Heat solve pause requested." : "Heat solve resume requested.");
+    setStatus(params.paused ? "Heat solve pause requested." : "Heat solve resume requested.");
 }
 
 void NodeHeatSolverPanel::resetHeatSystem() {
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
         setStatus("Cannot control heat system for this node.");
         return;
     }
 
-    if (!NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::Paused, false) ||
-        !NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::heatsolve::ResetRequested, true)) {
+    params.paused = false;
+    params.resetRequested = true;
+    if (!writeNodeParams(params)) {
         setStatus("Failed to request heat reset.");
         return;
     }
@@ -573,16 +487,15 @@ void NodeHeatSolverPanel::applySolveSettings() {
         return;
     }
 
-    if (!NodePanelUtils::writeFloatParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::heatsolve::CellSize,
-            heatCellSizeSpinBox->value()) ||
-        !NodePanelUtils::writeIntParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::heatsolve::VoxelResolution,
-            heatVoxelResolutionSpinBox->value())) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
+        setStatus("Cannot apply solver settings for this node.");
+        return;
+    }
+
+    params.cellSize = heatCellSizeSpinBox->value();
+    params.voxelResolution = heatVoxelResolutionSpinBox->value();
+    if (!writeNodeParams(params)) {
         setStatus("Failed to update solver settings.");
         return;
     }
@@ -596,10 +509,8 @@ void NodeHeatSolverPanel::applyMaterialBindings() {
         return;
     }
 
-    std::vector<HeatMaterialBindingEntry> bindings;
-    bindings.reserve(static_cast<std::size_t>(heatBindingsTable->rowCount()));
-    bool fallbackAssigned = false;
-    uint32_t validReceiverBindingCount = 0;
+    std::vector<HeatMaterialBindingRow> rows;
+    rows.reserve(static_cast<std::size_t>(heatBindingsTable->rowCount()));
     for (int row = 0; row < heatBindingsTable->rowCount(); ++row) {
         QTableWidgetItem* groupItem = heatBindingsTable->item(row, 0);
         QTableWidgetItem* presetItem = heatBindingsTable->item(row, 1);
@@ -607,54 +518,56 @@ void NodeHeatSolverPanel::applyMaterialBindings() {
             continue;
         }
 
-        const std::string receiverKey = NodePanelUtils::trimCopy(groupItem->text().toStdString());
-        const std::string presetName = NodePanelUtils::trimCopy(presetItem->text().toStdString());
+        const std::string receiverKey = groupItem->text().toStdString();
+        const std::string presetName = presetItem->text().toStdString();
         if (receiverKey.empty() || presetName.empty()) {
             continue;
         }
 
-        HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
-        if (!tryResolveHeatPresetId(presetName, presetId)) {
+        HeatMaterialBindingRow materialRow{};
+        if (!tryMakeMaterialBindingRow(receiverKey, presetName, materialRow)) {
             continue;
         }
-
-        uint32_t receiverModelId = 0;
-        const bool validReceiverModelId = NodePanelUtils::tryParseUint32Id(receiverKey, receiverModelId) && receiverModelId != 0;
-        if (!validReceiverModelId && fallbackAssigned) {
-            continue;
-        }
-
-        HeatMaterialBindingEntry binding{};
-        binding.groupName = validReceiverModelId ? std::to_string(receiverModelId) : receiverKey;
-        binding.presetId = presetId;
-        bindings.push_back(std::move(binding));
-        if (!validReceiverModelId) {
-            fallbackAssigned = true;
-        } else {
-            ++validReceiverBindingCount;
-        }
+        rows.push_back(materialRow);
     }
 
-    if (bindings.empty()) {
+    if (rows.empty()) {
         setStatus("No valid receiver material bindings to apply.");
         return;
     }
 
-    const std::string serializedBindings = serializeHeatMaterialBindings(bindings);
-    if (!NodePanelUtils::writeStringParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::heatsolve::MaterialBindings,
-            serializedBindings)) {
+    HeatSolveNodeParams params{};
+    if (!tryLoadNodeParams(params)) {
+        setStatus("Cannot apply material bindings for this node.");
+        return;
+    }
+
+    params.materialBindingRows = std::move(rows);
+    if (!writeNodeParams(params)) {
         setStatus("Failed to update material bindings.");
         return;
     }
 
-    if (validReceiverBindingCount == 0 && fallbackAssigned) {
-        setStatus("Applied fallback material binding only (no valid receiver IDs found).");
-    } else {
-        setStatus("Receiver material bindings applied.");
+    setStatus("Receiver material bindings applied.");
+}
+
+bool NodeHeatSolverPanel::writeNodeParams(const HeatSolveNodeParams& params) {
+    if (!nodeGraphBridge || !currentNodeId.isValid()) {
+        return false;
     }
+
+    NodeGraphEditor editor(nodeGraphBridge);
+    return writeHeatSolveNodeParams(editor, currentNodeId, params);
+}
+
+bool NodeHeatSolverPanel::tryLoadNodeParams(HeatSolveNodeParams& outParams) const {
+    NodeGraphNode node{};
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
+        return false;
+    }
+
+    outParams = readHeatSolveNodeParams(node);
+    return true;
 }
 
 void NodeHeatSolverPanel::setStatus(const QString& text) const {

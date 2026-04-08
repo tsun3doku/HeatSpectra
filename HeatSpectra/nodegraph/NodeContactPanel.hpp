@@ -21,13 +21,14 @@ public:
     void setStatusSink(std::function<void(const QString&)> statusSink);
 
 private:
+    bool writeParameters();
     void refreshFromNode();
+    void onParametersEdited();
     void setStatus(const QString& text) const;
-    void writeMinNormalDot(double value);
-    void writeContactRadius(double value);
 
     NodeGraphBridge* nodeGraphBridge = nullptr;
     NodeGraphNodeId currentNodeId{};
+    bool syncingFromNode = false;
 
     QLabel* emitterLabel = nullptr;
     QLabel* receiverLabel = nullptr;

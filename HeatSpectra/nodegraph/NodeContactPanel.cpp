@@ -3,12 +3,15 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
+#include "NodeGraphEditor.hpp"
 #include "NodePanelUtils.hpp"
+#include "NodeContactParams.hpp"
 
 #include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 NodeContactPanel::NodeContactPanel(QWidget* parent)
@@ -53,29 +56,15 @@ NodeContactPanel::NodeContactPanel(QWidget* parent)
     layout->addStretch();
 
     connect(minNormalDotSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-        [this](double value) {
-            writeMinNormalDot(value);
+        [this](double) {
+            onParametersEdited();
         });
     connect(contactRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-        [this](double value) {
-            writeContactRadius(value);
+        [this](double) {
+            onParametersEdited();
         });
-    connect(showContactLinesCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        if (!nodeGraphBridge || !currentNodeId.isValid()) {
-            setStatus("Cannot update contact settings for this node.");
-            return;
-        }
-
-        if (!NodePanelUtils::writeBoolParam(
-                nodeGraphBridge,
-                currentNodeId,
-                nodegraphparams::contact::ShowContactLines,
-                checked)) {
-            setStatus("Failed to update contact preview settings.");
-            return;
-        }
-
-        setStatus("Contact settings applied.");
+    connect(showContactLinesCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onParametersEdited();
     });
 }
 
@@ -95,28 +84,24 @@ void NodeContactPanel::setStatusSink(std::function<void(const QString&)> statusS
     statusSink = std::move(statusSinkFn);
 }
 
-void NodeContactPanel::writeMinNormalDot(double value) {
+bool NodeContactPanel::writeParameters() {
     if (!nodeGraphBridge || !currentNodeId.isValid()) {
         setStatus("Cannot update contact settings for this node.");
-        return;
+        return false;
     }
 
-    NodePanelUtils::writeFloatParam(
-        nodeGraphBridge, currentNodeId,
-        nodegraphparams::contact::MinNormalDot,
-        value);
-}
-
-void NodeContactPanel::writeContactRadius(double value) {
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        setStatus("Cannot update contact settings for this node.");
-        return;
+    NodeGraphEditor editor(nodeGraphBridge);
+    const ContactNodeParams params{
+        minNormalDotSpin->value(),
+        contactRadiusSpin->value(),
+        {showContactLinesCheckBox->isChecked()},
+    };
+    if (!writeContactNodeParams(editor, currentNodeId, params)) {
+        setStatus("Failed to update contact settings.");
+        return false;
     }
 
-    NodePanelUtils::writeFloatParam(
-        nodeGraphBridge, currentNodeId,
-        nodegraphparams::contact::ContactRadius,
-        value);
+    return true;
 }
 
 void NodeContactPanel::refreshFromNode() {
@@ -125,23 +110,41 @@ void NodeContactPanel::refreshFromNode() {
         return;
     }
 
+    const ContactNodeParams params = readContactNodeParams(node);
+    syncingFromNode = true;
+    const QSignalBlocker minNormalDotBlock(minNormalDotSpin);
+    const QSignalBlocker contactRadiusBlock(contactRadiusSpin);
+    const QSignalBlocker showContactLinesBlock(showContactLinesCheckBox);
     if (minNormalDotSpin) {
-        minNormalDotSpin->setValue(
-            NodePanelUtils::readFloatParam(node, nodegraphparams::contact::MinNormalDot, -0.65));
+        minNormalDotSpin->setValue(params.minNormalDot);
     }
     if (contactRadiusSpin) {
-        contactRadiusSpin->setValue(
-            NodePanelUtils::readFloatParam(node, nodegraphparams::contact::ContactRadius, 0.01));
+        contactRadiusSpin->setValue(params.contactRadius);
     }
     if (showContactLinesCheckBox) {
-        showContactLinesCheckBox->setChecked(
-            NodePanelUtils::readBoolParam(node, nodegraphparams::contact::ShowContactLines, false));
+        showContactLinesCheckBox->setChecked(params.preview.showContactLines);
     }
+    syncingFromNode = false;
     if (emitterLabel) {
         emitterLabel->setText("(connected)");
     }
     if (receiverLabel) {
         receiverLabel->setText("(connected)");
+    }
+}
+
+void NodeContactPanel::onParametersEdited() {
+    if (syncingFromNode) {
+        return;
+    }
+
+    if (!currentNodeId.isValid()) {
+        setStatus("Cannot update contact settings for this node.");
+        return;
+    }
+
+    if (writeParameters()) {
+        setStatus("Contact settings applied.");
     }
 }
 

@@ -3,7 +3,8 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeGraphEditor.hpp"
+#include "NodeTransformParams.hpp"
 
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
@@ -119,6 +120,7 @@ void NodeTransformPanel::setNode(NodeGraphNodeId nodeId) {
         return;
     }
 
+    const TransformNodeParams params = readTransformNodeParams(node);
     syncingFromNode = true;
     const QSignalBlocker txBlock(translateSpinBoxes[0]);
     const QSignalBlocker tyBlock(translateSpinBoxes[1]);
@@ -130,15 +132,15 @@ void NodeTransformPanel::setNode(NodeGraphNodeId nodeId) {
     const QSignalBlocker syBlock(scaleSpinBoxes[1]);
     const QSignalBlocker szBlock(scaleSpinBoxes[2]);
 
-    translateSpinBoxes[0]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateX, 0.0));
-    translateSpinBoxes[1]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateY, 0.0));
-    translateSpinBoxes[2]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateZ, 0.0));
-    rotateSpinBoxes[0]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateXDegrees, 0.0));
-    rotateSpinBoxes[1]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateYDegrees, 0.0));
-    rotateSpinBoxes[2]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateZDegrees, 0.0));
-    scaleSpinBoxes[0]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::ScaleX, 1.0));
-    scaleSpinBoxes[1]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::ScaleY, 1.0));
-    scaleSpinBoxes[2]->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::ScaleZ, 1.0));
+    translateSpinBoxes[0]->setValue(params.translateX);
+    translateSpinBoxes[1]->setValue(params.translateY);
+    translateSpinBoxes[2]->setValue(params.translateZ);
+    rotateSpinBoxes[0]->setValue(params.rotateXDegrees);
+    rotateSpinBoxes[1]->setValue(params.rotateYDegrees);
+    rotateSpinBoxes[2]->setValue(params.rotateZDegrees);
+    scaleSpinBoxes[0]->setValue(params.scaleX);
+    scaleSpinBoxes[1]->setValue(params.scaleY);
+    scaleSpinBoxes[2]->setValue(params.scaleZ);
     syncingFromNode = false;
 }
 
@@ -147,20 +149,24 @@ void NodeTransformPanel::setStatusSink(std::function<void(const QString&)> statu
 }
 
 bool NodeTransformPanel::writeParameters() {
-    if (!nodeGraphBridge) {
+    if (!nodeGraphBridge || !currentNodeId.isValid()) {
         setStatus("Cannot update transform settings for this node");
         return false;
     }
 
-    if (!NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::TranslateX, translateSpinBoxes[0]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::TranslateY, translateSpinBoxes[1]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::TranslateZ, translateSpinBoxes[2]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::RotateXDegrees, rotateSpinBoxes[0]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::RotateYDegrees, rotateSpinBoxes[1]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::RotateZDegrees, rotateSpinBoxes[2]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::ScaleX, scaleSpinBoxes[0]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::ScaleY, scaleSpinBoxes[1]->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::transform::ScaleZ, scaleSpinBoxes[2]->value())) {
+    NodeGraphEditor editor(nodeGraphBridge);
+    const TransformNodeParams params{
+        translateSpinBoxes[0]->value(),
+        translateSpinBoxes[1]->value(),
+        translateSpinBoxes[2]->value(),
+        rotateSpinBoxes[0]->value(),
+        rotateSpinBoxes[1]->value(),
+        rotateSpinBoxes[2]->value(),
+        scaleSpinBoxes[0]->value(),
+        scaleSpinBoxes[1]->value(),
+        scaleSpinBoxes[2]->value(),
+    };
+    if (!writeTransformNodeParams(editor, currentNodeId, params)) {
         setStatus("Failed to update transform settings");
         return false;
     }

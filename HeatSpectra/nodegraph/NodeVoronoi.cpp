@@ -4,11 +4,30 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
 #include "NodePayloadRegistry.hpp"
+#include "NodeVoronoiParams.hpp"
 #include "domain/VoronoiParams.hpp"
 
 #include <unordered_set>
+
+namespace {
+
+VoronoiParams makeVoronoiParams(const VoronoiNodeParams& nodeParams) {
+    const VoronoiParams defaults{};
+
+    VoronoiParams params{};
+    params.cellSize = static_cast<float>(nodeParams.cellSize);
+    params.voxelResolution = nodeParams.voxelResolution;
+    if (params.cellSize <= 0.0f) {
+        params.cellSize = defaults.cellSize;
+    }
+    if (params.voxelResolution <= 0) {
+        params.voxelResolution = defaults.voxelResolution;
+    }
+    return params;
+}
+
+}
 
 const char* NodeVoronoi::typeId() const {
     return nodegraphtypes::Voronoi;
@@ -36,21 +55,7 @@ bool NodeVoronoi::execute(NodeGraphKernelContext& context) const {
         }
     }
 
-    VoronoiParams voronoiParams{};
-    voronoiParams.cellSize = static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node,
-        nodegraphparams::voronoi::CellSize,
-        voronoiParams.cellSize));
-    voronoiParams.voxelResolution = NodePanelUtils::readIntParam(
-        context.node,
-        nodegraphparams::voronoi::VoxelResolution,
-        voronoiParams.voxelResolution);
-    if (voronoiParams.cellSize <= 0.0f) {
-        voronoiParams.cellSize = VoronoiParams{}.cellSize;
-    }
-    if (voronoiParams.voxelResolution <= 0) {
-        voronoiParams.voxelResolution = VoronoiParams{}.voxelResolution;
-    }
+    const VoronoiParams voronoiParams = makeVoronoiParams(readVoronoiNodeParams(context.node));
 
     const bool active = !receiverMeshHandles.empty();
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size() && outputIndex < context.node.outputs.size(); ++outputIndex) {
@@ -98,21 +103,7 @@ bool NodeVoronoi::computeInputHash(const NodeGraphKernelHashContext& context, ui
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputValue.payloadHandle.count));
     }
 
-    VoronoiParams voronoiParams{};
-    voronoiParams.cellSize = static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node,
-        nodegraphparams::voronoi::CellSize,
-        voronoiParams.cellSize));
-    voronoiParams.voxelResolution = NodePanelUtils::readIntParam(
-        context.node,
-        nodegraphparams::voronoi::VoxelResolution,
-        voronoiParams.voxelResolution);
-    if (voronoiParams.cellSize <= 0.0f) {
-        voronoiParams.cellSize = VoronoiParams{}.cellSize;
-    }
-    if (voronoiParams.voxelResolution <= 0) {
-        voronoiParams.voxelResolution = VoronoiParams{}.voxelResolution;
-    }
+    const VoronoiParams voronoiParams = makeVoronoiParams(readVoronoiNodeParams(context.node));
 
     NodeGraphHash::combineFloat(outHash, voronoiParams.cellSize);
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(voronoiParams.voxelResolution));

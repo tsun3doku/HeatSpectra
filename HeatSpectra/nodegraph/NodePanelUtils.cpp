@@ -4,6 +4,7 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphEditor.hpp"
+#include "NodeModelParams.hpp"
 
 #include <cctype>
 #include <filesystem>
@@ -216,7 +217,7 @@ void collectUpstreamModelPaths(
     }
 
     if (getNodeTypeId(node->typeId) == nodegraphtypes::Model) {
-        const std::string modelPath = readStringParam(*node, nodegraphparams::model::Path);
+        const std::string& modelPath = readModelNodeParams(*node).path;
         if (!modelPath.empty() && seenPaths.insert(modelPath).second) {
             outModelPaths.push_back(modelPath);
         }

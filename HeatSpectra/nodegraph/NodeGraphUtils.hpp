@@ -18,6 +18,7 @@ const NodeDataBlock* readInputValue(const EvaluatedSocketValue* input);
 NodeGraphParamValue makeNodeGraphParamValue(const NodeGraphParamDefinition& definition);
 const NodeGraphParamValue* findNodeParamValue(const NodeGraphNode& node, uint32_t paramId);
 NodeGraphParamValue* findNodeParamValue(NodeGraphNode& node, uint32_t paramId);
+bool validateNodeGraphParamValue(const NodeGraphParamDefinition& definition, const NodeGraphParamValue& value);
 
 std::string displayNodeLabel(const NodeGraphNode& node);
 
@@ -28,3 +29,4 @@ bool tryGetNodeParamFloat(const NodeGraphNode& node, uint32_t paramId, double& o
 bool tryGetNodeParamInt(const NodeGraphNode& node, uint32_t paramId, int64_t& outValue);
 bool tryGetNodeParamBool(const NodeGraphNode& node, uint32_t paramId, bool& outValue);
 bool tryGetNodeParamString(const NodeGraphNode& node, uint32_t paramId, std::string& outValue);
+bool tryGetNodeParamEnum(const NodeGraphNode& node, uint32_t paramId, std::string& outValue);

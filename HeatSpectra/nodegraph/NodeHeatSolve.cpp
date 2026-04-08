@@ -2,72 +2,13 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphUtils.hpp"
 
-#include "NodeGraphBridge.hpp"
-#include "NodeGraphCompiler.hpp"
 #include "NodeGraphHash.hpp"
-#include "NodeHeatMaterialPresets.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeHeatSolveParams.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
-#include <sstream>
-#include <unordered_set>
 #include <vector>
-
-std::vector<HeatMaterialBindingEntry> NodeHeatSolve::parseMaterialBindings(const std::string& serializedBindings) {
-    std::vector<HeatMaterialBindingEntry> parsedBindings;
-    if (serializedBindings.empty()) {
-        return parsedBindings;
-    }
-
-    std::stringstream listStream(serializedBindings);
-    std::string token;
-    std::unordered_set<std::string> seenGroups;
-    while (std::getline(listStream, token, ';')) {
-        token = NodePanelUtils::trimCopy(token);
-        if (token.empty()) {
-            continue;
-        }
-
-        const std::size_t separatorIndex = token.find('=');
-        if (separatorIndex == std::string::npos) {
-            continue;
-        }
-
-        std::string groupName = NodePanelUtils::trimCopy(token.substr(0, separatorIndex));
-        std::string presetName = NodePanelUtils::trimCopy(token.substr(separatorIndex + 1));
-        if (groupName.empty() || presetName.empty()) {
-            continue;
-        }
-
-        std::string normalizedGroupName;
-        normalizedGroupName.reserve(groupName.size());
-        for (char character : groupName) {
-            const unsigned char u = static_cast<unsigned char>(character);
-            if (std::isspace(u) != 0) {
-                continue;
-            }
-            normalizedGroupName.push_back(static_cast<char>(std::tolower(u)));
-        }
-        if (normalizedGroupName.empty() || !seenGroups.insert(normalizedGroupName).second) {
-            continue;
-        }
-
-        HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
-        if (!tryResolveHeatPresetId(presetName, presetId)) {
-            continue;
-        }
-
-        HeatMaterialBindingEntry binding{};
-        binding.groupName = std::move(groupName);
-        binding.presetId = presetId;
-        parsedBindings.push_back(std::move(binding));
-    }
-
-    return parsedBindings;
-}
 
 namespace {
 
@@ -161,8 +102,7 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<HeatMaterialBindingEntry> materialBindings;
-
-    const bool resetRequested = NodePanelUtils::readBoolParam(context.node, nodegraphparams::heatsolve::ResetRequested, false);
+    const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
 
     const NodeGraphNodeId selectedNodeId =
         selectHeatSolveNode(context.executionState.state, context.executionState);
@@ -206,12 +146,11 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
 
     appendSourceHandlesFromContact(*contactInput, sourceHandles);
     receiverMeshHandles = voronoiInput->receiverMeshHandles;
-    materialBindings = parseMaterialBindings(
-        NodePanelUtils::readStringParam(context.node, nodegraphparams::heatsolve::MaterialBindings));
+    materialBindings = makeHeatMaterialBindings(params);
 
-    const bool wantsPaused = resetRequested
+    const bool wantsPaused = params.resetRequested
         ? false
-        : NodePanelUtils::readBoolParam(context.node, nodegraphparams::heatsolve::Paused, false);
+        : params.paused;
     populateOutputPayloads(
         context,
         sourceHandles,
@@ -221,7 +160,7 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
         contactInput->payloadHash,
         true,
         wantsPaused,
-        resetRequested);
+        params.resetRequested);
     return false;
 }
 
@@ -313,7 +252,13 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(voronoi->params.voxelResolution));
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(contact->pair.kind));
 
-    NodeGraphHash::combineString(outHash, NodePanelUtils::readStringParam(context.node, nodegraphparams::heatsolve::MaterialBindings));
+    const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
+    const std::vector<HeatMaterialBindingEntry> materialBindings = makeHeatMaterialBindings(params);
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(materialBindings.size()));
+    for (const HeatMaterialBindingEntry& binding : materialBindings) {
+        NodeGraphHash::combineString(outHash, binding.groupName);
+        NodeGraphHash::combine(outHash, static_cast<uint64_t>(binding.presetId));
+    }
     std::vector<NodeDataHandle> sourceHandles;
     appendSourceHandlesFromContact(*contact, sourceHandles);
     for (const NodeDataHandle& sourceHandle : sourceHandles) {
@@ -327,10 +272,8 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(sourceHandle.count));
     }
 
-    const bool resetRequested = NodePanelUtils::readBoolParam(context.node, nodegraphparams::heatsolve::ResetRequested, false);
-    const bool wantsPaused = NodePanelUtils::readBoolParam(context.node, nodegraphparams::heatsolve::Paused, false);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(wantsPaused));
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(resetRequested));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(params.paused));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(params.resetRequested));
 
     return true;
 }
@@ -345,8 +288,8 @@ NodeGraphNodeId NodeHeatSolve::selectHeatSolveNode(
             continue;
         }
 
-        bool enabled = false;
-        if (!tryGetNodeParamBool(node, nodegraphparams::heatsolve::Enabled, enabled) || !enabled) {
+        const HeatSolveNodeParams params = readHeatSolveNodeParams(node);
+        if (!params.enabled) {
             continue;
         }
 

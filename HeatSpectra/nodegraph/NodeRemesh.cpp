@@ -4,7 +4,7 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeRemeshParams.hpp"
 #include "domain/RemeshParams.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 
@@ -26,25 +26,13 @@ bool NodeRemesh::execute(NodeGraphKernelContext& context) const {
 
     bool executed = false;
     if (payloadRegistry && upstreamGeometryValue && upstreamGeometryValue->payloadHandle.key != 0) {
-        const RemeshParams defaults{};
         const uint64_t sourcePayloadHash = payloadHashForDataBlock(*upstreamGeometryValue, payloadRegistry);
+        const RemeshNodeParams params = readRemeshNodeParams(context.node);
         remeshData.sourceMeshHandle = upstreamGeometryValue->payloadHandle;
-        remeshData.params.iterations = NodePanelUtils::readIntParam(
-            context.node,
-            nodegraphparams::remesh::Iterations,
-            defaults.iterations);
-        remeshData.params.minAngleDegrees = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node,
-            nodegraphparams::remesh::MinAngleDegrees,
-            defaults.minAngleDegrees));
-        remeshData.params.maxEdgeLength = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node,
-            nodegraphparams::remesh::MaxEdgeLength,
-            defaults.maxEdgeLength));
-        remeshData.params.stepSize = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node,
-            nodegraphparams::remesh::StepSize,
-            defaults.stepSize));
+        remeshData.params.iterations = params.iterations;
+        remeshData.params.minAngleDegrees = static_cast<float>(params.minAngleDegrees);
+        remeshData.params.maxEdgeLength = static_cast<float>(params.maxEdgeLength);
+        remeshData.params.stepSize = static_cast<float>(params.stepSize);
         remeshData.active = true;
         remeshData.payloadHash = NodeGraphHash::start();
         NodeGraphHash::combine(remeshData.payloadHash, static_cast<uint64_t>(remeshData.active ? 1u : 0u));
@@ -77,17 +65,13 @@ bool NodeRemesh::execute(NodeGraphKernelContext& context) const {
 }
 
 bool NodeRemesh::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
-    const RemeshParams defaults{};
+    const RemeshNodeParams params = readRemeshNodeParams(context.node);
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(NodePanelUtils::readIntParam(
-        context.node, nodegraphparams::remesh::Iterations, defaults.iterations)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::remesh::MinAngleDegrees, defaults.minAngleDegrees)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::remesh::MaxEdgeLength, defaults.maxEdgeLength)));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::remesh::StepSize, defaults.stepSize)));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(params.iterations));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.minAngleDegrees));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.maxEdgeLength));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.stepSize));
 
     const NodeGraphSocket* meshInputSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
     const EvaluatedSocketValue* inputValueState =

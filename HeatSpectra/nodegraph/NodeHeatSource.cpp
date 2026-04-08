@@ -3,7 +3,7 @@
 #include "NodeGraphDataTypes.hpp"
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeHeatSourceParams.hpp"
 #include "NodePayloadRegistry.hpp"
 
 const char* NodeHeatSource::typeId() const {
@@ -11,6 +11,7 @@ const char* NodeHeatSource::typeId() const {
 }
 
 bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
+    const HeatSourceNodeParams params = readHeatSourceNodeParams(context.node);
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
     const EvaluatedSocketValue* inputMesh =
         meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
@@ -32,8 +33,7 @@ bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
         }
 
         outputValue.dataType = NodePayloadType::HeatSource;
-        const float temperature = static_cast<float>(NodePanelUtils::readFloatParam(
-            context.node, nodegraphparams::heatsource::Temperature, 100.0));
+        const float temperature = static_cast<float>(params.temperature);
         const uint64_t meshPayloadHash = payloadHashForDataBlock(*inputMeshValue, payloadRegistry);
         HeatSourceData payload{};
         payload.meshHandle = inputMeshValue->payloadHandle;
@@ -53,6 +53,7 @@ bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
 
 
 bool NodeHeatSource::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
+    const HeatSourceNodeParams params = readHeatSourceNodeParams(context.node);
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
     const EvaluatedSocketValue* inputMesh =
         meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
@@ -70,7 +71,6 @@ bool NodeHeatSource::computeInputHash(const NodeGraphKernelHashContext& context,
     NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.key);
     NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.revision);
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->payloadHandle.count));
-    NodeGraphHash::combineFloat(outHash, static_cast<float>(NodePanelUtils::readFloatParam(
-        context.node, nodegraphparams::heatsource::Temperature, 100.0)));
+    NodeGraphHash::combineFloat(outHash, static_cast<float>(params.temperature));
     return true;
 }

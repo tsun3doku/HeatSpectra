@@ -3,7 +3,8 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodePanelUtils.hpp"
+#include "NodeGraphEditor.hpp"
+#include "NodeHeatSourceParams.hpp"
 
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
@@ -60,12 +61,17 @@ void NodeHeatSourcePanel::applySettings() {
         return;
     }
 
-    if (temperatureSpin) {
-        NodePanelUtils::writeFloatParam(
-            nodeGraphBridge,
-            currentNodeId,
-            nodegraphparams::heatsource::Temperature,
-            temperatureSpin->value());
+    if (!temperatureSpin) {
+        setStatus("Cannot apply temperature for this node.");
+        return;
+    }
+
+    NodeGraphEditor editor(nodeGraphBridge);
+    HeatSourceNodeParams params{};
+    params.temperature = temperatureSpin->value();
+    if (!writeHeatSourceNodeParams(editor, currentNodeId, params)) {
+        setStatus("Failed to update heat source settings.");
+        return;
     }
 
     setStatus("Heat source temperature applied.");
@@ -82,11 +88,7 @@ void NodeHeatSourcePanel::refreshFromNode() {
     }
 
     if (temperatureSpin) {
-        temperatureSpin->setValue(
-            NodePanelUtils::readFloatParam(
-                node,
-                nodegraphparams::heatsource::Temperature,
-                100.0));
+        temperatureSpin->setValue(readHeatSourceNodeParams(node).temperature);
     }
 }
 

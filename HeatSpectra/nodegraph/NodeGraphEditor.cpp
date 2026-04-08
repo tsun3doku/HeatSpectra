@@ -5,6 +5,7 @@
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphSceneUtils.hpp"
 #include "NodePanelUtils.hpp"
+#include "NodeTransformParams.hpp"
 
 #include <algorithm>
 #include <unordered_map>
@@ -221,6 +222,32 @@ bool NodeGraphEditor::moveNode(NodeGraphNodeId nodeId, float x, float y) {
 
 bool NodeGraphEditor::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter) {
     return bridge && bridge->setNodeParameter(nodeId, parameter);
+}
+
+bool NodeGraphEditor::updateNodeParameter(
+    NodeGraphNodeId nodeId,
+    uint32_t paramId,
+    const std::function<bool(NodeGraphParamValue&)>& updater) {
+    if (!bridge || !nodeId.isValid() || !updater) {
+        return false;
+    }
+
+    NodeGraphNode node{};
+    if (!bridge->getNode(nodeId, node)) {
+        return false;
+    }
+
+    const NodeGraphParamValue* existingParameter = findNodeParamValue(node, paramId);
+    if (!existingParameter) {
+        return false;
+    }
+
+    NodeGraphParamValue updatedParameter = *existingParameter;
+    if (!updater(updatedParameter)) {
+        return false;
+    }
+
+    return setNodeParameter(nodeId, updatedParameter);
 }
 
 bool NodeGraphEditor::connectSockets(
@@ -486,25 +513,46 @@ bool NodeGraphEditor::readTransformNodeValues(
         return false;
     }
 
-    outTranslation.x = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateX, 0.0));
-    outTranslation.y = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateY, 0.0));
-    outTranslation.z = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::TranslateZ, 0.0));
-    outRotationDegrees.x = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateXDegrees, 0.0));
-    outRotationDegrees.y = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateYDegrees, 0.0));
-    outRotationDegrees.z = static_cast<float>(NodePanelUtils::readFloatParam(node, nodegraphparams::transform::RotateZDegrees, 0.0));
+    const TransformNodeParams params = readTransformNodeParams(node);
+    outTranslation.x = static_cast<float>(params.translateX);
+    outTranslation.y = static_cast<float>(params.translateY);
+    outTranslation.z = static_cast<float>(params.translateZ);
+    outRotationDegrees.x = static_cast<float>(params.rotateXDegrees);
+    outRotationDegrees.y = static_cast<float>(params.rotateYDegrees);
+    outRotationDegrees.z = static_cast<float>(params.rotateZDegrees);
     return true;
 }
 
 bool NodeGraphEditor::writeTransformTranslation(NodeGraphNodeId nodeId, const glm::vec3& translation) {
-    return bridge &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::TranslateX, translation.x) &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::TranslateY, translation.y) &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::TranslateZ, translation.z);
+    if (!bridge || !nodeId.isValid()) {
+        return false;
+    }
+
+    NodeGraphNode node{};
+    if (!bridge->getNode(nodeId, node) || getNodeTypeId(node.typeId) != nodegraphtypes::Transform) {
+        return false;
+    }
+
+    TransformNodeParams params = readTransformNodeParams(node);
+    params.translateX = translation.x;
+    params.translateY = translation.y;
+    params.translateZ = translation.z;
+    return writeTransformNodeParams(*this, nodeId, params);
 }
 
 bool NodeGraphEditor::writeTransformRotation(NodeGraphNodeId nodeId, const glm::vec3& rotationDegrees) {
-    return bridge &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateXDegrees, rotationDegrees.x) &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateYDegrees, rotationDegrees.y) &&
-        NodePanelUtils::writeFloatParam(bridge, nodeId, nodegraphparams::transform::RotateZDegrees, rotationDegrees.z);
+    if (!bridge || !nodeId.isValid()) {
+        return false;
+    }
+
+    NodeGraphNode node{};
+    if (!bridge->getNode(nodeId, node) || getNodeTypeId(node.typeId) != nodegraphtypes::Transform) {
+        return false;
+    }
+
+    TransformNodeParams params = readTransformNodeParams(node);
+    params.rotateXDegrees = rotationDegrees.x;
+    params.rotateYDegrees = rotationDegrees.y;
+    params.rotateZDegrees = rotationDegrees.z;
+    return writeTransformNodeParams(*this, nodeId, params);
 }

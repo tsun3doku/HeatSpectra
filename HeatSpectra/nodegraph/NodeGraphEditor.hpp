@@ -4,6 +4,7 @@
 
 #include <glm/vec3.hpp>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,7 @@ public:
     bool removeNode(NodeGraphNodeId nodeId);
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
+    bool updateNodeParameter(NodeGraphNodeId nodeId, uint32_t paramId, const std::function<bool(NodeGraphParamValue&)>& updater);
     bool connectSockets(
         NodeGraphNodeId fromNode,
         NodeGraphSocketId fromSocket,

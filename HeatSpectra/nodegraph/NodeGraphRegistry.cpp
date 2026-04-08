@@ -1,4 +1,5 @@
 #include "NodeGraphRegistry.hpp"
+#include "NodeGraphParamUtils.hpp"
 
 #include "domain/RemeshParams.hpp"
 
@@ -223,6 +224,20 @@ NodeTypeDefinition NodeGraphRegistry::buildVoronoiNode() {
 }
 
 NodeTypeDefinition NodeGraphRegistry::buildHeatSolveNode() {
+    NodeGraphParamDefinition materialBindingDefinition = makeStructParamDefinition(
+        0,
+        "Material Binding",
+        {
+            makeParamField("receiverModelNodeId", makeIntParamDefinition(0, "Receiver Model Node ID")),
+            makeParamField(
+                "preset",
+                makeEnumParamDefinition(
+                    0,
+                    "Preset",
+                    "Aluminum",
+                    {"Aluminum", "Copper", "Custom", "Iron", "Ceramic"})),
+        });
+
     return {
         nodegraphtypes::HeatSolve,
         "Heat Solve",
@@ -236,7 +251,7 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSolveNode() {
             {nodegraphparams::heatsolve::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::Paused, "Paused", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::ResetRequested, "Reset Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
-            {nodegraphparams::heatsolve::MaterialBindings, "Material Bindings", NodeGraphParamType::String, 0.0, 0, false, "", false},
+            makeArrayParamDefinition(nodegraphparams::heatsolve::MaterialBindings, "Material Bindings", std::move(materialBindingDefinition)),
             {nodegraphparams::heatsolve::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
             {nodegraphparams::heatsolve::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
             {nodegraphparams::heatsolve::ShowHeatOverlay, "Show Heat Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},

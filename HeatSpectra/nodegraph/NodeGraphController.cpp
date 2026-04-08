@@ -6,6 +6,11 @@
 #include "NodeGraphDebugStore.hpp"
 #include "NodeGraphRuntimeBridge.hpp"
 #include "NodePayloadRegistry.hpp"
+#include "NodeContactParams.hpp"
+#include "NodeHeatSolveParams.hpp"
+#include "NodeModelParams.hpp"
+#include "NodeRemeshParams.hpp"
+#include "NodeVoronoiParams.hpp"
 #include "NodePanelUtils.hpp"
 #include "contact/ContactSystemController.hpp"
 #include "runtime/RenderSettingsController.hpp"
@@ -124,30 +129,20 @@ void NodeGraphController::updateNodeOwnedRenderSettings() {
     for (const NodeGraphNode& node : runtime.state().nodes) {
         const NodeTypeId typeId = getNodeTypeId(node.typeId);
         if (typeId == nodegraphtypes::Model) {
+            const ModelNodeParams params = readModelNodeParams(node);
             showWireframe =
                 showWireframe ||
-                NodePanelUtils::readBoolParam(node, nodegraphparams::model::ShowWireframe, false);
+                params.preview.showWireframe;
             continue;
         }
 
         if (typeId == nodegraphtypes::Remesh) {
-            const bool remeshOverlay = NodePanelUtils::readBoolParam(
-                node,
-                nodegraphparams::remesh::ShowRemeshOverlay,
-                false);
-            const bool faceNormals = NodePanelUtils::readBoolParam(
-                node,
-                nodegraphparams::remesh::ShowFaceNormals,
-                false);
-            const bool vertexNormals = NodePanelUtils::readBoolParam(
-                node,
-                nodegraphparams::remesh::ShowVertexNormals,
-                false);
+            const RemeshNodeParams params = readRemeshNodeParams(node);
+            const bool remeshOverlay = params.preview.showRemeshOverlay;
+            const bool faceNormals = params.preview.showFaceNormals;
+            const bool vertexNormals = params.preview.showVertexNormals;
             if (remeshOverlay || faceNormals || vertexNormals) {
-                const float nodeNormalLength = static_cast<float>(NodePanelUtils::readFloatParam(
-                    node,
-                    nodegraphparams::remesh::NormalLength,
-                    0.05));
+                const float nodeNormalLength = static_cast<float>(params.normalLength);
                 if (!hasNormalLength) {
                     normalLength = nodeNormalLength;
                     hasNormalLength = true;
@@ -163,26 +158,29 @@ void NodeGraphController::updateNodeOwnedRenderSettings() {
         }
 
         if (typeId == nodegraphtypes::HeatSolve) {
+            const HeatSolveNodeParams params = readHeatSolveNodeParams(node);
             showHeatOverlay =
                 showHeatOverlay ||
-                NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowHeatOverlay, false);
+                params.preview.showHeatOverlay;
             continue;
         }
 
         if (typeId == nodegraphtypes::Voronoi) {
+            const VoronoiNodeParams params = readVoronoiNodeParams(node);
             showVoronoi =
                 showVoronoi ||
-                NodePanelUtils::readBoolParam(node, nodegraphparams::voronoi::ShowVoronoi, false);
+                params.preview.showVoronoi;
             showPoints =
                 showPoints ||
-                NodePanelUtils::readBoolParam(node, nodegraphparams::voronoi::ShowPoints, false);
+                params.preview.showPoints;
             continue;
         }
 
         if (typeId == nodegraphtypes::Contact) {
+            const ContactNodeParams params = readContactNodeParams(node);
             showContactLines =
                 showContactLines ||
-                NodePanelUtils::readBoolParam(node, nodegraphparams::contact::ShowContactLines, false);
+                params.preview.showContactLines;
             continue;
         }
     }
@@ -238,10 +236,8 @@ void NodeGraphController::updateContactPreviews(const NodeGraphEvaluationState& 
             }
 
             const ContactPackage& contactPackage = packageIt->second;
-            const bool authoredPreviewEnabled = NodePanelUtils::readBoolParam(
-                node,
-                nodegraphparams::contact::ShowContactLines,
-                false);
+            const ContactNodeParams params = readContactNodeParams(node);
+            const bool authoredPreviewEnabled = params.preview.showContactLines;
             const bool previewEnabled =
                 authoredPreviewEnabled &&
                 contactPackage.authored.active &&

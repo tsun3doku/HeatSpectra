@@ -1,5 +1,6 @@
 #include "NodeGraphCompiler.hpp"
 #include "NodeGraphRegistry.hpp"
+#include "NodeHeatSolveParams.hpp"
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphSceneUtils.hpp"
 
@@ -245,8 +246,7 @@ NodeGraphCompiled NodeGraphCompiler::compile(const NodeGraphState& state) {
             continue;
         }
 
-        bool enabled = false;
-        if (tryGetNodeParamBool(*node, nodegraphparams::heatsolve::Enabled, enabled) && enabled) {
+        if (readHeatSolveNodeParams(*node).enabled) {
             enabledHeatSolveNodes.push_back(node);
         }
     }
