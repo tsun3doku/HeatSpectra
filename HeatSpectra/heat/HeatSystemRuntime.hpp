@@ -2,7 +2,6 @@
 
 #include "domain/GeometryData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
-#include "runtime/RuntimeContactTypes.hpp"
 
 #include <cstdint>
 #include <memory>

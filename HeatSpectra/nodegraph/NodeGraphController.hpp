@@ -5,6 +5,7 @@
 #include "runtime/RuntimePackageSync.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 
 class NodeGraphBridge;
 
@@ -20,7 +21,12 @@ public:
     const NodeGraphCompiled& compiledState() const;
 
 private:
+    struct OutputPreviewState {
+        bool enabled = false;
+    };
+
     static bool allChangesAreLayout(const NodeGraphDelta& delta);
+    void updateNodeOwnedRenderSettings();
     void updateContactPreviews(const NodeGraphEvaluationState& execState);
 
     NodeGraphBridge* bridge = nullptr;
@@ -30,4 +36,5 @@ private:
     NodeGraphCompiled plan{};
     RuntimePackageSet runtimePackages{};
     RuntimePackageSync runtimePackageSync{};
+    std::unordered_map<uint64_t, OutputPreviewState> previewStateBySocket;
 };

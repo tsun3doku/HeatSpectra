@@ -7,12 +7,12 @@
 #include <vector>
 
 #include "runtime/HeatOverlayData.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 class VulkanDevice;
 class UniformBufferManager;
-class Model;
 class HeatReceiverRuntime;
-class ResourceManager;
+class ModelRegistry;
 
 class HeatReceiverRenderer {
 public:
@@ -27,13 +27,13 @@ public:
     void cleanup();
     void updateDescriptors(const std::vector<HeatOverlayData>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
     void updateDescriptors(const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ResourceManager& resourceManager) const;
+    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ModelRegistry& resourceManager) const;
 
 private:
     bool createDescriptorPool(uint32_t maxFramesInFlight);
     bool createDescriptorSetLayout();
     bool createPipeline(VkRenderPass renderPass);
-    void drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, Model& model) const;
+    void drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, const ModelProduct& product) const;
     bool updateDescriptorSetVector(const std::array<VkBufferView, 11>& bufferViews, uint32_t maxFramesInFlight, std::vector<VkDescriptorSet>& targetSets, bool forceReallocate);
 
     VulkanDevice& vulkanDevice;
@@ -49,3 +49,4 @@ private:
 
     bool initialized = false;
 };
+

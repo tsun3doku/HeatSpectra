@@ -8,7 +8,6 @@
 #include "HeatSystemRuntime.hpp"
 #include "HeatSystemStageContext.hpp"
 
-class ContactLineRenderer;
 class HeatReceiverRuntime;
 class HeatReceiverRenderer;
 class HeatSourceRenderer;
@@ -17,7 +16,6 @@ class HeatSystemRenderStage {
 public:
     explicit HeatSystemRenderStage(const HeatSystemStageContext& stageContext);
 
-    void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent, ContactLineRenderer* contactLineRenderer) const;
     void renderHeatOverlay(
         VkCommandBuffer cmdBuffer,
         uint32_t frameIndex,

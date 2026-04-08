@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 #include <string>
@@ -9,7 +9,7 @@ class CommandPool;
 class MemoryAllocator;
 class Model;
 class MeshModifiers;
-class ResourceManager;
+class ModelRegistry;
 class VulkanDevice;
 
 class ModelUploader {
@@ -19,8 +19,8 @@ public:
 
     ModelUploader(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool);
 
-    void uploadInitialModels(ResourceManager& resourceManager, MeshModifiers& meshModifiers);
-    uint32_t addModel(ResourceManager& resourceManager, const std::string& modelPath, uint32_t preferredModelId = 0);
+    void uploadInitialModels(ModelRegistry& resourceManager, MeshModifiers& meshModifiers);
+    uint32_t addModel(ModelRegistry& resourceManager, const std::string& modelPath, uint32_t preferredModelId = 0);
 
 private:
     std::unique_ptr<Model> createModel(const std::string& modelPath) const;
@@ -30,3 +30,4 @@ private:
     Camera& camera;
     CommandPool& commandPool;
 };
+

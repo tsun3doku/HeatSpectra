@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "NodeGraphDataTypes.hpp"
 #include "NodeGraphPayloadTypes.hpp"
@@ -12,15 +12,15 @@
 class NodeGraphBridge;
 class HeatSystemController;
 class ContactSystemController;
-class ContactPreviewStore;
 class MeshModifiers;
 class NodeGraphRuntimeBridge;
 class NodePayloadRegistry;
 class Remesher;
-class ResourceManager;
+class ModelRegistry;
 class RuntimePackageController;
 class RuntimeProductRegistry;
 class SceneController;
+class RenderSettingsController;
 
 enum class EvaluatedSocketStatus : uint8_t {
     Missing,
@@ -39,11 +39,11 @@ struct NodeRuntimeServices {
     RuntimePackageController* runtimePackageController = nullptr;
     HeatSystemController* heatSystemController = nullptr;
     ContactSystemController* contactSystemController = nullptr;
-    ContactPreviewStore* contactPreviewStore = nullptr;
+    RenderSettingsController* renderSettingsController = nullptr;
     NodePayloadRegistry* payloadRegistry = nullptr;
     NodeGraphRuntimeBridge* runtimeBridge = nullptr;
     RuntimeProductRegistry* runtimeProductRegistry = nullptr;
-    ResourceManager* resourceManager = nullptr;
+    ModelRegistry* resourceManager = nullptr;
     MeshModifiers* meshModifiers = nullptr;
     Remesher* remesher = nullptr;
 };
@@ -109,3 +109,4 @@ private:
     std::vector<std::unique_ptr<NodeKernel>> kernels;
     std::unordered_map<NodeTypeId, const NodeKernel*> kernelByTypeId;
 };
+

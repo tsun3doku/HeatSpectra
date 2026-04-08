@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define GLM_FORCE_LEFT_HANDED
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -11,7 +11,7 @@
 class CommandPool;
 class GizmoController;
 class ModelSelection;
-class ResourceManager;
+class ModelRegistry;
 class VulkanDevice;
 
 namespace render {
@@ -65,7 +65,7 @@ public:
     void createRingGeometry();
     void createPipeline(VkRenderPass renderPass, uint32_t subpassIndex);
 
-    float calculateGizmoScale(ResourceManager& resourceManager, const ModelSelection& modelSelection) const;
+    float calculateGizmoScale(ModelRegistry& resourceManager, const ModelSelection& modelSelection) const;
 
     void render(
         VkCommandBuffer commandBuffer,
@@ -114,3 +114,4 @@ private:
     VkDeviceMemory ringIndexBufferMemory = VK_NULL_HANDLE;
     uint32_t ringIndexCount = 0;
 };
+

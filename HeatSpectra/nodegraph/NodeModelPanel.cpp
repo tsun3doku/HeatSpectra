@@ -5,6 +5,7 @@
 #include "NodeGraphBridge.hpp"
 #include "NodePanelUtils.hpp"
 
+#include <QCheckBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -38,10 +39,16 @@ NodeModelPanel::NodeModelPanel(QWidget* parent)
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);
 
+    wireframeCheckBox = new QCheckBox("Wireframe View", this);
+    layout->addWidget(wireframeCheckBox);
+
     layout->addStretch();
 
     connect(browseButton, &QPushButton::clicked, this, [this]() {
         browseModelFile();
+    });
+    connect(wireframeCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        applySettings();
     });
 }
 
@@ -52,17 +59,15 @@ void NodeModelPanel::bind(NodeGraphBridge* bridge) {
 void NodeModelPanel::setNode(NodeGraphNodeId nodeId) {
     currentNodeId = nodeId;
 
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
     NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
         return;
     }
 
     pathLineEdit->setText(QString::fromStdString(
         NodePanelUtils::readStringParam(node, nodegraphparams::model::Path)));
+    wireframeCheckBox->setChecked(
+        NodePanelUtils::readBoolParam(node, nodegraphparams::model::ShowWireframe, false));
 }
 
 void NodeModelPanel::setStatusSink(std::function<void(const QString&)> sink) {
@@ -111,7 +116,16 @@ void NodeModelPanel::applySettings() {
         return;
     }
 
-    setStatus("Model path updated.");
+    if (!NodePanelUtils::writeBoolParam(
+            nodeGraphBridge,
+            currentNodeId,
+            nodegraphparams::model::ShowWireframe,
+            wireframeCheckBox && wireframeCheckBox->isChecked())) {
+        setStatus("Failed to update model wireframe view.");
+        return;
+    }
+
+    setStatus("Model settings updated.");
 }
 
 void NodeModelPanel::setStatus(const QString& text) const {

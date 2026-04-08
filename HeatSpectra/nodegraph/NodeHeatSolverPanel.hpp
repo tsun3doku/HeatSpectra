@@ -8,6 +8,7 @@
 
 class NodeGraphBridge;
 class RuntimeQuery;
+class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
@@ -48,6 +49,7 @@ private:
     QPushButton* heatResetButton = nullptr;
     QDoubleSpinBox* heatCellSizeSpinBox = nullptr;
     QSpinBox* heatVoxelResolutionSpinBox = nullptr;
+    QCheckBox* heatOverlayCheckBox = nullptr;
     QPushButton* heatSolveSettingsApplyButton = nullptr;
     QComboBox* heatBindingGroupComboBox = nullptr;
     QComboBox* heatBindingPresetComboBox = nullptr;

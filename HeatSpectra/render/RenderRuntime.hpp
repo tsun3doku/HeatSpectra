@@ -17,7 +17,7 @@ class CommandPool;
 class FrameSync;
 class CameraController;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class MeshModifiers;
 class InputController;
@@ -31,15 +31,18 @@ class WireframeRenderer;
 class FrameController;
 class VkFrameGraphBackend;
 class VkFrameGraphRuntime;
-class HeatSystem;
-class VoronoiSystem;
+class VkFrameGraphRuntime;
+class HeatSystemController;
+class ContactSystemController;
+class VoronoiSystemController;
 
 struct RenderRuntimeServices {
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    HeatSystem* heatSystem = nullptr;
-    VoronoiSystem* voronoiSystem = nullptr;
+    HeatSystemController* heatSystemController = nullptr;
+    ContactSystemController* contactSystemController = nullptr;
+    VoronoiSystemController* voronoiSystemController = nullptr;
     InputController& inputController;
     LightingSystem& lightingSystem;
     MaterialSystem& materialSystem;
@@ -58,7 +61,7 @@ public:
         std::atomic<bool>& isShuttingDown);
     ~RenderRuntime();
 
-    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ResourceManager& resourceManager, UniformBufferManager& ubo);
+    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& resourceManager, UniformBufferManager& ubo);
     bool initializeFrameController(const RenderRuntimeServices& services);
 
     bool initializeSyncObjects();

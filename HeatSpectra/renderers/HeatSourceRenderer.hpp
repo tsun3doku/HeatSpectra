@@ -5,11 +5,11 @@
 #include <vector>
 
 #include "runtime/HeatOverlayData.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
 class VulkanDevice;
 class UniformBufferManager;
-class ResourceManager;
-class Model;
+class ModelRegistry;
 struct UniformBufferObject;
 
 class HeatSourceRenderer {
@@ -20,13 +20,13 @@ public:
     void initialize(VkRenderPass renderPass);
     void cleanup();
 
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ResourceManager& resourceManager) const;
+    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ModelRegistry& resourceManager) const;
 
 private:
     bool createPipeline(VkRenderPass renderPass);
     void drawModel(
         VkCommandBuffer commandBuffer,
-        Model& model,
+        const ModelProduct& product,
         float sourceTemperature,
         const UniformBufferObject& ubo) const;
 
@@ -38,3 +38,4 @@ private:
 
     bool initialized = false;
 };
+

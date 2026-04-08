@@ -11,9 +11,8 @@ class VulkanDevice;
 class MemoryAllocator;
 class UniformBufferManager;
 class CommandPool;
-class Model;
 class iODT;
-class ResourceManager;
+class ModelRegistry;
 
 class IntrinsicRenderer {
 public:
@@ -24,15 +23,15 @@ public:
 
     void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
     void removeIntrinsicPackage(uint64_t packageKey);
-    void renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager);
-    void renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength);
-    void renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength);
+    void renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager);
+    void renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength);
+    void renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength);
 
 private:
     bool initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight, uint32_t subpassIndex);
     uint32_t calculateMipLevels(uint32_t width, uint32_t height);
     bool createWireframeTexture();
-    void pruneStalePackageResources(const ResourceManager& resourceManager);
+    void pruneStalePackageResources(const ModelRegistry& resourceManager);
     void releaseDescriptorSetsForPackage(uint64_t packageKey);
     void allocateDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight);
     void allocateNormalsDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight);
@@ -87,3 +86,4 @@ private:
 
     bool initialized = false;
 };
+

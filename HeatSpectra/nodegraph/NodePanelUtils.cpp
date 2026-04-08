@@ -25,6 +25,17 @@ bool writeParam(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, const 
 
 }
 
+bool canEditNode(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId) {
+    return nodeGraphBridge && nodeId.isValid();
+}
+
+bool loadNode(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, NodeGraphNode& outNode) {
+    if (!canEditNode(nodeGraphBridge, nodeId)) {
+        return false;
+    }
+    return nodeGraphBridge->getNode(nodeId, outNode);
+}
+
 bool readBoolParam(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue) {
     bool value = defaultValue;
     if (tryGetNodeParamBool(node, parameterId, value)) {
@@ -221,7 +232,7 @@ void collectUpstreamModelPaths(
     }
 }
 
-void collectUpstreamModelNodeIds(
+void findUpstreamModelNodeIds(
     const NodeGraphState& state,
     NodeGraphNodeId nodeId,
     std::unordered_set<uint32_t>& visitedNodeIds,
@@ -248,7 +259,7 @@ void collectUpstreamModelNodeIds(
         if (!inputEdge) {
             continue;
         }
-        collectUpstreamModelNodeIds(state, inputEdge->fromNode, visitedNodeIds, seenModelNodeIds, outModelNodeIds);
+        findUpstreamModelNodeIds(state, inputEdge->fromNode, visitedNodeIds, seenModelNodeIds, outModelNodeIds);
     }
 }
 

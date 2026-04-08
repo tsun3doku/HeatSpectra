@@ -8,7 +8,6 @@
 #include "NodePanelUtils.hpp"
 #include "nodegraph/NodeGraphPayloadTypes.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
-#include "runtime/ContactPreviewStore.hpp"
 
 #include <cstdint>
 
@@ -17,8 +16,6 @@ const char* NodeContact::typeId() const {
 }
 
 bool NodeContact::execute(NodeGraphKernelContext& context) const {
-    ContactPreviewStore* const contactPreviewStore =
-        context.executionState.services.contactPreviewStore;
     const NodeGraphSocket* emitterSocket = findInputSocket(context.node, "Emitter");
     const NodeGraphSocket* receiverSocket = findInputSocket(context.node, "Receiver");
     const EvaluatedSocketValue* emitterInputValue =
@@ -67,9 +64,6 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
             receiverInput->dataType != NodePayloadType::HeatReceiver ||
             (emitterInput->dataType != NodePayloadType::HeatSource &&
              emitterInput->dataType != NodePayloadType::HeatReceiver)) {
-            if (contactPreviewStore) {
-                contactPreviewStore->clearPreviewForNode(context.node.id.value);
-            }
             contactData.payloadHash = NodeGraphHash::start();
             NodeGraphHash::combine(contactData.payloadHash, 0u);
             if (payloadRegistry) {
@@ -124,9 +118,6 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
         NodeGraphHash::combineFloat(contactData.payloadHash, contactData.pair.contactRadius);
         NodeGraphHash::combine(contactData.payloadHash, static_cast<uint64_t>(contactData.pair.hasValidContact ? 1u : 0u));
 
-        if (contactPreviewStore) {
-            contactPreviewStore->clearPreviewForNode(context.node.id.value);
-        }
         if (payloadRegistry) {
             const uint64_t payloadKey = makeSocketKey(
                 context.node.id,
@@ -142,11 +133,10 @@ bool NodeContact::execute(NodeGraphKernelContext& context) const {
 bool NodeContact::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
     const NodeGraphSocket* emitterSocket = findInputSocket(context.node, "Emitter");
     const NodeGraphSocket* receiverSocket = findInputSocket(context.node, "Receiver");
-    const EvaluatedSocketValue* emitterInputValue =
-        emitterSocket ? readEvaluatedInput(context.node, emitterSocket->id, context.executionState) : nullptr;
+
+    const EvaluatedSocketValue* emitterInputValue = emitterSocket ? readEvaluatedInput(context.node, emitterSocket->id, context.executionState) : nullptr;
     const NodeDataBlock* emitterInput = readInputValue(emitterInputValue);
-    const EvaluatedSocketValue* receiverInputValue =
-        receiverSocket ? readEvaluatedInput(context.node, receiverSocket->id, context.executionState) : nullptr;
+    const EvaluatedSocketValue* receiverInputValue = receiverSocket ? readEvaluatedInput(context.node, receiverSocket->id, context.executionState) : nullptr;
     const NodeDataBlock* receiverInput = readInputValue(receiverInputValue);
 
     outHash = NodeGraphHash::start();

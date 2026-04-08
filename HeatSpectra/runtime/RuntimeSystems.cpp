@@ -26,7 +26,7 @@ bool RuntimeSystems::initialize(WindowRuntimeState& runtimeState, const AppVulka
         cleanup();
         return false;
     }
-    if (!render.initialize(core, scene, runtimeState, runtimeBusy, isShuttingDown)) {
+    if (!render.initialize(core, scene, runtimeState, &settingsController, runtimeBusy, isShuttingDown)) {
         cleanup();
         return false;
     }

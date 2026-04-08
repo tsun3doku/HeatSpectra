@@ -1,13 +1,12 @@
-﻿#include "InputController.hpp"
+#include "InputController.hpp"
 
 #include "Camera.hpp"
 #include "GizmoController.hpp"
-#include "Model.hpp"
 #include "ModelSelection.hpp"
 #include "app/SwapchainManager.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "scene/SceneController.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -34,7 +33,7 @@ bool resolveSelectedTransformNode(
 
 }
 
-InputController::InputController(Camera& camera, GizmoController& gizmoController, ModelSelection& modelSelection, ResourceManager& resourceManager,
+InputController::InputController(Camera& camera, GizmoController& gizmoController, ModelSelection& modelSelection, ModelRegistry& resourceManager,
     SceneController& sceneController, NodeGraphBridge& nodeGraphBridge,
     const SwapchainManager& swapchainManager, InputActionHandler& actionHandler)
     : camera(camera),
@@ -71,10 +70,8 @@ void InputController::handleKeyInput(Qt::Key key, bool pressed) {
     else if (key == Qt::Key_F) {
         if (modelSelection.getSelected()) {
             const uint32_t selectedID = modelSelection.getSelectedModelID();
-            Model* model = resourceManager.getModelByID(selectedID);
-            if (model) {
-                const glm::vec3 localCenter = model->getBoundingBoxCenter();
-                const glm::vec3 worldCenter = glm::vec3(model->getModelMatrix() * glm::vec4(localCenter, 1.0f));
+            glm::vec3 worldCenter(0.0f);
+            if (resourceManager.tryGetWorldBoundingBoxCenter(selectedID, worldCenter)) {
                 camera.setLookAt(worldCenter);
             }
         }
@@ -253,3 +250,4 @@ void InputController::updateGizmo() {
         lastAppliedRotation = currentRotation;
     }
 }
+

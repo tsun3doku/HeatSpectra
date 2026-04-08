@@ -1,14 +1,15 @@
-﻿#pragma once
+#pragma once
 
 #include <atomic>
 #include <cstdint>
-#include <mutex>
 #include <string>
-#include <unordered_map>
+
+#include <glm/vec3.hpp>
 
 class CameraController;
 class ModelUploader;
-class ResourceManager;
+class ModelRuntime;
+class ModelRegistry;
 class VulkanDevice;
 class FrameSync;
 
@@ -16,12 +17,13 @@ class SceneController {
 public:
     SceneController(
         VulkanDevice& vulkanDevice,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         ModelUploader& modelUploader,
         FrameSync& frameSync,
         CameraController& cameraController,
         std::atomic<bool>& isOperating);
 
+    void setModelRuntime(ModelRuntime* updatedModelRuntime);
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     bool removeModelByID(uint32_t modelId);
     uint32_t materializeModelSink(uint32_t nodeModelId, const std::string& modelPath);
@@ -29,6 +31,7 @@ public:
     bool tryGetNodeModelRuntimeId(uint32_t nodeModelId, uint32_t& outRuntimeModelId) const;
     bool tryGetRuntimeModelNodeId(uint32_t runtimeModelId, uint32_t& outNodeModelId) const;
     void focusOnVisibleModel();
+    void focusCameraOn(const glm::vec3& localCenter);
 
 private:
     class OperatingScope {
@@ -42,14 +45,12 @@ private:
     };
 
     VulkanDevice& vulkanDevice;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     ModelUploader& modelUploader;
     FrameSync& frameSync;
     CameraController& cameraController;
     std::atomic<bool>& isOperating;
-    mutable std::mutex nodeBindingsMutex;
-    std::unordered_map<uint32_t, uint32_t> runtimeModelIdByNodeModelId;
-    std::unordered_map<uint32_t, uint32_t> nodeModelIdByRuntimeModelId;
-    std::unordered_map<uint32_t, std::string> modelPathByNodeModelId;
+    ModelRuntime* modelRuntime = nullptr;
 };
+
 

@@ -16,7 +16,6 @@ class SceneController;
 
 class RuntimePackageCompiler {
 public:
-    void setSceneController(SceneController* sceneController);
     void setRuntimeBridge(const NodeGraphRuntimeBridge* runtimeBridge);
     void setRuntimeProductRegistry(const RuntimeProductRegistry* runtimeProductRegistry);
     GeometryPackage buildGeometryPackage(uint64_t socketKey, const GeometryData& geometry) const;
@@ -43,10 +42,10 @@ public:
 private:
     bool tryParseHeatMaterialModelId(const std::string& value, uint32_t& outNodeModelId) const;
     std::vector<RuntimeThermalMaterial> buildRuntimeThermalMaterials(
+        const std::vector<GeometryData>& receiverGeometries,
         const std::vector<ProductHandle>& receiverRemeshProducts,
         const std::vector<HeatMaterialBindingEntry>& materialBindings) const;
 
-    SceneController* sceneController = nullptr;
     const NodeGraphRuntimeBridge* runtimeBridge = nullptr;
     const RuntimeProductRegistry* runtimeProductRegistry = nullptr;
 };

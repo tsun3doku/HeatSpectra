@@ -4,7 +4,7 @@
 #include "scene/LightingSystem.hpp"
 #include "scene/MaterialSystem.hpp"
 #include "scene/ModelSelection.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "render/SceneRenderer.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/UniformBufferManager.hpp"
@@ -12,7 +12,7 @@
 FrameUpdateStage::FrameUpdateStage(
     InputController& inputController,
     UniformBufferManager& uniformBufferManager,
-    ResourceManager& resourceManager,
+    ModelRegistry& resourceManager,
     LightingSystem& lightingSystem,
     MaterialSystem& materialSystem,
     SceneRenderer& sceneRenderer,
@@ -44,3 +44,4 @@ void FrameUpdateStage::updateFrameState(uint32_t frameIndex, const render::Scene
     lightingSystem.update(frameIndex);
     materialSystem.update(frameIndex);
 }
+

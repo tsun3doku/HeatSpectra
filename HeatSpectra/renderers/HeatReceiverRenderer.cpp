@@ -2,7 +2,7 @@
 
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "heat/HeatReceiverRuntime.hpp"
 #include "scene/Model.hpp"
 #include "util/Structs.hpp"
@@ -278,15 +278,14 @@ bool HeatReceiverRenderer::createPipeline(VkRenderPass renderPass) {
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
     vkDestroyShaderModule(vulkanDevice.getDevice(), geomShaderModule, nullptr);
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
-
     return true;
 }
 
-void HeatReceiverRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, Model& model) const {
+void HeatReceiverRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, const ModelProduct& product) const {
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
     HeatBufferPushConstant pushConstants{};
-    pushConstants.modelMatrix = model.getModelMatrix();
+    pushConstants.modelMatrix = product.modelMatrix;
     pushConstants.sourceParams = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
     vkCmdPushConstants(
         commandBuffer,
@@ -296,12 +295,12 @@ void HeatReceiverRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptor
         sizeof(HeatBufferPushConstant),
         &pushConstants);
 
-    VkBuffer modelVertexBuffer = model.getRenderVertexBuffer();
-    VkDeviceSize modelVertexOffset = model.getRenderVertexBufferOffset();
+    VkBuffer modelVertexBuffer = product.renderVertexBuffer;
+    VkDeviceSize modelVertexOffset = product.renderVertexBufferOffset;
 
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
-    vkCmdBindIndexBuffer(commandBuffer, model.getRenderIndexBuffer(), model.getRenderIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getRenderIndices().size()), 1, 0, 0, 0);
+    vkCmdBindIndexBuffer(commandBuffer, product.renderIndexBuffer, product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(commandBuffer, product.renderIndexCount, 1, 0, 0, 0);
 }
 
 bool HeatReceiverRenderer::updateDescriptorSetVector(const std::array<VkBufferView, 11>& bufferViews, uint32_t maxFramesInFlight,
@@ -444,7 +443,7 @@ void HeatReceiverRenderer::updateDescriptors(
     updateDescriptors(overlayReceivers, maxFramesInFlight, forceReallocate);
 }
 
-void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ResourceManager& resourceManager) const {
+void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ModelRegistry& resourceManager) const {
     if (!initialized || pipeline == VK_NULL_HANDLE || pipelineLayout == VK_NULL_HANDLE) {
         return;
     }
@@ -465,12 +464,12 @@ void HeatReceiverRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameI
             continue;
         }
 
-        Model* model = resourceManager.getModelByID(receiverBinding.runtimeModelId);
-        if (!model) {
+        ModelProduct product{};
+        if (!resourceManager.exportProduct(receiverBinding.runtimeModelId, product)) {
             continue;
         }
 
-        drawModel(commandBuffer, receiverHeatSets[frameIndex], *model);
+        drawModel(commandBuffer, receiverHeatSets[frameIndex], product);
     }
 }
 
@@ -497,3 +496,4 @@ void HeatReceiverRenderer::cleanup() {
     receiverDescriptorSets.clear();
     initialized = false;
 }
+

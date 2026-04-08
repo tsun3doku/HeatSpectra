@@ -1,14 +1,15 @@
-﻿#include "GeometryPass.hpp"
+#include "GeometryPass.hpp"
 
 #include <array>
 #include <iostream>
 #include <vector>
 
+#include "runtime/RuntimeProducts.hpp"
 #include "util/File_utils.h"
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "scene/Model.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanImage.hpp"
@@ -18,7 +19,7 @@ namespace render {
 GeometryPass::GeometryPass(
     VulkanDevice& device,
     VkFrameGraphRuntime& runtime,
-    ResourceManager& resources,
+    ModelRegistry& resources,
     UniformBufferManager& ubo,
     uint32_t framesInFlight,
     framegraph::PassId passId)
@@ -79,29 +80,29 @@ void GeometryPass::record(const FrameContext& context, const SceneView& view, co
     }
 
     VkCommandBuffer commandBuffer = context.commandBuffer;
-    ResourceManager& rm = resourceManager;
+    ModelRegistry& rm = resourceManager;
     const uint32_t frameIndex = context.currentFrame;
 
     VkPipeline currentPipeline = (flags.wireframeMode == 1) ? stencilOnlyPipeline : geometryPipeline;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currentPipeline);
 
     for (uint32_t modelId : rm.getRenderableModelIds()) {
-        Model* model = rm.getModelByID(modelId);
-        if (!model) {
+        ModelProduct product{};
+        if (!rm.exportProduct(modelId, product)) {
             continue;
         }
 
-        const VkBuffer indexBuffer = model->getRenderIndexBuffer();
-        const VkBuffer vertexBuffer = model->getRenderVertexBuffer();
-        const VkDeviceSize vertexOffset = model->getRenderVertexBufferOffset();
-        const VkDeviceSize indexOffset = model->getRenderIndexBufferOffset();
-        const uint32_t indexCount = static_cast<uint32_t>(model->getRenderIndices().size());
+        const VkBuffer indexBuffer = product.renderIndexBuffer;
+        const VkBuffer vertexBuffer = product.renderVertexBuffer;
+        const VkDeviceSize vertexOffset = product.renderVertexBufferOffset;
+        const VkDeviceSize indexOffset = product.renderIndexBufferOffset;
+        const uint32_t indexCount = product.renderIndexCount;
         if (vertexBuffer == VK_NULL_HANDLE || indexBuffer == VK_NULL_HANDLE || indexCount == 0) {
             continue;
         }
 
         GeometryPushConstant pushConstant{};
-        pushConstant.modelMatrix = model->getModelMatrix();
+        pushConstant.modelMatrix = product.modelMatrix;
         pushConstant.alpha = 1.0f;
         vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &pushConstant);
 
@@ -200,7 +201,7 @@ bool GeometryPass::createGeometryDescriptorSetLayout() {
     return true;
 }
 
-bool GeometryPass::createGeometryDescriptorSets(ResourceManager& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+bool GeometryPass::createGeometryDescriptorSets(ModelRegistry& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
     (void)resourceManager;
 
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, geometryDescriptorSetLayout);
@@ -535,3 +536,4 @@ bool GeometryPass::createStencilOnlyPipeline() {
 }
 
 } // namespace render
+

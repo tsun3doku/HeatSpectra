@@ -3,10 +3,14 @@
 #include <vulkan/vulkan.h>
 
 #include <atomic>
-#include <functional>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+class HeatSystemController;
+class ContactSystemController;
+class VoronoiSystemController;
+class ContactSystem;
 
 #include "FrameComputeStage.hpp"
 #include "FrameGraphicsStage.hpp"
@@ -23,11 +27,9 @@ class FrameSync;
 class ComputeTiming;
 class FrameStats;
 class CameraController;
-class ResourceManager;
+class ModelRegistry;
 class MeshModifiers;
 class UniformBufferManager;
-class HeatSystem;
-class VoronoiSystem;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
@@ -37,11 +39,12 @@ class LightingSystem;
 class MaterialSystem;
 
 struct FrameControllerServices {
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    HeatSystem* heatSystem = nullptr;
-    VoronoiSystem* voronoiSystem = nullptr;
+    HeatSystemController* heatSystemController = nullptr;
+    ContactSystemController* contactSystemController = nullptr;
+    VoronoiSystemController* voronoiSystemController = nullptr;
     ModelSelection& modelSelection;
     GizmoController& gizmoController;
     WireframeRenderer& wireframeRenderer;
@@ -81,8 +84,9 @@ private:
     ComputeTiming& computeTiming;
     FrameStats& frameStats;
     CameraController& cameraController;
-    HeatSystem* heatSystem = nullptr;
-    VoronoiSystem* voronoiSystem = nullptr;
+    HeatSystemController* heatSystemController = nullptr;
+    ContactSystemController* contactSystemController = nullptr;
+    VoronoiSystemController* voronoiSystemController = nullptr;
     std::atomic<bool>& isOperating;
     std::atomic<bool>& isShuttingDown;
 

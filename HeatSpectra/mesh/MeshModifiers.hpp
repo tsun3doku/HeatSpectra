@@ -4,11 +4,11 @@
 
 class VulkanDevice;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 
 class MeshModifiers {
 public:
-    MeshModifiers(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager);
+    MeshModifiers(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager);
 
     Remesher& getRemesher() {
         return remesher;
@@ -22,6 +22,7 @@ public:
     }
 
 private:
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     Remesher remesher;
 };
+

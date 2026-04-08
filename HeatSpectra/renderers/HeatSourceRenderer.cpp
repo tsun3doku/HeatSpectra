@@ -1,6 +1,6 @@
 #include "HeatSourceRenderer.hpp"
 
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "scene/Model.hpp"
@@ -201,13 +201,12 @@ bool HeatSourceRenderer::createPipeline(VkRenderPass renderPass) {
 
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
     vkDestroyShaderModule(vulkanDevice.getDevice(), fragShaderModule, nullptr);
-
     return true;
 }
 
-void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, Model& model,float sourceTemperature, const UniformBufferObject& ubo) const {
+void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, const ModelProduct& product, float sourceTemperature, const UniformBufferObject& ubo) const {
     HeatSourceRenderPushConstant pushConstants{};
-    pushConstants.modelMatrix = model.getModelMatrix();
+    pushConstants.modelMatrix = product.modelMatrix;
     pushConstants.view = ubo.view;
     pushConstants.proj = ubo.proj;
     pushConstants.sourceParams = glm::vec4(sourceTemperature, 1.0f, 0.0f, 0.0f);
@@ -220,15 +219,15 @@ void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, Model& model,f
         sizeof(HeatSourceRenderPushConstant),
         &pushConstants);
 
-    VkBuffer modelVertexBuffer = model.getRenderVertexBuffer();
-    VkDeviceSize modelVertexOffset = model.getRenderVertexBufferOffset();
+    VkBuffer modelVertexBuffer = product.renderVertexBuffer;
+    VkDeviceSize modelVertexOffset = product.renderVertexBufferOffset;
 
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
-    vkCmdBindIndexBuffer(commandBuffer, model.getRenderIndexBuffer(), model.getRenderIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model.getRenderIndices().size()), 1, 0, 0, 0);
+    vkCmdBindIndexBuffer(commandBuffer, product.renderIndexBuffer, product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(commandBuffer, product.renderIndexCount, 1, 0, 0, 0);
 }
 
-void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ResourceManager& resourceManager) const {
+void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ModelRegistry& resourceManager) const {
     if (!initialized || pipeline == VK_NULL_HANDLE || pipelineLayout == VK_NULL_HANDLE) {
         return;
     }
@@ -254,12 +253,12 @@ void HeatSourceRenderer::render(VkCommandBuffer commandBuffer, uint32_t frameInd
             continue;
         }
 
-        Model* sourceModel = resourceManager.getModelByID(sourceBinding.runtimeModelId);
-        if (!sourceModel) {
+        ModelProduct product{};
+        if (!resourceManager.exportProduct(sourceBinding.runtimeModelId, product)) {
             continue;
         }
 
-        drawModel(commandBuffer, *sourceModel, sourceBinding.sourceTemperature, *ubo);
+        drawModel(commandBuffer, product, sourceBinding.sourceTemperature, *ubo);
     }
 
 }
@@ -278,3 +277,4 @@ void HeatSourceRenderer::cleanup() {
 
     initialized = false;
 }
+

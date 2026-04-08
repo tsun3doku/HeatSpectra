@@ -6,7 +6,7 @@
 
 class InputController;
 class UniformBufferManager;
-class ResourceManager;
+class ModelRegistry;
 class LightingSystem;
 class MaterialSystem;
 class SceneRenderer;
@@ -17,7 +17,7 @@ public:
     FrameUpdateStage(
         InputController& inputController,
         UniformBufferManager& uniformBufferManager,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         LightingSystem& lightingSystem,
         MaterialSystem& materialSystem,
         SceneRenderer& sceneRenderer,
@@ -29,9 +29,10 @@ public:
 private:
     InputController& inputController;
     UniformBufferManager& uniformBufferManager;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     LightingSystem& lightingSystem;
     MaterialSystem& materialSystem;
     SceneRenderer& sceneRenderer;
     ModelSelection& modelSelection;
 };
+

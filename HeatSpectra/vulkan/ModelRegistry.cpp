@@ -1,4 +1,4 @@
-﻿#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.h>
 
 #include <algorithm>
 #include <cmath>
@@ -7,17 +7,18 @@
 #include <stdexcept>
 
 #include "MemoryAllocator.hpp"
+#include "runtime/RuntimeProducts.hpp"
 #include "scene/Model.hpp"
-#include "ResourceManager.hpp"
+#include "ModelRegistry.hpp"
 
-ResourceManager::ResourceManager(MemoryAllocator& memoryAllocator)
+ModelRegistry::ModelRegistry(MemoryAllocator& memoryAllocator)
     : memoryAllocator(memoryAllocator) {
 }
 
-ResourceManager::~ResourceManager() {
+ModelRegistry::~ModelRegistry() {
 }
 
-void ResourceManager::clearAdditionalModels() {
+void ModelRegistry::clearAdditionalModels() {
     for (auto& [modelId, model] : additionalModelsById) {
         (void)modelId;
         if (model) {
@@ -28,7 +29,7 @@ void ResourceManager::clearAdditionalModels() {
     additionalModelsById.clear();
 }
 
-void ResourceManager::setModels(std::unique_ptr<Model> newVisModel, std::unique_ptr<Model> newCommonSubdivision, std::unique_ptr<Model> newHeatModel) {
+void ModelRegistry::setModels(std::unique_ptr<Model> newVisModel, std::unique_ptr<Model> newCommonSubdivision, std::unique_ptr<Model> newHeatModel) {
     const uint32_t visModelId = getVisModelID();
     const uint32_t heatModelId = getHeatModelID();
     const uint32_t commonSubdivisionId = getCommonSubdivisionModelID();
@@ -43,13 +44,12 @@ void ResourceManager::setModels(std::unique_ptr<Model> newVisModel, std::unique_
     heatModel = std::move(newHeatModel);
     commonSubdivision = std::move(newCommonSubdivision);
 
-    // Keep renderable IDs in the low stencil-safe range.
     registerModel(visModel, visModelId);
     registerModel(heatModel, heatModelId);
     registerModel(commonSubdivision, commonSubdivisionId);
 }
 
-uint32_t ResourceManager::addModel(std::unique_ptr<Model> model, uint32_t preferredModelId) {
+uint32_t ModelRegistry::addModel(std::unique_ptr<Model> model, uint32_t preferredModelId) {
     if (!model) {
         return 0;
     }
@@ -61,7 +61,7 @@ uint32_t ResourceManager::addModel(std::unique_ptr<Model> model, uint32_t prefer
     return modelId;
 }
 
-bool ResourceManager::removeModelByID(uint32_t modelID) {
+bool ModelRegistry::removeModelByID(uint32_t modelID) {
     if (modelID == 0) {
         return false;
     }
@@ -85,7 +85,7 @@ bool ResourceManager::removeModelByID(uint32_t modelID) {
     return true;
 }
 
-std::vector<uint32_t> ResourceManager::getRenderableModelIds() const {
+std::vector<uint32_t> ModelRegistry::getRenderableModelIds() const {
     std::vector<uint32_t> modelIds;
     modelIds.reserve(modelsById.size());
     for (const auto& [modelId, modelPtr] : modelsById) {
@@ -100,7 +100,87 @@ std::vector<uint32_t> ResourceManager::getRenderableModelIds() const {
     return modelIds;
 }
 
-Model* ResourceManager::getModelByID(uint32_t modelID) {
+bool ModelRegistry::hasModel(uint32_t modelID) const {
+    return modelsById.find(modelID) != modelsById.end();
+}
+
+bool ModelRegistry::exportProduct(uint32_t modelID, ModelProduct& outProduct) const {
+    outProduct = {};
+
+    Model* model = const_cast<Model*>(findModel(modelID));
+    if (!model) {
+        return false;
+    }
+
+    outProduct.runtimeModelId = modelID;
+    outProduct.vertexBuffer = model->getVertexBuffer();
+    outProduct.vertexBufferOffset = model->getVertexBufferOffset();
+    outProduct.indexBuffer = model->getIndexBuffer();
+    outProduct.indexBufferOffset = model->getIndexBufferOffset();
+    outProduct.indexCount = static_cast<uint32_t>(model->getIndices().size());
+    outProduct.renderVertexBuffer = model->getRenderVertexBuffer();
+    outProduct.renderVertexBufferOffset = model->getRenderVertexBufferOffset();
+    outProduct.renderIndexBuffer = model->getRenderIndexBuffer();
+    outProduct.renderIndexBufferOffset = model->getRenderIndexBufferOffset();
+    outProduct.renderIndexCount = static_cast<uint32_t>(model->getRenderIndices().size());
+    outProduct.modelMatrix = model->getModelMatrix();
+    outProduct.contentHash = computeContentHash(outProduct);
+    return outProduct.isValid();
+}
+
+bool ModelRegistry::setModelMatrix(uint32_t modelID, const glm::mat4& matrix) {
+    Model* model = findModel(modelID);
+    if (!model) {
+        return false;
+    }
+
+    model->setModelMatrix(matrix);
+    return true;
+}
+
+bool ModelRegistry::tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) const {
+    Model* model = const_cast<Model*>(findModel(modelID));
+    if (!model) {
+        return false;
+    }
+
+    outMatrix = model->getModelMatrix();
+    return true;
+}
+
+bool ModelRegistry::tryGetBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const {
+    Model* model = const_cast<Model*>(findModel(modelID));
+    if (!model) {
+        return false;
+    }
+
+    outCenter = model->getBoundingBoxCenter();
+    return true;
+}
+
+bool ModelRegistry::tryGetBoundingBoxMinMax(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const {
+    Model* model = const_cast<Model*>(findModel(modelID));
+    if (!model) {
+        return false;
+    }
+
+    outMin = model->getBoundingBoxMin();
+    outMax = model->getBoundingBoxMax();
+    return true;
+}
+
+bool ModelRegistry::tryGetWorldBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const {
+    glm::vec3 localCenter(0.0f);
+    glm::mat4 modelMatrix(1.0f);
+    if (!tryGetBoundingBoxCenter(modelID, localCenter) || !tryGetModelMatrix(modelID, modelMatrix)) {
+        return false;
+    }
+
+    outCenter = glm::vec3(modelMatrix * glm::vec4(localCenter, 1.0f));
+    return true;
+}
+
+Model* ModelRegistry::findModel(uint32_t modelID) {
     const auto it = modelsById.find(modelID);
     if (it == modelsById.end()) {
         return nullptr;
@@ -108,7 +188,7 @@ Model* ResourceManager::getModelByID(uint32_t modelID) {
     return it->second;
 }
 
-const Model* ResourceManager::getModelByID(uint32_t modelID) const {
+const Model* ModelRegistry::findModel(uint32_t modelID) const {
     const auto it = modelsById.find(modelID);
     if (it == modelsById.end()) {
         return nullptr;
@@ -116,23 +196,19 @@ const Model* ResourceManager::getModelByID(uint32_t modelID) const {
     return it->second;
 }
 
-uint32_t ResourceManager::getModelID(Model* model) const {
-    return model ? model->getRuntimeModelId() : 0;
-}
-
-uint32_t ResourceManager::getVisModelID() const {
+uint32_t ModelRegistry::getVisModelID() const {
     return visModel ? visModel->getRuntimeModelId() : 0;
 }
 
-uint32_t ResourceManager::getHeatModelID() const {
+uint32_t ModelRegistry::getHeatModelID() const {
     return heatModel ? heatModel->getRuntimeModelId() : 0;
 }
 
-uint32_t ResourceManager::getCommonSubdivisionModelID() const {
+uint32_t ModelRegistry::getCommonSubdivisionModelID() const {
     return commonSubdivision ? commonSubdivision->getRuntimeModelId() : 0;
 }
 
-void ResourceManager::cleanup() {
+void ModelRegistry::cleanup() {
     clearAdditionalModels();
 
     if (visModel) {
@@ -146,11 +222,11 @@ void ResourceManager::cleanup() {
     }
 }
 
-bool ResourceManager::isReservedModelId(uint32_t modelId) {
+bool ModelRegistry::isReservedModelId(uint32_t modelId) {
     return modelId == 0 || (modelId >= 3 && modelId <= 8);
 }
 
-uint32_t ResourceManager::acquireModelId(uint32_t preferredModelId) {
+uint32_t ModelRegistry::acquireModelId(uint32_t preferredModelId) {
     if (preferredModelId != 0 &&
         preferredModelId <= MaxStencilModelId &&
         !isReservedModelId(preferredModelId) &&
@@ -176,14 +252,14 @@ uint32_t ResourceManager::acquireModelId(uint32_t preferredModelId) {
     }
 
     if (nextModelId > MaxStencilModelId) {
-        std::cerr << "[ResourceManager] Exhausted stencil model IDs" << std::endl;
+        std::cerr << "[ModelRegistry] Exhausted stencil model IDs" << std::endl;
         return 0;
     }
 
     return nextModelId++;
 }
 
-void ResourceManager::recycleModelId(uint32_t modelId) {
+void ModelRegistry::recycleModelId(uint32_t modelId) {
     if (modelId == 0 || modelId > MaxStencilModelId || isReservedModelId(modelId)) {
         return;
     }
@@ -193,21 +269,21 @@ void ResourceManager::recycleModelId(uint32_t modelId) {
     }
 }
 
-void ResourceManager::registerModel(std::unique_ptr<Model>& modelSlot, uint32_t preferredModelId) {
+void ModelRegistry::registerModel(std::unique_ptr<Model>& modelSlot, uint32_t preferredModelId) {
     if (!modelSlot) {
         return;
     }
 
     const uint32_t modelId = acquireModelId(preferredModelId);
     if (modelId == 0) {
-        std::cerr << "[ResourceManager] Failed to register model: no available model ID" << std::endl;
+        std::cerr << "[ModelRegistry] Failed to register model: no available model ID" << std::endl;
         return;
     }
     modelSlot->setRuntimeModelId(modelId);
     modelsById[modelId] = modelSlot.get();
 }
 
-void ResourceManager::unregisterModel(std::unique_ptr<Model>& modelSlot) {
+void ModelRegistry::unregisterModel(std::unique_ptr<Model>& modelSlot) {
     if (!modelSlot) {
         return;
     }
@@ -220,13 +296,13 @@ void ResourceManager::unregisterModel(std::unique_ptr<Model>& modelSlot) {
     }
 }
 
-glm::vec3 ResourceManager::calculateMaxBoundingBoxSize() const {
+glm::vec3 ModelRegistry::calculateMaxBoundingBoxSize() const {
     glm::vec3 globalMin = glm::vec3(std::numeric_limits<float>::max());
     glm::vec3 globalMax = glm::vec3(std::numeric_limits<float>::lowest());
     bool hasAnyBounds = false;
 
     for (uint32_t modelId : getRenderableModelIds()) {
-        Model* model = const_cast<Model*>(getModelByID(modelId));
+        Model* model = const_cast<Model*>(findModel(modelId));
         if (!model || model->getVertexCount() == 0) {
             continue;
         }
@@ -259,3 +335,4 @@ glm::vec3 ResourceManager::calculateMaxBoundingBoxSize() const {
 
     return glm::vec3(snappedWidth, snappedDepth, snappedHeight);
 }
+

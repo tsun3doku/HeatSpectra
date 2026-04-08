@@ -10,9 +10,8 @@
 #include <string>
 #include <vector>
 
-class Model;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class iODT;
 class VulkanDevice;
@@ -35,7 +34,7 @@ public:
         VulkanDevice& device,
         MemoryAllocator& allocator,
         VkFrameGraphRuntime& frameGraphRuntime,
-        ResourceManager& resources,
+        ModelRegistry& resources,
         UniformBufferManager& ubo,
         GeometryPass& geometry,
         uint32_t framesInFlight,
@@ -63,7 +62,7 @@ private:
     ::VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     uint32_t maxFramesInFlight = 0;
@@ -80,4 +79,5 @@ private:
 };
 
 } // namespace render
+
 

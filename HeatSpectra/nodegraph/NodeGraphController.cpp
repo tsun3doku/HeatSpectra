@@ -6,12 +6,13 @@
 #include "NodeGraphDebugStore.hpp"
 #include "NodeGraphRuntimeBridge.hpp"
 #include "NodePayloadRegistry.hpp"
+#include "NodePanelUtils.hpp"
 #include "contact/ContactSystemController.hpp"
-#include "runtime/ContactPreviewStore.hpp"
+#include "runtime/RenderSettingsController.hpp"
 #include "runtime/RuntimePackageCompiler.hpp"
 #include "runtime/RuntimePackageController.hpp"
-#include "runtime/RuntimeContactTransport.hpp"
 
+#include <algorithm>
 #include <utility>
 
 NodeGraphController::NodeGraphController(
@@ -50,7 +51,6 @@ void NodeGraphController::tick() {
 
     if (runtimeServices.runtimePackageController) {
         RuntimePackageCompiler packageCompiler{};
-        packageCompiler.setSceneController(runtimeServices.sceneController);
         packageCompiler.setRuntimeBridge(runtimeServices.runtimeBridge);
         packageCompiler.setRuntimeProductRegistry(runtimeServices.runtimeProductRegistry);
         RuntimePackageSet nextRuntimePackages = packageCompiler.buildRuntimePackageSet(
@@ -75,6 +75,7 @@ void NodeGraphController::tick() {
         }
     }
 
+    updateNodeOwnedRenderSettings();
     updateContactPreviews(execState);
     NodeGraphDebugStore::instance().publish(
         runtime.state().revision,
@@ -104,11 +105,109 @@ bool NodeGraphController::allChangesAreLayout(const NodeGraphDelta& delta) {
     return true;
 }
 
-void NodeGraphController::updateContactPreviews(const NodeGraphEvaluationState& execState) {
-    if (!runtimeServices.contactSystemController ||
-        !runtimeServices.contactPreviewStore) {
+void NodeGraphController::updateNodeOwnedRenderSettings() {
+    if (!runtimeServices.renderSettingsController) {
         return;
     }
+
+    bool showWireframe = false;
+    bool showRemeshOverlay = false;
+    bool showFaceNormals = false;
+    bool showVertexNormals = false;
+    bool showHeatOverlay = false;
+    bool showVoronoi = false;
+    bool showPoints = false;
+    bool showContactLines = false;
+    float normalLength = 0.05f;
+    bool hasNormalLength = false;
+
+    for (const NodeGraphNode& node : runtime.state().nodes) {
+        const NodeTypeId typeId = getNodeTypeId(node.typeId);
+        if (typeId == nodegraphtypes::Model) {
+            showWireframe =
+                showWireframe ||
+                NodePanelUtils::readBoolParam(node, nodegraphparams::model::ShowWireframe, false);
+            continue;
+        }
+
+        if (typeId == nodegraphtypes::Remesh) {
+            const bool remeshOverlay = NodePanelUtils::readBoolParam(
+                node,
+                nodegraphparams::remesh::ShowRemeshOverlay,
+                false);
+            const bool faceNormals = NodePanelUtils::readBoolParam(
+                node,
+                nodegraphparams::remesh::ShowFaceNormals,
+                false);
+            const bool vertexNormals = NodePanelUtils::readBoolParam(
+                node,
+                nodegraphparams::remesh::ShowVertexNormals,
+                false);
+            if (remeshOverlay || faceNormals || vertexNormals) {
+                const float nodeNormalLength = static_cast<float>(NodePanelUtils::readFloatParam(
+                    node,
+                    nodegraphparams::remesh::NormalLength,
+                    0.05));
+                if (!hasNormalLength) {
+                    normalLength = nodeNormalLength;
+                    hasNormalLength = true;
+                } else {
+                    normalLength = std::max(normalLength, nodeNormalLength);
+                }
+            }
+
+            showRemeshOverlay = showRemeshOverlay || remeshOverlay;
+            showFaceNormals = showFaceNormals || faceNormals;
+            showVertexNormals = showVertexNormals || vertexNormals;
+            continue;
+        }
+
+        if (typeId == nodegraphtypes::HeatSolve) {
+            showHeatOverlay =
+                showHeatOverlay ||
+                NodePanelUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowHeatOverlay, false);
+            continue;
+        }
+
+        if (typeId == nodegraphtypes::Voronoi) {
+            showVoronoi =
+                showVoronoi ||
+                NodePanelUtils::readBoolParam(node, nodegraphparams::voronoi::ShowVoronoi, false);
+            showPoints =
+                showPoints ||
+                NodePanelUtils::readBoolParam(node, nodegraphparams::voronoi::ShowPoints, false);
+            continue;
+        }
+
+        if (typeId == nodegraphtypes::Contact) {
+            showContactLines =
+                showContactLines ||
+                NodePanelUtils::readBoolParam(node, nodegraphparams::contact::ShowContactLines, false);
+            continue;
+        }
+    }
+
+    runtimeServices.renderSettingsController->setWireframeMode(
+        showWireframe ? RenderSettingsController::WireframeMode::Wireframe
+                      : RenderSettingsController::WireframeMode::Off);
+    runtimeServices.renderSettingsController->setIntrinsicOverlayEnabled(showRemeshOverlay);
+    runtimeServices.renderSettingsController->setIntrinsicNormalsEnabled(showFaceNormals);
+    runtimeServices.renderSettingsController->setIntrinsicVertexNormalsEnabled(showVertexNormals);
+    runtimeServices.renderSettingsController->setIntrinsicNormalLength(normalLength);
+    runtimeServices.renderSettingsController->setHeatOverlayEnabled(showHeatOverlay);
+    runtimeServices.renderSettingsController->setVoronoiEnabled(showVoronoi);
+    runtimeServices.renderSettingsController->setPointsEnabled(showPoints);
+    runtimeServices.renderSettingsController->setContactLinesEnabled(showContactLines);
+    runtimeServices.renderSettingsController->setSurfelsEnabled(false);
+}
+
+void NodeGraphController::updateContactPreviews(const NodeGraphEvaluationState& execState) {
+    if (!runtimeServices.contactSystemController) {
+        return;
+    }
+
+    std::unordered_map<uint64_t, OutputPreviewState> nextPreviewStateBySocket;
+    nextPreviewStateBySocket.reserve(previewStateBySocket.size() + runtimePackages.contactBySocket.size());
 
     for (const NodeGraphNode& node : runtime.state().nodes) {
         if (getNodeTypeId(node.typeId) != nodegraphtypes::Contact) {
@@ -139,42 +238,50 @@ void NodeGraphController::updateContactPreviews(const NodeGraphEvaluationState& 
             }
 
             const ContactPackage& contactPackage = packageIt->second;
-            if (!contactPackage.authored.active ||
-                !contactPackage.authored.pair.hasValidContact) {
+            const bool authoredPreviewEnabled = NodePanelUtils::readBoolParam(
+                node,
+                nodegraphparams::contact::ShowContactLines,
+                false);
+            const bool previewEnabled =
+                authoredPreviewEnabled &&
+                contactPackage.authored.active &&
+                contactPackage.authored.pair.hasValidContact;
+            if (!previewEnabled) {
+                runtimeServices.contactSystemController->setPreviewEnabled(outputSocketKey, false);
+                previewStateBySocket.erase(outputSocketKey);
+                updatedPreview = true;
                 continue;
             }
 
-            RuntimeContactBinding previewBinding{};
-            if (!RuntimeContactTransport::buildBinding(
-                    contactPackage,
-                    runtimeServices.runtimeProductRegistry,
-                    previewBinding)) {
-                runtimeServices.contactPreviewStore->clearPreviewForNode(node.id.value);
+            OutputPreviewState nextState{};
+            nextState.enabled = true;
+
+            const auto previousIt = previewStateBySocket.find(outputSocketKey);
+            const bool previewStateUnchanged =
+                previousIt != previewStateBySocket.end() &&
+                previousIt->second.enabled == nextState.enabled;
+            if (previewStateUnchanged) {
+                nextPreviewStateBySocket[outputSocketKey] = nextState;
                 updatedPreview = true;
                 break;
             }
 
-            ContactSystem::Result previewResult{};
-            ContactSystemController::HandleInfo handleInfo{};
-            bool previewChanged = false;
-            const bool hasPreview = runtimeServices.contactSystemController->computePreviewForRuntimePair(
-                previewBinding.runtimePair,
-                previewResult,
-                handleInfo,
-                false,
-                previewChanged);
-            if (hasPreview && previewChanged) {
-                runtimeServices.contactPreviewStore->setPreviewForNode(node.id.value, previewResult);
-            } else if (!hasPreview) {
-                runtimeServices.contactPreviewStore->clearPreviewForNode(node.id.value);
-            }
-
+            runtimeServices.contactSystemController->setPreviewEnabled(outputSocketKey, true);
+            nextPreviewStateBySocket[outputSocketKey] = nextState;
             updatedPreview = true;
             break;
         }
 
         if (!updatedPreview) {
-            runtimeServices.contactPreviewStore->clearPreviewForNode(node.id.value);
+            for (const NodeGraphSocket& output : node.outputs) {
+                if (output.contract.producedPayloadType == NodePayloadType::Contact) {
+                    const uint64_t outputSocketKey = makeSocketKey(node.id, output.id);
+                    runtimeServices.contactSystemController->setPreviewEnabled(outputSocketKey, false);
+                    previewStateBySocket.erase(outputSocketKey);
+                }
+            }
         }
     }
+
+    previewStateBySocket = std::move(nextPreviewStateBySocket);
 }

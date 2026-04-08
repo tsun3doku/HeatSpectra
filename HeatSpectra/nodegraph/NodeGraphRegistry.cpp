@@ -60,6 +60,7 @@ NodeTypeDefinition NodeGraphRegistry::buildModelNode() {
         },
         {
             {nodegraphparams::model::Path, "Model Path", NodeGraphParamType::String, 0.0, 0, false, "", false},
+            {nodegraphparams::model::ShowWireframe, "Show Wireframe", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
     };
 }
@@ -136,6 +137,10 @@ NodeTypeDefinition NodeGraphRegistry::buildRemeshNode() {
             {nodegraphparams::remesh::MaxEdgeLength, "Max Edge Length", NodeGraphParamType::Float, defaults.maxEdgeLength, 0, false, "", false},
             {nodegraphparams::remesh::StepSize, "Step Size", NodeGraphParamType::Float, defaults.stepSize, 0, false, "", false},
             {nodegraphparams::remesh::RunRequested, "Run Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
+            {nodegraphparams::remesh::ShowRemeshOverlay, "Show Remesh Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::remesh::ShowFaceNormals, "Show Face Normals", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::remesh::ShowVertexNormals, "Show Vertex Normals", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::remesh::NormalLength, "Normal Length", NodeGraphParamType::Float, 0.05, 0, false, "", false},
         },
     };
 }
@@ -194,6 +199,7 @@ NodeTypeDefinition NodeGraphRegistry::buildContactNode() {
         {
             {nodegraphparams::contact::MinNormalDot, "Min Normal Dot", NodeGraphParamType::Float, -0.65, 0, false, "", false},
             {nodegraphparams::contact::ContactRadius, "Contact Radius", NodeGraphParamType::Float, 0.01, 0, false, "", false},
+            {nodegraphparams::contact::ShowContactLines, "Show Contact Lines", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
     };
 }
@@ -210,6 +216,8 @@ NodeTypeDefinition NodeGraphRegistry::buildVoronoiNode() {
         {
             {nodegraphparams::voronoi::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
             {nodegraphparams::voronoi::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
+            {nodegraphparams::voronoi::ShowVoronoi, "Show Voronoi", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::voronoi::ShowPoints, "Show Points", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
     };
 }
@@ -229,6 +237,9 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSolveNode() {
             {nodegraphparams::heatsolve::Paused, "Paused", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::ResetRequested, "Reset Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
             {nodegraphparams::heatsolve::MaterialBindings, "Material Bindings", NodeGraphParamType::String, 0.0, 0, false, "", false},
+            {nodegraphparams::heatsolve::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
+            {nodegraphparams::heatsolve::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
+            {nodegraphparams::heatsolve::ShowHeatOverlay, "Show Heat Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
     };
 }

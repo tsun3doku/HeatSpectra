@@ -1,8 +1,8 @@
-﻿#include "HashGridRenderer.hpp"
+#include "HashGridRenderer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "spatial/HashGrid.hpp"
-#include "scene/Model.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanImage.hpp"
 #include "util/file_utils.h"
 #include "util/Structs.hpp"
@@ -267,12 +267,12 @@ bool HashGridRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass)
     return true;
 }
 
-bool HashGridRenderer::allocateDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight) {
-    if (!model) 
+bool HashGridRenderer::allocateDescriptorSetsForModel(uint32_t runtimeModelId, uint32_t maxFramesInFlight) {
+    if (runtimeModelId == 0)
         return false;
     
     // Check if already allocated
-    if (perModelDescriptorSets.find(model) != perModelDescriptorSets.end()) {
+    if (perModelDescriptorSets.find(runtimeModelId) != perModelDescriptorSets.end()) {
         return true;
     }
     
@@ -291,28 +291,28 @@ bool HashGridRenderer::allocateDescriptorSetsForModel(Model* model, uint32_t max
         return false;
     }
     
-    perModelDescriptorSets[model] = descriptorSets;
+    perModelDescriptorSets[runtimeModelId] = descriptorSets;
     return true;
 }
 
-void HashGridRenderer::updateDescriptorSetsForModel(Model* model, HashGrid* hashGrid, uint32_t maxFramesInFlight) {
-    if (!model || !hashGrid) 
+void HashGridRenderer::updateDescriptorSetsForModel(uint32_t runtimeModelId, HashGrid* hashGrid, uint32_t maxFramesInFlight) {
+    if (runtimeModelId == 0 || !hashGrid)
         return;
     
     // Allocate descriptor sets if not already allocated
-    if (perModelDescriptorSets.find(model) == perModelDescriptorSets.end()) {
-        if (!allocateDescriptorSetsForModel(model, maxFramesInFlight)) {
+    if (perModelDescriptorSets.find(runtimeModelId) == perModelDescriptorSets.end()) {
+        if (!allocateDescriptorSetsForModel(runtimeModelId, maxFramesInFlight)) {
             return;
         }
     }
-    auto it = perModelDescriptorSets.find(model);
+    auto it = perModelDescriptorSets.find(runtimeModelId);
     if (it == perModelDescriptorSets.end()) {
         return;
     }
 
     const auto& descriptorSets = it->second;
     
-    for (size_t i = 0; i < maxFramesInFlight; i++) {
+    for (uint32_t i = 0; i < maxFramesInFlight; ++i) {
         std::array<VkDescriptorBufferInfo, 3> bufferInfos{};
         
         // Binding 0: Grid UBO (view/proj matrices)
@@ -348,13 +348,24 @@ void HashGridRenderer::updateDescriptorSetsForModel(Model* model, HashGrid* hash
     }
 }
 
-void HashGridRenderer::render(VkCommandBuffer cmdBuffer, Model* model, HashGrid* hashGrid, uint32_t frameIndex, const glm::mat4& modelMatrix, const glm::vec3& color) {
-    if (!initialized || !model || !hashGrid) 
+void HashGridRenderer::render(
+    VkCommandBuffer cmdBuffer,
+    uint32_t runtimeModelId,
+    HashGrid* hashGrid,
+    uint32_t frameIndex,
+    ModelRegistry& resourceManager,
+    const glm::vec3& color) {
+    if (!initialized || runtimeModelId == 0 || !hashGrid)
         return;
     
     // Check if descriptor sets exist for this model
-    auto it = perModelDescriptorSets.find(model);
+    auto it = perModelDescriptorSets.find(runtimeModelId);
     if (it == perModelDescriptorSets.end() || frameIndex >= it->second.size()) {
+        return;
+    }
+
+    glm::mat4 modelMatrix(1.0f);
+    if (!resourceManager.tryGetModelMatrix(runtimeModelId, modelMatrix)) {
         return;
     }
     
@@ -410,3 +421,4 @@ void HashGridRenderer::cleanup() {
     
     initialized = false;
 }
+

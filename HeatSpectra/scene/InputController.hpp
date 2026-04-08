@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -12,7 +12,7 @@
 class Camera;
 class GizmoController;
 class ModelSelection;
-class ResourceManager;
+class ModelRegistry;
 class SceneController;
 class SwapchainManager;
 
@@ -21,7 +21,7 @@ public:
     InputController(Camera& camera,
         GizmoController& gizmoController,
         ModelSelection& modelSelection,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         SceneController& sceneController,
         NodeGraphBridge& nodeGraphBridge,
         const SwapchainManager& swapchainManager,
@@ -43,7 +43,7 @@ private:
     Camera& camera;
     GizmoController& gizmoController;
     ModelSelection& modelSelection;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     SceneController& sceneController;
     NodeGraphEditor nodeGraphEditor;
     const SwapchainManager& swapchainManager;
@@ -58,4 +58,5 @@ private:
     glm::vec3 transformDragStartTranslation{0.0f};
     glm::vec3 transformDragStartRotationDegrees{0.0f};
 };
+
 

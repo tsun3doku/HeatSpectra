@@ -1,8 +1,7 @@
-﻿#include "GizmoController.hpp"
+#include "GizmoController.hpp"
 
-#include "Model.hpp"
 #include "ModelSelection.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 
 #include <cmath>
 
@@ -134,15 +133,14 @@ float GizmoController::calculateRotationDelta(const glm::vec3& rayOrigin, const 
     return glm::degrees(angle);
 }
 
-glm::vec3 GizmoController::calculateGizmoPosition(ResourceManager& resourceManager, const ModelSelection& modelSelection) {
+glm::vec3 GizmoController::calculateGizmoPosition(ModelRegistry& resourceManager, const ModelSelection& modelSelection) {
     const auto& selectedModelIDs = modelSelection.getSelectedModelIDsRenderThread();
     glm::vec3 gizmoPosition(0.0f);
     int count = 0;
 
     for (uint32_t id : selectedModelIDs) {
-        if (Model* model = resourceManager.getModelByID(id)) {
-            const glm::vec3 localCenter = model->getBoundingBoxCenter();
-            const glm::vec3 worldCenter = glm::vec3(model->getModelMatrix() * glm::vec4(localCenter, 1.0f));
+        glm::vec3 worldCenter(0.0f);
+        if (resourceManager.tryGetWorldBoundingBoxCenter(id, worldCenter)) {
             gizmoPosition += worldCenter;
             count++;
         }
@@ -154,11 +152,12 @@ glm::vec3 GizmoController::calculateGizmoPosition(ResourceManager& resourceManag
     }
 
     for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
-        if (Model* model = resourceManager.getModelByID(modelId)) {
-            const glm::vec3 localCenter = model->getBoundingBoxCenter();
-            return glm::vec3(model->getModelMatrix() * glm::vec4(localCenter, 1.0f));
+        glm::vec3 worldCenter(0.0f);
+        if (resourceManager.tryGetWorldBoundingBoxCenter(modelId, worldCenter)) {
+            return worldCenter;
         }
     }
 
     return glm::vec3(0.0f);
 }
+

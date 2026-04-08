@@ -8,16 +8,16 @@
 #include <vector>
 
 class HeatSystemController;
+class ModelRuntime;
 class NodeGraphBridge;
 class NodeGraphController;
 class RenderSettingsManager;
-class SceneController;
 
 class RuntimeSimulationController : public InputActionHandler, public RuntimeQuery {
 public:
     RuntimeSimulationController(
         HeatSystemController& heatSystemController,
-        SceneController& sceneController,
+        ModelRuntime& modelRuntime,
         NodeGraphController& nodeGraphController,
         RenderSettingsManager& settingsManager);
 
@@ -35,7 +35,7 @@ private:
     void onTimingOverlayToggleRequested() override;
 
     HeatSystemController& heatSystemController;
-    SceneController& sceneController;
+    ModelRuntime& modelRuntime;
     NodeGraphController& nodeGraphController;
     RenderSettingsManager& settingsManager;
 };

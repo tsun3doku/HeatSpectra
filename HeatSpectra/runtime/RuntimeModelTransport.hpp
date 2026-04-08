@@ -2,12 +2,12 @@
 
 #include "runtime/RuntimeProductRegistry.hpp"
 
-class ResourceManager;
+class ModelRuntime;
 
 class RuntimeModelTransport {
 public:
-    void setResourceManager(ResourceManager* updatedResourceManager) {
-        resourceManager = updatedResourceManager;
+    void setRuntime(ModelRuntime* updatedRuntime) {
+        modelRuntime = updatedRuntime;
     }
 
     void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
@@ -18,6 +18,6 @@ public:
     void remove(uint64_t socketKey);
 
 private:
-    ResourceManager* resourceManager = nullptr;
+    ModelRuntime* modelRuntime = nullptr;
     RuntimeProductRegistry* productRegistry = nullptr;
 };

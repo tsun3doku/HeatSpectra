@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -13,7 +13,7 @@ class Camera;
 class Model;
 class VulkanDevice;
 class VkFrameGraphRuntime;
-class ResourceManager;
+class ModelRegistry;
 
 enum class PickedType {
     None = 0,
@@ -60,7 +60,7 @@ public:
     ModelSelection(
         VulkanDevice& device,
         VkFrameGraphRuntime& frameGraphRuntime,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         framegraph::ResourceId depthResolveResourceId);
     ~ModelSelection();
     bool isInitialized() const { return initialized; }
@@ -105,7 +105,7 @@ public:
 private:   
     VulkanDevice& vulkanDevice;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     framegraph::ResourceId depthResolveResourceId{};
     VkCommandPool pickingCommandPool;
     
@@ -124,4 +124,5 @@ private:
     glm::vec3 outlineColor = glm::vec3(pow(0.964705f, 2.2), pow(0.647058f, 2.2), pow(0.235294f, 2.2));
     bool initialized = false;
 };
+
 

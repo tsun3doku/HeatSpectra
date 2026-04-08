@@ -1,161 +1,179 @@
 #include "ContactSystemController.hpp"
 
-#include "runtime/ComputeCache.hpp"
+#include "ContactSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
-
-#include <cstring>
+#include "vulkan/UniformBufferManager.hpp"
 
 ContactSystemController::ContactSystemController(
     VulkanDevice& device,
     MemoryAllocator& allocator,
-    ComputeCache& cache)
+    UniformBufferManager& uniformBufferManager,
+    uint32_t maxFramesInFlight)
     : vulkanDevice(device),
       memoryAllocator(allocator),
-      computeCache(cache) {
+      uniformBufferManager(uniformBufferManager),
+      maxFramesInFlight(maxFramesInFlight) {
 }
 
 ContactSystemController::~ContactSystemController() {
-    runtime.clear(memoryAllocator);
+    disableAll();
 }
 
-void ContactSystemController::configure(const Config& config) {
-    runtime.rebuildProducts(
-        this,
+std::unique_ptr<ContactSystem> ContactSystemController::buildContactSystem(VkRenderPass renderPass) {
+    auto system = std::make_unique<ContactSystem>(
         vulkanDevice,
         memoryAllocator,
-        config.binding);
+        uniformBufferManager,
+        maxFramesInFlight,
+        renderPass);
+    if (!system || !system->isInitialized()) {
+        return nullptr;
+    }
+    return system;
 }
 
-void ContactSystemController::disable() {
-    runtime.clear(memoryAllocator);
+void ContactSystemController::createContactSystem(VkExtent2D extent, VkRenderPass renderPass) {
+    currentExtent = extent;
+    currentRenderPass = renderPass;
 }
 
-bool ContactSystemController::exportProduct(ContactProduct& outProduct) const {
-    outProduct = {};
-    const ContactProduct* product = runtime.getProduct();
-    if (!product) {
-        return false;
+void ContactSystemController::updateRenderContext(VkExtent2D extent, VkRenderPass renderPass) {
+    currentExtent = extent;
+    currentRenderPass = renderPass;
+}
+
+void ContactSystemController::updateRenderResources() {
+    for (auto& [socketKey, system] : contactSystems) {
+        (void)socketKey;
+        if (!system) {
+            continue;
+        }
+        system->updateRenderResources(maxFramesInFlight, currentRenderPass);
+    }
+}
+
+void ContactSystemController::configure(uint64_t socketKey, const Config& config) {
+    if (socketKey == 0) {
+        return;
     }
 
-    outProduct = *product;
-    return outProduct.isValid();
-}
-
-bool ContactSystemController::computePreviewForRuntimePair(
-    const RuntimeContactPairConfig& pair,
-    ContactSystem::Result& outPreview,
-    HandleInfo& outHandle,
-    bool forceRebuild,
-    bool& outPreviewUpdated) {
-    if (pair.emitter.geometry.modelId == 0 ||
-        pair.receiver.geometry.modelId == 0 ||
-        pair.emitter.intrinsicMesh.vertices.empty() ||
-        pair.receiver.intrinsicMesh.vertices.empty()) {
-        outPreview = {};
-        outHandle = {};
-        outPreviewUpdated = false;
-        return false;
+    configuredConfigs[socketKey] = config;
+    auto& system = contactSystems[socketKey];
+    if (!system && currentRenderPass != VK_NULL_HANDLE) {
+        system = buildContactSystem(currentRenderPass);
     }
 
-    outPreview = {};
-    outHandle = {};
-    outPreviewUpdated = false;
-
-    const uint64_t domainKey = buildDomainKey();
-    const uint64_t inputHash = buildCacheKey(pair);
-    if (!forceRebuild) {
-        ContactSystem::Result cachedResult{};
-        ComputeCache::Handle cacheHandle{};
-        if (computeCache.tryGet(domainKey, inputHash, cachedResult, cacheHandle)) {
-            outPreview = cachedResult;
-            outHandle.key = cacheHandle.key;
-            outHandle.revision = cacheHandle.revision;
-            outHandle.count = cacheHandle.count;
-            outHandle.hasContact = cachedResult.hasContact;
-            outPreviewUpdated = cachedResult.hasContact;
-            return cachedResult.hasContact;
+    if (system) {
+        system->setParams(
+            config.couplingType,
+            config.minNormalDot,
+            config.contactRadius);
+        system->setEmitterState(
+            config.emitterModelId,
+            config.emitterLocalToWorld,
+            config.emitterIntrinsicMesh,
+            config.emitterRuntimeModelId);
+        system->setReceiverState(
+            config.receiverModelId,
+            config.receiverLocalToWorld,
+            config.receiverIntrinsicMesh,
+            config.receiverRuntimeModelId);
+        system->setReceiverTriangleIndices(config.receiverTriangleIndices);
+        system->ensureConfigured();
+        if (previewEnabledSockets.find(socketKey) != previewEnabledSockets.end()) {
+            system->refreshPreview();
+        } else {
+            system->clearPreview();
         }
     }
-
-    ContactSystem::Result freshResult{};
-    if (!contactSystem.compute(pair, freshResult)) {
-        return false;
-    }
-
-    const ComputeCache::Handle cacheHandle = computeCache.store(domainKey, inputHash, freshResult);
-    outPreview = freshResult;
-    outPreviewUpdated = true;
-    outHandle.key = cacheHandle.key;
-    outHandle.revision = cacheHandle.revision;
-    outHandle.count = cacheHandle.count;
-    outHandle.hasContact = outPreview.hasContact;
-    return outHandle.hasContact;
 }
 
-bool ContactSystemController::computePairs(
-    const RuntimeContactPairConfig& pair,
-    std::vector<ContactPair>& outPairs,
-    bool forceRebuild) {
-    outPairs.clear();
-    if (!pair.emitter.geometry.modelId ||
-        !pair.receiver.geometry.modelId ||
-        pair.emitter.intrinsicMesh.vertices.empty() ||
-        pair.receiver.intrinsicMesh.vertices.empty()) {
-        return false;
+void ContactSystemController::disable(uint64_t socketKey) {
+    previewEnabledSockets.erase(socketKey);
+    configuredConfigs.erase(socketKey);
+    auto it = contactSystems.find(socketKey);
+    if (it != contactSystems.end()) {
+        if (it->second) {
+            it->second->clearPreview();
+            it->second->disable();
+        }
+        contactSystems.erase(it);
     }
+}
 
-    if (!forceRebuild) {
-        const uint64_t domainKey = buildDomainKey();
-        const uint64_t inputHash = buildCacheKey(pair);
-        ContactSystem::Result cachedResult{};
-        ComputeCache::Handle cacheHandle{};
-        if (computeCache.tryGet(domainKey, inputHash, cachedResult, cacheHandle)) {
-            if (!cachedResult.hasContact) {
-                return false;
-            }
-            outPairs = cachedResult.pairs;
-            return !outPairs.empty();
+void ContactSystemController::disableAll() {
+    previewEnabledSockets.clear();
+    configuredConfigs.clear();
+    for (auto& [key, system] : contactSystems) {
+        if (system) {
+            system->clearPreview();
+            system->disable();
         }
     }
+    contactSystems.clear();
+}
 
-    ContactSystem::Result freshResult{};
-    if (!contactSystem.compute(pair, freshResult)) {
+bool ContactSystemController::exportProduct(uint64_t socketKey, ContactProduct& outProduct) const {
+    const auto it = contactSystems.find(socketKey);
+    if (it == contactSystems.end() || !it->second) {
         return false;
     }
+    return it->second->exportProduct(outProduct);
+}
 
-    if (!freshResult.hasContact) {
-        return false;
+ContactSystem* ContactSystemController::getContactSystem(uint64_t socketKey) const {
+    const auto it = contactSystems.find(socketKey);
+    if (it == contactSystems.end()) {
+        return nullptr;
     }
-    outPairs = freshResult.pairs;
-    return !outPairs.empty();
+    return it->second.get();
 }
 
-void ContactSystemController::clearCache() {
-    computeCache.clearDomain(buildDomainKey());
-}
-
-uint64_t ContactSystemController::buildDomainKey() {
-    uint64_t h = 0xcbf29ce484222325ull;
-    const char domain[] = "ContactPair";
-    for (char c : domain) {
-        h = ComputeCache::combine(h, static_cast<uint64_t>(static_cast<unsigned char>(c)));
+std::vector<ContactSystem*> ContactSystemController::getActiveSystems() const {
+    std::vector<ContactSystem*> systems;
+    systems.reserve(contactSystems.size());
+    for (const auto& [key, system] : contactSystems) {
+        if (system) {
+            systems.push_back(system.get());
+        }
     }
-    return h;
+    return systems;
 }
 
-uint64_t ContactSystemController::buildCacheKey(const RuntimeContactPairConfig& pair) {
-    uint64_t h = 0xcbf29ce484222325ull;
-    h = ComputeCache::combine(h, static_cast<uint64_t>(pair.couplingType));
-    h = ComputeCache::combine(h, static_cast<uint64_t>(pair.emitter.geometry.modelId));
-    h = ComputeCache::combine(h, static_cast<uint64_t>(pair.receiver.geometry.modelId));
-    h = ComputeCache::combine(h, pair.emitter.geometry.payloadHash);
-    h = ComputeCache::combine(h, pair.receiver.geometry.payloadHash);
-    uint32_t minNormalBits = 0;
-    uint32_t contactRadiusBits = 0;
-    std::memcpy(&minNormalBits, &pair.minNormalDot, sizeof(float));
-    std::memcpy(&contactRadiusBits, &pair.contactRadius, sizeof(float));
-    h = ComputeCache::combine(h, static_cast<uint64_t>(minNormalBits));
-    h = ComputeCache::combine(h, static_cast<uint64_t>(contactRadiusBits));
-    return h;
+void ContactSystemController::setPreviewEnabled(uint64_t socketKey, bool enabled) {
+    if (socketKey == 0) {
+        return;
+    }
+
+    if (enabled) {
+        previewEnabledSockets.insert(socketKey);
+        refreshPreview(socketKey);
+        return;
+    }
+
+    previewEnabledSockets.erase(socketKey);
+    clearPreview(socketKey);
+}
+
+void ContactSystemController::refreshPreview(uint64_t socketKey) {
+    ContactSystem* system = getContactSystem(socketKey);
+    if (system) {
+        system->refreshPreview();
+    }
+}
+
+void ContactSystemController::clearPreview(uint64_t socketKey) {
+    ContactSystem* system = getContactSystem(socketKey);
+    if (system) {
+        system->clearPreview();
+    }
+}
+
+void ContactSystemController::clearAllPreviews() {
+    for (auto& [key, system] : contactSystems) {
+        if (system) {
+            system->clearPreview();
+        }
+    }
 }

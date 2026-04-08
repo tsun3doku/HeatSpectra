@@ -12,10 +12,9 @@
 #include "nodegraph/NodeModelTransform.hpp"
 #include "renderers/HeatReceiverRenderer.hpp"
 #include "renderers/HeatSourceRenderer.hpp"
-#include "runtime/ContactPreviewStore.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -27,7 +26,7 @@
 HeatSystem::HeatSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ResourceManager& resourceManager,
+    ModelRegistry& resourceManager,
     HeatSystemResources& resources,
     UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
@@ -106,10 +105,6 @@ void HeatSystem::failInitialization(const char* stage) {
     std::cerr << "[HeatSystem] Initialization failed at stage: " << stage << std::endl;
     cleanupResources();
     cleanup();
-}
-
-void HeatSystem::setContactPreviewStore(ContactPreviewStore* store) {
-    contactPreviewStore = store;
 }
 
 void HeatSystem::setSourcePayloads(
@@ -275,10 +270,7 @@ void HeatSystem::update() {
     }
 }
 
-void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass) {
-    (void)extent;
-    this->maxFramesInFlight = maxFramesInFlight;
-
+void HeatSystem::updateRenderResources(VkRenderPass renderPass) {
     if (!heatSourceRenderer) {
         heatSourceRenderer = std::make_unique<HeatSourceRenderer>(vulkanDevice, uniformBufferManager);
     }
@@ -291,49 +283,6 @@ void HeatSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent
     if (heatReceiverRenderer) {
         heatReceiverRenderer->initialize(renderPass, maxFramesInFlight);
         heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), maxFramesInFlight, true);
-    }
-
-    if (contactPreviewStore) {
-        contactPreviewStore->reinitRenderer(renderPass, maxFramesInFlight);
-    }
-
-    if (resources.surfacePipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(vulkanDevice.getDevice(), resources.surfacePipeline, nullptr);
-        resources.surfacePipeline = VK_NULL_HANDLE;
-    }
-    if (resources.surfacePipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(vulkanDevice.getDevice(), resources.surfacePipelineLayout, nullptr);
-        resources.surfacePipelineLayout = VK_NULL_HANDLE;
-    }
-    if (resources.surfaceDescriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), resources.surfaceDescriptorSetLayout, nullptr);
-        resources.surfaceDescriptorSetLayout = VK_NULL_HANDLE;
-    }
-    if (resources.voronoiPipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(vulkanDevice.getDevice(), resources.voronoiPipeline, nullptr);
-        resources.voronoiPipeline = VK_NULL_HANDLE;
-    }
-    if (resources.voronoiPipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(vulkanDevice.getDevice(), resources.voronoiPipelineLayout, nullptr);
-        resources.voronoiPipelineLayout = VK_NULL_HANDLE;
-    }
-    if (resources.voronoiDescriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), resources.voronoiDescriptorSetLayout, nullptr);
-        resources.voronoiDescriptorSetLayout = VK_NULL_HANDLE;
-    }
-
-    if (surfaceStage) {
-        surfaceStage->createDescriptorSetLayout();
-        surfaceStage->createPipeline();
-    }
-    if (voronoiStage) {
-        voronoiStage->createDescriptorSetLayout();
-        voronoiStage->createPipeline();
-    }
-
-    createComputeCommandBuffers(maxFramesInFlight);
-    if (simRuntime.isInitialized()) {
-        rebuildHeatStateRuntimes(true);
     }
 }
 
@@ -387,12 +336,6 @@ bool HeatSystem::rebuildHeatStateRuntimes(bool forceDescriptorReallocate) {
         std::cerr << "[HeatSystem] rebuildHeatStateRuntimes: ensureCouplings FAILED" << std::endl;
         return false;
     }
-
-    std::cerr << "[HeatSystem] rebuildHeatStateRuntimes"
-              << " sourceBindings=" << heatSources.size()
-              << " receiverBindings=" << surfaceRuntime.getReceivers().size()
-              << " contactCouplings=" << heatContactRuntime.getCouplings().size()
-              << std::endl;
 
     const bool heatVoronoiReady = rebuildVoronoiRuntime();
     for (const auto& receiver : surfaceRuntime.getReceivers()) {
@@ -462,12 +405,6 @@ void HeatSystem::setActive(bool active) {
 void HeatSystem::resetHeatState() {
     simRuntime.reset();
     surfaceRuntime.resetSurfaceTemperatures(renderCommandPool);
-}
-
-void HeatSystem::renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
-    if (contactPreviewStore) {
-        contactPreviewStore->renderLines(cmdBuffer, frameIndex, extent);
-    }
 }
 
 bool HeatSystem::createComputeCommandBuffers(uint32_t maxFramesInFlight) {
@@ -813,3 +750,4 @@ bool HeatSystem::rebuildVoronoiRuntime() {
     }
     return resources.voronoi.voronoiNodeCount > 0;
 }
+

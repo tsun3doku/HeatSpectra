@@ -4,7 +4,6 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphCompiler.hpp"
-#include "runtime/ContactPreviewStore.hpp"
 #include "contact/ContactSystemController.hpp"
 #include "NodePayloadRegistry.hpp"
 
@@ -122,10 +121,7 @@ void NodeGraphRuntime::applyDelta(const NodeGraphDelta& delta) {
         if (shouldClearCaches) {
             clearNodeCaches();
             if (runtimeServices.contactSystemController) {
-                runtimeServices.contactSystemController->clearCache();
-            }
-            if (runtimeServices.contactPreviewStore) {
-                runtimeServices.contactPreviewStore->clearAllPreviews();
+                runtimeServices.contactSystemController->clearAllPreviews();
             }
             if (runtimeServices.payloadRegistry) {
                 runtimeServices.payloadRegistry->clear();
@@ -218,9 +214,6 @@ void NodeGraphRuntime::tick(NodeGraphEvaluationState* outState) {
 void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState) {
     NodeGraphCompiled compiled = NodeGraphCompiler::compile(graphState);
     if (graphState.nodes.size() > 0 && compiled.executionOrder.size() != graphState.nodes.size()) {
-        if (runtimeServices.contactPreviewStore) {
-            runtimeServices.contactPreviewStore->endFrame();
-        }
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
             outState->outputBySocket.clear();
@@ -312,10 +305,6 @@ void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState) {
                     makeValueSocketValue(outputValues[outputIndex]);
             }
         }
-    }
-
-    if (runtimeServices.contactPreviewStore) {
-        runtimeServices.contactPreviewStore->endFrame();
     }
 
     if (outState) {

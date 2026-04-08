@@ -6,7 +6,7 @@
 #include "scene/LightingSystem.hpp"
 #include "scene/MaterialSystem.hpp"
 #include "scene/ModelUploader.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 
 SceneContext::SceneContext()
@@ -30,7 +30,7 @@ bool SceneContext::initialize(VulkanCoreContext& core) {
     materialSystemState = std::make_unique<MaterialSystem>(*uniformBufferManagerState);
     lightingSystemState = std::make_unique<LightingSystem>(cameraControllerState.getCamera(), *uniformBufferManagerState);
     modelUploaderState = std::make_unique<ModelUploader>(core.device(), *allocator, cameraControllerState.getCamera(), *commandPool);
-    resourceManagerState = std::make_unique<ResourceManager>(*allocator);
+    resourceManagerState = std::make_unique<ModelRegistry>(*allocator);
     meshModifiersState = std::make_unique<MeshModifiers>(core.device(), *allocator, *resourceManagerState);
 
     modelUploaderState->uploadInitialModels(*resourceManagerState, *meshModifiersState);
@@ -78,11 +78,11 @@ const UniformBufferManager* SceneContext::uniformBufferManager() const {
     return uniformBufferManagerState.get();
 }
 
-ResourceManager* SceneContext::resourceManager() {
+ModelRegistry* SceneContext::resourceManager() {
     return resourceManagerState.get();
 }
 
-const ResourceManager* SceneContext::resourceManager() const {
+const ModelRegistry* SceneContext::resourceManager() const {
     return resourceManagerState.get();
 }
 
@@ -117,3 +117,4 @@ LightingSystem* SceneContext::lightingSystem() {
 const LightingSystem* SceneContext::lightingSystem() const {
     return lightingSystemState.get();
 }
+

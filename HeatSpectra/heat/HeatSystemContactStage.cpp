@@ -12,7 +12,6 @@
 #include <array>
 #include <cstring>
 #include <iostream>
-
 HeatSystemContactStage::HeatSystemContactStage(const HeatSystemStageContext& stageContext)
     : context(stageContext) {
 }
@@ -181,16 +180,6 @@ void HeatSystemContactStage::updateCouplingDescriptors(
         coupling.contactCellRangeBuffer == VK_NULL_HANDLE ||
         coupling.contactCellRangeCount == 0 ||
         !ensureParamsBuffer(coupling)) {
-        std::cerr << "[HeatSystemContactStage] updateCouplingDescriptors skipped"
-                  << " emitterRuntimeModelId=" << coupling.emitterModelId
-                  << " receiverRuntimeModelId=" << coupling.receiverModelId
-                  << " sampleBuffer=" << (coupling.contactSampleBuffer != VK_NULL_HANDLE ? "yes" : "no")
-                  << " sampleCount=" << coupling.contactSampleCount
-                  << " cellMapBuffer=" << (coupling.contactCellMapBuffer != VK_NULL_HANDLE ? "yes" : "no")
-                  << " cellMapCount=" << coupling.contactCellMapCount
-                  << " cellRangeBuffer=" << (coupling.contactCellRangeBuffer != VK_NULL_HANDLE ? "yes" : "no")
-                  << " cellRangeCount=" << coupling.contactCellRangeCount
-                  << std::endl;
         return;
     }
 
@@ -264,12 +253,6 @@ void HeatSystemContactStage::updateCouplingDescriptors(
     updateSet(coupling.contactComputeSetB, simRuntime.getTempBufferB(), simRuntime.getTempBufferBOffset());
 
     coupling.contactDescriptorsReady = true;
-    std::cerr << "[HeatSystemContactStage] updateCouplingDescriptors ready"
-              << " emitterRuntimeModelId=" << coupling.emitterModelId
-              << " receiverRuntimeModelId=" << coupling.receiverModelId
-              << " sampleCount=" << coupling.contactSampleCount
-              << " cellRangeCount=" << coupling.contactCellRangeCount
-              << std::endl;
 }
 
 void HeatSystemContactStage::dispatchCoupling(
@@ -278,12 +261,6 @@ void HeatSystemContactStage::dispatchCoupling(
     const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     bool evenSubstep) const {
     if (!coupling.contactDescriptorsReady || coupling.contactCellRangeCount == 0) {
-        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped"
-                  << " emitterRuntimeModelId=" << coupling.emitterModelId
-                  << " receiverRuntimeModelId=" << coupling.receiverModelId
-                  << " descriptorsReady=" << (coupling.contactDescriptorsReady ? "true" : "false")
-                  << " cellRangeCount=" << coupling.contactCellRangeCount
-                  << std::endl;
         return;
     }
 
@@ -291,20 +268,12 @@ void HeatSystemContactStage::dispatchCoupling(
     if (descriptorSet == VK_NULL_HANDLE ||
         context.resources.contactPipeline == VK_NULL_HANDLE ||
         context.resources.contactPipelineLayout == VK_NULL_HANDLE) {
-        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped: missing pipeline state"
-                  << " descriptorSet=" << (descriptorSet != VK_NULL_HANDLE ? "yes" : "no")
-                  << " pipeline=" << (context.resources.contactPipeline != VK_NULL_HANDLE ? "yes" : "no")
-                  << " layout=" << (context.resources.contactPipelineLayout != VK_NULL_HANDLE ? "yes" : "no")
-                  << std::endl;
         return;
     }
 
     const HeatSystemRuntime::SourceBinding* sourceBinding =
         findSourceBindingByRuntimeModelId(sourceBindings, coupling.emitterModelId);
     if (!sourceBinding || !sourceBinding->heatSource) {
-        std::cerr << "[HeatSystemContactStage] dispatchCoupling skipped: source binding missing"
-                  << " emitterRuntimeModelId=" << coupling.emitterModelId
-                  << std::endl;
         return;
     }
 
@@ -315,15 +284,6 @@ void HeatSystemContactStage::dispatchCoupling(
 
     const uint32_t workGroupSize = 256;
     const uint32_t workGroupCount = (coupling.contactCellRangeCount + workGroupSize - 1) / workGroupSize;
-
-    std::cerr << "[HeatSystemContactStage] dispatchCoupling"
-              << " couplingKind=" << pushConstant.couplingKind
-              << " emitterRuntimeModelId=" << coupling.emitterModelId
-              << " receiverRuntimeModelId=" << coupling.receiverModelId
-              << " sourceTemp=" << pushConstant.heatSourceTemperature
-              << " cellRangeCount=" << coupling.contactCellRangeCount
-              << " workGroupCount=" << workGroupCount
-              << std::endl;
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.contactPipeline);
     vkCmdPushConstants(

@@ -11,20 +11,19 @@
 #include "runtime/RuntimeRemeshTransport.hpp"
 #include "runtime/RuntimeVoronoiTransport.hpp"
 
-class ResourceManager;
+class ModelRuntime;
 class SceneController;
 struct RuntimeSyncPlan;
 
 class RuntimePackageController {
 public:
-    explicit RuntimePackageController(ResourceManager& resourceManager);
+    explicit RuntimePackageController(ModelRuntime& modelRuntime);
 
     void setRemeshTransport(RuntimeRemeshTransport* remeshTransport);
     void setHeatTransport(RuntimeHeatTransport* heatTransport);
     void setContactTransport(RuntimeContactTransport* contactTransport);
     void setVoronoiTransport(RuntimeVoronoiTransport* voronoiTransport);
     void setModelTransport(RuntimeModelTransport* modelTransport);
-    void setSceneController(SceneController* sceneController);
     void applyGeometry(uint64_t socketKey, const GeometryPackage& geometryPackage);
     void removeGeometry(uint64_t socketKey);
     void applyRemesh(uint64_t socketKey, const RemeshPackage& remeshPackage);
@@ -39,12 +38,9 @@ public:
     void syncBackendSystems();
 
 private:
-    template <typename TPackage>
-    static const TPackage* selectPackage(const std::unordered_map<uint64_t, TPackage>& packagesBySocket);
-    template <typename TPackage>
-    static std::pair<uint64_t, const TPackage*> selectPackageEntry(const std::unordered_map<uint64_t, TPackage>& packagesBySocket);
+    void flushQueuedModelOperations();
 
-    ResourceManager& resourceManager;
+    ModelRuntime& modelRuntime;
     std::unordered_map<uint64_t, uint32_t> geometryNodeModelIdBySocketKey;
     std::unordered_map<uint64_t, RemeshPackage> remeshPackagesBySocket;
     std::unordered_map<uint64_t, HeatPackage> heatPackagesBySocket;
@@ -59,25 +55,6 @@ private:
     RuntimeModelTransport* modelTransport = nullptr;
     RuntimeRemeshTransport* remeshTransport = nullptr;
     RuntimeVoronoiTransport* voronoiTransport = nullptr;
-    SceneController* sceneController = nullptr;
+    std::vector<uint64_t> pendingGeometryModelRemovals;
+    std::vector<std::pair<uint64_t, uint32_t>> pendingGeometryModelPublishes;
 };
-
-template <typename TPackage>
-const TPackage* RuntimePackageController::selectPackage(const std::unordered_map<uint64_t, TPackage>& packagesBySocket) {
-    return selectPackageEntry(packagesBySocket).second;
-}
-
-template <typename TPackage>
-std::pair<uint64_t, const TPackage*> RuntimePackageController::selectPackageEntry(
-    const std::unordered_map<uint64_t, TPackage>& packagesBySocket) {
-    const TPackage* selectedPackage = nullptr;
-    uint64_t selectedSocketKey = 0;
-    for (const auto& [socketKey, package] : packagesBySocket) {
-        if (!selectedPackage || socketKey < selectedSocketKey) {
-            selectedPackage = &package;
-            selectedSocketKey = socketKey;
-        }
-    }
-
-    return { selectedSocketKey, selectedPackage };
-}

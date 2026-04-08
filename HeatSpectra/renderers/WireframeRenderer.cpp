@@ -233,17 +233,16 @@ void WireframeRenderer::renderModels(VkCommandBuffer cmdBuffer, VkDescriptorSet 
     bindPipeline(cmdBuffer);
 
     for (uint32_t i = 0; i < itemCount; ++i) {
-        if (!items[i].model) {
+        if (!items[i].product.isValid()) {
             continue;
         }
 
-        renderModel(cmdBuffer, *items[i].model, geometryDescriptorSet, items[i].modelMatrix);
+        renderModel(cmdBuffer, items[i].product, geometryDescriptorSet);
     }
 }
 
-void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const Model& model,
-                                   VkDescriptorSet geometryDescriptorSet,
-                                   const glm::mat4& modelMatrix) {
+void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const ModelProduct& product,
+                                   VkDescriptorSet geometryDescriptorSet) {
     if (!initialized) 
         return;
     
@@ -253,19 +252,19 @@ void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const Model& mode
     
     // Push model matrix
     GeometryPushConstant pushConstant{};
-    pushConstant.modelMatrix = modelMatrix;
+    pushConstant.modelMatrix = product.modelMatrix;
     vkCmdPushConstants(cmdBuffer, pipelineLayout,
                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &pushConstant);
     
     // Bind vertex and index buffers with proper offsets
-    VkBuffer vertexBuffer = model.getRenderVertexBuffer();
-    VkDeviceSize vertexOffset = model.getRenderVertexBufferOffset();
+    VkBuffer vertexBuffer = product.renderVertexBuffer;
+    VkDeviceSize vertexOffset = product.renderVertexBufferOffset;
     vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer, &vertexOffset);
-    vkCmdBindIndexBuffer(cmdBuffer, model.getRenderIndexBuffer(), 
-                        model.getRenderIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmdBuffer, product.renderIndexBuffer,
+                        product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
     
     // Draw
-    vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(model.getRenderIndices().size()), 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmdBuffer, product.renderIndexCount, 1, 0, 0, 0);
 }
 
 void WireframeRenderer::cleanup() {

@@ -6,6 +6,7 @@
 #include "NodePanelUtils.hpp"
 #include "domain/RemeshParams.hpp"
 
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include <QHBoxLayout>
@@ -67,6 +68,26 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);
 
+    remeshOverlayCheckBox = new QCheckBox("Remesh Overlay", this);
+    layout->addWidget(remeshOverlayCheckBox);
+
+    faceNormalsCheckBox = new QCheckBox("Face Normals", this);
+    layout->addWidget(faceNormalsCheckBox);
+
+    vertexNormalsCheckBox = new QCheckBox("Vertex Normals", this);
+    layout->addWidget(vertexNormalsCheckBox);
+
+    QHBoxLayout* normalLengthRow = new QHBoxLayout();
+    normalLengthRow->addWidget(new QLabel("Normal Length:", this));
+    normalLengthSpinBox = new QDoubleSpinBox(this);
+    normalLengthSpinBox->setMinimum(0.001);
+    normalLengthSpinBox->setMaximum(10.0);
+    normalLengthSpinBox->setSingleStep(0.01);
+    normalLengthSpinBox->setDecimals(3);
+    normalLengthSpinBox->setValue(0.05);
+    normalLengthRow->addWidget(normalLengthSpinBox, 1);
+    layout->addLayout(normalLengthRow);
+
     layout->addStretch();
 
     connect(iterationsSpinBox, &QSpinBox::valueChanged, this, [this](int) {
@@ -81,6 +102,18 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     connect(stepSizeSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
         onParametersEdited();
     });
+    connect(remeshOverlayCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onParametersEdited();
+    });
+    connect(faceNormalsCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onParametersEdited();
+    });
+    connect(vertexNormalsCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onParametersEdited();
+    });
+    connect(normalLengthSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
+        onParametersEdited();
+    });
 }
 
 void NodeRemeshPanel::bind(NodeGraphBridge* bridge) {
@@ -90,12 +123,8 @@ void NodeRemeshPanel::bind(NodeGraphBridge* bridge) {
 void NodeRemeshPanel::setNode(NodeGraphNodeId nodeId) {
     currentNodeId = nodeId;
 
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
     NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
         return;
     }
 
@@ -106,10 +135,18 @@ void NodeRemeshPanel::setNode(NodeGraphNodeId nodeId) {
     const QSignalBlocker minAngleBlock(minAngleSpinBox);
     const QSignalBlocker maxEdgeBlock(maxEdgeLengthSpinBox);
     const QSignalBlocker stepBlock(stepSizeSpinBox);
+    const QSignalBlocker remeshOverlayBlock(remeshOverlayCheckBox);
+    const QSignalBlocker faceNormalsBlock(faceNormalsCheckBox);
+    const QSignalBlocker vertexNormalsBlock(vertexNormalsCheckBox);
+    const QSignalBlocker normalLengthBlock(normalLengthSpinBox);
     iterationsSpinBox->setValue(NodePanelUtils::readIntParam(node, nodegraphparams::remesh::Iterations, defaults.iterations));
     minAngleSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, defaults.minAngleDegrees));
     maxEdgeLengthSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, defaults.maxEdgeLength));
     stepSizeSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::StepSize, defaults.stepSize));
+    remeshOverlayCheckBox->setChecked(NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowRemeshOverlay, false));
+    faceNormalsCheckBox->setChecked(NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowFaceNormals, false));
+    vertexNormalsCheckBox->setChecked(NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowVertexNormals, false));
+    normalLengthSpinBox->setValue(NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::NormalLength, 0.05));
     syncingFromNode = false;
 }
 
@@ -118,7 +155,7 @@ void NodeRemeshPanel::setStatusSink(std::function<void(const QString&)> sink) {
 }
 
 bool NodeRemeshPanel::writeParameters() {
-    if (!nodeGraphBridge) {
+    if (!NodePanelUtils::canEditNode(nodeGraphBridge, currentNodeId)) {
         setStatus("Cannot update settings for this node");
         return false;
     }
@@ -126,7 +163,11 @@ bool NodeRemeshPanel::writeParameters() {
     if (!NodePanelUtils::writeIntParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::Iterations, iterationsSpinBox->value()) ||
         !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::MinAngleDegrees, minAngleSpinBox->value()) ||
         !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::MaxEdgeLength, maxEdgeLengthSpinBox->value()) ||
-        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::StepSize, stepSizeSpinBox->value())) {
+        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::StepSize, stepSizeSpinBox->value()) ||
+        !NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::ShowRemeshOverlay, remeshOverlayCheckBox->isChecked()) ||
+        !NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::ShowFaceNormals, faceNormalsCheckBox->isChecked()) ||
+        !NodePanelUtils::writeBoolParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::ShowVertexNormals, vertexNormalsCheckBox->isChecked()) ||
+        !NodePanelUtils::writeFloatParam(nodeGraphBridge, currentNodeId, nodegraphparams::remesh::NormalLength, normalLengthSpinBox->value())) {
         setStatus("Failed to update remesh settings");
         return false;
     }

@@ -17,10 +17,9 @@
 
 class VulkanDevice;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class CommandPool;
-class ContactPreviewStore;
 class RenderRuntime;
 class HeatSystem;
 
@@ -72,38 +71,46 @@ public:
     HeatSystemController(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         UniformBufferManager& uniformBufferManager,
         CommandPool& renderCommandPool,
         uint32_t maxFramesInFlight);
 
-    bool isHeatSystemActive() const;
-    bool isHeatSystemPaused() const;
+    bool isAnyHeatSystemActive() const;
+    bool isAnyHeatSystemPaused() const;
+    bool isHeatSystemActive(uint64_t socketKey) const;
+    bool isHeatSystemPaused(uint64_t socketKey) const;
 
-    void configure(const Config& config);
-    void disable();
-    void setContactPreviewStore(ContactPreviewStore* contactPreviewStore);
-    HeatSystem* getHeatSystem() const;
+    void configure(uint64_t socketKey, const Config& config);
+    void disable(uint64_t socketKey);
+    void disableAll();
+    HeatSystem* getHeatSystem(uint64_t socketKey) const;
+    std::vector<HeatSystem*> getActiveSystems() const;
 
     void createHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void recreateHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void destroyHeatSystem();
+    void updateRenderContext(VkExtent2D extent, VkRenderPass renderPass);
+    void updateRenderResources();
+    void destroyHeatSystem(uint64_t socketKey);
 
 private:
-    std::unique_ptr<HeatSystem> buildHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void configureHeatSystem(HeatSystem& system);
+    struct SystemInstance {
+        HeatSystemResources resources;
+        std::unique_ptr<HeatSystem> system;
+    };
+
+    std::unique_ptr<HeatSystem> buildHeatSystem(HeatSystemResources& heatSystemResources, VkExtent2D extent, VkRenderPass renderPass);
+    void configureHeatSystem(HeatSystem& system, const Config& config);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
 
-    std::unique_ptr<HeatSystem> heatSystem;
-    HeatSystemResources heatSystemResources;
-    Config configuredConfig{};
-    bool hasConfiguredHeatConfig = false;
-    ContactPreviewStore* contactPreviewStore = nullptr;
+    std::unordered_map<uint64_t, SystemInstance> activeSystems;
+    std::unordered_map<uint64_t, Config> configuredConfigs;
     const uint32_t maxFramesInFlight;
+    VkExtent2D currentExtent = {0, 0};
+    VkRenderPass currentRenderPass = VK_NULL_HANDLE;
 };
 

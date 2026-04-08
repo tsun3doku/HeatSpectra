@@ -7,6 +7,7 @@
 #include <functional>
 
 class NodeGraphBridge;
+class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -30,6 +31,7 @@ private:
 
     QLineEdit* pathLineEdit = nullptr;
     QPushButton* browseButton = nullptr;
+    QCheckBox* wireframeCheckBox = nullptr;
 
     std::function<void(const QString&)> statusSink;
 };

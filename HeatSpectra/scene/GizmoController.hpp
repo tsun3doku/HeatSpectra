@@ -1,9 +1,9 @@
-﻿#pragma once
+#pragma once
 
 #include <glm/glm.hpp>
 
 class ModelSelection;
-class ResourceManager;
+class ModelRegistry;
 
 enum class GizmoAxis {
     None = 0,
@@ -49,7 +49,7 @@ public:
     glm::vec3 calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
     float calculateRotationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
 
-    glm::vec3 calculateGizmoPosition(ResourceManager& resourceManager, const ModelSelection& modelSelection);
+    glm::vec3 calculateGizmoPosition(ModelRegistry& resourceManager, const ModelSelection& modelSelection);
 
 private:
     GizmoMode currentMode = GizmoMode::Translate;
@@ -60,3 +60,4 @@ private:
     glm::vec3 dragStartRayDir = glm::vec3(0.0f);
     glm::vec3 dragStartIntersection = glm::vec3(0.0f);
 };
+

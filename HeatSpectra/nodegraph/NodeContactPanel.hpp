@@ -7,6 +7,7 @@
 #include <functional>
 
 class NodeGraphBridge;
+class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QString;
@@ -32,6 +33,7 @@ private:
     QLabel* receiverLabel = nullptr;
     QDoubleSpinBox* minNormalDotSpin = nullptr;
     QDoubleSpinBox* contactRadiusSpin = nullptr;
+    QCheckBox* showContactLinesCheckBox = nullptr;
 
     std::function<void(const QString&)> statusSink;
 };

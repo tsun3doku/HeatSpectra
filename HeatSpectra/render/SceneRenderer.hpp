@@ -14,10 +14,9 @@
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
-class Model;
 class UniformBufferManager;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class FrameGraph;
 class VulkanDevice;
 class CommandPool;
@@ -53,7 +52,7 @@ inline const auto& clearColorValues = clearColorLinear;
 
 class SceneRenderer {
 public:
-    SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
+    SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& frameGraphRuntime, ModelRegistry& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool);
     ~SceneRenderer();
 
     void resize(VkExtent2D extent);
@@ -111,7 +110,7 @@ private:
     MemoryAllocator& memoryAllocator;
     FrameGraph& frameGraph;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
 
@@ -132,3 +131,4 @@ private:
     std::vector<VkCommandBuffer> gbufferCommandBuffers;
     bool ready = false;
 };
+

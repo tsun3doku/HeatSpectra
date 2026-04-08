@@ -23,13 +23,13 @@ bool RuntimeController::initialize(
         return true;
     }
 
-    if (!render.heatSystemController() || !render.sceneController() || !render.nodeGraphBridge() || !render.nodeGraphController()) {
+    if (!render.heatSystemController() || !render.modelRuntime() || !render.sceneController() || !render.nodeGraphBridge() || !render.nodeGraphController()) {
         return false;
     }
 
     runtimeSimulationController = std::make_unique<RuntimeSimulationController>(
         *render.heatSystemController(),
-        *render.sceneController(),
+        *render.modelRuntime(),
         *render.nodeGraphController(),
         settingsManager);
 

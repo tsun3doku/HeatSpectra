@@ -1,5 +1,7 @@
 #include "FrameController.hpp"
 
+#include "contact/ContactSystemController.hpp"
+#include "contact/ContactSystem.hpp"
 #include "scene/CameraController.hpp"
 #include "util/ComputeTiming.hpp"
 #include "FrameStats.hpp"
@@ -8,7 +10,9 @@
 #include "app/SwapchainManager.hpp"
 #include "VkFrameGraphBackend.hpp"
 #include "heat/HeatSystem.hpp"
+#include "heat/HeatSystemController.hpp"
 #include "heat/VoronoiSystem.hpp"
+#include "heat/VoronoiSystemController.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/WindowRuntimeState.hpp"
 
@@ -36,8 +40,9 @@ FrameController::FrameController(
       computeTiming(computeTiming),
       frameStats(frameStats),
       cameraController(cameraController),
-      heatSystem(services.heatSystem),
-      voronoiSystem(services.voronoiSystem),
+      heatSystemController(services.heatSystemController),
+      contactSystemController(services.contactSystemController),
+      voronoiSystemController(services.voronoiSystemController),
       isOperating(isOperating),
       isShuttingDown(isShuttingDown),
       swapchainStage(
@@ -48,8 +53,9 @@ FrameController::FrameController(
           frameGraphBackend,
           sceneRenderer,
           frameSync,
-          heatSystem,
-          voronoiSystem,
+          heatSystemController,
+          contactSystemController,
+          voronoiSystemController,
           isShuttingDown),
       frameUpdateStage(
           services.inputController,
@@ -121,6 +127,10 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
     std::vector<std::string> timingLines = buildFrameTimingLines(frameState.frameIndex);
     frameUpdateStage.processPicking(frameState.frameIndex);
 
+    std::vector<HeatSystem*> currentHeatSystems = heatSystemController ? heatSystemController->getActiveSystems() : std::vector<HeatSystem*>{};
+    std::vector<VoronoiSystem*> currentVoronoiSystems = voronoiSystemController ? voronoiSystemController->getActiveSystems() : std::vector<VoronoiSystem*>{};
+    std::vector<ContactSystem*> currentContactSystems = contactSystemController ? contactSystemController->getActiveSystems() : std::vector<ContactSystem*>{};
+
     frameState.extent = swapchainManager.getExtent();
     frameState.imageIndex = imageIndex;
     frameState.sceneView = cameraController.buildSceneView(frameState.extent);
@@ -129,13 +139,13 @@ void FrameController::drawFrame(const render::RenderFlags& flags, const render::
     frameUpdateStage.updateFrameState(frameState.frameIndex, frameState.sceneView);
 
     FrameSyncState syncState{};
-    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, heatSystem, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, currentHeatSystems, syncState, allowHeatSolve))) {
         return;
     }
 
     updateTimingOverlay(timingLines, frameState.flags);
 
-    if (!handleStageResult(frameGraphicsStage.execute(frameState, heatSystem, voronoiSystem, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameGraphicsStage.execute(frameState, currentHeatSystems, currentVoronoiSystems, currentContactSystems, syncState, allowHeatSolve))) {
         return;
     }
 
@@ -187,4 +197,3 @@ bool FrameController::handleStageResult(FrameStageResult result) {
 
     return false;
 }
-

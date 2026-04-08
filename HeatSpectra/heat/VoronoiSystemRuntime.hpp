@@ -18,7 +18,7 @@
 class CommandPool;
 class MemoryAllocator;
 class PointRenderer;
-class ResourceManager;
+class ModelRegistry;
 class VulkanDevice;
 class VoronoiCandidateCompute;
 class VoronoiGeoCompute;

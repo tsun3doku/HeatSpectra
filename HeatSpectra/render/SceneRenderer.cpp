@@ -8,7 +8,7 @@
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/FrameGraphResources.hpp"
 #include "vulkan/CommandBufferManager.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "SceneRenderer.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
@@ -68,7 +68,7 @@ void recordComputeToGraphicsBarrier(VkCommandBuffer commandBuffer, VkPipelineSta
 }
 }
 
-SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& runtime, ResourceManager& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
+SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, FrameGraph& graph, VkFrameGraphRuntime& runtime, ModelRegistry& manager, UniformBufferManager& ubo, uint32_t framesInFlight, CommandPool& commandPool)
     : vulkanDevice(device),
       memoryAllocator(allocator),
       frameGraph(graph),
@@ -605,4 +605,5 @@ bool SceneRenderer::getGpuTimingStats(uint32_t frameIndex, GpuTimingStats& outSt
 
     return true;
 }
+
 

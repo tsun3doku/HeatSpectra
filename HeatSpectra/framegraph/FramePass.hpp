@@ -7,6 +7,7 @@
 
 class HeatSystem;
 class VoronoiSystem;
+class ContactSystem;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
@@ -37,8 +38,9 @@ struct OverlayParams {
 };
 
 struct RenderServices {
-    HeatSystem* heatSystem = nullptr;
-    VoronoiSystem* voronoiSystem = nullptr;
+    std::vector<HeatSystem*> heatSystems;
+    std::vector<VoronoiSystem*> voronoiSystems;
+    std::vector<ContactSystem*> contactSystems;
     ModelSelection* modelSelection = nullptr;
     GizmoController* gizmoController = nullptr;
     WireframeRenderer* wireframeRenderer = nullptr;

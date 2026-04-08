@@ -3,14 +3,14 @@
 #include "VoronoiSystem.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 VoronoiSystemController::VoronoiSystemController(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ResourceManager& resourceManager,
+    ModelRegistry& resourceManager,
     UniformBufferManager& uniformBufferManager,
     CommandPool& renderCommandPool,
     uint32_t maxFramesInFlight)
@@ -40,72 +40,119 @@ std::unique_ptr<VoronoiSystem> VoronoiSystemController::buildVoronoiSystem(VkExt
 }
 
 void VoronoiSystemController::createVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass) {
-    voronoiSystem = buildVoronoiSystem(extent, renderPass);
+    currentExtent = extent;
+    currentRenderPass = renderPass;
 }
 
-void VoronoiSystemController::recreateVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass) {
-    if (voronoiSystem) {
-        voronoiSystem->cleanupResources();
-        voronoiSystem->cleanup();
-        voronoiSystem.reset();
+void VoronoiSystemController::updateRenderContext(VkExtent2D extent, VkRenderPass renderPass) {
+    currentExtent = extent;
+    currentRenderPass = renderPass;
+}
+
+void VoronoiSystemController::updateRenderResources() {
+    for (auto& [socketKey, system] : voronoiSystems) {
+        if (system) {
+            system->updateRenderResources(currentRenderPass);
+        }
     }
-
-    voronoiSystem = buildVoronoiSystem(extent, renderPass);
 }
 
-void VoronoiSystemController::configure(const Config& config) {
-    configuredConfig = config;
-    if (!voronoiSystem) {
+void VoronoiSystemController::configure(uint64_t socketKey, const Config& config) {
+    if (socketKey == 0) {
         return;
     }
 
-    voronoiSystem->setReceiverPayloads(
-        configuredConfig.receiverNodeModelIds,
-        configuredConfig.receiverGeometryPositions,
-        configuredConfig.receiverGeometryTriangleIndices,
-        configuredConfig.receiverIntrinsicMeshes,
-        configuredConfig.receiverSurfaceVertices,
-        configuredConfig.receiverIntrinsicTriangleIndices,
-        configuredConfig.receiverRuntimeModelIds,
-        configuredConfig.meshVertexBuffers,
-        configuredConfig.meshVertexBufferOffsets,
-        configuredConfig.meshIndexBuffers,
-        configuredConfig.meshIndexBufferOffsets,
-        configuredConfig.meshIndexCounts,
-        configuredConfig.meshModelMatrices,
-        configuredConfig.supportingHalfedgeViews,
-        configuredConfig.supportingAngleViews,
-        configuredConfig.halfedgeViews,
-        configuredConfig.edgeViews,
-        configuredConfig.triangleViews,
-        configuredConfig.lengthViews,
-        configuredConfig.inputHalfedgeViews,
-        configuredConfig.inputEdgeViews,
-        configuredConfig.inputTriangleViews,
-        configuredConfig.inputLengthViews);
-    voronoiSystem->setParams(configuredConfig.params);
-    voronoiSystem->ensureConfigured();
+    configuredConfigs[socketKey] = config;
+    auto& system = voronoiSystems[socketKey];
+    if (!system && currentRenderPass != VK_NULL_HANDLE) {
+        system = buildVoronoiSystem(currentExtent, currentRenderPass);
+    }
+
+    if (system) {
+        system->setReceiverPayloads(
+            config.receiverNodeModelIds,
+            config.receiverGeometryPositions,
+            config.receiverGeometryTriangleIndices,
+            config.receiverIntrinsicMeshes,
+            config.receiverSurfaceVertices,
+            config.receiverIntrinsicTriangleIndices,
+            config.receiverRuntimeModelIds,
+            config.meshVertexBuffers,
+            config.meshVertexBufferOffsets,
+            config.meshIndexBuffers,
+            config.meshIndexBufferOffsets,
+            config.meshIndexCounts,
+            config.meshModelMatrices,
+            config.supportingHalfedgeViews,
+            config.supportingAngleViews,
+            config.halfedgeViews,
+            config.edgeViews,
+            config.triangleViews,
+            config.lengthViews,
+            config.inputHalfedgeViews,
+            config.inputEdgeViews,
+            config.inputTriangleViews,
+            config.inputLengthViews);
+        system->setParams(config.params);
+        system->ensureConfigured();
+    }
 }
 
-void VoronoiSystemController::disable() {
-    configuredConfig = {};
-    if (!voronoiSystem) {
+void VoronoiSystemController::disable(uint64_t socketKey) {
+    if (socketKey == 0) {
         return;
     }
 
-    voronoiSystem->clearReceiverPayloads();
+    configuredConfigs.erase(socketKey);
+    auto it = voronoiSystems.find(socketKey);
+    if (it != voronoiSystems.end()) {
+        if (it->second) {
+            it->second->cleanupResources();
+            it->second->cleanup();
+        }
+        voronoiSystems.erase(it);
+    }
 }
 
-VoronoiSystem* VoronoiSystemController::getVoronoiSystem() const {
-    return voronoiSystem.get();
+void VoronoiSystemController::disableAll() {
+    configuredConfigs.clear();
+    for (auto& [key, system] : voronoiSystems) {
+        if (system) {
+            system->cleanupResources();
+            system->cleanup();
+        }
+    }
+    voronoiSystems.clear();
 }
 
-bool VoronoiSystemController::exportProduct(VoronoiProduct& outProduct) const {
+VoronoiSystem* VoronoiSystemController::getVoronoiSystem(uint64_t socketKey) const {
+    const auto it = voronoiSystems.find(socketKey);
+    if (it != voronoiSystems.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+std::vector<VoronoiSystem*> VoronoiSystemController::getActiveSystems() const {
+    std::vector<VoronoiSystem*> activeSystems;
+    activeSystems.reserve(voronoiSystems.size());
+    for (const auto& [key, system] : voronoiSystems) {
+        if (system && system->isReady()) {
+            activeSystems.push_back(system.get());
+        }
+    }
+    return activeSystems;
+}
+
+bool VoronoiSystemController::exportProduct(uint64_t socketKey, VoronoiProduct& outProduct) const {
     outProduct = {};
 
-    if (!voronoiSystem || !voronoiSystem->isReady()) {
+    const auto it = voronoiSystems.find(socketKey);
+    if (it == voronoiSystems.end() || !it->second || !it->second->isReady()) {
         return false;
     }
+
+    const auto& voronoiSystem = it->second;
 
     outProduct.nodeCount = voronoiSystem->getVoronoiNodeCount();
 
@@ -148,5 +195,8 @@ bool VoronoiSystemController::exportProduct(VoronoiProduct& outProduct) const {
         outProduct.receiverProducts.push_back(std::move(receiverProduct));
     }
 
+    outProduct.contentHash = computeContentHash(outProduct);
+
     return outProduct.isValid();
 }
+

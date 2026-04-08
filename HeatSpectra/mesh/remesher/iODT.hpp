@@ -82,7 +82,7 @@ private:
     
     // Tracks which input face was used during vertex resolution
     std::unordered_map<uint32_t, uint32_t> vertexResolutionFaces;
-    
+
     std::unique_ptr<CommonSubdivision> commonSubdivision;   
     std::unique_ptr<SupportingHalfedge> supportingHalfedge; 
 };

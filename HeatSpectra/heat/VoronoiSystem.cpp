@@ -4,7 +4,7 @@
 #include "renderers/VoronoiRenderer.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -21,7 +21,7 @@
 VoronoiSystem::VoronoiSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ResourceManager& resourceManager,
+    ModelRegistry& resourceManager,
     UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
     CommandPool& renderCommandPool,
@@ -218,38 +218,9 @@ bool VoronoiSystem::prepareVoronoiRuntime() {
     return prepared;
 }
 
-void VoronoiSystem::recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass) {
-    (void)extent;
-    this->maxFramesInFlight = maxFramesInFlight;
-
-    VoronoiSystemResources& resources = runtime.resourcesRef();
-    if (runtime.isSeederReady()) {
-        if (resources.surfaceDescriptorPool != VK_NULL_HANDLE) {
-            vkResetDescriptorPool(vulkanDevice.getDevice(), resources.surfaceDescriptorPool, 0);
-        }
-    }
-
+void VoronoiSystem::updateRenderResources(VkRenderPass renderPass) {
     initializeVoronoiRenderer(renderPass, maxFramesInFlight);
     initializePointRenderer(renderPass, maxFramesInFlight);
-    if (runtime.isSeederReady()) {
-        if (resources.surfacePipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(vulkanDevice.getDevice(), resources.surfacePipeline, nullptr);
-            resources.surfacePipeline = VK_NULL_HANDLE;
-        }
-        if (resources.surfacePipelineLayout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(vulkanDevice.getDevice(), resources.surfacePipelineLayout, nullptr);
-            resources.surfacePipelineLayout = VK_NULL_HANDLE;
-        }
-        if (resources.surfaceDescriptorSetLayout != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(vulkanDevice.getDevice(), resources.surfaceDescriptorSetLayout, nullptr);
-            resources.surfaceDescriptorSetLayout = VK_NULL_HANDLE;
-        }
-
-        if (!createSurfaceDescriptorSetLayout() || !createSurfacePipeline()) {
-            std::cerr << "[VoronoiSystem] Failed to recreate surface resources" << std::endl;
-            return;
-        }
-    }
 }
 
 void VoronoiSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
@@ -340,3 +311,4 @@ void VoronoiSystem::cleanup() {
     surfaceRuntime.cleanup();
     runtime.cleanup(memoryAllocator);
 }
+

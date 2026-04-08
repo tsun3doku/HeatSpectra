@@ -3,28 +3,13 @@
 #include "HeatReceiverRuntime.hpp"
 #include "HeatSourceRuntime.hpp"
 #include "runtime/HeatOverlayData.hpp"
-#include "renderers/ContactLineRenderer.hpp"
 #include "renderers/HeatReceiverRenderer.hpp"
 #include "renderers/HeatSourceRenderer.hpp"
 #include "scene/Model.hpp"
-#include "vulkan/ResourceManager.hpp"
-
-#include <glm/glm.hpp>
+#include "vulkan/ModelRegistry.hpp"
 
 HeatSystemRenderStage::HeatSystemRenderStage(const HeatSystemStageContext& stageContext)
     : context(stageContext) {
-}
-
-void HeatSystemRenderStage::renderContactLines(
-    VkCommandBuffer cmdBuffer,
-    uint32_t frameIndex,
-    VkExtent2D extent,
-    ContactLineRenderer* contactLineRenderer) const {
-    if (!contactLineRenderer) {
-        return;
-    }
-
-    contactLineRenderer->render(cmdBuffer, frameIndex, glm::mat4(1.0f), extent);
 }
 
 void HeatSystemRenderStage::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex,
@@ -70,3 +55,4 @@ void HeatSystemRenderStage::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_
         heatReceiverRenderer->render(cmdBuffer, frameIndex, receiverRenderBindings, context.resourceManager);
     }
 }
+

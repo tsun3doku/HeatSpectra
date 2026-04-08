@@ -6,10 +6,9 @@
 #include "nodegraph/NodePayloadRegistry.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "runtime/RuntimeProductRegistry.hpp"
-#include "scene/SceneController.hpp"
-
 #include <algorithm>
 #include <limits>
+#include <iostream>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -21,6 +20,12 @@ static uint64_t buildGeometryPackageHash(const GeometryPackage& package) {
     NodeGraphHash::combine(hash, 1u);
     NodeGraphHash::combine(hash, package.geometry.payloadHash);
     return hash;
+}
+
+static void combineProductHandleHash(uint64_t& hash, const ProductHandle& handle) {
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
+    NodeGraphHash::combine(hash, handle.outputSocketKey);
+    NodeGraphHash::combine(hash, handle.outputRevision);
 }
 
 static uint64_t buildRemeshPackageHash(const RemeshPackage& package) {
@@ -40,13 +45,11 @@ static uint64_t buildVoronoiPackageHash(const VoronoiPackage& package) {
     NodeGraphHash::combine(hash, package.authored.payloadHash);
     NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverModelProducts.size()));
     for (const ProductHandle& handle : package.receiverModelProducts) {
-        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
-        NodeGraphHash::combine(hash, handle.outputSocketKey);
+        combineProductHandleHash(hash, handle);
     }
     NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProducts.size()));
     for (const ProductHandle& handle : package.receiverRemeshProducts) {
-        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
-        NodeGraphHash::combine(hash, handle.outputSocketKey);
+        combineProductHandleHash(hash, handle);
     }
     return hash;
 }
@@ -55,10 +58,8 @@ static uint64_t buildContactPackageHash(const ContactPackage& package) {
     uint64_t hash = NodeGraphHash::start();
     NodeGraphHash::combine(hash, 4u);
     NodeGraphHash::combine(hash, package.authored.payloadHash);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.emitterRemeshProduct.type));
-    NodeGraphHash::combine(hash, package.emitterRemeshProduct.outputSocketKey);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProduct.type));
-    NodeGraphHash::combine(hash, package.receiverRemeshProduct.outputSocketKey);
+    combineProductHandleHash(hash, package.emitterRemeshProduct);
+    combineProductHandleHash(hash, package.receiverRemeshProduct);
     return hash;
 }
 
@@ -66,19 +67,15 @@ static uint64_t buildHeatPackageHash(const HeatPackage& package) {
     uint64_t hash = NodeGraphHash::start();
     NodeGraphHash::combine(hash, 5u);
     NodeGraphHash::combine(hash, package.authored.payloadHash);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.voronoiProduct.type));
-    NodeGraphHash::combine(hash, package.voronoiProduct.outputSocketKey);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.contactProduct.type));
-    NodeGraphHash::combine(hash, package.contactProduct.outputSocketKey);
+    combineProductHandleHash(hash, package.voronoiProduct);
+    combineProductHandleHash(hash, package.contactProduct);
     NodeGraphHash::combine(hash, static_cast<uint64_t>(package.sourceRemeshProducts.size()));
     for (const ProductHandle& handle : package.sourceRemeshProducts) {
-        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
-        NodeGraphHash::combine(hash, handle.outputSocketKey);
+        combineProductHandleHash(hash, handle);
     }
     NodeGraphHash::combine(hash, static_cast<uint64_t>(package.receiverRemeshProducts.size()));
     for (const ProductHandle& handle : package.receiverRemeshProducts) {
-        NodeGraphHash::combine(hash, static_cast<uint64_t>(handle.type));
-        NodeGraphHash::combine(hash, handle.outputSocketKey);
+        combineProductHandleHash(hash, handle);
     }
     return hash;
 }
@@ -211,10 +208,6 @@ ProductHandle resolveHeatContactInput(
 
 }
 
-void RuntimePackageCompiler::setSceneController(SceneController* updatedSceneController) {
-    sceneController = updatedSceneController;
-}
-
 void RuntimePackageCompiler::setRuntimeBridge(const NodeGraphRuntimeBridge* updatedRuntimeBridge) {
     runtimeBridge = updatedRuntimeBridge;
 }
@@ -226,10 +219,6 @@ void RuntimePackageCompiler::setRuntimeProductRegistry(const RuntimeProductRegis
 GeometryPackage RuntimePackageCompiler::buildGeometryPackage(uint64_t socketKey, const GeometryData& geometry) const {
     GeometryPackage package{};
     package.geometry = geometry;
-    if (socketKey != 0) {
-        package.modelProduct.type = NodeProductType::Model;
-        package.modelProduct.outputSocketKey = socketKey;
-    }
     package.packageHash = buildGeometryPackageHash(package);
     return package;
 }
@@ -265,10 +254,16 @@ VoronoiPackage RuntimePackageCompiler::buildVoronoiPackage(const NodePayloadRegi
 
     package.receiverModelProducts.reserve(voronoi.receiverMeshHandles.size());
     package.receiverRemeshProducts.reserve(voronoi.receiverMeshHandles.size());
+    package.receiverGeometries.reserve(voronoi.receiverMeshHandles.size());
 
     std::set<NodeDataHandle> seenMeshHandles;
     for (const NodeDataHandle& meshHandle : voronoi.receiverMeshHandles) {
         if (!seenMeshHandles.insert(meshHandle).second) {
+            continue;
+        }
+
+        const std::optional<GeometryData> receiverGeometry = geometryFromHandle(payloadRegistry, meshHandle);
+        if (!receiverGeometry.has_value()) {
             continue;
         }
 
@@ -278,6 +273,7 @@ VoronoiPackage RuntimePackageCompiler::buildVoronoiPackage(const NodePayloadRegi
             continue;
         }
 
+        package.receiverGeometries.push_back(*receiverGeometry);
         package.receiverModelProducts.push_back(modelProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, meshHandle));
         package.receiverRemeshProducts.push_back(receiverRemeshProduct);
     }
@@ -301,6 +297,8 @@ HeatPackage RuntimePackageCompiler::buildHeatPackage(
     }
 
     std::unordered_set<uint64_t> seenSourceRemeshSocketKeys;
+    std::set<NodeDataHandle> seenSourceHandles;
+    package.sourceGeometries.reserve(heat.sourceHandles.size());
     package.sourceRemeshProducts.reserve(heat.sourceHandles.size());
     package.sourceTemperatures.reserve(heat.sourceHandles.size());
     for (const NodeDataHandle& sourceHandle : heat.sourceHandles) {
@@ -310,6 +308,14 @@ HeatPackage RuntimePackageCompiler::buildHeatPackage(
 
         const HeatSourceData* heatSource = payloadRegistry->get<HeatSourceData>(sourceHandle);
         if (!heatSource || heatSource->meshHandle.key == 0) {
+            continue;
+        }
+        if (!seenSourceHandles.insert(heatSource->meshHandle).second) {
+            continue;
+        }
+
+        const std::optional<GeometryData> sourceGeometry = geometryFromHandle(payloadRegistry, heatSource->meshHandle);
+        if (!sourceGeometry.has_value()) {
             continue;
         }
 
@@ -322,14 +328,21 @@ HeatPackage RuntimePackageCompiler::buildHeatPackage(
             continue;
         }
 
+        package.sourceGeometries.push_back(*sourceGeometry);
         package.sourceRemeshProducts.push_back(sourceRemeshProduct);
         package.sourceTemperatures.push_back(heatSource->temperature);
     }
 
     std::set<NodeDataHandle> seenReceiverHandles;
+    package.receiverGeometries.reserve(heat.receiverMeshHandles.size());
     package.receiverRemeshProducts.reserve(heat.receiverMeshHandles.size());
     for (const NodeDataHandle& meshHandle : heat.receiverMeshHandles) {
         if (!seenReceiverHandles.insert(meshHandle).second) {
+            continue;
+        }
+
+        const std::optional<GeometryData> receiverGeometry = geometryFromHandle(payloadRegistry, meshHandle);
+        if (!receiverGeometry.has_value()) {
             continue;
         }
 
@@ -339,10 +352,12 @@ HeatPackage RuntimePackageCompiler::buildHeatPackage(
             continue;
         }
 
+        package.receiverGeometries.push_back(*receiverGeometry);
         package.receiverRemeshProducts.push_back(receiverRemeshProduct);
     }
 
     package.runtimeThermalMaterials = buildRuntimeThermalMaterials(
+        package.receiverGeometries,
         package.receiverRemeshProducts,
         heat.materialBindings);
 
@@ -358,8 +373,7 @@ ContactPackage RuntimePackageCompiler::buildContactPackage(const NodePayloadRegi
     }
 
     const ContactPairData& pair = contact.pair;
-    if (!pair.hasValidContact ||
-        pair.endpointA.meshHandle.key == 0 ||
+    if (pair.endpointA.meshHandle.key == 0 ||
         pair.endpointB.meshHandle.key == 0 ||
         pair.endpointA.meshHandle == pair.endpointB.meshHandle) {
         return package;
@@ -374,6 +388,14 @@ ContactPackage RuntimePackageCompiler::buildContactPackage(const NodePayloadRegi
         ? pair.endpointB
         : pair.endpointA;
 
+    const std::optional<GeometryData> emitterGeometry = geometryFromHandle(payloadRegistry, emitterEndpoint.meshHandle);
+    const std::optional<GeometryData> receiverGeometry = geometryFromHandle(payloadRegistry, receiverEndpoint.meshHandle);
+    if (!emitterGeometry.has_value() || !receiverGeometry.has_value()) {
+        return package;
+    }
+
+    package.emitterGeometry = *emitterGeometry;
+    package.receiverGeometry = *receiverGeometry;
     package.emitterRemeshProduct = remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, emitterEndpoint.meshHandle);
     package.receiverRemeshProduct = remeshProductFromHandle(runtimeBridge, payloadRegistry, runtimeProductRegistry, receiverEndpoint.meshHandle);
 
@@ -562,6 +584,7 @@ bool RuntimePackageCompiler::tryParseHeatMaterialModelId(const std::string& valu
 }
 
 std::vector<RuntimeThermalMaterial> RuntimePackageCompiler::buildRuntimeThermalMaterials(
+    const std::vector<GeometryData>& receiverGeometries,
     const std::vector<ProductHandle>& receiverRemeshProducts,
     const std::vector<HeatMaterialBindingEntry>& materialBindings) const {
     std::unordered_map<uint32_t, HeatMaterialPresetId> presetByNodeModelId;
@@ -578,7 +601,9 @@ std::vector<RuntimeThermalMaterial> RuntimePackageCompiler::buildRuntimeThermalM
     std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
     runtimeThermalMaterials.reserve(receiverRemeshProducts.size());
     std::unordered_set<uint32_t> seenRuntimeModelIds;
-    for (const ProductHandle& remeshProductHandle : receiverRemeshProducts) {
+    const size_t receiverCount = std::min(receiverGeometries.size(), receiverRemeshProducts.size());
+    for (size_t index = 0; index < receiverCount; ++index) {
+        const ProductHandle& remeshProductHandle = receiverRemeshProducts[index];
         if (!runtimeProductRegistry) {
             continue;
         }
@@ -588,7 +613,7 @@ std::vector<RuntimeThermalMaterial> RuntimePackageCompiler::buildRuntimeThermalM
             continue;
         }
 
-        const GeometryData& geometry = remeshProduct->geometry;
+        const GeometryData& geometry = receiverGeometries[index];
         const uint32_t runtimeModelId = remeshProduct->runtimeModelId;
         if (geometry.modelId == 0 || runtimeModelId == 0) {
             continue;

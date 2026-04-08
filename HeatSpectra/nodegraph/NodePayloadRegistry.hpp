@@ -26,7 +26,6 @@ public:
         entry.type = std::type_index(typeid(T));
         entry.revision = revisionCounter.fetch_add(1, std::memory_order_relaxed);
         entry.count = static_cast<uint32_t>(inferCount(*static_cast<T*>(entry.payload.get())));
-
         entries[key] = entry;
         NodeDataHandle handle{};
         handle.key = key;

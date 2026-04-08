@@ -16,13 +16,16 @@
 #include "mesh/MeshModifiers.hpp"
 #include "scene/ModelSelection.hpp"
 #include "RenderConfig.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "SceneRenderer.hpp"
 #include "app/SwapchainManager.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "renderers/WireframeRenderer.hpp"
+#include "contact/ContactSystemController.hpp"
+
+#include <iostream>
 
 RenderRuntime::RenderRuntime(
     const WindowRuntimeState& windowState,
@@ -45,7 +48,7 @@ RenderRuntime::RenderRuntime(
 
 RenderRuntime::~RenderRuntime() = default;
 
-bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ResourceManager& resourceManager, UniformBufferManager& ubo) {
+bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& resourceManager, UniformBufferManager& ubo) {
     if (swapChainFormat == VK_FORMAT_UNDEFINED || extent.width == 0 || extent.height == 0) {
         return false;
     }
@@ -123,8 +126,9 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
         services.resourceManager,
         services.meshModifiers,
         services.uniformBufferManager,
-        services.heatSystem,
-        services.voronoiSystem,
+        services.heatSystemController,
+        services.contactSystemController,
+        services.voronoiSystemController,
         *modelSelection,
         *gizmoController,
         *wireframeRenderer,

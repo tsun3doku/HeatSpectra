@@ -19,6 +19,7 @@ inline constexpr const char* Custom = "custom";
 namespace nodegraphparams {
 namespace model {
 constexpr uint32_t Path = 1;
+constexpr uint32_t ShowWireframe = 2;
 }
 
 namespace transform {
@@ -53,6 +54,10 @@ constexpr uint32_t MinAngleDegrees = 2;
 constexpr uint32_t MaxEdgeLength = 3;
 constexpr uint32_t StepSize = 4;
 constexpr uint32_t RunRequested = 5;
+constexpr uint32_t ShowRemeshOverlay = 6;
+constexpr uint32_t ShowFaceNormals = 7;
+constexpr uint32_t ShowVertexNormals = 8;
+constexpr uint32_t NormalLength = 9;
 }
 
 namespace heatsolve {
@@ -62,16 +67,20 @@ constexpr uint32_t ResetRequested = 3;
 constexpr uint32_t MaterialBindings = 4;
 constexpr uint32_t CellSize = 6;
 constexpr uint32_t VoxelResolution = 7;
+constexpr uint32_t ShowHeatOverlay = 8;
 }
 
 namespace voronoi {
 constexpr uint32_t CellSize = 1;
 constexpr uint32_t VoxelResolution = 2;
+constexpr uint32_t ShowVoronoi = 3;
+constexpr uint32_t ShowPoints = 4;
 }
 
 namespace contact {
 constexpr uint32_t MinNormalDot = 1;
 constexpr uint32_t ContactRadius = 2;
+constexpr uint32_t ShowContactLines = 3;
 }
 
 namespace heatsource {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -8,8 +8,8 @@
 class VulkanDevice;
 class MemoryAllocator;
 class UniformBufferManager;
-class Model;
 class HashGrid;
+class ModelRegistry;
 
 class HashGridRenderer {
 public:
@@ -22,10 +22,16 @@ public:
     bool createDescriptorPool(uint32_t maxFramesInFlight);
     bool createPipeline(VkRenderPass renderPass, uint32_t subpass);
 
-    bool allocateDescriptorSetsForModel(Model* model, uint32_t maxFramesInFlight);
-    void updateDescriptorSetsForModel(Model* model, HashGrid* hashGrid, uint32_t maxFramesInFlight);
+    bool allocateDescriptorSetsForModel(uint32_t runtimeModelId, uint32_t maxFramesInFlight);
+    void updateDescriptorSetsForModel(uint32_t runtimeModelId, HashGrid* hashGrid, uint32_t maxFramesInFlight);
     
-    void render(VkCommandBuffer cmdBuffer, Model* model, HashGrid* hashGrid, uint32_t frameIndex, const glm::mat4& modelMatrix, const glm::vec3& color);
+    void render(
+        VkCommandBuffer cmdBuffer,
+        uint32_t runtimeModelId,
+        HashGrid* hashGrid,
+        uint32_t frameIndex,
+        ModelRegistry& resourceManager,
+        const glm::vec3& color);
     
     void cleanup();
 
@@ -36,10 +42,11 @@ private:
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-    std::unordered_map<Model*, std::vector<VkDescriptorSet>> perModelDescriptorSets;
+    std::unordered_map<uint32_t, std::vector<VkDescriptorSet>> perModelDescriptorSets;
     
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     
     bool initialized = false;
 };
+

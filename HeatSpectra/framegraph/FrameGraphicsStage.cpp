@@ -4,6 +4,7 @@
 
 #include "FramePass.hpp"
 #include "FrameSync.hpp"
+#include "contact/ContactSystem.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/VoronoiSystem.hpp"
 #include "mesh/MeshModifiers.hpp"
@@ -21,7 +22,7 @@ FrameGraphicsStage::FrameGraphicsStage(VulkanDevice& vulkanDevice, FrameSync& fr
       wireframeRenderer(wireframeRenderer) {
 }
 
-FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, HeatSystem* heatSystem, VoronoiSystem* voronoiSystem, const FrameSyncState& syncState, bool allowHeatSolve) {
+FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const std::vector<HeatSystem*>& heatSystems, const std::vector<VoronoiSystem*>& voronoiSystems, const std::vector<ContactSystem*>& contactSystems, const FrameSyncState& syncState, bool allowHeatSolve) {
     const auto& commandBuffers = sceneRenderer.getCommandBuffers();
     if (frameState.frameIndex >= commandBuffers.size()) {
         std::cout << "[FrameGraphicsStage] Missing scene renderer command buffer for frame index" << std::endl;
@@ -42,8 +43,9 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, HeatS
     frameRequest.overlay = frameState.overlay;
 
     render::RenderServices services{};
-    services.heatSystem = heatSystem;
-    services.voronoiSystem = voronoiSystem;
+    services.heatSystems = heatSystems;
+    services.voronoiSystems = voronoiSystems;
+    services.contactSystems = contactSystems;
     services.modelSelection = &modelSelection;
     services.gizmoController = &gizmoController;
     services.wireframeRenderer = &wireframeRenderer;

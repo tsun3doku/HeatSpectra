@@ -1,19 +1,14 @@
 #include "MainQt.h"
 #include "App.h"
 #include "nodegraph/NodeGraphDock.hpp"
-#include "runtime/RenderSettingsController.hpp"
 #include "util/UiTheme.hpp"
 #include "VulkanWindow.hpp"
 
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QCloseEvent>
-#include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -38,7 +33,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setStyleSheet(QString::fromStdString(ui::splitterStyleSheet()));
 
     createMenuBar();
-    createDockWidget();
     createNodeGraphDock();
 
     QWidget* centralHost = new QWidget(this);
@@ -71,16 +65,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     viewportHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     mainSplitter->addWidget(viewportHost);
 
-    if (controlsPanel) {
-        controlsPanel->setMinimumWidth(160);
-        controlsPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-        mainSplitter->addWidget(controlsPanel);
-    }
-
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
-    mainSplitter->setStretchFactor(2, 0);
-    mainSplitter->setSizes({320, 880, 220});
+    mainSplitter->setSizes({320, 1100});
 
     setCentralWidget(centralHost);
     connect(mainSplitter, &QSplitter::splitterMoved, this, [this](int, int) {
@@ -114,7 +101,6 @@ void MainWindow::setApp(App* application) {
     if (viewportWindow) {
         viewportWindow->setApp(app);
     }
-    settingsController = app ? app->getSettingsController() : nullptr;
     if (nodeGraphDock) {
         boundRuntimeQuery = app ? app->runtimeQuery() : nullptr;
         nodeGraphDock->setRuntimeQuery(boundRuntimeQuery);
@@ -176,12 +162,6 @@ void MainWindow::createMenuBar() {
 
     QMenu* viewMenu = menuBar->addMenu("&View");
 
-    remeshOverlayAction = new QAction("&Remesh Overlay", this);
-    remeshOverlayAction->setCheckable(true);
-    remeshOverlayAction->setShortcut(Qt::Key_C);
-    connect(remeshOverlayAction, &QAction::triggered, this, &MainWindow::onIntrinsicToggled);
-    viewMenu->addAction(remeshOverlayAction);
-
     nodeGraphAction = new QAction("Node &Graph", this);
     nodeGraphAction->setCheckable(true);
     nodeGraphAction->setChecked(true);
@@ -189,98 +169,6 @@ void MainWindow::createMenuBar() {
         setNodeGraphVisible(checked);
     });
     viewMenu->addAction(nodeGraphAction);
-}
-
-void MainWindow::createDockWidget() {
-    controlsPanel = new QWidget(this);
-    controlsPanel->setObjectName("ControlsPanel");
-    QVBoxLayout* layout = new QVBoxLayout();
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
-
-    QLabel* viewLabel = new QLabel("<b>View Options</b>");
-    layout->addWidget(viewLabel);
-
-    wireframeModeCombo = new QComboBox();
-    wireframeModeCombo->addItem("Normal");
-    wireframeModeCombo->addItem("Wireframe");
-    wireframeModeCombo->addItem("Shaded Wire");
-    wireframeModeCombo->setCurrentIndex(0);
-    connect(wireframeModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-        this, &MainWindow::onWireframeModeChanged);
-    layout->addWidget(wireframeModeCombo);
-
-    intrinsicCheck = new QCheckBox("Remesh Overlay (Ctrl+C)");
-    connect(intrinsicCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicToggled);
-    layout->addWidget(intrinsicCheck);
-
-    heatOverlayCheck = new QCheckBox("Heat Overlay (Ctrl+V)");
-    connect(heatOverlayCheck, &QCheckBox::toggled, this, &MainWindow::onHeatOverlayToggled);
-    layout->addWidget(heatOverlayCheck);
-
-    intrinsicNormalsCheck = new QCheckBox("Normal Vectors");
-    connect(intrinsicNormalsCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicNormalsToggled);
-    layout->addWidget(intrinsicNormalsCheck);
-
-    intrinsicVertexNormalsCheck = new QCheckBox("Vertex Normals");
-    connect(intrinsicVertexNormalsCheck, &QCheckBox::toggled, this, &MainWindow::onIntrinsicVertexNormalsToggled);
-    layout->addWidget(intrinsicVertexNormalsCheck);
-
-    QHBoxLayout* normalLengthLayout = new QHBoxLayout();
-    QLabel* normalLengthLabel = new QLabel("  Normal Length:");
-    normalLengthLayout->addWidget(normalLengthLabel);
-
-    normalLengthSpinBox = new QDoubleSpinBox();
-    normalLengthSpinBox->setMinimum(0.001);
-    normalLengthSpinBox->setMaximum(10.0);
-    normalLengthSpinBox->setValue(0.05);
-    normalLengthSpinBox->setSingleStep(0.01);
-    normalLengthSpinBox->setDecimals(3);
-    normalLengthSpinBox->setToolTip("Length of normal vectors for visualization");
-    connect(normalLengthSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-        this, &MainWindow::onNormalLengthChanged);
-    normalLengthLayout->addWidget(normalLengthSpinBox);
-    normalLengthLayout->addStretch();
-    layout->addLayout(normalLengthLayout);
-
-    QHBoxLayout* panSensLayout = new QHBoxLayout();
-    QLabel* panSensLabel = new QLabel("  Pan Sensitivity:");
-    panSensLayout->addWidget(panSensLabel);
-
-    panSensitivitySpinBox = new QDoubleSpinBox();
-    panSensitivitySpinBox->setMinimum(0.0);
-    panSensitivitySpinBox->setMaximum(10.0);
-    panSensitivitySpinBox->setValue(1.0);
-    panSensitivitySpinBox->setSingleStep(0.1);
-    panSensitivitySpinBox->setDecimals(2);
-    panSensitivitySpinBox->setToolTip("Sensitivity of camera panning (Default: 1.0)");
-    connect(panSensitivitySpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-        this, &MainWindow::onPanSensitivityChanged);
-    panSensLayout->addWidget(panSensitivitySpinBox);
-    panSensLayout->addStretch();
-    layout->addLayout(panSensLayout);
-
-    layout->addSpacing(10);
-
-    surfelsCheck = new QCheckBox("Show Surfels");
-    connect(surfelsCheck, &QCheckBox::toggled, this, &MainWindow::onSurfelsToggled);
-    layout->addWidget(surfelsCheck);
-
-    voronoiCheck = new QCheckBox("View Voronoi");
-    connect(voronoiCheck, &QCheckBox::toggled, this, &MainWindow::onVoronoiToggled);
-    layout->addWidget(voronoiCheck);
-
-    pointsCheck = new QCheckBox("View Points");
-    connect(pointsCheck, &QCheckBox::toggled, this, &MainWindow::onPointsToggled);
-    layout->addWidget(pointsCheck);
-
-    contactLinesCheck = new QCheckBox("Show Contact Lines");
-    connect(contactLinesCheck, &QCheckBox::toggled, this, &MainWindow::onContactLinesToggled);
-    layout->addWidget(contactLinesCheck);
-
-    layout->addStretch();
-
-    controlsPanel->setLayout(layout);
 }
 
 void MainWindow::createNodeGraphDock() {
@@ -346,7 +234,7 @@ void MainWindow::setNodeGraphVisible(bool visible) {
     }
 
     QList<int> sizes = mainSplitter->sizes();
-    if (sizes.size() < 3) {
+    if (sizes.size() < 2) {
         return;
     }
 
@@ -361,100 +249,6 @@ void MainWindow::setNodeGraphVisible(bool visible) {
 
     lastNodeGraphWidth = std::max(nodeGraphDock->minimumWidth(), sizes[0]);
     nodeGraphDock->hide();
-}
-
-void MainWindow::onWireframeModeChanged(int index) {
-    if (settingsController) {
-        settingsController->setWireframeMode(static_cast<app::WireframeMode>(index));
-    }
-}
-
-void MainWindow::onIntrinsicToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setIntrinsicOverlayEnabled(checked);
-    }
-
-    if (remeshOverlayAction && remeshOverlayAction->isChecked() != checked) {
-        remeshOverlayAction->setChecked(checked);
-    }
-    if (intrinsicCheck && intrinsicCheck->isChecked() != checked) {
-        intrinsicCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onHeatOverlayToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setHeatOverlayEnabled(checked);
-    }
-    if (heatOverlayCheck && heatOverlayCheck->isChecked() != checked) {
-        heatOverlayCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onIntrinsicNormalsToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setIntrinsicNormalsEnabled(checked);
-    }
-    if (intrinsicNormalsCheck && intrinsicNormalsCheck->isChecked() != checked) {
-        intrinsicNormalsCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onIntrinsicVertexNormalsToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setIntrinsicVertexNormalsEnabled(checked);
-    }
-    if (intrinsicVertexNormalsCheck && intrinsicVertexNormalsCheck->isChecked() != checked) {
-        intrinsicVertexNormalsCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onSurfelsToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setSurfelsEnabled(checked);
-    }
-    if (surfelsCheck && surfelsCheck->isChecked() != checked) {
-        surfelsCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onVoronoiToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setVoronoiEnabled(checked);
-    }
-    if (voronoiCheck && voronoiCheck->isChecked() != checked) {
-        voronoiCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onPointsToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setPointsEnabled(checked);
-    }
-    if (pointsCheck && pointsCheck->isChecked() != checked) {
-        pointsCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onContactLinesToggled(bool checked) {
-    if (settingsController) {
-        settingsController->setContactLinesEnabled(checked);
-    }
-    if (contactLinesCheck && contactLinesCheck->isChecked() != checked) {
-        contactLinesCheck->setChecked(checked);
-    }
-}
-
-void MainWindow::onNormalLengthChanged(double value) {
-    if (settingsController) {
-        settingsController->setIntrinsicNormalLength(static_cast<float>(value));
-    }
-}
-
-void MainWindow::onPanSensitivityChanged(double value) {
-    if (app) {
-        app->setPanSensitivity(static_cast<float>(value) * 0.001f);
-    }
 }
 
 void MainWindow::onOpenModel() {

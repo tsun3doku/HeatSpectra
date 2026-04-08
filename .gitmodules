@@ -1,12 +1,6 @@
-[submodule "HeatSpectra/libs/VulkanMemoryAllocator"]
-	path = HeatSpectra/libs/VulkanMemoryAllocator
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "HeatSpectra/libs/tinyply"]
 	path = HeatSpectra/libs/tinyply
 	url = https://github.com/ddiakopoulos/tinyply.git
-[submodule "HeatSpectra/libs/isotropicremesher"]
-	path = HeatSpectra/libs/isotropicremesher
-	url = https://github.com/huxingyi/isotropicremesher
 [submodule "HeatSpectra/libs/stb"]
 	path = HeatSpectra/libs/stb
 	url = https://github.com/nothings/stb

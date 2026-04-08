@@ -15,6 +15,11 @@ public:
             return;
         }
 
+        const auto existingIt = modelBySocket.find(outputSocketKey);
+        if (existingIt != modelBySocket.end() && existingIt->second.contentHash == product.contentHash) {
+            existingIt->second = product;
+            return;
+        }
         modelBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Model, outputSocketKey);
     }
@@ -24,12 +29,16 @@ public:
             return;
         }
 
-        modelBySocket.erase(outputSocketKey);
-        bumpRevision(NodeProductType::Model, outputSocketKey);
+        if (modelBySocket.erase(outputSocketKey) != 0) {
+            bumpRevision(NodeProductType::Model, outputSocketKey);
+        }
     }
 
     const ModelProduct* resolveModel(const ProductHandle& handle) const {
         if (handle.type != NodeProductType::Model || !handle.isValid()) {
+            return nullptr;
+        }
+        if (getRevision(NodeProductType::Model, handle.outputSocketKey) != handle.outputRevision) {
             return nullptr;
         }
 
@@ -47,6 +56,11 @@ public:
             return;
         }
 
+        const auto existingIt = remeshBySocket.find(outputSocketKey);
+        if (existingIt != remeshBySocket.end() && existingIt->second.contentHash == product.contentHash) {
+            existingIt->second = product;
+            return;
+        }
         remeshBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Remesh, outputSocketKey);
     }
@@ -56,12 +70,16 @@ public:
             return;
         }
 
-        remeshBySocket.erase(outputSocketKey);
-        bumpRevision(NodeProductType::Remesh, outputSocketKey);
+        if (remeshBySocket.erase(outputSocketKey) != 0) {
+            bumpRevision(NodeProductType::Remesh, outputSocketKey);
+        }
     }
 
     const RemeshProduct* resolveRemesh(const ProductHandle& handle) const {
         if (handle.type != NodeProductType::Remesh || !handle.isValid()) {
+            return nullptr;
+        }
+        if (getRevision(NodeProductType::Remesh, handle.outputSocketKey) != handle.outputRevision) {
             return nullptr;
         }
 
@@ -79,6 +97,11 @@ public:
             return;
         }
 
+        const auto existingIt = voronoiBySocket.find(outputSocketKey);
+        if (existingIt != voronoiBySocket.end() && existingIt->second.contentHash == product.contentHash) {
+            existingIt->second = product;
+            return;
+        }
         voronoiBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Voronoi, outputSocketKey);
     }
@@ -88,12 +111,16 @@ public:
             return;
         }
 
-        voronoiBySocket.erase(outputSocketKey);
-        bumpRevision(NodeProductType::Voronoi, outputSocketKey);
+        if (voronoiBySocket.erase(outputSocketKey) != 0) {
+            bumpRevision(NodeProductType::Voronoi, outputSocketKey);
+        }
     }
 
     const VoronoiProduct* resolve(const ProductHandle& handle) const {
         if (handle.type != NodeProductType::Voronoi || !handle.isValid()) {
+            return nullptr;
+        }
+        if (getRevision(NodeProductType::Voronoi, handle.outputSocketKey) != handle.outputRevision) {
             return nullptr;
         }
 
@@ -111,6 +138,11 @@ public:
             return;
         }
 
+        const auto existingIt = contactBySocket.find(outputSocketKey);
+        if (existingIt != contactBySocket.end() && existingIt->second.contentHash == product.contentHash) {
+            existingIt->second = product;
+            return;
+        }
         contactBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Contact, outputSocketKey);
     }
@@ -120,12 +152,16 @@ public:
             return;
         }
 
-        contactBySocket.erase(outputSocketKey);
-        bumpRevision(NodeProductType::Contact, outputSocketKey);
+        if (contactBySocket.erase(outputSocketKey) != 0) {
+            bumpRevision(NodeProductType::Contact, outputSocketKey);
+        }
     }
 
     const ContactProduct* resolveContact(const ProductHandle& handle) const {
         if (handle.type != NodeProductType::Contact || !handle.isValid()) {
+            return nullptr;
+        }
+        if (getRevision(NodeProductType::Contact, handle.outputSocketKey) != handle.outputRevision) {
             return nullptr;
         }
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <vulkan/vulkan.h>
 
@@ -10,21 +10,30 @@
 #include <vector>
 #include <cstdint>
 
+#include "runtime/RuntimeProducts.hpp"
+
 class Model;
 class MemoryAllocator;
 
-class ResourceManager {
+class ModelRegistry {
 public:
-	ResourceManager(MemoryAllocator& memoryAllocator);
-	~ResourceManager();
+	ModelRegistry(MemoryAllocator& memoryAllocator);
+	~ModelRegistry();
 
-	ResourceManager(const ResourceManager&) = delete;
-	ResourceManager& operator=(const ResourceManager&) = delete;
+	ModelRegistry(const ModelRegistry&) = delete;
+	ModelRegistry& operator=(const ModelRegistry&) = delete;
 	void cleanup();
 	void setModels(std::unique_ptr<Model> visModel, std::unique_ptr<Model> commonSubdivision, std::unique_ptr<Model> heatModel);
 	uint32_t addModel(std::unique_ptr<Model> model, uint32_t preferredModelId = 0);
 	bool removeModelByID(uint32_t modelID);
 	std::vector<uint32_t> getRenderableModelIds() const;
+	bool hasModel(uint32_t modelID) const;
+	bool exportProduct(uint32_t modelID, ModelProduct& outProduct) const;
+	bool setModelMatrix(uint32_t modelID, const glm::mat4& matrix);
+	bool tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) const;
+	bool tryGetBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const;
+	bool tryGetBoundingBoxMinMax(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const;
+	bool tryGetWorldBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const;
 
 	// Getters
 	Model& getVisModel() {
@@ -42,9 +51,6 @@ public:
 	}
 
 	// Model ID mapping 
-	Model* getModelByID(uint32_t modelID);
-	const Model* getModelByID(uint32_t modelID) const;
-	uint32_t getModelID(Model* model) const;
 	uint32_t getVisModelID() const;
 	uint32_t getHeatModelID() const;
 	uint32_t getCommonSubdivisionModelID() const;
@@ -59,6 +65,8 @@ private:
 	void registerModel(std::unique_ptr<Model>& modelSlot, uint32_t preferredModelId = 0);
 	void unregisterModel(std::unique_ptr<Model>& modelSlot);
 	void clearAdditionalModels();
+	Model* findModel(uint32_t modelID);
+	const Model* findModel(uint32_t modelID) const;
 
 	MemoryAllocator& memoryAllocator;
 
@@ -70,3 +78,4 @@ private:
 	std::vector<uint32_t> recycledModelIds;
 	uint32_t nextModelId = 1;
 };
+

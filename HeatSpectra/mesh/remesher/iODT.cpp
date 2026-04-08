@@ -342,11 +342,11 @@ bool iODT::delaunayRefinement(int maxIters, float minAngleDegrees) {
     size_t candidateCount = 0;
 
     for (int iter = 0; iter < 100; ++iter) {
-        std::cout << " Refinement iteration " << (iter + 1) << "\n";
+        std::cout << "Refinement iteration " << (iter + 1) << std::endl;
    
         auto cands = findRefinementCandidates(MIN_ANGLE, MIN_AREA);
         if (cands.empty()) {
-            std::cout << " Done.\n";
+            std::cout << "Done." << std::endl;
             return true;
         }
         
@@ -462,7 +462,7 @@ bool iODT::delaunayRefinement(int maxIters, float minAngleDegrees) {
         }
     }
 
-    std::cout << "Reached max iterations\n";
+    std::cout << "[iODT] Reached max iterations" << std::endl;
     return true;
 }
 

@@ -15,7 +15,7 @@
 class VoronoiModelRuntime;
 class MemoryAllocator;
 class PointRenderer;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class VulkanDevice;
 class CommandPool;
@@ -29,7 +29,7 @@ public:
     VoronoiSystem(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         UniformBufferManager& uniformBufferManager,
         uint32_t maxFramesInFlight,
         CommandPool& renderCommandPool,
@@ -40,7 +40,7 @@ public:
     bool isInitialized() const { return initialized; }
     bool isReady() const { return runtime.isReady(); }
 
-    void recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass);
+    void updateRenderResources(VkRenderPass renderPass);
 
     void setReceiverPayloads(
         const std::vector<uint32_t>& receiverNodeModelIds,
@@ -108,7 +108,7 @@ private:
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     VoronoiSystemRuntime runtime;
@@ -126,3 +126,4 @@ private:
     bool debugEnable = false;
     static constexpr int K_NEIGHBORS = 50;
 };
+

@@ -2,7 +2,7 @@
 
 class VulkanDevice;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class CommandPool;
 class VoronoiSystemResources;
@@ -10,8 +10,9 @@ class VoronoiSystemResources;
 struct VoronoiStageContext {
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     VoronoiSystemResources& resources;
 };
+

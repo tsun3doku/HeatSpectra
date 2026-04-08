@@ -26,6 +26,7 @@ public:
             return;
         }
 
+        staleSocketKeys.clear();
         std::unordered_set<uint64_t> nextSocketKeys;
         nextSocketKeys.reserve(packagesBySocket.size());
 
@@ -44,9 +45,28 @@ public:
 
         for (uint64_t socketKey : staleSocketKeys) {
             controller->disable(socketKey);
+            this->staleSocketKeys.push_back(socketKey);
+        }
+
+        activeSocketKeys = std::move(nextSocketKeys);
+    }
+
+    void finalizeSync() {
+        if (!controller) {
+            return;
+        }
+
+        controller->finalizePendingStates();
+
+        for (uint64_t socketKey : staleSocketKeys) {
             removePublishedProduct(socketKey);
             removePublishedModel(socketKey);
-            activeSocketKeys.erase(socketKey);
+        }
+        staleSocketKeys.clear();
+
+        for (uint64_t socketKey : activeSocketKeys) {
+            publishProduct(socketKey);
+            publishModel(socketKey);
         }
     }
 
@@ -62,8 +82,6 @@ private:
         config.params = package.params;
         config.remeshHandle = package.remeshHandle;
         controller->configure(config);
-        publishProduct(socketKey);
-        publishModel(socketKey);
         activeSocketKeys.insert(socketKey);
     }
 
@@ -115,4 +133,5 @@ private:
     RuntimeModelTransport* modelTransport = nullptr;
     RuntimeProductRegistry* productRegistry = nullptr;
     std::unordered_set<uint64_t> activeSocketKeys;
+    std::vector<uint64_t> staleSocketKeys;
 };

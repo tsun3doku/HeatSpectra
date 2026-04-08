@@ -1,12 +1,11 @@
 #include "RemeshController.hpp"
 
+#include "runtime/ModelRuntime.hpp"
 #include "render/RenderRuntime.hpp"
 #include "render/SceneRenderer.hpp"
 #include "nodegraph/NodeModelTransform.hpp"
-#include "scene/Model.hpp"
-#include "scene/SceneController.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 #include <iostream>
@@ -30,18 +29,16 @@ std::vector<glm::vec3> buildGeometryPositions(const std::vector<float>& pointPos
 RemeshController::RemeshController(
     Remesher& remesher,
     VulkanDevice& vulkanDevice,
-    ResourceManager& resourceManager,
+    ModelRuntime& modelRuntime,
+    ModelRegistry& resourceManager,
     RenderRuntime& renderRuntime,
     std::atomic<bool>& isOperating)
     : vulkanDevice(vulkanDevice),
+      modelRuntime(modelRuntime),
       resourceManager(resourceManager),
       renderRuntime(renderRuntime),
       isOperating(isOperating),
       remesher(remesher) {
-}
-
-void RemeshController::setSceneController(SceneController* updatedSceneController) {
-    sceneController = updatedSceneController;
 }
 
 void RemeshController::configure(const Config& config) {
@@ -69,20 +66,12 @@ void RemeshController::configure(const Config& config) {
             config.params.maxEdgeLength,
             config.params.stepSize,
             remeshResult)) {
-        std::cout << "[RemeshController] Remesh execution failed"
-                  << " socketKey=" << config.socketKey
-                  << " remeshHandle=" << config.remeshHandle.key << ":" << config.remeshHandle.revision
-                  << std::endl;
         return;
     }
 
     if (remeshResult.intrinsicGpuResources.viewS == VK_NULL_HANDLE ||
         remeshResult.intrinsicGpuResources.intrinsicTriangleBuffer == VK_NULL_HANDLE ||
         remeshResult.intrinsicGpuResources.intrinsicVertexBuffer == VK_NULL_HANDLE) {
-        std::cout << "[RemeshController] Failed to materialize intrinsic GPU resources"
-                  << " socketKey=" << config.socketKey
-                  << " remeshHandle=" << config.remeshHandle.key << ":" << config.remeshHandle.revision
-                  << std::endl;
         cleanupGpuResources(remeshResult.intrinsicGpuResources);
         return;
     }
@@ -92,30 +81,6 @@ void RemeshController::configure(const Config& config) {
         ? static_cast<uint32_t>(config.remeshHandle.key & 0xFFFFFFFFu)
         : 0;
 
-    const uint32_t runtimeModelId = materializeRuntimeModelSink(resolvedGeometry);
-    std::cout << "[RemeshController] Remesh sink resolution"
-              << " socketKey=" << config.socketKey
-              << " geometryModelId=" << resolvedGeometry.modelId
-              << " baseModelPath=" << resolvedGeometry.baseModelPath
-              << " runtimeModelId=" << runtimeModelId
-              << std::endl;
-    if (runtimeModelId == 0) {
-        cleanupGpuResources(remeshResult.intrinsicGpuResources);
-        return;
-    }
-
-    Model* sinkModel = resourceManager.getModelByID(runtimeModelId);
-    if (!sinkModel) {
-        std::cout << "[RemeshController] Remesh sink model lookup failed"
-                  << " socketKey=" << config.socketKey
-                  << " runtimeModelId=" << runtimeModelId
-                  << std::endl;
-        cleanupGpuResources(remeshResult.intrinsicGpuResources);
-        return;
-    }
-
-    sinkModel->setModelMatrix(NodeModelTransform::toMat4(resolvedGeometry.localToWorld));
-
     ActiveState state{};
     state.config = config;
     state.geometry = resolvedGeometry;
@@ -123,25 +88,18 @@ void RemeshController::configure(const Config& config) {
     state.geometryTriangleIndices = config.sourceGeometry.triangleIndices;
     state.intrinsicMesh = remeshResult.intrinsicMesh;
     state.intrinsicGpuResources = remeshResult.intrinsicGpuResources;
-    state.runtimeModelId = runtimeModelId;
     state.sinkOwned = !resolvedGeometry.baseModelPath.empty();
-    activeStatesBySocket[config.socketKey] = state;
-
-    RemeshProduct activeProduct{};
-    if (exportProduct(config.socketKey, activeProduct)) {
-        renderRuntime.getSceneRenderer().bindRemeshProduct(config.socketKey, activeProduct);
-        std::cout << "[RemeshController] Bound remesh product to sink"
-                  << " socketKey=" << config.socketKey
-                  << " runtimeModelId=" << runtimeModelId
-                  << std::endl;
-    } else {
-        disableSocket(config.socketKey, false);
-    }
+    pendingStatesBySocket[config.socketKey] = std::move(state);
+    modelRuntime.queueApplySink(
+        resolvedGeometry.modelId,
+        resolvedGeometry.baseModelPath,
+        NodeModelTransform::toMat4(resolvedGeometry.localToWorld));
 }
 
 void RemeshController::disable(uint64_t socketKey) {
     disableSocket(socketKey, false);
     flushRetiredStates(false);
+    modelRuntime.flush();
 }
 
 void RemeshController::disable() {
@@ -157,9 +115,43 @@ void RemeshController::disable() {
     }
 
     flushRetiredStates(false);
+    modelRuntime.flush();
 
-    if (sceneController) {
-        sceneController->focusOnVisibleModel();
+    modelRuntime.focusOnVisibleModel();
+}
+
+void RemeshController::finalizePendingStates() {
+    std::vector<uint64_t> pendingSocketKeys;
+    pendingSocketKeys.reserve(pendingStatesBySocket.size());
+    for (const auto& [socketKey, state] : pendingStatesBySocket) {
+        (void)state;
+        pendingSocketKeys.push_back(socketKey);
+    }
+
+    for (uint64_t socketKey : pendingSocketKeys) {
+        auto pendingIt = pendingStatesBySocket.find(socketKey);
+        if (pendingIt == pendingStatesBySocket.end()) {
+            continue;
+        }
+
+        ActiveState state = std::move(pendingIt->second);
+        pendingStatesBySocket.erase(pendingIt);
+
+        uint32_t runtimeModelId = 0;
+        if (!modelRuntime.tryGetRuntimeModelId(state.geometry.modelId, runtimeModelId) || runtimeModelId == 0) {
+            cleanupGpuResources(state.intrinsicGpuResources);
+            continue;
+        }
+
+        state.runtimeModelId = runtimeModelId;
+        activeStatesBySocket[socketKey] = state;
+
+        RemeshProduct activeProduct{};
+        if (exportProduct(socketKey, activeProduct)) {
+            renderRuntime.getSceneRenderer().bindRemeshProduct(socketKey, activeProduct);
+        } else {
+            disableSocket(socketKey, false);
+        }
     }
 }
 
@@ -177,15 +169,12 @@ bool RemeshController::exportProduct(uint64_t socketKey, RemeshProduct& outProdu
 
     const ActiveState& state = activeIt->second;
     if (state.config.socketKey == 0 ||
-        state.config.remeshHandle.key == 0 ||
         state.runtimeModelId == 0 ||
         state.geometry.modelId == 0) {
         return false;
     }
 
-    outProduct.remeshHandle = state.config.remeshHandle;
     outProduct.runtimeModelId = state.runtimeModelId;
-    outProduct.geometry = state.geometry;
     outProduct.geometryPositions = state.geometryPositions;
     outProduct.geometryTriangleIndices = state.geometryTriangleIndices;
     outProduct.intrinsicMesh = state.intrinsicMesh;
@@ -206,23 +195,8 @@ bool RemeshController::exportProduct(uint64_t socketKey, RemeshProduct& outProdu
     outProduct.inputEdgeView = state.intrinsicGpuResources.viewEInput;
     outProduct.inputTriangleView = state.intrinsicGpuResources.viewTInput;
     outProduct.inputLengthView = state.intrinsicGpuResources.viewLInput;
+    outProduct.contentHash = computeContentHash(outProduct);
     return outProduct.isValid();
-}
-
-uint32_t RemeshController::materializeRuntimeModelSink(const GeometryData& geometry) const {
-    if (!sceneController || geometry.modelId == 0) {
-        return 0;
-    }
-
-    if (!geometry.baseModelPath.empty()) {
-        return sceneController->materializeModelSink(geometry.modelId, geometry.baseModelPath);
-    }
-
-    uint32_t runtimeModelId = 0;
-    if (!sceneController->tryGetNodeModelRuntimeId(geometry.modelId, runtimeModelId)) {
-        return 0;
-    }
-    return runtimeModelId;
 }
 
 void RemeshController::cleanupGpuResources(SupportingHalfedge::GPUResources& resources) const {
@@ -272,6 +246,16 @@ void RemeshController::disableSocket(uint64_t socketKey, bool updateFocus) {
         return;
     }
 
+    auto pendingIt = pendingStatesBySocket.find(socketKey);
+    if (pendingIt != pendingStatesBySocket.end()) {
+        ActiveState pendingState = std::move(pendingIt->second);
+        pendingStatesBySocket.erase(pendingIt);
+        cleanupGpuResources(pendingState.intrinsicGpuResources);
+        if (pendingState.sinkOwned && pendingState.geometry.modelId != 0) {
+            modelRuntime.queueRemoveSink(pendingState.geometry.modelId);
+        }
+    }
+
     auto activeIt = activeStatesBySocket.find(socketKey);
     if (activeIt == activeStatesBySocket.end()) {
         return;
@@ -283,8 +267,8 @@ void RemeshController::disableSocket(uint64_t socketKey, bool updateFocus) {
     activeStatesBySocket.erase(activeIt);
     retiredStates.push_back(std::move(state));
 
-    if (updateFocus && sceneController) {
-        sceneController->focusOnVisibleModel();
+    if (updateFocus) {
+        modelRuntime.focusOnVisibleModel();
     }
 }
 
@@ -299,15 +283,15 @@ void RemeshController::flushRetiredStates(bool updateFocus) {
     for (ActiveState& state : retiredStates) {
         cleanupGpuResources(state.intrinsicGpuResources);
 
-        if (state.sinkOwned && sceneController && state.geometry.modelId != 0) {
-            sceneController->removeNodeModelSink(state.geometry.modelId);
+        if (state.sinkOwned && state.geometry.modelId != 0) {
+            modelRuntime.queueRemoveSink(state.geometry.modelId);
             removedSink = true;
         }
     }
     retiredStates.clear();
 
-    if (updateFocus && sceneController && removedSink) {
-        sceneController->focusOnVisibleModel();
+    if (updateFocus && removedSink) {
+        modelRuntime.queueFocusVisibleModel();
     }
 }
 
@@ -319,3 +303,4 @@ RemeshController::OperatingScope::OperatingScope(std::atomic<bool>& isOperating)
 RemeshController::OperatingScope::~OperatingScope() {
     isOperating.store(previousState, std::memory_order_release);
 }
+

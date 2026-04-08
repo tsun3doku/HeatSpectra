@@ -5,9 +5,8 @@
 
 #include "framegraph/FrameSync.hpp"
 #include "contact/ContactSystemController.hpp"
-#include "runtime/ContactPreviewStore.hpp"
-#include "runtime/ComputeCache.hpp"
 #include "runtime/RemeshController.hpp"
+#include "runtime/ModelRuntime.hpp"
 #include "runtime/RuntimeContactTransport.hpp"
 #include "runtime/RuntimeHeatTransport.hpp"
 #include "runtime/RuntimeModelTransport.hpp"
@@ -29,6 +28,7 @@
 #include "scene/SceneController.hpp"
 
 class RuntimeSimulationController;
+class RenderSettingsController;
 class SceneContext;
 class VulkanCoreContext;
 struct WindowRuntimeState;
@@ -37,7 +37,7 @@ class RenderContext {
 public:
     ~RenderContext();
 
-    bool initialize(VulkanCoreContext& core, SceneContext& scene, WindowRuntimeState& windowState,std::atomic<bool>& runtimeBusy, std::atomic<bool>& isShuttingDown);
+    bool initialize(VulkanCoreContext& core, SceneContext& scene, WindowRuntimeState& windowState, RenderSettingsController* renderSettingsController, std::atomic<bool>& runtimeBusy, std::atomic<bool>& isShuttingDown);
     bool initializeInputPipeline(SceneContext& scene, RuntimeSimulationController& simulationController);
     bool initializeSyncObjects();
     void shutdown();
@@ -48,11 +48,10 @@ public:
     FrameSync& sync();
     RenderRuntime* runtime();
     const RenderRuntime* runtime() const;
-    HeatSystem* heatSystem();
-    VoronoiSystem* voronoiSystem();
     HeatSystemController* heatSystemController();
     ContactSystemController* contactSystemController();
-    ContactPreviewStore* contactPreviewStore();
+    ModelRuntime* modelRuntime();
+    const ModelRuntime* modelRuntime() const;
     RuntimePackageController* runtimePackageController();
     SceneController* sceneController();
     const SceneController* sceneController() const;
@@ -71,12 +70,11 @@ private:
     std::unique_ptr<RuntimeRemeshTransport> runtimeRemeshTransportState;
     std::unique_ptr<RuntimeVoronoiTransport> runtimeVoronoiTransportState;
     std::unique_ptr<RuntimeProductRegistry> runtimeProductRegistryState;
+    std::unique_ptr<ModelRuntime> modelRuntimeState;
     std::unique_ptr<RemeshController> remeshControllerState;
     std::unique_ptr<VoronoiSystemController> voronoiSystemControllerState;
     std::unique_ptr<HeatSystemController> heatSystemControllerState;
     std::unique_ptr<ContactSystemController> contactSystemControllerState;
-    std::unique_ptr<ContactPreviewStore> contactPreviewStoreState;
-    std::unique_ptr<ComputeCache> computeCacheState;
     std::unique_ptr<RuntimePackageController> runtimePackageControllerState;
     std::unique_ptr<SceneController> sceneControllerState;
     std::unique_ptr<InputController> inputControllerState;

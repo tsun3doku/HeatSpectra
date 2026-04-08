@@ -8,7 +8,6 @@
 
 #include <iostream>
 
-
 Remesher::Remesher(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator) {

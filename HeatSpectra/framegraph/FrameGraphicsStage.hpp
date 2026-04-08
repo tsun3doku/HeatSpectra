@@ -12,6 +12,8 @@ class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
 class HeatSystem;
+class ContactSystemController;
+class ContactSystem;
 class VoronoiSystem;
 
 class FrameGraphicsStage {
@@ -25,7 +27,7 @@ public:
         GizmoController& gizmoController,
         WireframeRenderer& wireframeRenderer);
 
-    FrameStageResult execute(const FrameState& frameState, HeatSystem* heatSystem, VoronoiSystem* voronoiSystem, const FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(const FrameState& frameState, const std::vector<HeatSystem*>& heatSystems, const std::vector<VoronoiSystem*>& voronoiSystems, const std::vector<ContactSystem*>& contactSystems, const FrameSyncState& syncState, bool allowHeatSolve);
 
 private:
     VulkanDevice& vulkanDevice;

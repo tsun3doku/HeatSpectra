@@ -9,6 +9,7 @@
 #include "runtime/RuntimeInterfaces.hpp"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
@@ -91,7 +92,7 @@ std::string serializeHeatMaterialBindings(const std::vector<HeatMaterialBindingE
         if (binding.groupName.empty()) {
             continue;
         }
-
+        
         if (!serialized.empty()) {
             serialized += ";";
         }
@@ -100,43 +101,6 @@ std::string serializeHeatMaterialBindings(const std::vector<HeatMaterialBindingE
         serialized += heatMaterialPresetName(binding.presetId);
     }
     return serialized;
-}
-
-void collectUpstreamModelNodeIds(
-    const NodeGraphState& state,
-    NodeGraphNodeId startNodeId,
-    std::unordered_set<uint32_t>& visitedNodeIds,
-    std::unordered_set<uint32_t>& seenModelNodeIds,
-    std::vector<uint32_t>& outModelNodeIds) {
-    if (!startNodeId.isValid() || !visitedNodeIds.insert(startNodeId.value).second) {
-        return;
-    }
-
-    const NodeGraphNode* node = findNodeInState(state, startNodeId);
-    if (!node) {
-        return;
-    }
-
-    if (getNodeTypeId(node->typeId) == nodegraphtypes::Model) {
-        if (seenModelNodeIds.insert(node->id.value).second) {
-            outModelNodeIds.push_back(node->id.value);
-        }
-        return;
-    }
-
-    for (const NodeGraphSocket& inputSocket : node->inputs) {
-        const NodeGraphEdge* inputEdge = findIncomingEdgeInState(state, node->id, inputSocket.id);
-        if (!inputEdge) {
-            continue;
-        }
-
-        collectUpstreamModelNodeIds(
-            state,
-            inputEdge->fromNode,
-            visitedNodeIds,
-            seenModelNodeIds,
-            outModelNodeIds);
-    }
 }
 
 } // namespace
@@ -183,6 +147,9 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
 
     heatSolveSettingsApplyButton = new QPushButton("Apply Solver Settings", this);
     layout->addWidget(heatSolveSettingsApplyButton);
+
+    heatOverlayCheckBox = new QCheckBox("Heat Overlay", this);
+    layout->addWidget(heatOverlayCheckBox);
 
     layout->addWidget(new QLabel("Receiver Material Bindings:", this));
 
@@ -245,6 +212,23 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
     connect(heatSolveSettingsApplyButton, &QPushButton::clicked, this, [this]() {
         applySolveSettings();
     });
+    connect(heatOverlayCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!nodeGraphBridge || !currentNodeId.isValid()) {
+            setStatus("Cannot update heat overlay settings for this node.");
+            return;
+        }
+
+        if (!NodePanelUtils::writeBoolParam(
+                nodeGraphBridge,
+                currentNodeId,
+                nodegraphparams::heatsolve::ShowHeatOverlay,
+                checked)) {
+            setStatus("Failed to update heat overlay settings.");
+            return;
+        }
+
+        setStatus("Heat settings applied.");
+    });
     connect(heatBindingAddButton, &QPushButton::clicked, this, [this]() {
         if (!heatBindingGroupComboBox || !heatBindingPresetComboBox || !heatBindingsTable) {
             return;
@@ -306,12 +290,8 @@ void NodeHeatSolverPanel::bind(NodeGraphBridge* nodeGraphBridgePtr, const Runtim
 
 void NodeHeatSolverPanel::setNode(NodeGraphNodeId nodeId) {
     currentNodeId = nodeId;
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
     NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
         setStatus("Failed to read HeatSolve node.");
         return;
     }
@@ -328,6 +308,12 @@ void NodeHeatSolverPanel::setNode(NodeGraphNodeId nodeId) {
             node,
             nodegraphparams::heatsolve::VoxelResolution,
             128));
+    }
+    if (heatOverlayCheckBox) {
+        heatOverlayCheckBox->setChecked(NodePanelUtils::readBoolParam(
+            node,
+            nodegraphparams::heatsolve::ShowHeatOverlay,
+            false));
     }
 
     const std::vector<HeatMaterialBindingEntry> bindings =
@@ -370,7 +356,7 @@ void NodeHeatSolverPanel::refreshBindingGroupOptions() {
                 }
 
                 std::unordered_set<uint32_t> visitedNodeIds;
-                collectUpstreamModelNodeIds(
+                NodePanelUtils::findUpstreamModelNodeIds(
                     state,
                     inputEdge->fromNode,
                     visitedNodeIds,

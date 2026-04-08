@@ -11,6 +11,9 @@ class NodeGraphBridge;
 
 namespace NodePanelUtils {
 
+bool canEditNode(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId);
+bool loadNode(NodeGraphBridge* nodeGraphBridge, NodeGraphNodeId nodeId, NodeGraphNode& outNode);
+
 bool readBoolParam(const NodeGraphNode& node, uint32_t parameterId, bool defaultValue = false);
 double readFloatParam(const NodeGraphNode& node, uint32_t parameterId, double defaultValue);
 int readIntParam(const NodeGraphNode& node, uint32_t parameterId, int defaultValue);
@@ -36,7 +39,7 @@ void collectUpstreamModelPaths(
     std::unordered_set<std::string>& seenPaths,
     std::vector<std::string>& outModelPaths);
 
-void collectUpstreamModelNodeIds(
+void findUpstreamModelNodeIds(
     const NodeGraphState& state,
     NodeGraphNodeId nodeId,
     std::unordered_set<uint32_t>& visitedNodeIds,

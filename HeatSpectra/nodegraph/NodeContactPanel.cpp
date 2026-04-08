@@ -5,6 +5,7 @@
 #include "NodeGraphBridge.hpp"
 #include "NodePanelUtils.hpp"
 
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -46,6 +47,9 @@ NodeContactPanel::NodeContactPanel(QWidget* parent)
     contactRadiusRow->addWidget(contactRadiusSpin, 1);
     layout->addLayout(contactRadiusRow);
 
+    showContactLinesCheckBox = new QCheckBox("Show Contact Lines", this);
+    layout->addWidget(showContactLinesCheckBox);
+
     layout->addStretch();
 
     connect(minNormalDotSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -56,6 +60,23 @@ NodeContactPanel::NodeContactPanel(QWidget* parent)
         [this](double value) {
             writeContactRadius(value);
         });
+    connect(showContactLinesCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!nodeGraphBridge || !currentNodeId.isValid()) {
+            setStatus("Cannot update contact settings for this node.");
+            return;
+        }
+
+        if (!NodePanelUtils::writeBoolParam(
+                nodeGraphBridge,
+                currentNodeId,
+                nodegraphparams::contact::ShowContactLines,
+                checked)) {
+            setStatus("Failed to update contact preview settings.");
+            return;
+        }
+
+        setStatus("Contact settings applied.");
+    });
 }
 
 void NodeContactPanel::bind(NodeGraphBridge* nodeGraphBridgePtr) {
@@ -99,12 +120,8 @@ void NodeContactPanel::writeContactRadius(double value) {
 }
 
 void NodeContactPanel::refreshFromNode() {
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
     NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
         return;
     }
 
@@ -115,6 +132,10 @@ void NodeContactPanel::refreshFromNode() {
     if (contactRadiusSpin) {
         contactRadiusSpin->setValue(
             NodePanelUtils::readFloatParam(node, nodegraphparams::contact::ContactRadius, 0.01));
+    }
+    if (showContactLinesCheckBox) {
+        showContactLinesCheckBox->setChecked(
+            NodePanelUtils::readBoolParam(node, nodegraphparams::contact::ShowContactLines, false));
     }
     if (emitterLabel) {
         emitterLabel->setText("(connected)");

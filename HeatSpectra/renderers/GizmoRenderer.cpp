@@ -1,12 +1,11 @@
-﻿#include "GizmoRenderer.hpp"
+#include "GizmoRenderer.hpp"
 
 #include "vulkan/CommandBufferManager.hpp"
 #include "util/File_utils.h"
 #include "framegraph/FramePass.hpp"
 #include "scene/GizmoController.hpp"
-#include "scene/Model.hpp"
 #include "scene/ModelSelection.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
 
@@ -536,26 +535,29 @@ void GizmoRenderer::renderRotationRing(const RenderState& state, const glm::vec3
     vkCmdDrawIndexed(state.commandBuffer, ringIndexCount, 1, 0, 0, 0);
 }
 
-float GizmoRenderer::calculateGizmoScale(ResourceManager& resourceManager, const ModelSelection& modelSelection) const {
+float GizmoRenderer::calculateGizmoScale(ModelRegistry& resourceManager, const ModelSelection& modelSelection) const {
     const auto& selectedModelIDs = modelSelection.getSelectedModelIDsRenderThread();
 
     float maxBBoxSize = 0.0f;
 
     for (uint32_t id : selectedModelIDs) {
-        if (Model* model = resourceManager.getModelByID(id)) {
-            const glm::vec3 bboxSize = model->getBoundingBoxMax() - model->getBoundingBoxMin();
+        glm::vec3 bboxMin(0.0f);
+        glm::vec3 bboxMax(0.0f);
+        if (resourceManager.tryGetBoundingBoxMinMax(id, bboxMin, bboxMax)) {
+            const glm::vec3 bboxSize = bboxMax - bboxMin;
             maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
         }
     }
 
     if (maxBBoxSize == 0.0f) {
         for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
-            Model* model = resourceManager.getModelByID(modelId);
-            if (!model) {
+            glm::vec3 bboxMin(0.0f);
+            glm::vec3 bboxMax(0.0f);
+            if (!resourceManager.tryGetBoundingBoxMinMax(modelId, bboxMin, bboxMax)) {
                 continue;
             }
 
-            const glm::vec3 bboxSize = model->getBoundingBoxMax() - model->getBoundingBoxMin();
+            const glm::vec3 bboxSize = bboxMax - bboxMin;
             maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
         }
     }
@@ -647,3 +649,4 @@ void GizmoRenderer::cleanup() {
         pipelineLayout = VK_NULL_HANDLE;
     }
 }
+

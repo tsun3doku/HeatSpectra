@@ -10,9 +10,9 @@
 #include "runtime/RuntimePackages.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
+class ModelRuntime;
 class RenderRuntime;
-class ResourceManager;
-class SceneController;
+class ModelRegistry;
 class VulkanDevice;
 
 class RemeshController {
@@ -27,15 +27,15 @@ public:
     RemeshController(
         Remesher& remesher,
         VulkanDevice& vulkanDevice,
-        ResourceManager& resourceManager,
+        ModelRuntime& modelRuntime,
+        ModelRegistry& resourceManager,
         RenderRuntime& renderRuntime,
         std::atomic<bool>& isOperating);
-
-    void setSceneController(SceneController* updatedSceneController);
 
     void configure(const Config& config);
     void disable(uint64_t socketKey);
     void disable();
+    void finalizePendingStates();
     bool exportProduct(uint64_t socketKey, RemeshProduct& outProduct) const;
 
 private:
@@ -60,17 +60,18 @@ private:
         bool previousState = false;
     };
 
-    uint32_t materializeRuntimeModelSink(const GeometryData& geometry) const;
     void cleanupGpuResources(SupportingHalfedge::GPUResources& resources) const;
     void disableSocket(uint64_t socketKey, bool updateFocus);
     void flushRetiredStates(bool updateFocus);
 
     VulkanDevice& vulkanDevice;
-    ResourceManager& resourceManager;
+    ModelRuntime& modelRuntime;
+    ModelRegistry& resourceManager;
     RenderRuntime& renderRuntime;
     std::atomic<bool>& isOperating;
     Remesher& remesher;
-    SceneController* sceneController = nullptr;
     std::unordered_map<uint64_t, ActiveState> activeStatesBySocket;
+    std::unordered_map<uint64_t, ActiveState> pendingStatesBySocket;
     std::vector<ActiveState> retiredStates;
 };
+

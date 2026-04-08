@@ -225,8 +225,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="runtime\VulkanCoreContext.cpp" />
     <ClCompile Include="runtime\SceneContext.cpp" />
     <ClCompile Include="runtime\RenderContext.cpp" />
-    <ClCompile Include="runtime\ContactPreviewStore.cpp" />
-    <ClCompile Include="runtime\ComputeCache.cpp" />
+    <ClCompile Include="runtime\ModelRuntime.cpp" />
     <ClCompile Include="runtime\RemeshController.cpp" />
     <ClCompile Include="runtime\RuntimePackageCompiler.cpp" />
     <ClCompile Include="runtime\RuntimePackageSync.cpp" />
@@ -372,7 +371,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClCompile Include="vulkan\MemoryAllocator.cpp" />
     <ClCompile Include="scene\Model.cpp" />
     <ClCompile Include="scene\ModelUploader.cpp" />
-    <ClCompile Include="vulkan\ResourceManager.cpp" />
+    <ClCompile Include="vulkan\ModelRegistry.cpp" />
     <ClCompile Include="mesh\\remesher\\Remesher.cpp" />
     <ClCompile Include="mesh\\remesher\\SignPostMesh.cpp" />
     <ClCompile Include="vulkan\VulkanDevice.cpp" />
@@ -455,6 +454,9 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="runtime\RuntimeContactTransport.hpp" />
     <ClInclude Include="runtime\RuntimeHeatTransport.hpp" />
     <ClInclude Include="runtime\RemeshController.hpp" />
+    <ClInclude Include="runtime\ModelRuntime.hpp" />
+    <ClInclude Include="runtime\RuntimeProductRegistry.hpp" />
+    <ClInclude Include="runtime\RuntimeProducts.hpp" />
     <ClInclude Include="runtime\RuntimeRemeshTransport.hpp" />
     <ClInclude Include="runtime\RuntimeVoronoiTransport.hpp" />
     <ClInclude Include="vulkan\CommandBufferManager.hpp" />
@@ -473,13 +475,10 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="runtime\VulkanCoreContext.hpp" />
     <ClInclude Include="runtime\SceneContext.hpp" />
     <ClInclude Include="runtime\RenderContext.hpp" />
-    <ClInclude Include="runtime\ContactPreviewStore.hpp" />
-    <ClInclude Include="runtime\ComputeCache.hpp" />
     <ClInclude Include="runtime\RuntimePackageCompiler.hpp" />
     <ClInclude Include="runtime\RuntimePackageSync.hpp" />
     <ClInclude Include="runtime\RuntimePackages.hpp" />
     <ClInclude Include="runtime\RuntimePackageController.hpp" />
-    <ClInclude Include="runtime\RuntimeContactTypes.hpp" />
     <ClInclude Include="runtime\RuntimeThermalTypes.hpp" />
     <ClInclude Include="runtime\RuntimeController.hpp" />
     <ClInclude Include="runtime\RenderSettingsManager.hpp" />
@@ -617,7 +616,7 @@ xcopy /y /d "C:\Qt\6.9.3\msvc2022_64\plugins\platforms\qwindows.dll" "$(OutDir)p
     <ClInclude Include="scene\Model.hpp" />
     <ClInclude Include="scene\ModelUploader.hpp" />
     <ClInclude Include="scene\ModelSelection.hpp" />
-    <ClInclude Include="vulkan\ResourceManager.hpp" />
+    <ClInclude Include="vulkan\ModelRegistry.hpp" />
     <ClInclude Include="mesh\\remesher\\Remesher.hpp" />
     <ClInclude Include="mesh\\remesher\\SignPostMesh.hpp" />
     <ClInclude Include="mesh\\remesher\\SupportingHalfedge.hpp" />

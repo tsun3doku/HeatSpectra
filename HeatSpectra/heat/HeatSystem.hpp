@@ -16,14 +16,13 @@
 
 static constexpr int NUM_SUBSTEPS = 8;
 
-class ResourceManager;
+class ModelRegistry;
 class MemoryAllocator;
 class VulkanDevice;
 class UniformBufferManager;
 class CommandPool;
 class HeatReceiverRenderer;
 class HeatSourceRenderer;
-class ContactPreviewStore;
 class HeatSystemContactStage;
 class HeatSystemSimStage;
 class HeatSystemSurfaceStage;
@@ -33,20 +32,19 @@ class HeatSystemResources;
 
 class HeatSystem {
 public:
-    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ResourceManager& resourceManager, HeatSystemResources& resources,
+    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager, HeatSystemResources& resources,
         UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool,
         VkExtent2D extent, VkRenderPass renderPass);
     ~HeatSystem();
 
     void update();
-    void recreateResources(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass);
+    void updateRenderResources(VkRenderPass renderPass);
     void ensureConfigured();
     void setActive(bool active);
     bool isInitialized() const { return initialized; }
 
     void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkQueryPool timingQueryPool = VK_NULL_HANDLE, uint32_t timingQueryBase = 0);
     void renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
-    void renderContactLines(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
     
     bool createComputeCommandBuffers(uint32_t maxFramesInFlight);
 
@@ -60,7 +58,6 @@ public:
     void setIsPaused(bool paused) { isPaused = paused; } 
     bool hasDispatchableComputeWork() const;
     bool voronoiReady() const;
-    void setContactPreviewStore(ContactPreviewStore* store);
     void setSourcePayloads(
         const std::vector<GeometryData>& sourceGeometries,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
@@ -122,7 +119,7 @@ private:
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     HeatSystemResources& resources;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool; 
@@ -155,7 +152,6 @@ private:
     std::unique_ptr<HeatSystemSurfaceStage> surfaceStage;
     std::unique_ptr<HeatSystemVoronoiStage> voronoiStage;
     std::unique_ptr<HeatSystemRenderStage> renderStage;
-    ContactPreviewStore* contactPreviewStore = nullptr;
     std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeOffsetByModelId;
     std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeCountByModelId;
     std::unordered_map<uint32_t, VkBuffer> receiverVoronoiSurfaceMappingBufferByModelId;
@@ -174,3 +170,4 @@ private:
     bool thermalMaterialsDirty = true;
     static constexpr uint32_t MAX_NODE_NEIGHBORS = 50;
 };
+

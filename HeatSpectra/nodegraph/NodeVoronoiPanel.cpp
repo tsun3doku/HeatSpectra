@@ -5,6 +5,7 @@
 #include "NodePanelUtils.hpp"
 #include "domain/VoronoiParams.hpp"
 
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -45,12 +46,24 @@ NodeVoronoiPanel::NodeVoronoiPanel(QWidget* parent)
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);
 
+    showVoronoiCheckBox = new QCheckBox("Show Voronoi", this);
+    layout->addWidget(showVoronoiCheckBox);
+
+    showPointsCheckBox = new QCheckBox("Show Points", this);
+    layout->addWidget(showPointsCheckBox);
+
     layout->addStretch();
 
     connect(cellSizeSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double) {
         onParametersEdited();
     });
     connect(voxelResolutionSpinBox, &QSpinBox::valueChanged, this, [this](int) {
+        onParametersEdited();
+    });
+    connect(showVoronoiCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onParametersEdited();
+    });
+    connect(showPointsCheckBox, &QCheckBox::toggled, this, [this](bool) {
         onParametersEdited();
     });
 }
@@ -62,12 +75,8 @@ void NodeVoronoiPanel::bind(NodeGraphBridge* nodeGraphBridgePtr) {
 void NodeVoronoiPanel::setNode(NodeGraphNodeId nodeId) {
     currentNodeId = nodeId;
 
-    if (!nodeGraphBridge || !currentNodeId.isValid()) {
-        return;
-    }
-
     NodeGraphNode node{};
-    if (!nodeGraphBridge->getNode(currentNodeId, node)) {
+    if (!NodePanelUtils::loadNode(nodeGraphBridge, currentNodeId, node)) {
         return;
     }
 
@@ -76,6 +85,8 @@ void NodeVoronoiPanel::setNode(NodeGraphNodeId nodeId) {
     syncingFromNode = true;
     const QSignalBlocker cellSizeBlock(cellSizeSpinBox);
     const QSignalBlocker voxelResolutionBlock(voxelResolutionSpinBox);
+    const QSignalBlocker showVoronoiBlock(showVoronoiCheckBox);
+    const QSignalBlocker showPointsBlock(showPointsCheckBox);
     cellSizeSpinBox->setValue(NodePanelUtils::readFloatParam(
         node,
         nodegraphparams::voronoi::CellSize,
@@ -84,6 +95,14 @@ void NodeVoronoiPanel::setNode(NodeGraphNodeId nodeId) {
         node,
         nodegraphparams::voronoi::VoxelResolution,
         defaults.voxelResolution));
+    showVoronoiCheckBox->setChecked(NodePanelUtils::readBoolParam(
+        node,
+        nodegraphparams::voronoi::ShowVoronoi,
+        false));
+    showPointsCheckBox->setChecked(NodePanelUtils::readBoolParam(
+        node,
+        nodegraphparams::voronoi::ShowPoints,
+        false));
     syncingFromNode = false;
 }
 
@@ -92,7 +111,7 @@ void NodeVoronoiPanel::setStatusSink(std::function<void(const QString&)> statusS
 }
 
 bool NodeVoronoiPanel::writeParameters() {
-    if (!nodeGraphBridge) {
+    if (!NodePanelUtils::canEditNode(nodeGraphBridge, currentNodeId)) {
         setStatus("Cannot update Voronoi settings for this node");
         return false;
     }
@@ -112,6 +131,24 @@ bool NodeVoronoiPanel::writeParameters() {
             nodegraphparams::voronoi::VoxelResolution,
             voxelResolutionSpinBox->value())) {
         setStatus("Failed to update Voronoi voxel resolution");
+        return false;
+    }
+
+    if (!NodePanelUtils::writeBoolParam(
+            nodeGraphBridge,
+            currentNodeId,
+            nodegraphparams::voronoi::ShowVoronoi,
+            showVoronoiCheckBox->isChecked())) {
+        setStatus("Failed to update Voronoi overlay state");
+        return false;
+    }
+
+    if (!NodePanelUtils::writeBoolParam(
+            nodeGraphBridge,
+            currentNodeId,
+            nodegraphparams::voronoi::ShowPoints,
+            showPointsCheckBox->isChecked())) {
+        setStatus("Failed to update Voronoi points state");
         return false;
     }
 

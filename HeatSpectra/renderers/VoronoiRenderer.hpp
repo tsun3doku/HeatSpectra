@@ -6,7 +6,6 @@
 
 class VulkanDevice;
 class UniformBufferManager;
-class Model;
 class CommandPool;
 
 class VoronoiRenderer {

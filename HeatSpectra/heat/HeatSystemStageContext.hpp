@@ -2,7 +2,7 @@
 
 class VulkanDevice;
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class CommandPool;
 class HeatSystemResources;
@@ -10,9 +10,10 @@ class HeatSystemResources;
 struct HeatSystemStageContext {
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     HeatSystemResources& resources;
 };
+
 

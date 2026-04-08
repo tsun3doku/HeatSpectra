@@ -1,7 +1,7 @@
-﻿#include "ModelSelection.hpp"
+#include "ModelSelection.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "Model.hpp"
 
 #include <algorithm>
@@ -12,7 +12,7 @@
 ModelSelection::ModelSelection(
     VulkanDevice& device,
     VkFrameGraphRuntime& runtime,
-    ResourceManager& resourceManager,
+    ModelRegistry& resourceManager,
     framegraph::ResourceId depthResolveResourceId)
     : vulkanDevice(device), frameGraphRuntime(runtime), resourceManager(resourceManager), depthResolveResourceId(depthResolveResourceId), pickingCommandPool(VK_NULL_HANDLE),
       stagingBuffer(VK_NULL_HANDLE), stagingBufferMemory(VK_NULL_HANDLE), stagingBufferMapped(nullptr) {
@@ -354,7 +354,7 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
     if (stencilValue >= 3 && stencilValue <= 8) {
         result.type = PickedType::Gizmo;
         result.gizmoAxis = static_cast<PickedGizmoAxis>(((stencilValue - 3) % 3) + 1);
-    } else if (resourceManager.getModelByID(stencilValue) != nullptr) {
+    } else if (resourceManager.hasModel(stencilValue)) {
         result.type = PickedType::Model;
         result.modelID = stencilValue;
     } else {
@@ -387,4 +387,5 @@ void ModelSelection::cleanup() {
     }
     initialized = false;
 }
+
 

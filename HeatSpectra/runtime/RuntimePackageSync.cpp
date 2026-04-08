@@ -21,7 +21,8 @@ RuntimeSyncPlan RuntimePackageSync::buildPlan(
 }
 
 void RuntimePackageSync::sync(const RuntimePackageSet& previous, const RuntimePackageSet& next, RuntimePackageController& payloadController) const {
-    payloadController.executePlan(buildPlan(previous, next));
+    const RuntimeSyncPlan plan = buildPlan(previous, next);
+    payloadController.executePlan(plan);
 }
 
 bool RuntimePackageSync::containsActiveModelId(const RuntimePackageSet& packageSet, uint32_t modelId) {

@@ -11,110 +11,69 @@ RuntimeHost::~RuntimeHost() {
 }
 
 bool RuntimeHost::initialize(WindowRuntimeState& runtimeState, const AppVulkanContext& vulkanContext) {
-    return systems && systems->initialize(runtimeState, vulkanContext);
+    return systems->initialize(runtimeState, vulkanContext);
 }
 
 void RuntimeHost::tickFrame(float deltaTime) {
-    if (systems) {
-        systems->tickFrame(deltaTime);
-    }
+    systems->tickFrame(deltaTime);
 }
 
 void RuntimeHost::shutdown() {
-    if (systems) {
-        systems->shutdown();
-    }
+    systems->shutdown();
 }
 
 bool RuntimeHost::isInitialized() const {
-    return systems && systems->isInitialized();
+    return systems->isInitialized();
 }
 
 const RuntimeQuery* RuntimeHost::runtimeQuery() const {
-    if (systems) {
-        return systems->runtimeQuery();
-    }
-    return nullptr;
+    return systems->runtimeQuery();
 }
 
 std::vector<SimulationError> RuntimeHost::consumeSimulationErrors() {
-    if (systems) {
-        return systems->consumeSimulationErrors();
-    }
-    return {};
+    return systems->consumeSimulationErrors();
 }
 
 uint32_t RuntimeHost::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    if (systems) {
-        return systems->loadModel(modelPath, preferredModelId);
-    }
-    return 0;
+    return systems->loadModel(modelPath, preferredModelId);
 }
 
 void RuntimeHost::setPanSensitivity(float sensitivity) {
-    if (systems) {
-        systems->setPanSensitivity(sensitivity);
-    }
+    systems->setPanSensitivity(sensitivity);
 }
 
 void RuntimeHost::setRenderPaused(bool paused) {
-    if (systems) {
-        systems->setRenderPaused(paused);
-    }
+    systems->setRenderPaused(paused);
 }
 
 RenderSettingsController* RuntimeHost::getSettingsController() {
-    if (systems) {
-        return systems->getSettingsController();
-    }
-    return nullptr;
+    return systems->getSettingsController();
 }
 
 const RenderSettingsController* RuntimeHost::getSettingsController() const {
-    if (systems) {
-        return systems->getSettingsController();
-    }
-    return nullptr;
+    return systems->getSettingsController();
 }
 
 NodeGraphBridge* RuntimeHost::getNodeGraphBridge() {
-    if (systems) {
-        return systems->getNodeGraphBridge();
-    }
-    return nullptr;
+    return systems->getNodeGraphBridge();
 }
 
 const NodeGraphBridge* RuntimeHost::getNodeGraphBridge() const {
-    if (systems) {
-        return systems->getNodeGraphBridge();
-    }
-    return nullptr;
+    return systems->getNodeGraphBridge();
 }
 
 SceneController* RuntimeHost::getSceneController() {
-    if (systems) {
-        return systems->getSceneController();
-    }
-    return nullptr;
+    return systems->getSceneController();
 }
 
 const SceneController* RuntimeHost::getSceneController() const {
-    if (systems) {
-        return systems->getSceneController();
-    }
-    return nullptr;
+    return systems->getSceneController();
 }
 
 ModelSelection* RuntimeHost::getModelSelection() {
-    if (systems) {
-        return systems->getModelSelection();
-    }
-    return nullptr;
+    return systems->getModelSelection();
 }
 
 const ModelSelection* RuntimeHost::getModelSelection() const {
-    if (systems) {
-        return systems->getModelSelection();
-    }
-    return nullptr;
+    return systems->getModelSelection();
 }

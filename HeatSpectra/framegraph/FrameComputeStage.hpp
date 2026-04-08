@@ -13,7 +13,7 @@ class VkFrameGraphRuntime;
 class FrameComputeStage {
 public:
     FrameComputeStage(VulkanDevice& vulkanDevice, VkFrameGraphRuntime& frameGraphRuntime, FrameSync& frameSync, ComputeTiming& computeTiming);
-    FrameStageResult execute(uint32_t frameIndex, HeatSystem* heatSystem, FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(uint32_t frameIndex, const std::vector<HeatSystem*>& heatSystems, FrameSyncState& syncState, bool allowHeatSolve);
 
 private:
     VulkanDevice& vulkanDevice;

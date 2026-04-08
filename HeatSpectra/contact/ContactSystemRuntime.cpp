@@ -1,16 +1,52 @@
 #include "ContactSystemRuntime.hpp"
 
-#include "ContactSystemController.hpp"
+#include "ContactSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
-#include <iostream>
 #include <vector>
 
-namespace {
+void ContactSystemRuntime::setParams(
+    ContactCouplingType updatedCouplingType,
+    float updatedMinNormalDot,
+    float updatedContactRadius) {
+    couplingType = updatedCouplingType;
+    minNormalDot = updatedMinNormalDot;
+    contactRadius = updatedContactRadius;
+    bindingDirty = true;
+}
 
-void freeProductBuffers(MemoryAllocator& memoryAllocator, ContactProduct& product) {
+void ContactSystemRuntime::setEmitterState(
+    uint32_t modelId,
+    const std::array<float, 16>& localToWorld,
+    const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+    uint32_t runtimeModelId) {
+    emitterModelId = modelId;
+    emitterLocalToWorld = localToWorld;
+    emitterIntrinsicMesh = intrinsicMesh;
+    emitterRuntimeModelId = runtimeModelId;
+    bindingDirty = true;
+}
+
+void ContactSystemRuntime::setReceiverState(
+    uint32_t modelId,
+    const std::array<float, 16>& localToWorld,
+    const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
+    uint32_t runtimeModelId) {
+    receiverModelId = modelId;
+    receiverLocalToWorld = localToWorld;
+    receiverIntrinsicMesh = intrinsicMesh;
+    receiverRuntimeModelId = runtimeModelId;
+    bindingDirty = true;
+}
+
+void ContactSystemRuntime::setReceiverTriangleIndices(const std::vector<uint32_t>& triangleIndices) {
+    receiverTriangleIndices = triangleIndices;
+    bindingDirty = true;
+}
+
+void ContactSystemRuntime::clearProductBuffers(MemoryAllocator& memoryAllocator) {
     if (product.contactPairBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(product.contactPairBuffer, product.contactPairBufferOffset);
         product.contactPairBuffer = VK_NULL_HANDLE;
@@ -20,7 +56,7 @@ void freeProductBuffers(MemoryAllocator& memoryAllocator, ContactProduct& produc
     product.mappedContactPairs = nullptr;
 }
 
-bool recreateBuffer(
+bool ContactSystemRuntime::recreateProductBuffer(
     MemoryAllocator& memoryAllocator,
     VulkanDevice& vulkanDevice,
     VkBuffer& buffer,
@@ -53,50 +89,91 @@ bool recreateBuffer(
         buffer != VK_NULL_HANDLE;
 }
 
-}
-
-void ContactSystemRuntime::clear(MemoryAllocator& memoryAllocator) {
-    freeProductBuffers(memoryAllocator, product);
+void ContactSystemRuntime::clearProduct(MemoryAllocator& memoryAllocator) {
+    clearProductBuffers(memoryAllocator);
     product = {};
     productValid = false;
 }
 
-void ContactSystemRuntime::rebuildProducts(
-    ContactSystemController* contactSystemController,
+void ContactSystemRuntime::clear(MemoryAllocator& memoryAllocator) {
+    clearProduct(memoryAllocator);
+    couplingType = ContactCouplingType::SourceToReceiver;
+    minNormalDot = -0.65f;
+    contactRadius = 0.01f;
+    emitterModelId = 0;
+    emitterLocalToWorld = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    emitterIntrinsicMesh = {};
+    emitterRuntimeModelId = 0;
+    receiverModelId = 0;
+    receiverLocalToWorld = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    receiverIntrinsicMesh = {};
+    receiverRuntimeModelId = 0;
+    receiverTriangleIndices.clear();
+    bindingDirty = false;
+}
+
+bool ContactSystemRuntime::hasValidBinding() const {
+    return emitterRuntimeModelId != 0 &&
+        receiverRuntimeModelId != 0 &&
+        emitterRuntimeModelId != receiverRuntimeModelId &&
+        emitterModelId != 0 &&
+        receiverModelId != 0 &&
+        !emitterIntrinsicMesh.vertices.empty() &&
+        !receiverIntrinsicMesh.vertices.empty() &&
+        !receiverTriangleIndices.empty();
+}
+
+bool ContactSystemRuntime::ensureProduct(
+    ContactSystem& contactSystem,
     VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    const RuntimeContactBinding& configuredContact) {
-    clear(memoryAllocator);
-    if (!contactSystemController) {
-        return;
+    MemoryAllocator& memoryAllocator) {
+    if (!bindingDirty) {
+        return productValid;
     }
 
-    if (!configuredContact.contactPair.hasValidContact ||
-        configuredContact.emitterRuntimeModelId == 0 ||
-        configuredContact.receiverRuntimeModelId == 0 ||
-        configuredContact.emitterRuntimeModelId == configuredContact.receiverRuntimeModelId) {
-        return;
+    clearProduct(memoryAllocator);
+
+    if (!hasValidBinding()) {
+        return false;
     }
 
     std::vector<ContactPair> pairs;
-    if (!contactSystemController->computePairs(configuredContact.runtimePair, pairs, false) ||
+    if (!contactSystem.computePairs(
+            emitterModelId,
+            emitterLocalToWorld,
+            emitterIntrinsicMesh,
+            receiverModelId,
+            receiverLocalToWorld,
+            receiverIntrinsicMesh,
+            couplingType,
+            minNormalDot,
+            contactRadius,
+            pairs) ||
         pairs.empty()) {
-        std::cerr << "[ContactRuntime] computePairs FAILED or returned 0 pairs" << std::endl;
-        return;
+        return false;
     }
 
-    product.couplingType = configuredContact.contactPair.kind;
-    product.emitterRuntimeModelId = configuredContact.emitterRuntimeModelId;
-    product.receiverRuntimeModelId = configuredContact.receiverRuntimeModelId;
-    product.receiverTriangleIndices = configuredContact.receiverTriangleIndices;
+    product.couplingType = couplingType;
+    product.emitterRuntimeModelId = emitterRuntimeModelId;
+    product.receiverRuntimeModelId = receiverRuntimeModelId;
+    product.receiverTriangleIndices = receiverTriangleIndices;
     if (product.receiverTriangleIndices.empty()) {
-        std::cerr << "[ContactRuntime] receiverTriangleIndices EMPTY — aborting" << std::endl;
-        clear(memoryAllocator);
-        return;
+        clearProduct(memoryAllocator);
+        return false;
     }
 
     void* mappedPairData = nullptr;
-    if (!recreateBuffer(
+    if (!recreateProductBuffer(
             memoryAllocator,
             vulkanDevice,
             product.contactPairBuffer,
@@ -104,13 +181,15 @@ void ContactSystemRuntime::rebuildProducts(
             &mappedPairData,
             pairs.data(),
             sizeof(ContactPair) * pairs.size())) {
-        clear(memoryAllocator);
-        return;
+        clearProduct(memoryAllocator);
+        return false;
     }
 
     product.contactPairCount = static_cast<uint32_t>(pairs.size());
     product.mappedContactPairs = static_cast<const ContactPair*>(mappedPairData);
     productValid = product.isValid();
-    std::cerr << "[ContactRuntime] rebuildProducts done: contactPairCount=" << product.contactPairCount
-              << " productValid=" << (productValid ? "true" : "false") << std::endl;
+    if (productValid) {
+        bindingDirty = false;
+    }
+    return productValid;
 }

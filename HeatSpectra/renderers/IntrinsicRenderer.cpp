@@ -3,9 +3,8 @@
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "mesh/remesher/iODT.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ResourceManager.hpp"
+#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanBuffer.hpp"
-#include "scene/Model.hpp"
 #include "util/File_utils.h"
 #include "util/Structs.hpp"
 #include "vulkan/UniformBufferManager.hpp"
@@ -615,24 +614,24 @@ void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForPackage(uint64_t pa
         uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets[i];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
-
         VkDescriptorBufferInfo triangleBufferInfo{};
         triangleBufferInfo.buffer = product.intrinsicTriangleBuffer;
         triangleBufferInfo.offset = product.intrinsicTriangleBufferOffset;
         triangleBufferInfo.range = product.intrinsicTriangleCount * sizeof(IntrinsicTriangleData);
 
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &triangleBufferInfo;
+
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets[i];
         descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pBufferInfo = &triangleBufferInfo;
+        descriptorWrites[1].pBufferInfo = &uboBufferInfo;
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
@@ -660,24 +659,24 @@ void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForPackage(uint6
         uboBufferInfo.offset = uniformBufferManager.getUniformBufferOffsets()[i];
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = descriptorSets[i];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
-
         VkDescriptorBufferInfo vertexBufferInfo{};
         vertexBufferInfo.buffer = product.intrinsicVertexBuffer;
         vertexBufferInfo.offset = product.intrinsicVertexBufferOffset;
         vertexBufferInfo.range = product.intrinsicVertexCount * sizeof(IntrinsicVertexData);
 
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = descriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &vertexBufferInfo;
+
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets[i];
         descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pBufferInfo = &vertexBufferInfo;
+        descriptorWrites[1].pBufferInfo = &uboBufferInfo;
 
         vkUpdateDescriptorSets(vulkanDevice.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
@@ -727,7 +726,7 @@ void IntrinsicRenderer::releaseDescriptorSetsForPackage(uint64_t packageKey) {
     runtimeModelIdByPackageKey.erase(packageKey);
 }
 
-void IntrinsicRenderer::pruneStalePackageResources(const ResourceManager& resourceManager) {
+void IntrinsicRenderer::pruneStalePackageResources(const ModelRegistry& resourceManager) {
     std::vector<uint64_t> stalePackageKeys;
     stalePackageKeys.reserve(remeshProductsByPackageKey.size());
 
@@ -737,7 +736,7 @@ void IntrinsicRenderer::pruneStalePackageResources(const ResourceManager& resour
             !product.isValid() ||
             runtimeModelIt == runtimeModelIdByPackageKey.end() ||
             runtimeModelIt->second == 0 ||
-            resourceManager.getModelByID(runtimeModelIt->second) == nullptr) {
+            !resourceManager.hasModel(runtimeModelIt->second)) {
             stalePackageKeys.push_back(packageKey);
         }
     }
@@ -1252,7 +1251,7 @@ bool IntrinsicRenderer::createIntrinsicVertexNormalsPipeline(VkRenderPass render
     return true;
 }
 
-void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager) {
+void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager) {
     if (!initialized || supportingHalfedgePipeline == VK_NULL_HANDLE) {
         return;
     }
@@ -1266,8 +1265,8 @@ void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer,
         if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
             continue;
         }
-        Model* model = const_cast<Model*>(resourceManager.getModelByID(runtimeModelIt->second));
-        if (!model || !product.isValid()) {
+        ModelProduct modelProduct{};
+        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
             continue;
         }
 
@@ -1281,21 +1280,21 @@ void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer,
             continue;
         }
 
-        glm::mat4 modelMatrix = model->getModelMatrix();
+        glm::mat4 modelMatrix = modelProduct.modelMatrix;
         vkCmdPushConstants(commandBuffer, supportingHalfedgePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
 
-        VkBuffer modelVertexBuffer = model->getVertexBuffer();
-        VkDeviceSize modelVertexOffset = model->getVertexBufferOffset();
+        VkBuffer modelVertexBuffer = modelProduct.vertexBuffer;
+        VkDeviceSize modelVertexOffset = modelProduct.vertexBufferOffset;
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
-        vkCmdBindIndexBuffer(commandBuffer, model->getIndexBuffer(), model->getIndexBufferOffset(), VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, modelProduct.indexBuffer, modelProduct.indexBufferOffset, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipelineLayout, 0, 1, &modelDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->getIndices().size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, modelProduct.indexCount, 1, 0, 0, 0);
     }
 
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 }
 
-void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength) {
     if (!initialized || intrinsicNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
@@ -1308,8 +1307,8 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
         if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
             continue;
         }
-        Model* model = const_cast<Model*>(resourceManager.getModelByID(runtimeModelIt->second));
-        if (!model || !product.isValid()) {
+        ModelProduct modelProduct{};
+        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
             continue;
         }
 
@@ -1329,7 +1328,7 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = model->getModelMatrix();
+        pushConstants.modelMatrix = modelProduct.modelMatrix;
         pushConstants.normalLength = normalLength;
         pushConstants.avgArea = product.averageTriangleArea;
 
@@ -1339,7 +1338,7 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
     }
 }
 
-void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ResourceManager& resourceManager, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength) {
     if (!initialized || intrinsicVertexNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
@@ -1352,8 +1351,8 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
         if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
             continue;
         }
-        Model* model = const_cast<Model*>(resourceManager.getModelByID(runtimeModelIt->second));
-        if (!model || !product.isValid()) {
+        ModelProduct modelProduct{};
+        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
             continue;
         }
 
@@ -1373,7 +1372,7 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = model->getModelMatrix();
+        pushConstants.modelMatrix = modelProduct.modelMatrix;
         pushConstants.normalLength = normalLength;
         pushConstants.avgArea = 0.0f;
 
@@ -1461,3 +1460,4 @@ void IntrinsicRenderer::cleanup() {
 
     initialized = false;
 }
+

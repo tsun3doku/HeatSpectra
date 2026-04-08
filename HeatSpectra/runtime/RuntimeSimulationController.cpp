@@ -5,15 +5,15 @@
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
-#include "scene/SceneController.hpp"
+#include "runtime/ModelRuntime.hpp"
 
 RuntimeSimulationController::RuntimeSimulationController(
     HeatSystemController& heatSystemController,
-    SceneController& sceneController,
+    ModelRuntime& modelRuntime,
     NodeGraphController& nodeGraphController,
     RenderSettingsManager& settingsManager)
     : heatSystemController(heatSystemController),
-      sceneController(sceneController),
+      modelRuntime(modelRuntime),
       nodeGraphController(nodeGraphController),
       settingsManager(settingsManager) {
 }
@@ -23,7 +23,7 @@ bool RuntimeSimulationController::canExecuteHeatSolve() const {
 }
 
 uint32_t RuntimeSimulationController::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    return sceneController.loadModel(modelPath, preferredModelId);
+    return modelRuntime.loadModel(modelPath, preferredModelId);
 }
 
 std::vector<SimulationError> RuntimeSimulationController::consumeSimulationErrors() {
@@ -31,11 +31,11 @@ std::vector<SimulationError> RuntimeSimulationController::consumeSimulationError
 }
 
 bool RuntimeSimulationController::isSimulationActive() const {
-    return heatSystemController.isHeatSystemActive();
+    return heatSystemController.isAnyHeatSystemActive();
 }
 
 bool RuntimeSimulationController::isSimulationPaused() const {
-    return heatSystemController.isHeatSystemPaused();
+    return heatSystemController.isAnyHeatSystemPaused();
 }
 
 void RuntimeSimulationController::onWireframeToggleRequested() {

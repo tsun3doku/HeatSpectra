@@ -1,18 +1,16 @@
 #include "RuntimePackageController.hpp"
 
+#include "runtime/ModelRuntime.hpp"
 #include "nodegraph/NodeModelTransform.hpp"
-#include "scene/Model.hpp"
-#include "scene/SceneController.hpp"
 #include "runtime/RuntimePackageSync.hpp"
 #include "runtime/RuntimeContactTransport.hpp"
 #include "runtime/RuntimeHeatTransport.hpp"
 #include "runtime/RuntimeModelTransport.hpp"
 #include "runtime/RuntimeRemeshTransport.hpp"
 #include "runtime/RuntimeVoronoiTransport.hpp"
-#include "vulkan/ResourceManager.hpp"
 
-RuntimePackageController::RuntimePackageController(ResourceManager& resourceManager)
-    : resourceManager(resourceManager) {
+RuntimePackageController::RuntimePackageController(ModelRuntime& modelRuntime)
+    : modelRuntime(modelRuntime) {
 }
 
 void RuntimePackageController::setRemeshTransport(RuntimeRemeshTransport* updatedRemeshTransport) {
@@ -35,40 +33,20 @@ void RuntimePackageController::setModelTransport(RuntimeModelTransport* updatedM
     modelTransport = updatedModelTransport;
 }
 
-void RuntimePackageController::setSceneController(SceneController* updatedSceneController) {
-    sceneController = updatedSceneController;
-}
-
 void RuntimePackageController::applyGeometry(uint64_t socketKey, const GeometryPackage& geometryPackage) {
     if (geometryPackage.geometry.modelId != 0) {
         geometryNodeModelIdBySocketKey[socketKey] = geometryPackage.geometry.modelId;
     }
 
-    if (!sceneController || geometryPackage.geometry.modelId == 0) {
+    if (geometryPackage.geometry.modelId == 0) {
         return;
     }
 
-    uint32_t runtimeModelId = 0;
-    if (!geometryPackage.geometry.baseModelPath.empty()) {
-        runtimeModelId = sceneController->materializeModelSink(
-            geometryPackage.geometry.modelId,
-            geometryPackage.geometry.baseModelPath);
-    } else if (!sceneController->tryGetNodeModelRuntimeId(geometryPackage.geometry.modelId, runtimeModelId)) {
-        runtimeModelId = 0;
-    }
-    if (runtimeModelId == 0) {
-        return;
-    }
-
-    Model* sinkModel = resourceManager.getModelByID(runtimeModelId);
-    if (!sinkModel) {
-        return;
-    }
-
-    sinkModel->setModelMatrix(NodeModelTransform::toMat4(geometryPackage.geometry.localToWorld));
-    if (modelTransport) {
-        modelTransport->publish(socketKey, runtimeModelId);
-    }
+    modelRuntime.queueApplySink(
+        geometryPackage.geometry.modelId,
+        geometryPackage.geometry.baseModelPath,
+        NodeModelTransform::toMat4(geometryPackage.geometry.localToWorld));
+    pendingGeometryModelPublishes.emplace_back(socketKey, geometryPackage.geometry.modelId);
     heatSystemsDirty = true;
 }
 
@@ -84,11 +62,9 @@ void RuntimePackageController::removeGeometry(uint64_t socketKey) {
 
     const uint32_t nodeModelId = it->second;
     geometryNodeModelIdBySocketKey.erase(it);
-    if (modelTransport) {
-        modelTransport->remove(socketKey);
-    }
-    if (sceneController && nodeModelId != 0) {
-        sceneController->removeNodeModelSink(nodeModelId);
+    pendingGeometryModelRemovals.push_back(socketKey);
+    if (nodeModelId != 0) {
+        modelRuntime.queueRemoveSink(nodeModelId);
     }
     heatSystemsDirty = true;
 }
@@ -174,6 +150,9 @@ void RuntimePackageController::removeVoronoi(uint64_t socketKey) {
 }
 
 void RuntimePackageController::executePlan(const RuntimeSyncPlan& plan) {
+    pendingGeometryModelRemovals.clear();
+    pendingGeometryModelPublishes.clear();
+
     for (uint64_t socketKey : plan.removeHeatSockets) {
         removeHeat(socketKey);
     }
@@ -184,31 +163,11 @@ void RuntimePackageController::executePlan(const RuntimeSyncPlan& plan) {
         removeVoronoi(socketKey);
     }
 
-    if (heatSystemsDirty && heatTransport) {
-        const HeatPackage* activeHeatPackage = selectPackage(heatPackagesBySocket);
-        heatTransport->apply(activeHeatPackage);
-        heatSystemsDirty = false;
-    }
-    if (contactSystemsDirty && contactTransport) {
-        const auto [activeContactSocketKey, activeContactPackage] = selectPackageEntry(contactPackagesBySocket);
-        contactTransport->apply(activeContactSocketKey, activeContactPackage);
-        contactSystemsDirty = false;
-    }
-    if (voronoiSystemsDirty && voronoiTransport) {
-        const auto [activeVoronoiSocketKey, activeVoronoiPackage] = selectPackageEntry(voronoiPackagesBySocket);
-        voronoiTransport->apply(activeVoronoiSocketKey, activeVoronoiPackage);
-        voronoiSystemsDirty = false;
-    }
-
     for (uint64_t socketKey : plan.removeRemeshSockets) {
         removeRemesh(socketKey);
     }
     for (uint64_t socketKey : plan.removeGeometrySockets) {
         removeGeometry(socketKey);
-    }
-    if (remeshSystemsDirty && remeshTransport) {
-        remeshTransport->sync(remeshPackagesBySocket);
-        remeshSystemsDirty = false;
     }
 
     for (const auto& [socketKey, geometryPackage] : plan.applyGeometryPackages) {
@@ -219,6 +178,11 @@ void RuntimePackageController::executePlan(const RuntimeSyncPlan& plan) {
     }
     if (remeshSystemsDirty && remeshTransport) {
         remeshTransport->sync(remeshPackagesBySocket);
+    }
+
+    flushQueuedModelOperations();
+    if (remeshSystemsDirty && remeshTransport) {
+        remeshTransport->finalizeSync();
         remeshSystemsDirty = false;
     }
 
@@ -235,22 +199,41 @@ void RuntimePackageController::executePlan(const RuntimeSyncPlan& plan) {
     syncBackendSystems();
 }
 
+void RuntimePackageController::flushQueuedModelOperations() {
+    modelRuntime.flush();
+
+    if (modelTransport) {
+        for (uint64_t socketKey : pendingGeometryModelRemovals) {
+            modelTransport->remove(socketKey);
+        }
+
+        for (const auto& [socketKey, nodeModelId] : pendingGeometryModelPublishes) {
+            uint32_t runtimeModelId = 0;
+            if (modelRuntime.tryGetRuntimeModelId(nodeModelId, runtimeModelId) && runtimeModelId != 0) {
+                modelTransport->publish(socketKey, runtimeModelId);
+            } else {
+                modelTransport->remove(socketKey);
+            }
+        }
+    }
+
+    pendingGeometryModelRemovals.clear();
+    pendingGeometryModelPublishes.clear();
+}
+
 void RuntimePackageController::syncBackendSystems() {
     if (voronoiSystemsDirty && voronoiTransport) {
-        const auto [activeVoronoiSocketKey, activeVoronoiPackage] = selectPackageEntry(voronoiPackagesBySocket);
-        voronoiTransport->apply(activeVoronoiSocketKey, activeVoronoiPackage);
+        voronoiTransport->sync(voronoiPackagesBySocket);
         voronoiSystemsDirty = false;
     }
 
     if (contactSystemsDirty && contactTransport) {
-        const auto [activeContactSocketKey, activeContactPackage] = selectPackageEntry(contactPackagesBySocket);
-        contactTransport->apply(activeContactSocketKey, activeContactPackage);
+        contactTransport->sync(contactPackagesBySocket);
         contactSystemsDirty = false;
     }
 
     if (heatSystemsDirty && heatTransport) {
-        const HeatPackage* activeHeatPackage = selectPackage(heatPackagesBySocket);
-        heatTransport->apply(activeHeatPackage);
+        heatTransport->sync(heatPackagesBySocket);
         heatSystemsDirty = false;
     }
 }

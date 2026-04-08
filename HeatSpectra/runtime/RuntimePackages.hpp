@@ -12,19 +12,17 @@
 #include "domain/VoronoiData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "nodegraph/NodeGraphProductTypes.hpp"
-#include "runtime/RuntimeContactTypes.hpp"
 #include "runtime/RuntimeThermalTypes.hpp"
 
-//                                                          [ Invariant:
-//                                                            - *Package types exist for backend sinks only
-//                                                            - Packages hold authored config and ProductHandle dependencies
-//                                                            - Packages are compiled from authored graph data into backend dependencies
-//                                                            - Packages should not duplicate runtime data that Products already provide ]
+//                                                   [ Invariant:
+//                                                     - *Package types exist for backend sinks only
+//                                                     - Packages hold authored config and ProductHandle dependencies
+//                                                     - Packages are compiled from authored graph data into backend dependencies
+//                                                     - Packages should not duplicate runtime data that Products already provide ]
 
 struct GeometryPackage {
     uint64_t packageHash = 0;
     GeometryData geometry;
-    ProductHandle modelProduct{};
 
     bool matches(const GeometryPackage& other) const {
         return packageHash == other.packageHash;
@@ -45,6 +43,7 @@ struct RemeshPackage {
 struct VoronoiPackage {
     uint64_t packageHash = 0;
     VoronoiData authored;
+    std::vector<GeometryData> receiverGeometries;
     std::vector<ProductHandle> receiverModelProducts;
     std::vector<ProductHandle> receiverRemeshProducts;
 
@@ -58,8 +57,10 @@ struct HeatPackage {
     HeatData authored;
     ProductHandle voronoiProduct{};
     ProductHandle contactProduct{};
+    std::vector<GeometryData> sourceGeometries;
     std::vector<ProductHandle> sourceRemeshProducts;
     std::vector<float> sourceTemperatures;
+    std::vector<GeometryData> receiverGeometries;
     std::vector<ProductHandle> receiverRemeshProducts;
     std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
 
@@ -71,6 +72,8 @@ struct HeatPackage {
 struct ContactPackage {
     uint64_t packageHash = 0;
     ContactData authored;
+    GeometryData emitterGeometry;
+    GeometryData receiverGeometry;
     ProductHandle emitterRemeshProduct{};
     ProductHandle receiverRemeshProduct{};
 

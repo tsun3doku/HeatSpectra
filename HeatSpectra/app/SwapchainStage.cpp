@@ -1,11 +1,14 @@
 #include "SwapchainStage.hpp"
 
 #include "SwapchainManager.hpp"
+#include "contact/ContactSystemController.hpp"
 #include "framegraph/FrameGraph.hpp"
 #include "framegraph/FrameGraphVkTypes.hpp"
 #include "framegraph/FrameSync.hpp"
 #include "heat/HeatSystem.hpp"
+#include "heat/HeatSystemController.hpp"
 #include "heat/VoronoiSystem.hpp"
+#include "heat/VoronoiSystemController.hpp"
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/SceneRenderer.hpp"
@@ -24,8 +27,9 @@ SwapchainStage::SwapchainStage(
     VkFrameGraphBackend& frameGraphBackend,
     SceneRenderer& sceneRenderer,
     FrameSync& frameSync,
-    HeatSystem* heatSystem,
-    VoronoiSystem* voronoiSystem,
+    HeatSystemController* heatSystemController,
+    ContactSystemController* contactSystemController,
+    VoronoiSystemController* voronoiSystemController,
     std::atomic<bool>& isShuttingDown)
     : windowState(windowState),
       vulkanDevice(vulkanDevice),
@@ -34,8 +38,9 @@ SwapchainStage::SwapchainStage(
       frameGraphBackend(frameGraphBackend),
       sceneRenderer(sceneRenderer),
       frameSync(frameSync),
-      heatSystem(heatSystem),
-      voronoiSystem(voronoiSystem),
+      heatSystemController(heatSystemController),
+      contactSystemController(contactSystemController),
+      voronoiSystemController(voronoiSystemController),
       isShuttingDown(isShuttingDown) {
 }
 
@@ -95,17 +100,23 @@ bool SwapchainStage::recreateSwapChain() {
         return false;
     }
 
-    if (heatSystem) {
-        heatSystem->recreateResources(
-            renderconfig::MaxFramesInFlight,
+    if (heatSystemController) {
+        heatSystemController->updateRenderContext(
             targetExtent,
             frameGraphBackend.getRuntime().getRenderPass());
+        heatSystemController->updateRenderResources();
     }
-    if (voronoiSystem) {
-        voronoiSystem->recreateResources(
-            renderconfig::MaxFramesInFlight,
+    if (contactSystemController) {
+        contactSystemController->updateRenderContext(
             targetExtent,
             frameGraphBackend.getRuntime().getRenderPass());
+        contactSystemController->updateRenderResources();
+    }
+    if (voronoiSystemController) {
+        voronoiSystemController->updateRenderContext(
+            targetExtent,
+            frameGraphBackend.getRuntime().getRenderPass());
+        voronoiSystemController->updateRenderResources();
     }
 
     sceneRenderer.updateDescriptorSets();

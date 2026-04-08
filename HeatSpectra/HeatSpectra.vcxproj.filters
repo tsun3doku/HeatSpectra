@@ -78,12 +78,6 @@
     <ClCompile Include="runtime\RenderContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\ContactPreviewStore.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\ComputeCache.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="runtime\RemeshController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -210,7 +204,7 @@
     <ClCompile Include="vulkan\MemoryAllocator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\ResourceManager.cpp">
+    <ClCompile Include="vulkan\ModelRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="mesh\\remesher\\Remesher.cpp">
@@ -712,12 +706,6 @@
     <ClInclude Include="runtime\RenderContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\ContactPreviewStore.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\ComputeCache.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="runtime\RuntimePackageCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -728,9 +716,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimePackageController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimeContactTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeThermalTypes.hpp">
@@ -862,7 +847,7 @@
     <ClInclude Include="vulkan\MemoryAllocator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan\ResourceManager.hpp">
+    <ClInclude Include="vulkan\ModelRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mesh\\remesher\\Remesher.hpp">
@@ -1247,3 +1232,4 @@
     </QtMoc>
   </ItemGroup>
 </Project>
+

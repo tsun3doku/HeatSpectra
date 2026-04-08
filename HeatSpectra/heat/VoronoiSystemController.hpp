@@ -14,7 +14,7 @@
 #include <vulkan/vulkan.h>
 
 class MemoryAllocator;
-class ResourceManager;
+class ModelRegistry;
 class UniformBufferManager;
 class VulkanDevice;
 class CommandPool;
@@ -54,27 +54,33 @@ public:
     VoronoiSystemController(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ResourceManager& resourceManager,
+        ModelRegistry& resourceManager,
         UniformBufferManager& uniformBufferManager,
         CommandPool& renderCommandPool,
         uint32_t maxFramesInFlight);
 
     void createVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void recreateVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void configure(const Config& config);
-    void disable();
-    VoronoiSystem* getVoronoiSystem() const;
-    bool exportProduct(VoronoiProduct& outProduct) const;
+    void updateRenderContext(VkExtent2D extent, VkRenderPass renderPass);
+    void updateRenderResources();
+    void configure(uint64_t socketKey, const Config& config);
+    void disable(uint64_t socketKey);
+    void disableAll();
+    VoronoiSystem* getVoronoiSystem(uint64_t socketKey) const;
+    bool exportProduct(uint64_t socketKey, VoronoiProduct& outProduct) const;
+    std::vector<VoronoiSystem*> getActiveSystems() const;
 
 private:
     std::unique_ptr<VoronoiSystem> buildVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ResourceManager& resourceManager;
+    ModelRegistry& resourceManager;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
-    std::unique_ptr<VoronoiSystem> voronoiSystem;
-    Config configuredConfig{};
+    std::unordered_map<uint64_t, std::unique_ptr<VoronoiSystem>> voronoiSystems;
+    std::unordered_map<uint64_t, Config> configuredConfigs;
+    VkExtent2D currentExtent = {0, 0};
+    VkRenderPass currentRenderPass = VK_NULL_HANDLE;
     uint32_t maxFramesInFlight = 0;
 };
+
