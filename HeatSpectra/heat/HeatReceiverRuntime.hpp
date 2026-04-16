@@ -4,7 +4,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include "domain/GeometryData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 
 class VulkanDevice;
@@ -16,7 +15,6 @@ public:
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         uint32_t runtimeModelId,
-        const GeometryData& geometryData,
         const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
         VkBufferView supportingHalfedgeView,
         VkBufferView supportingAngleView,
@@ -55,7 +53,6 @@ public:
     uint32_t getRuntimeModelId() const { return runtimeModelId; }
 
     size_t getIntrinsicVertexCount() const { return intrinsicMesh.vertices.size(); }
-    const GeometryData& getGeometryData() const { return geometryData; }
     const SupportingHalfedge::IntrinsicMesh& getIntrinsicMesh() const { return intrinsicMesh; }
 
     VkBuffer getSurfaceBuffer() const { return surfaceBuffer; }
@@ -84,7 +81,6 @@ private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     uint32_t runtimeModelId = 0;
-    GeometryData geometryData{};
     SupportingHalfedge::IntrinsicMesh intrinsicMesh{};
     VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
     VkBufferView supportingAngleView = VK_NULL_HANDLE;

@@ -18,11 +18,8 @@ public:
     bool removeNode(NodeGraphNodeId nodeId);
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
     bool getNode(NodeGraphNodeId nodeId, NodeGraphNode& outNode) const;
+    bool setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
-    bool appendSocket(
-        NodeGraphNodeId nodeId,
-        const NodeSocketSignature& socketSignature,
-        NodeGraphSocketId* outSocketId = nullptr);
 
     bool connectSockets(
         NodeGraphNodeId fromNode,
@@ -33,10 +30,10 @@ public:
         bool replaceExistingInput = true);
     bool removeConnection(NodeGraphEdgeId edgeId);
 
-    NodeGraphCompiled compiledState() const;
     bool canExecuteHeatSolve(std::string& reason) const;
 
     NodeGraphState state() const;
+    bool resolveGizmoTransformNode(uint64_t outputSocketKey, NodeGraphNodeId& outTransformNodeId) const;
     bool consumeChanges(uint64_t& lastSeenRevision, NodeGraphDelta& outDelta) const;
 
 private:

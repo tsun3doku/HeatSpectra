@@ -1,6 +1,6 @@
 #pragma once
 
-#include "runtime/RuntimeProducts.hpp"
+#include "runtime/RemeshDisplayController.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -12,7 +12,6 @@ class MemoryAllocator;
 class UniformBufferManager;
 class CommandPool;
 class iODT;
-class ModelRegistry;
 
 class IntrinsicRenderer {
 public:
@@ -21,24 +20,24 @@ public:
     ~IntrinsicRenderer();
     void cleanup();
 
-    void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
-    void removeIntrinsicPackage(uint64_t packageKey);
-    void renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager);
-    void renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength);
-    void renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength);
+    void apply(uint64_t socketKey, const RemeshDisplayController::Config& config);
+    void remove(uint64_t socketKey);
+    void renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame);
+    void renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
 private:
     bool initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight, uint32_t subpassIndex);
     uint32_t calculateMipLevels(uint32_t width, uint32_t height);
     bool createWireframeTexture();
-    void pruneStalePackageResources(const ModelRegistry& resourceManager);
-    void releaseDescriptorSetsForPackage(uint64_t packageKey);
-    void allocateDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight);
-    void allocateNormalsDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight);
-    void allocateVertexNormalsDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight);
-    void updatePayloadDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product);
-    void updatePayloadNormalsDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product);
-    void updatePayloadVertexNormalsDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product);
+    void pruneStaleSocketResources();
+    void releaseDescriptorSetsForSocket(uint64_t socketKey);
+    void allocateDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight);
+    void allocateNormalsDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight);
+    void allocateVertexNormalsDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight);
+    void updatePayloadDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config);
+    void updatePayloadNormalsDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config);
+    void updatePayloadVertexNormalsDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config);
 
     bool createSupportingHalfedgeDescriptorPool(uint32_t maxFramesInFlight);
     bool createSupportingHalfedgeDescriptorSetLayout();
@@ -60,7 +59,7 @@ private:
 
     VkDescriptorPool supportingHalfedgeDescriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout supportingHalfedgeDescriptorSetLayout = VK_NULL_HANDLE;
-    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> supportingHalfedgeDescriptorSetsByPackage;
+    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> supportingHalfedgeDescriptorSetsBySocket;
 
     VkImage wireframeTextureImage = VK_NULL_HANDLE;
     VkDeviceMemory wireframeTextureMemory = VK_NULL_HANDLE;
@@ -69,13 +68,12 @@ private:
 
     VkDescriptorPool intrinsicNormalsDescriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout intrinsicNormalsDescriptorSetLayout = VK_NULL_HANDLE;
-    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> intrinsicNormalsDescriptorSetsByPackage;
+    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> intrinsicNormalsDescriptorSetsBySocket;
 
     VkDescriptorPool intrinsicVertexNormalsDescriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout intrinsicVertexNormalsDescriptorSetLayout = VK_NULL_HANDLE;
-    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> intrinsicVertexNormalsDescriptorSetsByPackage;
-    std::unordered_map<uint64_t, RemeshProduct> remeshProductsByPackageKey;
-    std::unordered_map<uint64_t, uint32_t> runtimeModelIdByPackageKey;
+    std::unordered_map<uint64_t, std::vector<VkDescriptorSet>> intrinsicVertexNormalsDescriptorSetsBySocket;
+    std::unordered_map<uint64_t, RemeshDisplayController::Config> remeshConfigsBySocketKey;
 
     VkPipeline supportingHalfedgePipeline = VK_NULL_HANDLE;
     VkPipelineLayout supportingHalfedgePipelineLayout = VK_NULL_HANDLE;
@@ -86,4 +84,3 @@ private:
 
     bool initialized = false;
 };
-

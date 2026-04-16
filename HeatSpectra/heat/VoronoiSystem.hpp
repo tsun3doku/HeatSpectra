@@ -14,14 +14,12 @@
 
 class VoronoiModelRuntime;
 class MemoryAllocator;
-class PointRenderer;
 class ModelRegistry;
 class UniformBufferManager;
 class VulkanDevice;
 class CommandPool;
 class VoronoiGeoCompute;
 class VoronoiCandidateCompute;
-class VoronoiRenderer;
 class VoronoiSurfaceStage;
 
 class VoronoiSystem {
@@ -39,8 +37,6 @@ public:
 
     bool isInitialized() const { return initialized; }
     bool isReady() const { return runtime.isReady(); }
-
-    void updateRenderResources(VkRenderPass renderPass);
 
     void setReceiverPayloads(
         const std::vector<uint32_t>& receiverNodeModelIds,
@@ -67,22 +63,12 @@ public:
         const std::vector<VkBufferView>& inputTriangleViews,
         const std::vector<VkBufferView>& inputLengthViews);
     void clearReceiverPayloads();
-    void setParams(const VoronoiParams& params);
+    void setParams(float cellSize, int voxelResolution);
     bool ensureConfigured();
-
-    void renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
-    void renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent);
 
     const std::vector<std::unique_ptr<VoronoiModelRuntime>>& getModelRuntimes() const { return runtime.getModelRuntimes(); }
     const std::vector<VoronoiDomain>& getReceiverVoronoiDomains() const { return runtime.getReceiverVoronoiDomains(); }
     const VoronoiDomain* findReceiverDomain(uint32_t receiverModelId) const { return runtime.findReceiverDomain(receiverModelId); }
-    VoronoiRenderer* voronoiRendererPtr() const { return voronoiRenderer.get(); }
-    PointRenderer* pointRendererPtr() const { return pointRenderer.get(); }
-
-    VkBuffer getSeedPositionBuffer() const { return runtime.voronoiResourcesRef().seedPositionBuffer; }
-    VkDeviceSize getSeedPositionBufferOffset() const { return runtime.voronoiResourcesRef().seedPositionBufferOffset; }
-    VkBuffer getVoronoiNeighborBuffer() const { return runtime.voronoiResourcesRef().neighborIndicesBuffer; }
-    VkDeviceSize getVoronoiNeighborBufferOffset() const { return runtime.voronoiResourcesRef().neighborIndicesBufferOffset; }
     uint32_t getVoronoiNodeCount() const { return runtime.getVoronoiNodeCount(); }
 
     VoronoiSystemResources& resourcesRef() { return runtime.resourcesRef(); }
@@ -97,8 +83,6 @@ public:
 
 private:
     void failInitialization(const char* stage);
-    void initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
-    void initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void initializeVoronoiGeoCompute();
     void initializeVoronoiCandidateCompute();
     bool createSurfaceDescriptorPool(uint32_t maxFramesInFlight);
@@ -114,8 +98,6 @@ private:
     VoronoiSystemRuntime runtime;
     VoronoiSurfaceRuntime surfaceRuntime;
 
-    std::unique_ptr<VoronoiRenderer> voronoiRenderer;
-    std::unique_ptr<PointRenderer> pointRenderer;
     std::unique_ptr<VoronoiGeoCompute> voronoiGeoCompute;
     std::unique_ptr<VoronoiCandidateCompute> voronoiCandidateCompute;
     std::unique_ptr<VoronoiSurfaceStage> surfaceStage;

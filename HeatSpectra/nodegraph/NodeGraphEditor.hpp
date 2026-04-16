@@ -2,8 +2,6 @@
 
 #include "NodeGraphTypes.hpp"
 
-#include <glm/vec3.hpp>
-
 #include <functional>
 #include <string>
 #include <vector>
@@ -55,14 +53,6 @@ public:
         const std::vector<CopiedEdge>& copiedEdges,
         float positionOffset,
         std::vector<NodeGraphNodeId>& outCreatedNodeIds);
-
-    bool ensureTransformForModelNode(NodeGraphNodeId modelNodeId, NodeGraphNodeId& outTransformNodeId);
-    bool readTransformNodeValues(
-        NodeGraphNodeId nodeId,
-        glm::vec3& outTranslation,
-        glm::vec3& outRotationDegrees) const;
-    bool writeTransformTranslation(NodeGraphNodeId nodeId, const glm::vec3& translation);
-    bool writeTransformRotation(NodeGraphNodeId nodeId, const glm::vec3& rotationDegrees);
 
 private:
     NodeGraphBridge* bridge = nullptr;

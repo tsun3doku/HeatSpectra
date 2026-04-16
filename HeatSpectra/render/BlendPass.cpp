@@ -1,4 +1,4 @@
-﻿#include "BlendPass.hpp"
+#include "BlendPass.hpp"
 
 #include <array>
 #include <cstring>
@@ -147,10 +147,9 @@ void BlendPass::updateDescriptors() {
     }
 }
 
-void BlendPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) {
+void BlendPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) {
     (void)view;
     (void)flags;
-    (void)params;
     (void)services;
     if (!ready) {
         return;

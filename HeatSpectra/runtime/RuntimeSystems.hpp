@@ -10,6 +10,7 @@
 #include "RenderSettingsManager.hpp"
 #include "RenderContext.hpp"
 #include "RuntimeController.hpp"
+#include "RuntimeInterfaces.hpp"
 #include "SimulationError.hpp"
 #include "SceneContext.hpp"
 #include "VulkanCoreContext.hpp"
@@ -20,7 +21,7 @@ class RuntimeQuery;
 class SceneController;
 struct WindowRuntimeState;
 
-class RuntimeSystems {
+class RuntimeSystems : public RuntimeQuery {
 public:
     RuntimeSystems() = default;
     ~RuntimeSystems();
@@ -46,6 +47,8 @@ public:
 
 private:
     void cleanup();
+    bool isSimulationActive() const override;
+    bool isSimulationPaused() const override;
 
     WindowRuntimeState* windowRuntimeState = nullptr;
     bool initialized = false;

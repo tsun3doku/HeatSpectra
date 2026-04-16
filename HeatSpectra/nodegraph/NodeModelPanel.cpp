@@ -7,8 +7,6 @@
 #include "NodeModelParams.hpp"
 #include "NodePanelUtils.hpp"
 
-#include <QSignalBlocker>
-#include <QCheckBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -42,16 +40,10 @@ NodeModelPanel::NodeModelPanel(QWidget* parent)
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);
 
-    wireframeCheckBox = new QCheckBox("Wireframe View", this);
-    layout->addWidget(wireframeCheckBox);
-
     layout->addStretch();
 
     connect(browseButton, &QPushButton::clicked, this, [this]() {
         browseModelFile();
-    });
-    connect(wireframeCheckBox, &QCheckBox::toggled, this, [this](bool) {
-        applySettings();
     });
 }
 
@@ -69,9 +61,7 @@ void NodeModelPanel::setNode(NodeGraphNodeId nodeId) {
 
     const ModelNodeParams params = readModelNodeParams(node);
     syncingFromNode = true;
-    const QSignalBlocker wireframeBlocker(wireframeCheckBox);
     pathLineEdit->setText(QString::fromStdString(params.path));
-    wireframeCheckBox->setChecked(params.preview.showWireframe);
     syncingFromNode = false;
 }
 
@@ -92,10 +82,7 @@ bool NodeModelPanel::writeParameters() {
     }
 
     NodeGraphEditor editor(nodeGraphBridge);
-    const ModelNodeParams params{
-        modelPath,
-        {wireframeCheckBox && wireframeCheckBox->isChecked()},
-    };
+    const ModelNodeParams params{ modelPath };
     if (!writeModelNodeParams(editor, currentNodeId, params)) {
         setStatus("Failed to update model settings.");
         return false;

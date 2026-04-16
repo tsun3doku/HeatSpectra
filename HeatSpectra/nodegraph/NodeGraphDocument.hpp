@@ -13,6 +13,7 @@ public:
     NodeGraphNodeId addNode(const NodeTypeId& typeId, const std::string& title, float x, float y);
     bool removeNode(NodeGraphNodeId nodeId);
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
+    bool setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
     bool appendSocket(NodeGraphNodeId nodeId, const NodeSocketSignature& socketSignature, NodeGraphSocketId* outSocketId = nullptr);
 

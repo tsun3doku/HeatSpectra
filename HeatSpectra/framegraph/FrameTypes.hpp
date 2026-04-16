@@ -18,7 +18,6 @@ struct FrameState {
     VkExtent2D extent{};
     render::SceneView sceneView{};
     render::RenderFlags flags{};
-    render::OverlayParams overlay{};
 };
 
 struct FrameSyncState {

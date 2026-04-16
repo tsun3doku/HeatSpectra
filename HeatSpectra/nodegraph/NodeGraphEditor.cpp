@@ -5,7 +5,6 @@
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphSceneUtils.hpp"
 #include "NodePanelUtils.hpp"
-#include "NodeTransformParams.hpp"
 
 #include <algorithm>
 #include <unordered_map>
@@ -14,44 +13,6 @@
 #include <vector>
 
 namespace {
-
-bool findFirstDownstreamTransformNode(const NodeGraphState& state, NodeGraphNodeId startNodeId, NodeGraphNodeId& outTransformNodeId) {
-    outTransformNodeId = {};
-    if (!startNodeId.isValid()) {
-        return false;
-    }
-
-    std::vector<NodeGraphNodeId> stack{startNodeId};
-    std::unordered_set<uint32_t> visitedNodeIds;
-    visitedNodeIds.insert(startNodeId.value);
-
-    while (!stack.empty()) {
-        const NodeGraphNodeId currentNodeId = stack.back();
-        stack.pop_back();
-
-        for (const NodeGraphEdge& edge : state.edges) {
-            if (edge.fromNode != currentNodeId || !edge.toNode.isValid()) {
-                continue;
-            }
-            if (!visitedNodeIds.insert(edge.toNode.value).second) {
-                continue;
-            }
-
-            const NodeGraphNode* nextNode = findNodeInState(state, edge.toNode);
-            if (!nextNode) {
-                continue;
-            }
-            if (getNodeTypeId(nextNode->typeId) == nodegraphtypes::Transform) {
-                outTransformNodeId = nextNode->id;
-                return true;
-            }
-
-            stack.push_back(nextNode->id);
-        }
-    }
-
-    return false;
-}
 
 bool findFirstSocketByValueType(
     const std::vector<NodeGraphSocket>& sockets,
@@ -89,92 +50,83 @@ void NodeGraphEditor::resetToDefaultGraph() {
         return;
     }
 
+    struct CreatedNode {
+        NodeGraphNodeId id{};
+        NodeGraphNode node{};
+    };
+
     bridge->clear();
 
-    const NodeGraphNodeId receiverModelNode = addNode(nodegraphtypes::Model, "Receiver Model", 30.0f, 40.0f);
-    const NodeGraphNodeId receiverTransformNode = addNode(nodegraphtypes::Transform, "Receiver Transform", 220.0f, 40.0f);
-    const NodeGraphNodeId receiverRemeshNode = addNode(nodegraphtypes::Remesh, "Receiver Remesh", 410.0f, 40.0f);
-    const NodeGraphNodeId sourceModelNode = addNode(nodegraphtypes::Model, "Source Model", 30.0f, 280.0f);
-    const NodeGraphNodeId sourceTransformNode = addNode(nodegraphtypes::Transform, "Source Transform", 220.0f, 280.0f);
-    const NodeGraphNodeId sourceRemeshNode = addNode(nodegraphtypes::Remesh, "Source Remesh", 410.0f, 280.0f);
-    const NodeGraphNodeId heatReceiverNode = addNode(nodegraphtypes::HeatReceiver, "", 650.0f, 40.0f);
-    const NodeGraphNodeId heatSourceNode = addNode(nodegraphtypes::HeatSource, "", 650.0f, 280.0f);
-    const NodeGraphNodeId contactNode = addNode(nodegraphtypes::Contact, "", 860.0f, 180.0f);
-    const NodeGraphNodeId voronoiNode = addNode(nodegraphtypes::Voronoi, "", 860.0f, 20.0f);
-    const NodeGraphNodeId heatSolveNode = addNode(nodegraphtypes::HeatSolve, "", 1130.0f, 180.0f);
+    const auto createNode = [this](const NodeTypeId& typeId, const std::string& title, float x, float y) {
+        CreatedNode created{};
+        created.id = addNode(typeId, title, x, y);
+        if (created.id.isValid()) {
+            bridge->getNode(created.id, created.node);
+        }
+        return created;
+    };
+    const auto inputSocketByType = [](const NodeGraphNode& node, NodeGraphValueType valueType) {
+        NodeGraphSocketId socketId{};
+        findFirstSocketByValueType(node.inputs, valueType, socketId);
+        return socketId;
+    };
+    const auto outputSocketByType = [](const NodeGraphNode& node, NodeGraphValueType valueType) {
+        NodeGraphSocketId socketId{};
+        findFirstSocketByValueType(node.outputs, valueType, socketId);
+        return socketId;
+    };
+    const auto firstOutputSocket = [](const NodeGraphNode& node) {
+        return node.outputs.empty() ? NodeGraphSocketId{} : node.outputs.front().id;
+    };
 
-    NodeGraphNode receiverModel{};
-    NodeGraphNode receiverTransform{};
-    NodeGraphNode receiverRemesh{};
-    NodeGraphNode sourceModel{};
-    NodeGraphNode sourceTransform{};
-    NodeGraphNode sourceRemesh{};
-    NodeGraphNode heatReceiver{};
-    NodeGraphNode heatSource{};
-    NodeGraphNode contact{};
-    NodeGraphNode voronoi{};
-    NodeGraphNode heatSolve{};
+    const CreatedNode receiverModel = createNode(nodegraphtypes::Model, "Receiver Model", 30.0f, 40.0f);
+    const CreatedNode receiverTransform = createNode(nodegraphtypes::Transform, "Receiver Transform", 220.0f, 40.0f);
+    const CreatedNode receiverRemesh = createNode(nodegraphtypes::Remesh, "Receiver Remesh", 410.0f, 40.0f);
+    const CreatedNode sourceModel = createNode(nodegraphtypes::Model, "Source Model", 30.0f, 280.0f);
+    const CreatedNode sourceTransform = createNode(nodegraphtypes::Transform, "Source Transform", 220.0f, 280.0f);
+    const CreatedNode sourceRemesh = createNode(nodegraphtypes::Remesh, "Source Remesh", 410.0f, 280.0f);
+    const CreatedNode heatReceiver = createNode(nodegraphtypes::HeatReceiver, "", 650.0f, 40.0f);
+    const CreatedNode heatSource = createNode(nodegraphtypes::HeatSource, "", 650.0f, 280.0f);
+    const CreatedNode contact = createNode(nodegraphtypes::Contact, "", 860.0f, 180.0f);
+    const CreatedNode voronoi = createNode(nodegraphtypes::Voronoi, "", 860.0f, 20.0f);
+    const CreatedNode heatSolve = createNode(nodegraphtypes::HeatSolve, "", 1130.0f, 180.0f);
 
-    if (!bridge->getNode(receiverModelNode, receiverModel) ||
-        !bridge->getNode(receiverTransformNode, receiverTransform) ||
-        !bridge->getNode(receiverRemeshNode, receiverRemesh) ||
-        !bridge->getNode(sourceModelNode, sourceModel) ||
-        !bridge->getNode(sourceTransformNode, sourceTransform) ||
-        !bridge->getNode(sourceRemeshNode, sourceRemesh) ||
-        !bridge->getNode(heatReceiverNode, heatReceiver) ||
-        !bridge->getNode(heatSourceNode, heatSource) ||
-        !bridge->getNode(contactNode, contact) ||
-        !bridge->getNode(voronoiNode, voronoi) ||
-        !bridge->getNode(heatSolveNode, heatSolve)) {
+    if (!receiverModel.id.isValid() || !receiverTransform.id.isValid() || !receiverRemesh.id.isValid() ||
+        !sourceModel.id.isValid() || !sourceTransform.id.isValid() || !sourceRemesh.id.isValid() ||
+        !heatReceiver.id.isValid() || !heatSource.id.isValid() || !contact.id.isValid() ||
+        !voronoi.id.isValid() || !heatSolve.id.isValid()) {
         return;
     }
 
-    NodeGraphSocketId receiverModelOutputId{};
-    NodeGraphSocketId receiverTransformInputId{};
-    NodeGraphSocketId receiverTransformOutputId{};
-    NodeGraphSocketId receiverRemeshInputId{};
-    NodeGraphSocketId receiverRemeshOutputId{};
-    NodeGraphSocketId sourceModelOutputId{};
-    NodeGraphSocketId sourceTransformInputId{};
-    NodeGraphSocketId sourceTransformOutputId{};
-    NodeGraphSocketId sourceRemeshInputId{};
-    NodeGraphSocketId sourceRemeshOutputId{};
-    NodeGraphSocketId heatReceiverInputId{};
-    NodeGraphSocketId heatSourceInputId{};
-    NodeGraphSocketId voronoiGeometryInputId{};
-    NodeGraphSocketId heatSolveVoronoiInputId{};
-    NodeGraphSocketId heatSolveContactInputId{};
+    const NodeGraphSocketId receiverModelOutputId = outputSocketByType(receiverModel.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId receiverTransformInputId = inputSocketByType(receiverTransform.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId receiverTransformOutputId = outputSocketByType(receiverTransform.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId receiverRemeshInputId = inputSocketByType(receiverRemesh.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId receiverRemeshOutputId = outputSocketByType(receiverRemesh.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId sourceModelOutputId = outputSocketByType(sourceModel.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId sourceTransformInputId = inputSocketByType(sourceTransform.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId sourceTransformOutputId = outputSocketByType(sourceTransform.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId sourceRemeshInputId = inputSocketByType(sourceRemesh.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId sourceRemeshOutputId = outputSocketByType(sourceRemesh.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId heatReceiverInputId = inputSocketByType(heatReceiver.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId heatSourceInputId = inputSocketByType(heatSource.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId voronoiGeometryInputId = inputSocketByType(voronoi.node, NodeGraphValueType::Mesh);
+    const NodeGraphSocketId heatSolveVoronoiInputId = inputSocketByType(heatSolve.node, NodeGraphValueType::Volume);
+    const NodeGraphSocketId heatSolveContactInputId = inputSocketByType(heatSolve.node, NodeGraphValueType::Field);
+    const NodeGraphSocketId contactEmitterInputId = inputSocketByType(contact.node, NodeGraphValueType::Emitter);
+    const NodeGraphSocketId contactReceiverInputId = inputSocketByType(contact.node, NodeGraphValueType::Receiver);
+    const NodeGraphSocketId heatReceiverOutputId = firstOutputSocket(heatReceiver.node);
+    const NodeGraphSocketId heatSourceOutputId = firstOutputSocket(heatSource.node);
+    const NodeGraphSocketId contactOutputId = firstOutputSocket(contact.node);
+    const NodeGraphSocketId voronoiOutputId = firstOutputSocket(voronoi.node);
 
-    if (!findFirstSocketByValueType(receiverModel.outputs, NodeGraphValueType::Mesh, receiverModelOutputId) ||
-        !findFirstSocketByValueType(receiverTransform.inputs, NodeGraphValueType::Mesh, receiverTransformInputId) ||
-        !findFirstSocketByValueType(receiverTransform.outputs, NodeGraphValueType::Mesh, receiverTransformOutputId) ||
-        !findFirstSocketByValueType(receiverRemesh.inputs, NodeGraphValueType::Mesh, receiverRemeshInputId) ||
-        !findFirstSocketByValueType(receiverRemesh.outputs, NodeGraphValueType::Mesh, receiverRemeshOutputId) ||
-        !findFirstSocketByValueType(sourceModel.outputs, NodeGraphValueType::Mesh, sourceModelOutputId) ||
-        !findFirstSocketByValueType(sourceTransform.inputs, NodeGraphValueType::Mesh, sourceTransformInputId) ||
-        !findFirstSocketByValueType(sourceTransform.outputs, NodeGraphValueType::Mesh, sourceTransformOutputId) ||
-        !findFirstSocketByValueType(sourceRemesh.inputs, NodeGraphValueType::Mesh, sourceRemeshInputId) ||
-        !findFirstSocketByValueType(sourceRemesh.outputs, NodeGraphValueType::Mesh, sourceRemeshOutputId) ||
-        !findFirstSocketByValueType(heatReceiver.inputs, NodeGraphValueType::Mesh, heatReceiverInputId) ||
-        !findFirstSocketByValueType(heatSource.inputs, NodeGraphValueType::Mesh, heatSourceInputId) ||
-        !findFirstSocketByValueType(voronoi.inputs, NodeGraphValueType::Mesh, voronoiGeometryInputId) ||
-        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Volume, heatSolveVoronoiInputId) ||
-        !findFirstSocketByValueType(heatSolve.inputs, NodeGraphValueType::Field, heatSolveContactInputId) ||
-        heatReceiver.outputs.empty() || heatSource.outputs.empty() || contact.outputs.empty() || voronoi.outputs.empty()) {
-        return;
-    }
-
-    const NodeGraphSocketId contactEmitterInputId = [&]() {
-        NodeGraphSocketId socketId{};
-        findFirstSocketByValueType(contact.inputs, NodeGraphValueType::Emitter, socketId);
-        return socketId;
-    }();
-    const NodeGraphSocketId contactReceiverInputId = [&]() {
-        NodeGraphSocketId socketId{};
-        findFirstSocketByValueType(contact.inputs, NodeGraphValueType::Receiver, socketId);
-        return socketId;
-    }();
-    if (!contactEmitterInputId.isValid() || !contactReceiverInputId.isValid()) {
+    if (!receiverModelOutputId.isValid() || !receiverTransformInputId.isValid() || !receiverTransformOutputId.isValid() ||
+        !receiverRemeshInputId.isValid() || !receiverRemeshOutputId.isValid() || !sourceModelOutputId.isValid() ||
+        !sourceTransformInputId.isValid() || !sourceTransformOutputId.isValid() || !sourceRemeshInputId.isValid() ||
+        !sourceRemeshOutputId.isValid() || !heatReceiverInputId.isValid() || !heatSourceInputId.isValid() ||
+        !voronoiGeometryInputId.isValid() || !heatSolveVoronoiInputId.isValid() || !heatSolveContactInputId.isValid() ||
+        !contactEmitterInputId.isValid() || !contactReceiverInputId.isValid() || !heatReceiverOutputId.isValid() ||
+        !heatSourceOutputId.isValid() || !contactOutputId.isValid() || !voronoiOutputId.isValid()) {
         return;
     }
 
@@ -182,26 +134,26 @@ void NodeGraphEditor::resetToDefaultGraph() {
     receiverModelPath.id = nodegraphparams::model::Path;
     receiverModelPath.type = NodeGraphParamType::String;
     receiverModelPath.stringValue = "models/channel_tube.obj";
-    setNodeParameter(receiverModelNode, receiverModelPath);
+    setNodeParameter(receiverModel.id, receiverModelPath);
 
     NodeGraphParamValue sourceModelPath{};
     sourceModelPath.id = nodegraphparams::model::Path;
     sourceModelPath.type = NodeGraphParamType::String;
     sourceModelPath.stringValue = "models/heatsource_tube.obj";
-    setNodeParameter(sourceModelNode, sourceModelPath);
+    setNodeParameter(sourceModel.id, sourceModelPath);
 
     std::string errorMessage;
-    connectSockets(receiverModelNode, receiverModelOutputId, receiverTransformNode, receiverTransformInputId, errorMessage);
-    connectSockets(receiverTransformNode, receiverTransformOutputId, receiverRemeshNode, receiverRemeshInputId, errorMessage);
-    connectSockets(receiverRemeshNode, receiverRemeshOutputId, voronoiNode, voronoiGeometryInputId, errorMessage);
-    connectSockets(receiverRemeshNode, receiverRemeshOutputId, heatReceiverNode, heatReceiverInputId, errorMessage);
-    connectSockets(sourceModelNode, sourceModelOutputId, sourceTransformNode, sourceTransformInputId, errorMessage);
-    connectSockets(sourceTransformNode, sourceTransformOutputId, sourceRemeshNode, sourceRemeshInputId, errorMessage);
-    connectSockets(sourceRemeshNode, sourceRemeshOutputId, heatSourceNode, heatSourceInputId, errorMessage);
-    connectSockets(heatSourceNode, heatSource.outputs[0].id, contactNode, contactEmitterInputId, errorMessage);
-    connectSockets(heatReceiverNode, heatReceiver.outputs[0].id, contactNode, contactReceiverInputId, errorMessage);
-    connectSockets(voronoiNode, voronoi.outputs[0].id, heatSolveNode, heatSolveVoronoiInputId, errorMessage);
-    connectSockets(contactNode, contact.outputs[0].id, heatSolveNode, heatSolveContactInputId, errorMessage);
+    connectSockets(receiverModel.id, receiverModelOutputId, receiverTransform.id, receiverTransformInputId, errorMessage);
+    connectSockets(receiverTransform.id, receiverTransformOutputId, receiverRemesh.id, receiverRemeshInputId, errorMessage);
+    connectSockets(receiverRemesh.id, receiverRemeshOutputId, voronoi.id, voronoiGeometryInputId, errorMessage);
+    connectSockets(receiverRemesh.id, receiverRemeshOutputId, heatReceiver.id, heatReceiverInputId, errorMessage);
+    connectSockets(sourceModel.id, sourceModelOutputId, sourceTransform.id, sourceTransformInputId, errorMessage);
+    connectSockets(sourceTransform.id, sourceTransformOutputId, sourceRemesh.id, sourceRemeshInputId, errorMessage);
+    connectSockets(sourceRemesh.id, sourceRemeshOutputId, heatSource.id, heatSourceInputId, errorMessage);
+    connectSockets(heatSource.id, heatSourceOutputId, contact.id, contactEmitterInputId, errorMessage);
+    connectSockets(heatReceiver.id, heatReceiverOutputId, contact.id, contactReceiverInputId, errorMessage);
+    connectSockets(voronoi.id, voronoiOutputId, heatSolve.id, heatSolveVoronoiInputId, errorMessage);
+    connectSockets(contact.id, contactOutputId, heatSolve.id, heatSolveContactInputId, errorMessage);
 }
 
 NodeGraphNodeId NodeGraphEditor::addNode(const NodeTypeId& typeId, const std::string& title, float x, float y) {
@@ -265,12 +217,6 @@ bool NodeGraphEditor::connectSockets(
     if (!bridge->connectSockets(fromNode, fromSocket, toNode, toSocket, errorMessage, replaceExistingInput)) {
         return false;
     }
-
-    NodeGraphNode targetNode{};
-    if (!bridge->getNode(toNode, targetNode)) {
-        return true;
-    }
-
     return true;
 }
 
@@ -419,140 +365,4 @@ bool NodeGraphEditor::pasteCopiedNodes(
     }
 
     return true;
-}
-
-bool NodeGraphEditor::ensureTransformForModelNode(NodeGraphNodeId modelNodeId, NodeGraphNodeId& outTransformNodeId) {
-    outTransformNodeId = {};
-    if (!bridge || !modelNodeId.isValid()) {
-        return false;
-    }
-
-    const NodeGraphState state = bridge->state();
-    if (findFirstDownstreamTransformNode(state, modelNodeId, outTransformNodeId)) {
-        return true;
-    }
-
-    const NodeGraphNode* modelNode = findNodeInState(state, modelNodeId);
-    if (!modelNode || getNodeTypeId(modelNode->typeId) != nodegraphtypes::Model) {
-        return false;
-    }
-
-    NodeGraphSocketId modelOutputSocketId{};
-    if (!findFirstSocketByValueType(modelNode->outputs, NodeGraphValueType::Mesh, modelOutputSocketId)) {
-        return false;
-    }
-
-    std::vector<NodeGraphEdge> outgoingEdges;
-    outgoingEdges.reserve(state.edges.size());
-    for (const NodeGraphEdge& edge : state.edges) {
-        if (edge.fromNode == modelNodeId && edge.fromSocket == modelOutputSocketId) {
-            outgoingEdges.push_back(edge);
-        }
-    }
-
-    const NodeGraphNodeId transformNodeId = addNode(
-        nodegraphtypes::Transform,
-        "",
-        modelNode->x + 180.0f,
-        modelNode->y);
-    if (!transformNodeId.isValid()) {
-        return false;
-    }
-
-    NodeGraphNode transformNode{};
-    if (!bridge->getNode(transformNodeId, transformNode)) {
-        return false;
-    }
-
-    NodeGraphSocketId transformInputSocketId{};
-    NodeGraphSocketId transformOutputSocketId{};
-    if (!findFirstSocketByValueType(transformNode.inputs, NodeGraphValueType::Mesh, transformInputSocketId) ||
-        !findFirstSocketByValueType(transformNode.outputs, NodeGraphValueType::Mesh, transformOutputSocketId)) {
-        return false;
-    }
-
-    std::string errorMessage;
-    if (!connectSockets(
-            modelNodeId,
-            modelOutputSocketId,
-            transformNodeId,
-            transformInputSocketId,
-            errorMessage,
-            true)) {
-        return false;
-    }
-
-    for (const NodeGraphEdge& edge : outgoingEdges) {
-        errorMessage.clear();
-        if (!connectSockets(
-                transformNodeId,
-                transformOutputSocketId,
-                edge.toNode,
-                edge.toSocket,
-                errorMessage,
-                true)) {
-            return false;
-        }
-    }
-
-    outTransformNodeId = transformNodeId;
-    return true;
-}
-
-bool NodeGraphEditor::readTransformNodeValues(
-    NodeGraphNodeId nodeId,
-    glm::vec3& outTranslation,
-    glm::vec3& outRotationDegrees) const {
-    if (!bridge) {
-        return false;
-    }
-
-    NodeGraphNode node{};
-    if (!bridge->getNode(nodeId, node) ||
-        getNodeTypeId(node.typeId) != nodegraphtypes::Transform) {
-        return false;
-    }
-
-    const TransformNodeParams params = readTransformNodeParams(node);
-    outTranslation.x = static_cast<float>(params.translateX);
-    outTranslation.y = static_cast<float>(params.translateY);
-    outTranslation.z = static_cast<float>(params.translateZ);
-    outRotationDegrees.x = static_cast<float>(params.rotateXDegrees);
-    outRotationDegrees.y = static_cast<float>(params.rotateYDegrees);
-    outRotationDegrees.z = static_cast<float>(params.rotateZDegrees);
-    return true;
-}
-
-bool NodeGraphEditor::writeTransformTranslation(NodeGraphNodeId nodeId, const glm::vec3& translation) {
-    if (!bridge || !nodeId.isValid()) {
-        return false;
-    }
-
-    NodeGraphNode node{};
-    if (!bridge->getNode(nodeId, node) || getNodeTypeId(node.typeId) != nodegraphtypes::Transform) {
-        return false;
-    }
-
-    TransformNodeParams params = readTransformNodeParams(node);
-    params.translateX = translation.x;
-    params.translateY = translation.y;
-    params.translateZ = translation.z;
-    return writeTransformNodeParams(*this, nodeId, params);
-}
-
-bool NodeGraphEditor::writeTransformRotation(NodeGraphNodeId nodeId, const glm::vec3& rotationDegrees) {
-    if (!bridge || !nodeId.isValid()) {
-        return false;
-    }
-
-    NodeGraphNode node{};
-    if (!bridge->getNode(nodeId, node) || getNodeTypeId(node.typeId) != nodegraphtypes::Transform) {
-        return false;
-    }
-
-    TransformNodeParams params = readTransformNodeParams(node);
-    params.rotateXDegrees = rotationDegrees.x;
-    params.rotateYDegrees = rotationDegrees.y;
-    params.rotateZDegrees = rotationDegrees.z;
-    return writeTransformNodeParams(*this, nodeId, params);
 }

@@ -1,6 +1,5 @@
 #include "RuntimeSystems.hpp"
 
-#include "RuntimeSimulationController.hpp"
 #include "render/WindowRuntimeState.hpp"
 
 RuntimeSystems::~RuntimeSystems() {
@@ -71,23 +70,19 @@ bool RuntimeSystems::isInitialized() const {
 }
 
 const RuntimeQuery* RuntimeSystems::runtimeQuery() const {
-    return runtimeController.runtimeQuery();
+    return this;
 }
 
 std::vector<SimulationError> RuntimeSystems::consumeSimulationErrors() {
-    RuntimeSimulationController* simulation = runtimeController.simulationController();
-    if (!simulation) {
-        return {};
-    }
-    return simulation->consumeSimulationErrors();
+    return {};
 }
 
 uint32_t RuntimeSystems::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    RuntimeSimulationController* simulation = runtimeController.simulationController();
-    if (!simulation) {
+    SceneController* sceneController = render.sceneController();
+    if (!sceneController) {
         return 0;
     }
-    return simulation->loadModel(modelPath, preferredModelId);
+    return sceneController->loadModel(modelPath, preferredModelId);
 }
 
 void RuntimeSystems::setPanSensitivity(float sensitivity) {
@@ -147,4 +142,14 @@ void RuntimeSystems::cleanup() {
     scene.shutdown();
     core.shutdown();
     windowRuntimeState = nullptr;
+}
+
+bool RuntimeSystems::isSimulationActive() const {
+    const HeatSystemComputeController* heatSystemController = render.heatSystemComputeController();
+    return heatSystemController && heatSystemController->isAnyHeatSystemActive();
+}
+
+bool RuntimeSystems::isSimulationPaused() const {
+    const HeatSystemComputeController* heatSystemController = render.heatSystemComputeController();
+    return heatSystemController && heatSystemController->isAnyHeatSystemPaused();
 }

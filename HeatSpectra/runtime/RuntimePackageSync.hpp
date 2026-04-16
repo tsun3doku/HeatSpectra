@@ -1,89 +1,90 @@
 #pragma once
 
-#include <utility>
+#include <cstdint>
 #include <vector>
 
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/RuntimePackageGraph.hpp"
 
-class RuntimePackageController;
+struct PackagePlanEntry {
+    PackageKey key{};
+};
 
-struct RuntimeSyncPlan {
-    std::vector<uint64_t> removeHeatSockets;
-    std::vector<uint64_t> removeContactSockets;
-    std::vector<uint64_t> removeVoronoiSockets;
-    std::vector<uint64_t> removeRemeshSockets;
-    std::vector<uint64_t> removeGeometrySockets;
-
-    std::vector<std::pair<uint64_t, GeometryPackage>> applyGeometryPackages;
-    std::vector<std::pair<uint64_t, RemeshPackage>> applyRemeshPackages;
-    std::vector<std::pair<uint64_t, VoronoiPackage>> applyVoronoiPackages;
-    std::vector<std::pair<uint64_t, ContactPackage>> applyContactPackages;
-    std::vector<std::pair<uint64_t, HeatPackage>> applyHeatPackages;
+struct PackagePlanGroup {
+    std::vector<PackagePlanEntry> entries;
 
     bool empty() const {
-        return removeHeatSockets.empty() &&
-            removeContactSockets.empty() &&
-            removeVoronoiSockets.empty() &&
-            removeRemeshSockets.empty() &&
-            removeGeometrySockets.empty() &&
-            applyGeometryPackages.empty() &&
-            applyRemeshPackages.empty() &&
-            applyVoronoiPackages.empty() &&
-            applyContactPackages.empty() &&
-            applyHeatPackages.empty();
+        return entries.empty();
+    }
+};
+
+struct PackagePlan {
+    std::vector<PackagePlanEntry> removals;
+    std::vector<PackagePlanGroup> groups;
+    std::vector<PackageNode> blockedNodes;
+
+    bool empty() const {
+        return removals.empty() &&
+            groups.empty();
     }
 };
 
 class RuntimePackageSync {
 public:
-    RuntimeSyncPlan buildPlan(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next) const;
-    void sync(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimePackageController& payloadController) const;
+    template <typename PackageControllerT>
+    RuntimePackageGraph sync(const RuntimePackageGraph& previousGraph, const RuntimePackageGraph& currentGraph, PackageControllerT& packageController) const {
+        PackagePlan plan{};
+        buildRemovePlan(previousGraph.compiledPackages.packageSet, currentGraph.compiledPackages.packageSet, plan);
+        packageController.executeRemovals(plan);
+
+        RuntimePackageSet installedPackages = previousGraph.compiledPackages.packageSet;
+        for (const PackagePlanEntry& entry : plan.removals) {
+            switch (entry.key.kind) {
+            case PackageKind::Model:
+                installedPackages.modelBySocket.erase(entry.key.outputSocketKey);
+                break;
+            case PackageKind::Remesh:
+                installedPackages.remeshBySocket.erase(entry.key.outputSocketKey);
+                break;
+            case PackageKind::Voronoi:
+                installedPackages.voronoiBySocket.erase(entry.key.outputSocketKey);
+                break;
+            case PackageKind::Contact:
+                installedPackages.contactBySocket.erase(entry.key.outputSocketKey);
+                break;
+            case PackageKind::Heat:
+                installedPackages.heatBySocket.erase(entry.key.outputSocketKey);
+                break;
+            }
+        }
+
+        while (true) {
+            std::vector<PackageNode> blockedNodes;
+            const PackagePlanGroup group = buildReadyGroup(currentGraph, installedPackages, &blockedNodes);
+            if (group.empty()) {
+                plan.blockedNodes = blockedNodes;
+                break;
+            }
+
+            packageController.executeGroup(group, currentGraph.compiledPackages);
+            plan.groups.push_back(group);
+
+            for (const PackagePlanEntry& entry : group.entries) {
+                copyInstalledPackage(
+                    installedPackages,
+                    currentGraph.compiledPackages.packageSet,
+                    entry.key,
+                    entry.key.outputSocketKey);
+            }
+        }
+
+        return currentGraph;
+    }
 
 private:
-    static bool containsActiveModelId(const RuntimePackageSet& packageSet, uint32_t modelId);
-    void removeHeat(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void removeContact(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void removeVoronoi(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void removeRemesh(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void removeGeometry(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void applyGeometry(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void applyRemesh(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void applyVoronoi(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void applyContact(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
-    void applyHeat(
-        const RuntimePackageSet& previous,
-        const RuntimePackageSet& next,
-        RuntimeSyncPlan& plan) const;
+    static void copyInstalledPackage(RuntimePackageSet& installedPackages, const RuntimePackageSet& sourcePackages, const PackageKey& key, uint64_t socketKey);
+    static bool packageMatches(const RuntimePackageSet& packageSet, PackageKind kind, uint64_t outputSocketKey, uint64_t packageHash);
+    static bool dependencySatisfied(const PackageDependency& dependency, const RuntimePackageGraph& graph, const RuntimePackageSet& installedPackages);
+
+    void buildRemovePlan(const RuntimePackageSet& previousPackages, const RuntimePackageSet& nextPackages, PackagePlan& plan) const;
+    PackagePlanGroup buildReadyGroup(const RuntimePackageGraph& graph, const RuntimePackageSet& installedPackages, std::vector<PackageNode>* blockedNodes) const;
 };

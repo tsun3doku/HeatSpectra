@@ -7,13 +7,8 @@
 class NodeGraphEditor;
 struct NodeGraphNode;
 
-struct ModelPreviewSettings {
-    bool showWireframe = false;
-};
-
 struct ModelNodeParams {
     std::string path;
-    ModelPreviewSettings preview{};
 };
 
 ModelNodeParams readModelNodeParams(const NodeGraphNode& node);

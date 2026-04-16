@@ -389,12 +389,13 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
     return true;
 }
 
-void VoronoiBuilder::uploadOccupancyPoints(
-    const std::vector<VoronoiDomain>& domains,
-    PointRenderer* pointRenderer) const {
-    if (!pointRenderer) {
-        return;
+bool VoronoiBuilder::rebuildOccupancyPointBuffer(const std::vector<VoronoiDomain>& domains) const {
+    if (resources.occupancyPointBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(resources.occupancyPointBuffer, resources.occupancyPointBufferOffset);
+        resources.occupancyPointBuffer = VK_NULL_HANDLE;
+        resources.occupancyPointBufferOffset = 0;
     }
+    resources.occupancyPointCount = 0;
 
     size_t estimatedPointCount = 0;
     for (const VoronoiDomain& domain : domains) {
@@ -449,15 +450,38 @@ void VoronoiBuilder::uploadOccupancyPoints(
         }
     }
 
-    pointRenderer->uploadPoints(points);
+    if (points.empty()) {
+        return true;
+    }
+
+    const VkDeviceSize bufferSize = sizeof(PointRenderer::PointVertex) * points.size();
+    auto [buffer, offset] = memoryAllocator.allocate(
+        bufferSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        alignof(PointRenderer::PointVertex));
+    if (buffer == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    void* mappedPtr = memoryAllocator.getMappedPointer(buffer, offset);
+    if (!mappedPtr) {
+        memoryAllocator.free(buffer, offset);
+        return false;
+    }
+
+    std::memcpy(mappedPtr, points.data(), static_cast<size_t>(bufferSize));
+    resources.occupancyPointBuffer = buffer;
+    resources.occupancyPointBufferOffset = offset;
+    resources.occupancyPointCount = static_cast<uint32_t>(points.size());
+    return true;
 }
 
 bool VoronoiBuilder::generateDiagram(
     std::vector<VoronoiDomain>& receiverVoronoiDomains,
     bool debugEnable,
     uint32_t maxNeighbors,
-    VoronoiGeoCompute* voronoiGeoCompute,
-    PointRenderer* pointRenderer) {
+    VoronoiGeoCompute* voronoiGeoCompute) {
     if (receiverVoronoiDomains.empty()) {
         std::cerr << "[VoronoiBuilder] Cannot generate Voronoi diagram: no receiver domains" << std::endl;
         return false;
@@ -755,8 +779,7 @@ bool VoronoiBuilder::generateDiagram(
         return false;
     }
 
-    uploadOccupancyPoints(receiverVoronoiDomains, pointRenderer);
-    return true;
+    return rebuildOccupancyPointBuffer(receiverVoronoiDomains);
 }
 
 bool VoronoiBuilder::stageSurfaceMappings(

@@ -10,6 +10,9 @@
 #include "framegraph/FrameGraphPasses.hpp"
 #include "util/File_utils.h"
 #include "GeometryPass.hpp"
+#include "ContactOverlayRenderer.hpp"
+#include "HeatOverlayRenderer.hpp"
+#include "VoronoiOverlayRenderer.hpp"
 #include "scene/GizmoController.hpp"
 #include "renderers/GizmoRenderer.hpp"
 #include "spatial/Grid.hpp"
@@ -25,9 +28,6 @@
 #include "renderers/IntrinsicRenderer.hpp"
 #include "renderers/OutlineRenderer.hpp"
 #include "mesh/remesher/iODT.hpp"
-#include "contact/ContactSystem.hpp"
-#include "heat/HeatSystem.hpp"
-#include "heat/VoronoiSystem.hpp"
 
 namespace render {
 
@@ -87,6 +87,50 @@ void OverlayPass::create() {
         return;
     }
 
+    contactOverlayRenderer = std::make_unique<ContactOverlayRenderer>(
+        vulkanDevice,
+        memoryAllocator,
+        uniformBufferManager);
+    if (!contactOverlayRenderer) {
+        std::cerr << "[OverlayPass] Failed to create contact overlay renderer" << std::endl;
+        destroy();
+        return;
+    }
+
+    contactOverlayRenderer->initialize(
+        frameGraphRuntime.getRenderPass(),
+        framegraph::toIndex(passId),
+        maxFramesInFlight);
+
+    heatOverlayRenderer = std::make_unique<HeatOverlayRenderer>(
+        vulkanDevice,
+        memoryAllocator,
+        uniformBufferManager);
+    if (!heatOverlayRenderer) {
+        std::cerr << "[OverlayPass] Failed to create heat overlay renderer" << std::endl;
+        destroy();
+        return;
+    }
+
+    heatOverlayRenderer->initialize(
+        frameGraphRuntime.getRenderPass(),
+        maxFramesInFlight);
+
+    voronoiOverlayRenderer = std::make_unique<VoronoiOverlayRenderer>(
+        vulkanDevice,
+        uniformBufferManager,
+        renderCommandPool);
+    if (!voronoiOverlayRenderer) {
+        std::cerr << "[OverlayPass] Failed to create voronoi overlay renderer" << std::endl;
+        destroy();
+        return;
+    }
+
+    voronoiOverlayRenderer->initialize(
+        frameGraphRuntime.getRenderPass(),
+        framegraph::toIndex(passId),
+        maxFramesInFlight);
+
     gridRenderer = std::make_unique<GridRenderer>(vulkanDevice, uniformBufferManager, maxFramesInFlight, frameGraphRuntime.getRenderPass(), renderCommandPool);
     if (!gridRenderer) {
         std::cerr << "[OverlayPass] Failed to create grid renderer" << std::endl;
@@ -129,19 +173,23 @@ void OverlayPass::updateGridLabels(const glm::vec3& gridSize) {
     }
 }
 
-void OverlayPass::bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->bindRemeshProduct(socketKey, product);
-    }
+IntrinsicRenderer* OverlayPass::getIntrinsicRenderer() const {
+    return intrinsicRenderer.get();
 }
 
-void OverlayPass::removeIntrinsicPackage(uint64_t packageKey) {
-    if (intrinsicRenderer) {
-        intrinsicRenderer->removeIntrinsicPackage(packageKey);
-    }
+ContactOverlayRenderer* OverlayPass::getContactOverlayRenderer() const {
+    return contactOverlayRenderer.get();
 }
 
-void OverlayPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) {
+HeatOverlayRenderer* OverlayPass::getHeatOverlayRenderer() const {
+    return heatOverlayRenderer.get();
+}
+
+VoronoiOverlayRenderer* OverlayPass::getVoronoiOverlayRenderer() const {
+    return voronoiOverlayRenderer.get();
+}
+
+void OverlayPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) {
     if (!ready) {
         return;
     }
@@ -152,33 +200,27 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
     ModelSelection& modelSelection = *services.modelSelection;
     GizmoController& gizmoController = *services.gizmoController;
     WireframeRenderer& wireframeRenderer = *services.wireframeRenderer;
-    const std::vector<HeatSystem*>& heatSystems = services.heatSystems;
-    const std::vector<VoronoiSystem*>& voronoiSystems = services.voronoiSystems;
-    const std::vector<ContactSystem*>& contactSystems = services.contactSystems;
-
     VkCommandBuffer commandBuffer = context.commandBuffer;
     const uint32_t currentFrame = context.currentFrame;
     const VkExtent2D extent = context.extent;
-
-    if (flags.drawHeatOverlay) {
-        for (HeatSystem* heatSystem : heatSystems) {
-            if (heatSystem && (heatSystem->getIsActive() || heatSystem->getIsPaused())) {
-
-                heatSystem->renderHeatOverlay(commandBuffer, currentFrame);
-            }
-        }
+    if (intrinsicRenderer) {
+        intrinsicRenderer->renderSupportingHalfedges(commandBuffer, currentFrame);
     }
 
-    if (flags.drawIntrinsicOverlay && intrinsicRenderer) {
-        intrinsicRenderer->renderSupportingHalfedges(commandBuffer, currentFrame, resourceManager);
+    if (contactOverlayRenderer) {
+        contactOverlayRenderer->render(commandBuffer, currentFrame, extent);
+    }
+    if (heatOverlayRenderer) {
+        heatOverlayRenderer->render(commandBuffer, currentFrame);
+    }
+    if (voronoiOverlayRenderer) {
+        voronoiOverlayRenderer->renderSurface(commandBuffer, currentFrame);
+        voronoiOverlayRenderer->renderPoints(commandBuffer, currentFrame, extent);
     }
 
-    if (params.drawIntrinsicNormals && intrinsicRenderer) {
-        intrinsicRenderer->renderIntrinsicNormals(commandBuffer, currentFrame, resourceManager, params.normalLength);
-    }
-
-    if (params.drawIntrinsicVertexNormals && intrinsicRenderer) {
-        intrinsicRenderer->renderIntrinsicVertexNormals(commandBuffer, currentFrame, resourceManager, params.normalLength);
+    if (intrinsicRenderer) {
+        intrinsicRenderer->renderIntrinsicNormals(commandBuffer, currentFrame);
+        intrinsicRenderer->renderIntrinsicVertexNormals(commandBuffer, currentFrame);
     }
 
     if (outlineRenderer) {
@@ -190,22 +232,6 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, gridRenderer->getGridPipelineLayout(), 0, 1, &gridRenderer->getGridDescriptorSets()[currentFrame], 0, nullptr);
         vkCmdDraw(commandBuffer, gridRenderer->vertexCount, 1, 0, 0);
         gridRenderer->renderLabels(commandBuffer, currentFrame);
-    }
-
-    if (flags.drawVoronoi) {
-        for (VoronoiSystem* voronoiSystem : voronoiSystems) {
-            if (voronoiSystem && voronoiSystem->isReady()) {
-
-                voronoiSystem->renderVoronoiSurface(commandBuffer, currentFrame);
-            }
-        }
-    }
-    if (flags.drawPoints) {
-        for (VoronoiSystem* voronoiSystem : voronoiSystems) {
-            if (voronoiSystem && voronoiSystem->isReady()) {
-                voronoiSystem->renderOccupancy(commandBuffer, currentFrame, extent);
-            }
-        }
     }
 
     if (flags.wireframeMode > 0) {
@@ -227,14 +253,6 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
                     geometryDescriptorSet,
                     wireframeItems.data(),
                     static_cast<uint32_t>(wireframeItems.size()));
-            }
-        }
-    }
-
-    if (flags.drawContactLines) {
-        for (ContactSystem* contactSystem : contactSystems) {
-            if (contactSystem) {
-                contactSystem->renderContactLines(commandBuffer, currentFrame, extent);
             }
         }
     }
@@ -271,6 +289,18 @@ void OverlayPass::destroy() {
     if (intrinsicRenderer) {
         intrinsicRenderer->cleanup();
         intrinsicRenderer.reset();
+    }
+    if (contactOverlayRenderer) {
+        contactOverlayRenderer->cleanup();
+        contactOverlayRenderer.reset();
+    }
+    if (heatOverlayRenderer) {
+        heatOverlayRenderer->cleanup();
+        heatOverlayRenderer.reset();
+    }
+    if (voronoiOverlayRenderer) {
+        voronoiOverlayRenderer->cleanup();
+        voronoiOverlayRenderer.reset();
     }
     if (timingOverlay) {
         timingOverlay->cleanup();

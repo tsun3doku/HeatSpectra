@@ -19,7 +19,6 @@ public:
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& getReceivers() const { return receiverRuntimes; }
 
     void setReceiverPayloads(
-        const std::vector<GeometryData>& receiverGeometries,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
         const std::vector<uint32_t>& receiverRuntimeModelIds,
         const std::vector<VkBufferView>& supportingHalfedgeViews,
@@ -46,7 +45,6 @@ public:
     void cleanup();
 
 private:
-    std::vector<GeometryData> activeReceiverGeometries;
     std::vector<SupportingHalfedge::IntrinsicMesh> activeReceiverIntrinsicMeshes;
     std::vector<uint32_t> activeReceiverRuntimeModelIds;
     std::vector<VkBufferView> activeSupportingHalfedgeViews;

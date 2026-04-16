@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 enum class HeatMaterialPresetId : uint8_t {
     Aluminum = 0,
@@ -23,11 +22,6 @@ struct HeatMaterialPreset {
 struct HeatMaterialBindingGroup {
     uint32_t id = 0;
     std::string name;
-};
-
-struct HeatMaterialBindingEntry {
-    std::string groupName;
-    HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
 };
 
 const HeatMaterialPreset& heatMaterialPresetById(HeatMaterialPresetId id);

@@ -24,4 +24,4 @@ struct HeatSolveNodeParams {
 
 HeatSolveNodeParams readHeatSolveNodeParams(const NodeGraphNode& node);
 bool writeHeatSolveNodeParams(NodeGraphEditor& editor, NodeGraphNodeId nodeId, const HeatSolveNodeParams& params);
-std::vector<HeatMaterialBindingEntry> makeHeatMaterialBindings(const HeatSolveNodeParams& params);
+std::vector<HeatMaterialBinding> makeHeatPayloadMaterialBindings(const HeatSolveNodeParams& params);

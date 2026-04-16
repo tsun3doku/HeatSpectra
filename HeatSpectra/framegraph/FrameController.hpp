@@ -7,9 +7,10 @@
 #include <string>
 #include <vector>
 
-class HeatSystemController;
-class ContactSystemController;
-class VoronoiSystemController;
+class HeatSystemComputeController;
+class HeatSystemDisplayController;
+class ContactSystemComputeController;
+class VoronoiSystemComputeController;
 class ContactSystem;
 
 #include "FrameComputeStage.hpp"
@@ -42,9 +43,10 @@ struct FrameControllerServices {
     ModelRegistry& resourceManager;
     MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    HeatSystemController* heatSystemController = nullptr;
-    ContactSystemController* contactSystemController = nullptr;
-    VoronoiSystemController* voronoiSystemController = nullptr;
+    HeatSystemComputeController* heatSystemComputeController = nullptr;
+    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
+    ContactSystemComputeController* contactSystemController = nullptr;
+    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
     ModelSelection& modelSelection;
     GizmoController& gizmoController;
     WireframeRenderer& wireframeRenderer;
@@ -74,7 +76,7 @@ public:
     void shutdownSyncObjects();
     void cleanupSwapChain();
     bool recreateSwapChain();
-    void drawFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve);
+    void drawFrame(const render::RenderFlags& flags, bool allowHeatSolve);
 
 private:
     const WindowRuntimeState& windowState;
@@ -84,9 +86,10 @@ private:
     ComputeTiming& computeTiming;
     FrameStats& frameStats;
     CameraController& cameraController;
-    HeatSystemController* heatSystemController = nullptr;
-    ContactSystemController* contactSystemController = nullptr;
-    VoronoiSystemController* voronoiSystemController = nullptr;
+    HeatSystemComputeController* heatSystemComputeController = nullptr;
+    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
+    ContactSystemComputeController* contactSystemController = nullptr;
+    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
     std::atomic<bool>& isOperating;
     std::atomic<bool>& isShuttingDown;
 

@@ -26,7 +26,7 @@ public:
     void create() override;
     void resize(VkExtent2D extent) override;
     void updateDescriptors() override;
-    void record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) override;
+    void record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) override;
     void destroy() override;
 
     VkDescriptorSetLayout getDescriptorSetLayout() const;

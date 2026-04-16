@@ -16,13 +16,11 @@
 HeatSourceRuntime::HeatSourceRuntime(
     VulkanDevice& device,
     MemoryAllocator& allocator,
-    const GeometryData& geometryData,
     const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
     CommandPool& cmdPool,
     float initialTemperatureValue)
     : vulkanDevice(device),
       memoryAllocator(allocator),
-      geometryData(geometryData),
       intrinsicMesh(intrinsicMesh),
       renderCommandPool(cmdPool),
       uniformTemperature(initialTemperatureValue) {

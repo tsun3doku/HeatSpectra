@@ -109,14 +109,18 @@ bool writeMaterialBindingRows(NodeGraphParamValue& value, const std::vector<Heat
     return true;
 }
 
-std::vector<HeatMaterialBindingEntry> readMaterialBindings(const NodeGraphParamValue& value) {
-    std::vector<HeatMaterialBindingEntry> bindings;
-    const std::vector<HeatMaterialBindingRow> rows = readMaterialBindingRows(value);
+HeatMaterialBinding makeHeatMaterialBinding(const HeatMaterialBindingRow& row) {
+    HeatMaterialBinding binding{};
+    binding.receiverModelNodeId = row.receiverModelNodeId;
+    binding.presetId = row.presetId;
+    return binding;
+}
+
+std::vector<HeatMaterialBinding> makeHeatMaterialBindings(const std::vector<HeatMaterialBindingRow>& rows) {
+    std::vector<HeatMaterialBinding> bindings;
     bindings.reserve(rows.size());
     for (const HeatMaterialBindingRow& row : rows) {
-        HeatMaterialBindingEntry binding{};
-        binding.groupName = std::to_string(row.receiverModelNodeId);
-        binding.presetId = row.presetId;
+        HeatMaterialBinding binding = makeHeatMaterialBinding(row);
         bindings.push_back(std::move(binding));
     }
     return bindings;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "domain/GeometryData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 
 #include <cstdint>
@@ -19,7 +18,6 @@ public:
     ~HeatSystemRuntime() = default;
 
     struct SourceBinding {
-        GeometryData geometry{};
         uint32_t runtimeModelId = 0;
         std::unique_ptr<HeatSourceRuntime> heatSource;
     };
@@ -27,7 +25,6 @@ public:
     const SourceBinding* findBaseSourceBinding() const;
 
     void setSourcePayloads(
-        const std::vector<GeometryData>& sourceGeometries,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
         const std::vector<uint32_t>& sourceRuntimeModelIds,
         const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId);
@@ -42,7 +39,6 @@ public:
     void cleanupModelBindings();
 
 private:
-    std::vector<GeometryData> activeSourceGeometries;
     std::vector<SupportingHalfedge::IntrinsicMesh> activeSourceIntrinsicMeshes;
     std::vector<uint32_t> activeSourceRuntimeModelIds;
     std::unordered_map<uint32_t, float> activeSourceTemperatureByRuntimeId;

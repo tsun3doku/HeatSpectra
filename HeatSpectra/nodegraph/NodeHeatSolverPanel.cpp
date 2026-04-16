@@ -4,7 +4,7 @@
 
 #include "NodeHeatMaterialPresets.hpp"
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphDebugStore.hpp"
+#include "NodeGraphDebugCache.hpp"
 #include "NodeGraphEditor.hpp"
 #include "NodeHeatSolveParams.hpp"
 #include "NodePanelUtils.hpp"

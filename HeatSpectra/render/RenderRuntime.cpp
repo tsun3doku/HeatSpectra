@@ -23,7 +23,7 @@
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "renderers/WireframeRenderer.hpp"
-#include "contact/ContactSystemController.hpp"
+#include "contact/ContactSystemComputeController.hpp"
 
 #include <iostream>
 
@@ -126,9 +126,10 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
         services.resourceManager,
         services.meshModifiers,
         services.uniformBufferManager,
-        services.heatSystemController,
+        services.heatSystemComputeController,
+        services.heatSystemDisplayController,
         services.contactSystemController,
-        services.voronoiSystemController,
+        services.voronoiSystemComputeController,
         *modelSelection,
         *gizmoController,
         *wireframeRenderer,
@@ -172,9 +173,9 @@ void RenderRuntime::shutdownSyncObjects() {
     frameSync.shutdown();
 }
 
-void RenderRuntime::renderFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve) {
+void RenderRuntime::renderFrame(const render::RenderFlags& flags, bool allowHeatSolve) {
     if (frameController) {
-        frameController->drawFrame(flags, overlay, allowHeatSolve);
+        frameController->drawFrame(flags, allowHeatSolve);
     }
 }
 

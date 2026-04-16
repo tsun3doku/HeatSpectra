@@ -37,14 +37,6 @@ bool writeHeatSolveNodeParams(NodeGraphEditor& editor, NodeGraphNodeId nodeId, c
             });
 }
 
-std::vector<HeatMaterialBindingEntry> makeHeatMaterialBindings(const HeatSolveNodeParams& params) {
-    std::vector<HeatMaterialBindingEntry> bindings;
-    bindings.reserve(params.materialBindingRows.size());
-    for (const HeatMaterialBindingRow& row : params.materialBindingRows) {
-        HeatMaterialBindingEntry binding{};
-        binding.groupName = std::to_string(row.receiverModelNodeId);
-        binding.presetId = row.presetId;
-        bindings.push_back(std::move(binding));
-    }
-    return bindings;
+std::vector<HeatMaterialBinding> makeHeatPayloadMaterialBindings(const HeatSolveNodeParams& params) {
+    return makeHeatMaterialBindings(params.materialBindingRows);
 }

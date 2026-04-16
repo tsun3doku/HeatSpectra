@@ -5,9 +5,6 @@
 
 #include <vector>
 
-class HeatSystem;
-class VoronoiSystem;
-class ContactSystem;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
@@ -22,25 +19,10 @@ struct FrameContext {
 
 struct RenderFlags {
     int wireframeMode = 0;
-    bool drawIntrinsicOverlay = false;
-    bool drawHeatOverlay = false;
     bool drawTimingOverlay = false;
-    bool drawSurfels = false;
-    bool drawVoronoi = false;
-    bool drawPoints = false;
-    bool drawContactLines = false;
-};
-
-struct OverlayParams {
-    bool drawIntrinsicNormals = false;
-    bool drawIntrinsicVertexNormals = false;
-    float normalLength = 0.05f;
 };
 
 struct RenderServices {
-    std::vector<HeatSystem*> heatSystems;
-    std::vector<VoronoiSystem*> voronoiSystems;
-    std::vector<ContactSystem*> contactSystems;
     ModelSelection* modelSelection = nullptr;
     GizmoController* gizmoController = nullptr;
     WireframeRenderer* wireframeRenderer = nullptr;
@@ -54,7 +36,7 @@ public:
     virtual void create() = 0;
     virtual void resize(VkExtent2D extent) = 0;
     virtual void updateDescriptors() = 0;
-    virtual void record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) = 0;
+    virtual void record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) = 0;
     virtual void destroy() = 0;
 };
 

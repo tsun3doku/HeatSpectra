@@ -5,7 +5,6 @@
 #include <vector>
 
 class VulkanDevice;
-class MemoryAllocator;
 class UniformBufferManager;
 
 class PointRenderer {
@@ -15,13 +14,18 @@ public:
         glm::vec3 color;
     };
 
-    PointRenderer(VulkanDevice& device, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager);
+    PointRenderer(VulkanDevice& device, UniformBufferManager& uniformBufferManager);
     ~PointRenderer();
     
     void initialize(VkRenderPass renderPass, uint32_t subpass, uint32_t maxFramesInFlight);
-    
-    void uploadPoints(const std::vector<PointVertex>& points);
-    void render(VkCommandBuffer cmdBuffer, uint32_t frameIndex, const glm::mat4& modelMatrix, VkExtent2D extent);
+    void render(
+        VkCommandBuffer cmdBuffer,
+        uint32_t frameIndex,
+        VkBuffer vertexBuffer,
+        VkDeviceSize vertexBufferOffset,
+        uint32_t pointCount,
+        const glm::mat4& modelMatrix,
+        VkExtent2D extent);
     
     void setPointSize(float size) { pointSize = size; }
     void setVisible(bool vis) { visible = vis; }
@@ -36,7 +40,6 @@ private:
     bool createPipeline(VkRenderPass renderPass, uint32_t subpass);
 
     VulkanDevice& vulkanDevice;
-    MemoryAllocator& memoryAllocator;
     UniformBufferManager& uniformBufferManager;
     
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
@@ -45,10 +48,6 @@ private:
     
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
-    
-    VkBuffer vertexBuffer = VK_NULL_HANDLE;
-    VkDeviceSize vertexBufferOffset = 0;
-    uint32_t pointCount = 0;
     
     float pointSize = 0.00075f; 
     bool visible = true;

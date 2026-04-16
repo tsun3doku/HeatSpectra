@@ -21,6 +21,10 @@ class FrameGraph;
 class VulkanDevice;
 class CommandPool;
 class VkFrameGraphRuntime;
+class IntrinsicRenderer;
+namespace render { class ContactOverlayRenderer; }
+namespace render { class HeatOverlayRenderer; }
+namespace render { class VoronoiOverlayRenderer; }
 
 namespace render {
 class GeometryPass;
@@ -34,7 +38,7 @@ struct RenderFrameRequest {
     VkExtent2D extent{};
     SceneView sceneView{};
     RenderFlags flags{};
-    OverlayParams overlay{};
+
 };
 }
 
@@ -57,8 +61,10 @@ public:
 
     void resize(VkExtent2D extent);
     void updateDescriptorSets();
-    void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
-    void removeIntrinsicPackage(uint64_t packageKey);
+    IntrinsicRenderer* getIntrinsicRenderer() const;
+    render::ContactOverlayRenderer* getContactOverlayRenderer() const;
+    render::HeatOverlayRenderer* getHeatOverlayRenderer() const;
+    render::VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
 
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
@@ -98,7 +104,7 @@ private:
         const render::FrameContext& frameContext,
         const render::SceneView& sceneView,
         const render::RenderFlags& flags,
-        const render::OverlayParams& overlayParams,
+
         render::RenderServices& services,
         VkQueryPool passTimingQueryPool = VK_NULL_HANDLE,
         uint32_t passTimingQueryBase = 0);

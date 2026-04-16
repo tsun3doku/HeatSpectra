@@ -3,7 +3,7 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphDebugStore.hpp"
+#include "NodeGraphDebugCache.hpp"
 #include "NodePanelUtils.hpp"
 
 #include <QCheckBox>
@@ -242,7 +242,7 @@ void NodeGroupPanel::refreshSourceOptions() {
     std::unordered_set<std::string> seenGroupNames;
 
     NodeGraphRuntimeNodeDebugInfo debugInfo{};
-    if (NodeGraphDebugStore::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
+    if (NodeGraphDebugCache::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
         for (const NodeGraphRuntimeSocketDebugInfo& inputSocket : debugInfo.inputs) {
             if (!inputSocket.hasValue) {
                 continue;

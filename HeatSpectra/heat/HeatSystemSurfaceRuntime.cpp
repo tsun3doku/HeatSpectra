@@ -12,7 +12,6 @@
 HeatSystemSurfaceRuntime::~HeatSystemSurfaceRuntime() = default;
 
 void HeatSystemSurfaceRuntime::setReceiverPayloads(
-    const std::vector<GeometryData>& receiverGeometries,
     const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
     const std::vector<uint32_t>& receiverRuntimeModelIds,
     const std::vector<VkBufferView>& supportingHalfedgeViews,
@@ -25,7 +24,6 @@ void HeatSystemSurfaceRuntime::setReceiverPayloads(
     const std::vector<VkBufferView>& inputEdgeViews,
     const std::vector<VkBufferView>& inputTriangleViews,
     const std::vector<VkBufferView>& inputLengthViews) {
-    activeReceiverGeometries = receiverGeometries;
     activeReceiverIntrinsicMeshes = receiverIntrinsicMeshes;
     activeReceiverRuntimeModelIds = receiverRuntimeModelIds;
     activeSupportingHalfedgeViews = supportingHalfedgeViews;
@@ -51,7 +49,6 @@ bool HeatSystemSurfaceRuntime::ensureReceiverBindings(
     cleanup();
 
     const size_t receiverCount = std::min({
-        activeReceiverGeometries.size(),
         activeReceiverIntrinsicMeshes.size(),
         activeReceiverRuntimeModelIds.size(),
         activeSupportingHalfedgeViews.size(),
@@ -68,7 +65,6 @@ bool HeatSystemSurfaceRuntime::ensureReceiverBindings(
     receiverRuntimes.reserve(receiverCount);
 
     for (size_t index = 0; index < receiverCount; ++index) {
-        const GeometryData& geometry = activeReceiverGeometries[index];
         const uint32_t runtimeModelId = activeReceiverRuntimeModelIds[index];
         if (runtimeModelId == 0 ||
             activeSupportingHalfedgeViews[index] == VK_NULL_HANDLE ||
@@ -88,7 +84,6 @@ bool HeatSystemSurfaceRuntime::ensureReceiverBindings(
             vulkanDevice,
             memoryAllocator,
             runtimeModelId,
-            geometry,
             activeReceiverIntrinsicMeshes[index],
             activeSupportingHalfedgeViews[index],
             activeSupportingAngleViews[index],

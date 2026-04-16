@@ -32,17 +32,19 @@ class FrameController;
 class VkFrameGraphBackend;
 class VkFrameGraphRuntime;
 class VkFrameGraphRuntime;
-class HeatSystemController;
-class ContactSystemController;
-class VoronoiSystemController;
+class HeatSystemComputeController;
+class HeatSystemDisplayController;
+class ContactSystemComputeController;
+class VoronoiSystemComputeController;
 
 struct RenderRuntimeServices {
     ModelRegistry& resourceManager;
     MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    HeatSystemController* heatSystemController = nullptr;
-    ContactSystemController* contactSystemController = nullptr;
-    VoronoiSystemController* voronoiSystemController = nullptr;
+    HeatSystemComputeController* heatSystemComputeController = nullptr;
+    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
+    ContactSystemComputeController* contactSystemController = nullptr;
+    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
     InputController& inputController;
     LightingSystem& lightingSystem;
     MaterialSystem& materialSystem;
@@ -66,7 +68,7 @@ public:
 
     bool initializeSyncObjects();
     void shutdownSyncObjects();
-    void renderFrame(const render::RenderFlags& flags, const render::OverlayParams& overlay, bool allowHeatSolve);
+    void renderFrame(const render::RenderFlags& flags, bool allowHeatSolve);
     void cleanupSwapChain();
     void cleanup();
 

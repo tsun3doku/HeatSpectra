@@ -49,6 +49,24 @@ uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId) {
     return (static_cast<uint64_t>(nodeId.value) << 32) | static_cast<uint64_t>(socketId.value);
 }
 
+bool tryDecodeSocketKey(uint64_t socketKey, NodeGraphNodeId& outNodeId, NodeGraphSocketId& outSocketId) {
+    outNodeId = {};
+    outSocketId = {};
+    if (socketKey == 0) {
+        return false;
+    }
+
+    const uint32_t nodeValue = static_cast<uint32_t>(socketKey >> 32);
+    const uint32_t socketValue = static_cast<uint32_t>(socketKey & 0xffffffffu);
+    if (nodeValue == 0 || socketValue == 0) {
+        return false;
+    }
+
+    outNodeId = NodeGraphNodeId{nodeValue};
+    outSocketId = NodeGraphSocketId{socketValue};
+    return true;
+}
+
 const NodeGraphNode* findNodeInState(const NodeGraphState& state, NodeGraphNodeId nodeId) {
     for (const NodeGraphNode& node : state.nodes) {
         if (node.id == nodeId) {

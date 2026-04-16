@@ -8,7 +8,7 @@
 
 class CameraController;
 class ModelUploader;
-class ModelRuntime;
+class ModelComputeRuntime;
 class ModelRegistry;
 class VulkanDevice;
 class FrameSync;
@@ -23,13 +23,11 @@ public:
         CameraController& cameraController,
         std::atomic<bool>& isOperating);
 
-    void setModelRuntime(ModelRuntime* updatedModelRuntime);
+    void setModelComputeRuntime(ModelComputeRuntime* updatedModelComputeRuntime);
     uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     bool removeModelByID(uint32_t modelId);
-    uint32_t materializeModelSink(uint32_t nodeModelId, const std::string& modelPath);
-    bool removeNodeModelSink(uint32_t nodeModelId);
-    bool tryGetNodeModelRuntimeId(uint32_t nodeModelId, uint32_t& outRuntimeModelId) const;
-    bool tryGetRuntimeModelNodeId(uint32_t runtimeModelId, uint32_t& outNodeModelId) const;
+    bool tryGetRuntimeModelSocketKey(uint32_t runtimeModelId, uint64_t& outSocketKey) const;
+    bool tryGetSocketRuntimeModelId(uint64_t socketKey, uint32_t& outRuntimeModelId) const;
     void focusOnVisibleModel();
     void focusCameraOn(const glm::vec3& localCenter);
 
@@ -50,7 +48,7 @@ private:
     FrameSync& frameSync;
     CameraController& cameraController;
     std::atomic<bool>& isOperating;
-    ModelRuntime* modelRuntime = nullptr;
+    ModelComputeRuntime* modelComputeRuntime = nullptr;
 };
 
 

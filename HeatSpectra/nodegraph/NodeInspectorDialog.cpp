@@ -3,7 +3,7 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphDebugStore.hpp"
+#include "NodeGraphDebugCache.hpp"
 #include "NodeContactPanel.hpp"
 #include "NodeHeatSourcePanel.hpp"
 #include "NodeGroupPanel.hpp"
@@ -17,6 +17,7 @@
 #include <QAbstractScrollArea>
 #include <QAbstractItemView>
 #include <QAbstractTableModel>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFrame>
 #include <QHeaderView>
@@ -25,6 +26,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QTableView>
@@ -281,6 +283,10 @@ bool NodeInspectorDialog::setNode(NodeGraphNodeId nodeId) {
 
     titleLabel->setText(QString::fromStdString(node.title));
     subtitleLabel->setText(nodeTypeDisplayName(currentNodeTypeId));
+    if (displayCheckBox) {
+        const QSignalBlocker blocker(displayCheckBox);
+        displayCheckBox->setChecked(node.displayEnabled);
+    }
     statusLabel->clear();
 
     if (currentNodeTypeId == nodegraphtypes::Model) {
@@ -379,6 +385,9 @@ void NodeInspectorDialog::buildUi() {
     subtitleLabel = new QLabel(inspectorContent);
     subtitleLabel->setText("Select a node in the graph to inspect parameters and dataflow");
     contentLayout->addWidget(subtitleLabel);
+
+    displayCheckBox = new QCheckBox("Display In Scene", inspectorContent);
+    contentLayout->addWidget(displayCheckBox);
 
     pageStack = new QStackedWidget(inspectorContent);
 
@@ -578,6 +587,19 @@ void NodeInspectorDialog::buildUi() {
     connect(spreadsheetSocketComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         updateSpreadsheetView();
     });
+    connect(displayCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!nodeGraphBridge || !currentNodeId.isValid()) {
+            return;
+        }
+
+        if (!nodeGraphBridge->setNodeDisplayEnabled(currentNodeId, checked)) {
+            return;
+        }
+
+        statusLabel->setText(checked
+            ? "Node display enabled for scene rendering."
+            : "Node display disabled for scene rendering.");
+    });
 }
 
 void NodeInspectorDialog::refreshRuntimeDebugViews() {
@@ -602,7 +624,7 @@ void NodeInspectorDialog::updateDataflowView() {
     }
 
     NodeGraphRuntimeNodeDebugInfo debugInfo{};
-    if (!NodeGraphDebugStore::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
+    if (!NodeGraphDebugCache::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
         dataflowTextEdit->setPlainText("No runtime packet data for this node yet \n Run the graph for at least one frame");
         return;
     }
@@ -647,7 +669,7 @@ void NodeInspectorDialog::updateSpreadsheetView() {
     }
 
     NodeGraphRuntimeNodeDebugInfo debugInfo{};
-    if (!NodeGraphDebugStore::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
+    if (!NodeGraphDebugCache::tryGetLatestNodeDebugInfo(currentNodeId, debugInfo)) {
         spreadsheetSocketComboBox->blockSignals(true);
         spreadsheetSocketComboBox->clear();
         spreadsheetSocketComboBox->blockSignals(false);

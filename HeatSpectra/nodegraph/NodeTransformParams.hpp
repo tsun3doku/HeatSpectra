@@ -2,6 +2,7 @@
 
 #include "NodeGraphTypes.hpp"
 
+class NodeGraphBridge;
 class NodeGraphEditor;
 struct NodeGraphNode;
 
@@ -18,4 +19,5 @@ struct TransformNodeParams {
 };
 
 TransformNodeParams readTransformNodeParams(const NodeGraphNode& node);
+bool writeTransformNodeParams(NodeGraphBridge& bridge, NodeGraphNodeId nodeId, const TransformNodeParams& params);
 bool writeTransformNodeParams(NodeGraphEditor& editor, NodeGraphNodeId nodeId, const TransformNodeParams& params);

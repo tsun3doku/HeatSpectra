@@ -18,6 +18,7 @@ class QComboBox;
 class QTableWidget;
 class QTableView;
 class QAbstractTableModel;
+class QCheckBox;
 class QString;
 class NodeGroupPanel;
 class NodeHeatSolverPanel;
@@ -54,6 +55,7 @@ private:
     QLabel* titleLabel = nullptr;
     QLabel* subtitleLabel = nullptr;
     QLabel* statusLabel = nullptr;
+    QCheckBox* displayCheckBox = nullptr;
 
     QStackedWidget* pageStack = nullptr;
     QWidget* genericPage = nullptr;

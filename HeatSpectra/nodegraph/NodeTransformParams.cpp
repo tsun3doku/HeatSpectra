@@ -1,5 +1,6 @@
 #include "NodeTransformParams.hpp"
 
+#include "NodeGraphBridge.hpp"
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
 #include "NodePanelUtils.hpp"
@@ -16,6 +17,18 @@ TransformNodeParams readTransformNodeParams(const NodeGraphNode& node) {
     params.scaleY = NodePanelUtils::readFloatParam(node, nodegraphparams::transform::ScaleY, 1.0);
     params.scaleZ = NodePanelUtils::readFloatParam(node, nodegraphparams::transform::ScaleZ, 1.0);
     return params;
+}
+
+bool writeTransformNodeParams(NodeGraphBridge& bridge, NodeGraphNodeId nodeId, const TransformNodeParams& params) {
+    return bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::TranslateX, NodeGraphParamType::Float, params.translateX}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::TranslateY, NodeGraphParamType::Float, params.translateY}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::TranslateZ, NodeGraphParamType::Float, params.translateZ}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::RotateXDegrees, NodeGraphParamType::Float, params.rotateXDegrees}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::RotateYDegrees, NodeGraphParamType::Float, params.rotateYDegrees}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::RotateZDegrees, NodeGraphParamType::Float, params.rotateZDegrees}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::ScaleX, NodeGraphParamType::Float, params.scaleX}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::ScaleY, NodeGraphParamType::Float, params.scaleY}) &&
+        bridge.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::transform::ScaleZ, NodeGraphParamType::Float, params.scaleZ});
 }
 
 bool writeTransformNodeParams(NodeGraphEditor& editor, NodeGraphNodeId nodeId, const TransformNodeParams& params) {

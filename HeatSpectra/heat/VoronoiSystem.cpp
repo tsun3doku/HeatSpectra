@@ -1,7 +1,5 @@
 #include "VoronoiSystem.hpp"
 
-#include "renderers/PointRenderer.hpp"
-#include "renderers/VoronoiRenderer.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
@@ -54,8 +52,7 @@ VoronoiSystem::VoronoiSystem(
         return;
     }
 
-    initializeVoronoiRenderer(renderPass, maxFramesInFlight);
-    initializePointRenderer(renderPass, maxFramesInFlight);
+    (void)renderPass;
     initializeVoronoiGeoCompute();
     initializeVoronoiCandidateCompute();
 
@@ -138,7 +135,10 @@ void VoronoiSystem::clearReceiverPayloads() {
     runtime.clearReceiverPayloads();
 }
 
-void VoronoiSystem::setParams(const VoronoiParams& params) {
+void VoronoiSystem::setParams(float cellSize, int voxelResolution) {
+    VoronoiParams params{};
+    params.cellSize = cellSize;
+    params.voxelResolution = voxelResolution;
     runtime.setParams(params);
 }
 
@@ -155,20 +155,6 @@ bool VoronoiSystem::ensureConfigured() {
 
     runtime.executeBufferTransfers(renderCommandPool, surfaceRuntime, voronoiCandidateCompute.get());
     return true;
-}
-
-void VoronoiSystem::initializeVoronoiRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-    voronoiRenderer = std::make_unique<VoronoiRenderer>(vulkanDevice, uniformBufferManager, renderCommandPool);
-    if (voronoiRenderer) {
-        voronoiRenderer->initialize(renderPass, maxFramesInFlight);
-    }
-}
-
-void VoronoiSystem::initializePointRenderer(VkRenderPass renderPass, uint32_t maxFramesInFlight) {
-    pointRenderer = std::make_unique<PointRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager);
-    if (pointRenderer) {
-        pointRenderer->initialize(renderPass, 2, maxFramesInFlight);
-    }
 }
 
 void VoronoiSystem::initializeVoronoiGeoCompute() {
@@ -208,8 +194,7 @@ bool VoronoiSystem::prepareVoronoiRuntime() {
         voronoiBuilder,
         debugEnable,
         K_NEIGHBORS,
-        voronoiGeoCompute.get(),
-        pointRenderer.get());
+        voronoiGeoCompute.get());
 
     std::cout << "[VoronoiSystem] prepareVoronoiRuntime "
               << (prepared ? "succeeded" : "failed")
@@ -218,85 +203,7 @@ bool VoronoiSystem::prepareVoronoiRuntime() {
     return prepared;
 }
 
-void VoronoiSystem::updateRenderResources(VkRenderPass renderPass) {
-    initializeVoronoiRenderer(renderPass, maxFramesInFlight);
-    initializePointRenderer(renderPass, maxFramesInFlight);
-}
-
-void VoronoiSystem::renderVoronoiSurface(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
-    if (!voronoiRenderer || !runtime.isReady()) {
-        return;
-    }
-
-    const VoronoiResources& resources = runtime.voronoiResourcesRef();
-    const auto& modelRuntimes = runtime.getModelRuntimes();
-
-    for (const auto& modelRuntime : modelRuntimes) {
-        if (!modelRuntime) {
-            continue;
-        }
-
-        const uint32_t runtimeModelId = modelRuntime->getRuntimeModelId();
-        const VoronoiDomain* receiverDomain = runtime.findReceiverDomain(runtimeModelId);
-        if (!receiverDomain || receiverDomain->nodeCount == 0) {
-            continue;
-        }
-
-        const uint32_t vertexCount = static_cast<uint32_t>(modelRuntime->getIntrinsicVertexCount());
-        const VkBuffer candidateBuffer = modelRuntime->getVoronoiCandidateBuffer();
-        if (candidateBuffer == VK_NULL_HANDLE || vertexCount == 0) {
-            continue;
-        }
-
-        voronoiRenderer->updateDescriptors(
-            frameIndex,
-            vertexCount,
-            resources.seedPositionBuffer,
-            resources.seedPositionBufferOffset,
-            resources.neighborIndicesBuffer,
-            resources.neighborIndicesBufferOffset,
-            modelRuntime->getSupportingHalfedgeView(),
-            modelRuntime->getSupportingAngleView(),
-            modelRuntime->getHalfedgeView(),
-            modelRuntime->getEdgeView(),
-            modelRuntime->getTriangleView(),
-            modelRuntime->getLengthView(),
-            modelRuntime->getInputHalfedgeView(),
-            modelRuntime->getInputEdgeView(),
-            modelRuntime->getInputTriangleView(),
-            modelRuntime->getInputLengthView(),
-            candidateBuffer,
-            modelRuntime->getVoronoiCandidateBufferOffset());
-
-        voronoiRenderer->render(
-            cmdBuffer,
-            modelRuntime->getVertexBuffer(),
-            modelRuntime->getVertexBufferOffset(),
-            modelRuntime->getIndexBuffer(),
-            modelRuntime->getIndexBufferOffset(),
-            modelRuntime->getIndexCount(),
-            frameIndex,
-            modelRuntime->getModelMatrix());
-    }
-}
-
-void VoronoiSystem::renderOccupancy(VkCommandBuffer cmdBuffer, uint32_t frameIndex, VkExtent2D extent) {
-    if (!pointRenderer) {
-        return;
-    }
-    pointRenderer->render(cmdBuffer, frameIndex, glm::mat4(1.0f), extent);
-}
-
 void VoronoiSystem::cleanupResources() {
-    if (voronoiRenderer) {
-        voronoiRenderer->cleanup();
-        voronoiRenderer.reset();
-    }
-    if (pointRenderer) {
-        pointRenderer->cleanup();
-        pointRenderer.reset();
-    }
-
     runtime.cleanupResources(vulkanDevice);
 
     if (voronoiGeoCompute) {

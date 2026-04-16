@@ -117,22 +117,6 @@ void ContactSystem::disable() {
     }
 }
 
-bool ContactSystem::exportProduct(ContactProduct& outProduct) const {
-    outProduct = {};
-    if (!runtime) {
-        return false;
-    }
-
-    const ContactProduct* product = runtime->getProduct();
-    if (!product) {
-        return false;
-    }
-
-    outProduct = *product;
-    outProduct.contentHash = computeContentHash(outProduct);
-    return outProduct.isValid();
-}
-
 static bool computeContactPairs(
     ContactInterface& contactInterface,
     uint32_t emitterModelId,

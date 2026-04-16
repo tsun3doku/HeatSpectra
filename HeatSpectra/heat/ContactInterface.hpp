@@ -18,6 +18,15 @@ public:
     struct ContactLineVertex {
         glm::vec3 position;
         glm::vec3 color;
+
+        bool operator==(const ContactLineVertex& other) const {
+            return position.x == other.position.x &&
+                position.y == other.position.y &&
+                position.z == other.position.z &&
+                color.x == other.color.x &&
+                color.y == other.color.y &&
+                color.z == other.color.z;
+        }
     };
 
     void mapSurfacePoints(

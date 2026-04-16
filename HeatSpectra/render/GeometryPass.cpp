@@ -71,9 +71,8 @@ void GeometryPass::updateDescriptors() {
     }
 }
 
-void GeometryPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) {
+void GeometryPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) {
     (void)view;
-    (void)params;
     (void)services;
     if (!ready) {
         return;

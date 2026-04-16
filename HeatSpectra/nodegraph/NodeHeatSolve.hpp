@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeGraphKernels.hpp"
+#include "domain/HeatData.hpp"
 #include "heat/HeatSystemPresets.hpp"
 
 #include <vector>
@@ -16,7 +17,7 @@ private:
         NodeGraphKernelContext& context,
         const std::vector<NodeDataHandle>& sourceHandles,
         const std::vector<NodeDataHandle>& receiverMeshHandles,
-        const std::vector<HeatMaterialBindingEntry>& materialBindings,
+        const std::vector<HeatMaterialBinding>& materialBindings,
         uint64_t voronoiPayloadHash,
         uint64_t contactPayloadHash,
         bool active,

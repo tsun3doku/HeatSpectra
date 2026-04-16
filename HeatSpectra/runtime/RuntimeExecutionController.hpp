@@ -7,7 +7,6 @@ class CameraController;
 class NodeGraphController;
 class RuntimeInputController;
 class RuntimeRenderController;
-class RuntimeSimulationController;
 
 class RuntimeExecutionController {
 public:
@@ -15,7 +14,6 @@ public:
         RuntimeInputController& inputController,
         NodeGraphController& nodeGraphController,
         RuntimeRenderController& renderController,
-        RuntimeSimulationController& simulationController,
         CameraController& cameraController,
         std::atomic<bool>& renderPaused);
 
@@ -28,11 +26,9 @@ private:
     RuntimeInputController& inputController;
     NodeGraphController& nodeGraphController;
     RuntimeRenderController& renderController;
-    RuntimeSimulationController& simulationController;
     CameraController& cameraController;
     std::atomic<bool>& renderPaused;
 
     bool hasFrameSlot = false;
     uint32_t frameSlot = 0;
 };
-

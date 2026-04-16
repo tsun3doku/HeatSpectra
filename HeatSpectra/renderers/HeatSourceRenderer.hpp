@@ -1,26 +1,31 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <memory>
 #include <vector>
 
-#include "runtime/HeatOverlayData.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 class VulkanDevice;
 class UniformBufferManager;
-class ModelRegistry;
 struct UniformBufferObject;
 
 class HeatSourceRenderer {
 public:
+    struct SourceRenderBinding {
+        ModelProduct model;
+        float sourceTemperature = 0.0f;
+    };
+
     HeatSourceRenderer(VulkanDevice& device, UniformBufferManager& uniformBufferManager);
     ~HeatSourceRenderer();
 
     void initialize(VkRenderPass renderPass);
     void cleanup();
 
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<HeatOverlayData>& sources, ModelRegistry& resourceManager) const;
+    void render(
+        VkCommandBuffer commandBuffer,
+        uint32_t frameIndex,
+        const std::vector<SourceRenderBinding>& sources) const;
 
 private:
     bool createPipeline(VkRenderPass renderPass);

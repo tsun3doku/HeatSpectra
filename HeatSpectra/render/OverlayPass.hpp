@@ -24,6 +24,9 @@ class OutlineRenderer;
 class VkFrameGraphRuntime;
 
 namespace render {
+class ContactOverlayRenderer;
+class HeatOverlayRenderer;
+class VoronoiOverlayRenderer;
 class GeometryPass;
 }
 
@@ -48,11 +51,13 @@ public:
     void create() override;
     void resize(VkExtent2D extent) override;
     void updateDescriptors() override;
-    void record(const FrameContext& context, const SceneView& sceneView, const RenderFlags& flags, const OverlayParams& params, RenderServices& services) override;
+    void record(const FrameContext& context, const SceneView& sceneView, const RenderFlags& flags, RenderServices& services) override;
     void destroy() override;
 
-    void bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product);
-    void removeIntrinsicPackage(uint64_t packageKey);
+    IntrinsicRenderer* getIntrinsicRenderer() const;
+    ContactOverlayRenderer* getContactOverlayRenderer() const;
+    HeatOverlayRenderer* getHeatOverlayRenderer() const;
+    VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
     void setTimingOverlayLines(const std::vector<std::string>& lines);
     void updateGridLabels(const glm::vec3& gridSize);
 
@@ -72,6 +77,9 @@ private:
 
     std::unique_ptr<OutlineRenderer> outlineRenderer;
     std::unique_ptr<IntrinsicRenderer> intrinsicRenderer;
+    std::unique_ptr<ContactOverlayRenderer> contactOverlayRenderer;
+    std::unique_ptr<HeatOverlayRenderer> heatOverlayRenderer;
+    std::unique_ptr<VoronoiOverlayRenderer> voronoiOverlayRenderer;
     std::unique_ptr<TimingRenderer> timingOverlay;
     std::unique_ptr<GridRenderer> gridRenderer;
     std::unique_ptr<GizmoRenderer> gizmoRenderer;
@@ -79,5 +87,3 @@ private:
 };
 
 } // namespace render
-
-

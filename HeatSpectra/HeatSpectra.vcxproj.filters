@@ -81,18 +81,78 @@
     <ClCompile Include="runtime\RemeshController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="runtime\RemeshSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="runtime\RuntimePackageCompiler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimePackageGraph.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimePackageSync.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\RuntimePackageController.cpp">
+    <ClCompile Include="runtime\RuntimeComputePackageController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\RuntimeModelTransport.cpp">
+    <ClCompile Include="runtime\RuntimeDisplayPackageController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="runtime\ModelComputeRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\ModelDisplayRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RemeshDisplayController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimeModelComputeTransport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimeModelDisplayTransport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimeVoronoiComputeTransport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\VoronoiDisplayController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\HeatDisplayController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="runtime\RuntimeProductRegistry.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\ModelComputeRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\ModelDisplayRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RemeshDisplayController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\ContactOverlayRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeModelComputeTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeModelDisplayTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeVoronoiComputeTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeVoronoiDisplayTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\VoronoiDisplayController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClCompile Include="runtime\RuntimeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -106,9 +166,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimeRenderController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimeSimulationController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimeExecutionController.cpp">
@@ -135,6 +192,9 @@
     <ClCompile Include="render\SceneRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="render\ContactOverlayRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="render\GeometryPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -142,6 +202,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="render\OverlayPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="render\HeatOverlayRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="render\VoronoiOverlayRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="render\BlendPass.cpp">
@@ -183,13 +249,13 @@
     <ClCompile Include="heat\HeatSystemDebugStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemRenderStage.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="heat\HeatSourceRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemController.cpp">
+    <ClCompile Include="heat\HeatSystemComputeController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="heat\HeatSystemDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\VoronoiSystem.cpp">
@@ -198,7 +264,7 @@
     <ClCompile Include="heat\VoronoiSystemRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\VoronoiSystemController.cpp">
+    <ClCompile Include="heat\VoronoiSystemComputeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vulkan\MemoryAllocator.cpp">
@@ -345,7 +411,10 @@
     <ClCompile Include="heat\ContactInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="contact\ContactSystemController.cpp">
+    <ClCompile Include="contact\ContactSystemComputeController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="contact\ContactSystemDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="contact\ContactSystem.cpp">
@@ -402,7 +471,7 @@
     <ClCompile Include="nodegraph\NodeGraphRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphDebugStore.cpp">
+    <ClCompile Include="nodegraph\NodeGraphDebugCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphKernels.cpp">
@@ -468,6 +537,9 @@
     <ClCompile Include="nodegraph\NodePanelUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphDisplay.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphCompiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -490,6 +562,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphRegistry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphTopology.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphUtils.cpp">
@@ -709,13 +784,19 @@
     <ClInclude Include="runtime\RuntimePackageCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="runtime\RuntimePackageGraph.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="runtime\RuntimePackageSync.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimePackages.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimePackageController.hpp">
+    <ClInclude Include="runtime\RuntimeComputePackageController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeDisplayPackageController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeThermalTypes.hpp">
@@ -734,9 +815,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeRenderController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimeSimulationController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeExecutionController.hpp">
@@ -781,6 +859,12 @@
     <ClInclude Include="render\OverlayPass.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="render\HeatOverlayRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render\VoronoiOverlayRenderer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="render\BlendPass.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -820,10 +904,10 @@
     <ClInclude Include="heat\HeatSystemDebugStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatSystemRenderStage.hpp">
+    <ClInclude Include="heat\HeatSystemComputeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatSystemController.hpp">
+    <ClInclude Include="heat\HeatSystemDisplayController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\VoronoiSystem.hpp">
@@ -832,7 +916,7 @@
     <ClInclude Include="heat\VoronoiSystemRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\VoronoiSystemController.hpp">
+    <ClInclude Include="heat\VoronoiSystemComputeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\LloydCompute.hpp">
@@ -1009,7 +1093,10 @@
     <ClInclude Include="renderers\ContactLineRenderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="contact\ContactSystemController.hpp">
+    <ClInclude Include="contact\ContactSystemComputeController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="contact\ContactSystemDisplayController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="contact\ContactSystem.hpp">
@@ -1072,7 +1159,7 @@
     <ClInclude Include="nodegraph\NodeGraphRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphDebugStore.hpp">
+    <ClInclude Include="nodegraph\NodeGraphDebugCache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphKernels.hpp">
@@ -1138,6 +1225,9 @@
     <ClInclude Include="nodegraph\NodePanelUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphDisplay.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1195,6 +1285,9 @@
     <ClInclude Include="nodegraph\NodeGraphRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphTopology.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1204,19 +1297,28 @@
     <ClInclude Include="nodegraph\NodeGraphCoreTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeVoronoiTransport.hpp">
+    <ClInclude Include="runtime\RuntimeContactComputeTransport.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeContactTransport.hpp">
+    <ClInclude Include="runtime\HeatDisplayController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeHeatTransport.hpp">
+    <ClInclude Include="runtime\RuntimeHeatComputeTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeHeatDisplayTransport.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RemeshController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeRemeshTransport.hpp">
+    <ClInclude Include="runtime\RemeshSystem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeRemeshComputeTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeRemeshDisplayTransport.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="domain\GeometryData.hpp">

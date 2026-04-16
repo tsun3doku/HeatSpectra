@@ -6,7 +6,6 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
-#include "domain/GeometryData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "util/Structs.hpp"
 
@@ -21,7 +20,6 @@ public:
     HeatSourceRuntime(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        const GeometryData& geometryData,
         const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
         CommandPool& renderCommandPool,
         float initialTemperature);
@@ -74,7 +72,6 @@ public:
 private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    GeometryData geometryData{};
     SupportingHalfedge::IntrinsicMesh intrinsicMesh{};
     CommandPool& renderCommandPool;
     size_t intrinsicVertexCount = 0;

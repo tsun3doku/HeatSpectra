@@ -10,14 +10,14 @@
 #include <vector>
 
 class NodeGraphBridge;
-class HeatSystemController;
-class ContactSystemController;
+class HeatSystemComputeController;
 class MeshModifiers;
 class NodeGraphRuntimeBridge;
 class NodePayloadRegistry;
 class Remesher;
 class ModelRegistry;
-class RuntimePackageController;
+class RuntimeComputePackageController;
+class RuntimeDisplayPackageController;
 class RuntimeProductRegistry;
 class SceneController;
 class RenderSettingsController;
@@ -36,9 +36,9 @@ struct EvaluatedSocketValue {
 
 struct NodeRuntimeServices {
     SceneController* sceneController = nullptr;
-    RuntimePackageController* runtimePackageController = nullptr;
-    HeatSystemController* heatSystemController = nullptr;
-    ContactSystemController* contactSystemController = nullptr;
+    RuntimeComputePackageController* runtimeComputePackageController = nullptr;
+    RuntimeDisplayPackageController* runtimeDisplayPackageController = nullptr;
+    HeatSystemComputeController* heatSystemController = nullptr;
     RenderSettingsController* renderSettingsController = nullptr;
     NodePayloadRegistry* payloadRegistry = nullptr;
     NodeGraphRuntimeBridge* runtimeBridge = nullptr;

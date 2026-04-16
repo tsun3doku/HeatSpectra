@@ -326,7 +326,6 @@ void normalizeGeometryGroups(GeometryData& geometry) {
 void updatePayloadHash(GeometryData& geometry) {
     uint64_t hash = NodeGraphHash::start();
     NodeGraphHash::combineString(hash, geometry.baseModelPath);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(geometry.modelId));
     for (float value : geometry.localToWorld) {
         NodeGraphHash::combineFloat(hash, value);
     }
@@ -423,11 +422,10 @@ void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry
         } else {
             dataBlock.metadata["geometry.model_path"] = geometry->baseModelPath;
         }
-        const uint32_t modelId = geometry ? geometry->modelId : 0u;
         const size_t pointCount = geometry ? geometry->pointPositions.size() / 3 : 0u;
         const size_t triangleCount = geometry ? geometry->triangleIndices.size() / 3 : 0u;
         const size_t groupCount = geometry ? geometry->groups.size() : 0u;
-        dataBlock.metadata["geometry.model_id"] = std::to_string(modelId);
+        dataBlock.metadata.erase("geometry.model_id");
         dataBlock.metadata["geometry.point_count"] = std::to_string(pointCount);
         dataBlock.metadata["geometry.triangle_count"] = std::to_string(triangleCount);
         dataBlock.metadata["geometry.group_count"] = std::to_string(groupCount);

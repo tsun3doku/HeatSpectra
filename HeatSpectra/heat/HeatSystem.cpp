@@ -3,15 +3,12 @@
 #include "HeatReceiverRuntime.hpp"
 #include "HeatSourceRuntime.hpp"
 #include "HeatSystemContactStage.hpp"
-#include "HeatSystemRenderStage.hpp"
 #include "HeatSystemResources.hpp"
 #include "HeatSystemSimStage.hpp"
 #include "HeatSystemSurfaceStage.hpp"
 #include "HeatSystemStageContext.hpp"
 #include "HeatSystemVoronoiStage.hpp"
 #include "nodegraph/NodeModelTransform.hpp"
-#include "renderers/HeatReceiverRenderer.hpp"
-#include "renderers/HeatSourceRenderer.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
@@ -57,7 +54,6 @@ HeatSystem::HeatSystem(
     simStage = std::make_unique<HeatSystemSimStage>(stageContext);
     surfaceStage = std::make_unique<HeatSystemSurfaceStage>(stageContext);
     voronoiStage = std::make_unique<HeatSystemVoronoiStage>(stageContext);
-    renderStage = std::make_unique<HeatSystemRenderStage>(stageContext);
 
     if (!contactStage ||
         !contactStage->createDescriptorPool(maxFramesInFlight) ||
@@ -74,21 +70,6 @@ HeatSystem::HeatSystem(
         failInitialization("create contact compute resources");
         return;
     }
-
-    heatSourceRenderer = std::make_unique<HeatSourceRenderer>(vulkanDevice, uniformBufferManager);
-    if (!heatSourceRenderer) {
-        failInitialization("create HeatSourceRenderer");
-        return;
-    }
-
-    heatReceiverRenderer = std::make_unique<HeatReceiverRenderer>(vulkanDevice, uniformBufferManager);
-    if (!heatReceiverRenderer) {
-        failInitialization("create HeatReceiverRenderer");
-        return;
-    }
-
-    heatSourceRenderer->initialize(renderPass);
-    heatReceiverRenderer->initialize(renderPass, maxFramesInFlight);
 
     if (!createComputeCommandBuffers(maxFramesInFlight)) {
         failInitialization("allocate compute command buffers");
@@ -108,19 +89,16 @@ void HeatSystem::failInitialization(const char* stage) {
 }
 
 void HeatSystem::setSourcePayloads(
-    const std::vector<GeometryData>& sourceGeometries,
     const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
     const std::vector<uint32_t>& sourceRuntimeModelIds,
     const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId) {
     runtime.setSourcePayloads(
-        sourceGeometries,
         sourceIntrinsicMeshes,
         sourceRuntimeModelIds,
         sourceTemperatureByRuntimeId);
 }
 
 void HeatSystem::setReceiverPayloads(
-    const std::vector<GeometryData>& updatedReceiverGeometries,
     const std::vector<SupportingHalfedge::IntrinsicMesh>& updatedReceiverIntrinsicMeshes,
     const std::vector<uint32_t>& updatedReceiverRuntimeModelIds,
     const std::vector<VkBufferView>& supportingHalfedgeViews,
@@ -135,7 +113,6 @@ void HeatSystem::setReceiverPayloads(
     const std::vector<VkBufferView>& inputLengthViews) {
     receiverRuntimeModelIds = updatedReceiverRuntimeModelIds;
     surfaceRuntime.setReceiverPayloads(
-        updatedReceiverGeometries,
         updatedReceiverIntrinsicMeshes,
         receiverRuntimeModelIds,
         supportingHalfedgeViews,
@@ -265,24 +242,12 @@ void HeatSystem::update() {
             continue;
         }
 
-        sourceBinding.heatSource->setHeatSourcePushConstant(
-            NodeModelTransform::toMat4(sourceBinding.geometry.localToWorld));
-    }
-}
+        glm::mat4 modelMatrix(1.0f);
+        if (!resourceManager.tryGetModelMatrix(sourceBinding.runtimeModelId, modelMatrix)) {
+            continue;
+        }
 
-void HeatSystem::updateRenderResources(VkRenderPass renderPass) {
-    if (!heatSourceRenderer) {
-        heatSourceRenderer = std::make_unique<HeatSourceRenderer>(vulkanDevice, uniformBufferManager);
-    }
-    if (!heatReceiverRenderer) {
-        heatReceiverRenderer = std::make_unique<HeatReceiverRenderer>(vulkanDevice, uniformBufferManager);
-    }
-    if (heatSourceRenderer) {
-        heatSourceRenderer->initialize(renderPass);
-    }
-    if (heatReceiverRenderer) {
-        heatReceiverRenderer->initialize(renderPass, maxFramesInFlight);
-        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), maxFramesInFlight, true);
+        sourceBinding.heatSource->setHeatSourcePushConstant(modelMatrix);
     }
 }
 
@@ -321,11 +286,6 @@ bool HeatSystem::rebuildHeatStateRuntimes(bool forceDescriptorReallocate) {
     }
 
     surfaceRuntime.executeBufferTransfers(renderCommandPool);
-
-    if (heatReceiverRenderer) {
-        heatReceiverRenderer->updateDescriptors(surfaceRuntime.getReceivers(), maxFramesInFlight, forceDescriptorReallocate);
-    }
-
     if (!heatContactRuntime.ensureCouplings(
             vulkanDevice,
             memoryAllocator,
@@ -511,21 +471,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
     vkEndCommandBuffer(commandBuffer);
 }
 
-void HeatSystem::renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex) {
-    if (!renderStage) {
-        return;
-    }
-    renderStage->renderHeatOverlay(cmdBuffer, frameIndex, heatSourceRenderer.get(), heatReceiverRenderer.get(), heatSources, surfaceRuntime.getReceivers(), isActive, isPaused);
-}
-
 void HeatSystem::cleanupResources() {
-    if (heatSourceRenderer) {
-        heatSourceRenderer->cleanup();
-    }
-    if (heatReceiverRenderer) {
-        heatReceiverRenderer->cleanup();
-    }
-
     if (resources.contactPipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(vulkanDevice.getDevice(), resources.contactPipeline, nullptr);
         resources.contactPipeline = VK_NULL_HANDLE;

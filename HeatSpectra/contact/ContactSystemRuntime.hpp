@@ -1,6 +1,6 @@
 #pragma once
 
-#include "contact/ContactSystemController.hpp"
+#include "contact/ContactSystemComputeController.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 #include <vector>

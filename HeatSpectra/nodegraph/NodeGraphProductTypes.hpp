@@ -10,6 +10,7 @@ enum class NodeProductType : uint8_t {
     Remesh,
     Voronoi,
     Contact,
+    Heat,
 };
 
 struct ProductHandle {

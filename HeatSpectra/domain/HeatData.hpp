@@ -24,11 +24,16 @@ struct HeatReceiverData {
     NodeDataHandle meshHandle{};
 };
 
+struct HeatMaterialBinding {
+    uint32_t receiverModelNodeId = 0;
+    HeatMaterialPresetId presetId = HeatMaterialPresetId::Aluminum;
+};
+
 struct HeatData {
     uint64_t payloadHash = 0;
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
-    std::vector<HeatMaterialBindingEntry> materialBindings;
+    std::vector<HeatMaterialBinding> materialBindings;
     bool active = false;
     bool paused = false;
     bool resetRequested = false;

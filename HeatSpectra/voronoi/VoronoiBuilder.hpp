@@ -9,7 +9,6 @@
 #include "voronoi/VoronoiResources.hpp"
 
 class MemoryAllocator;
-class PointRenderer;
 class VoronoiGeoCompute;
 class VoronoiModelRuntime;
 class VulkanDevice;
@@ -31,8 +30,7 @@ public:
         std::vector<VoronoiDomain>& receiverVoronoiDomains,
         bool debugEnable,
         uint32_t maxNeighbors,
-        VoronoiGeoCompute* voronoiGeoCompute,
-        PointRenderer* pointRenderer);
+        VoronoiGeoCompute* voronoiGeoCompute);
     bool stageSurfaceMappings(
         std::vector<VoronoiDomain>& receiverVoronoiDomains,
         uint32_t maxNeighbors) const;
@@ -54,7 +52,7 @@ private:
         bool debugEnable,
         uint32_t maxNeighbors);
     bool buildVoronoiNeighborBuffer(uint32_t maxNeighbors);
-    void uploadOccupancyPoints(const std::vector<VoronoiDomain>& domains, PointRenderer* pointRenderer) const;
+    bool rebuildOccupancyPointBuffer(const std::vector<VoronoiDomain>& domains) const;
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;

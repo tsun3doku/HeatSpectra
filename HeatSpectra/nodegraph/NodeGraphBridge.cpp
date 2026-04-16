@@ -1,10 +1,13 @@
 #include "NodeGraphBridge.hpp"
 
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphTopology.hpp"
 #include "NodeGraphValidator.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -134,6 +137,39 @@ bool NodeGraphBridge::getNode(NodeGraphNodeId nodeId, NodeGraphNode& outNode) co
     return true;
 }
 
+bool NodeGraphBridge::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex);
+
+    std::unordered_map<uint32_t, bool> displayByNodeId;
+    displayByNodeId.reserve(document.getNodes().size());
+    for (const NodeGraphNode& existingNode : document.getNodes()) {
+        displayByNodeId.emplace(existingNode.id.value, existingNode.displayEnabled);
+    }
+
+    if (!document.setNodeDisplayEnabled(nodeId, enabled)) {
+        return false;
+    }
+
+    std::vector<NodeGraphChange> changes;
+    for (const NodeGraphNode& updatedNode : document.getNodes()) {
+        const auto previousIt = displayByNodeId.find(updatedNode.id.value);
+        const bool previousDisplayEnabled =
+            previousIt != displayByNodeId.end() ? previousIt->second : false;
+        if (previousDisplayEnabled == updatedNode.displayEnabled) {
+            continue;
+        }
+
+        NodeGraphChange change{NodeGraphChangeType::NodeUpsert};
+        change.reason = NodeGraphChangeReason::Parameter;
+        change.node = updatedNode;
+        changes.push_back(std::move(change));
+    }
+
+    rebuildStateLocked();
+    pushChangesLocked(changes);
+    return true;
+}
+
 bool NodeGraphBridge::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter) {
     std::lock_guard<std::mutex> lock(mutex);
 
@@ -145,29 +181,6 @@ bool NodeGraphBridge::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphPa
     if (const NodeGraphNode* node = document.findNode(nodeId)) {
         NodeGraphChange change{NodeGraphChangeType::NodeUpsert};
         change.reason = NodeGraphChangeReason::Parameter;
-        change.node = *node;
-        changes.push_back(std::move(change));
-    }
-
-    rebuildStateLocked();
-    pushChangesLocked(changes);
-    return true;
-}
-
-bool NodeGraphBridge::appendSocket(
-    NodeGraphNodeId nodeId,
-    const NodeSocketSignature& socketSignature,
-    NodeGraphSocketId* outSocketId) {
-    std::lock_guard<std::mutex> lock(mutex);
-
-    if (!document.appendSocket(nodeId, socketSignature, outSocketId)) {
-        return false;
-    }
-
-    std::vector<NodeGraphChange> changes;
-    if (const NodeGraphNode* node = document.findNode(nodeId)) {
-        NodeGraphChange change{NodeGraphChangeType::NodeUpsert};
-        change.reason = NodeGraphChangeReason::Topology;
         change.node = *node;
         changes.push_back(std::move(change));
     }
@@ -211,14 +224,7 @@ bool NodeGraphBridge::connectSockets(
         return false;
     }
 
-    if (!NodeGraphValidator::canCreateConnection(
-            document,
-            fromNode,
-            fromSocket,
-            toNode,
-            toSocket,
-            errorMessage,
-            existingIncomingEdgeId)) {
+    if (!NodeGraphValidator::canCreateConnection(document, fromNode, fromSocket, toNode, toSocket, errorMessage, existingIncomingEdgeId)) {
         return false;
     }
 
@@ -264,13 +270,9 @@ bool NodeGraphBridge::removeConnection(NodeGraphEdgeId edgeId) {
     return true;
 }
 
-NodeGraphCompiled NodeGraphBridge::compiledState() const {
-    std::lock_guard<std::mutex> lock(mutex);
-    return NodeGraphCompiler::compile(graphState);
-}
-
 bool NodeGraphBridge::canExecuteHeatSolve(std::string& reason) const {
-    const NodeGraphCompiled plan = compiledState();
+    std::lock_guard<std::mutex> lock(mutex);
+    const NodeGraphCompiled plan = NodeGraphCompiler::compile(graphState);
     if (!plan.isValid) {
         if (!plan.compilationErrors.empty()) {
             reason = plan.compilationErrors.front();
@@ -284,6 +286,17 @@ bool NodeGraphBridge::canExecuteHeatSolve(std::string& reason) const {
 NodeGraphState NodeGraphBridge::state() const {
     std::lock_guard<std::mutex> lock(mutex);
     return graphState;
+}
+
+bool NodeGraphBridge::resolveGizmoTransformNode(uint64_t outputSocketKey, NodeGraphNodeId& outTransformNodeId) const {
+    outTransformNodeId = {};
+    std::lock_guard<std::mutex> lock(mutex);
+    if (outputSocketKey == 0) {
+        return false;
+    }
+
+    const NodeGraphTopology topology(graphState);
+    return topology.findFirstUpstreamNodeByType(outputSocketKey, nodegraphtypes::Transform, outTransformNodeId);
 }
 
 bool NodeGraphBridge::consumeChanges(uint64_t& lastSeenRevision, NodeGraphDelta& outDelta) const {

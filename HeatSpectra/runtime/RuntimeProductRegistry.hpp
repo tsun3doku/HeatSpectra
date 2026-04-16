@@ -20,6 +20,7 @@ public:
             existingIt->second = product;
             return;
         }
+
         modelBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Model, outputSocketKey);
     }
@@ -61,6 +62,7 @@ public:
             existingIt->second = product;
             return;
         }
+
         remeshBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Remesh, outputSocketKey);
     }
@@ -102,6 +104,7 @@ public:
             existingIt->second = product;
             return;
         }
+
         voronoiBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Voronoi, outputSocketKey);
     }
@@ -116,7 +119,7 @@ public:
         }
     }
 
-    const VoronoiProduct* resolve(const ProductHandle& handle) const {
+    const VoronoiProduct* resolveVoronoi(const ProductHandle& handle) const {
         if (handle.type != NodeProductType::Voronoi || !handle.isValid()) {
             return nullptr;
         }
@@ -143,6 +146,7 @@ public:
             existingIt->second = product;
             return;
         }
+
         contactBySocket[outputSocketKey] = product;
         bumpRevision(NodeProductType::Contact, outputSocketKey);
     }
@@ -169,6 +173,49 @@ public:
         if (it == contactBySocket.end()) {
             return nullptr;
         }
+
+        return &it->second;
+    }
+
+    void publishHeat(uint64_t outputSocketKey, const HeatProduct& product) {
+        if (outputSocketKey == 0 || !product.isValid()) {
+            removeHeat(outputSocketKey);
+            return;
+        }
+
+        const auto existingIt = heatBySocket.find(outputSocketKey);
+        if (existingIt != heatBySocket.end() && existingIt->second.contentHash == product.contentHash) {
+            existingIt->second = product;
+            return;
+        }
+
+        heatBySocket[outputSocketKey] = product;
+        bumpRevision(NodeProductType::Heat, outputSocketKey);
+    }
+
+    void removeHeat(uint64_t outputSocketKey) {
+        if (outputSocketKey == 0) {
+            return;
+        }
+
+        if (heatBySocket.erase(outputSocketKey) != 0) {
+            bumpRevision(NodeProductType::Heat, outputSocketKey);
+        }
+    }
+
+    const HeatProduct* resolveHeat(const ProductHandle& handle) const {
+        if (handle.type != NodeProductType::Heat || !handle.isValid()) {
+            return nullptr;
+        }
+        if (getRevision(NodeProductType::Heat, handle.outputSocketKey) != handle.outputRevision) {
+            return nullptr;
+        }
+
+        const auto it = heatBySocket.find(handle.outputSocketKey);
+        if (it == heatBySocket.end()) {
+            return nullptr;
+        }
+
         return &it->second;
     }
 
@@ -188,7 +235,7 @@ private:
     using PublicationKey = std::pair<NodeProductType, uint64_t>;
 
     static PublicationKey publicationKey(NodeProductType type, uint64_t outputSocketKey) {
-        return PublicationKey{type, outputSocketKey};
+        return PublicationKey{ type, outputSocketKey };
     }
 
     uint64_t bumpRevision(NodeProductType type, uint64_t outputSocketKey) {
@@ -201,11 +248,7 @@ private:
 
     uint64_t getRevision(NodeProductType type, uint64_t outputSocketKey) const {
         const auto it = revisionByProduct.find(publicationKey(type, outputSocketKey));
-        if (it == revisionByProduct.end()) {
-            return 0;
-        }
-
-        return it->second;
+        return it != revisionByProduct.end() ? it->second : 0;
     }
 
     bool containsProduct(NodeProductType type, uint64_t outputSocketKey) const {
@@ -218,6 +261,8 @@ private:
             return voronoiBySocket.find(outputSocketKey) != voronoiBySocket.end();
         case NodeProductType::Contact:
             return contactBySocket.find(outputSocketKey) != contactBySocket.end();
+        case NodeProductType::Heat:
+            return heatBySocket.find(outputSocketKey) != heatBySocket.end();
         default:
             return false;
         }
@@ -227,5 +272,6 @@ private:
     std::unordered_map<uint64_t, RemeshProduct> remeshBySocket;
     std::unordered_map<uint64_t, VoronoiProduct> voronoiBySocket;
     std::unordered_map<uint64_t, ContactProduct> contactBySocket;
+    std::unordered_map<uint64_t, HeatProduct> heatBySocket;
     std::map<PublicationKey, uint64_t> revisionByProduct;
 };

@@ -37,7 +37,6 @@ bool NodeModel::execute(NodeGraphKernelContext& context) const {
         outputValue.dataType = NodePayloadType::Geometry;
         GeometryData geometry{};
         geometry.baseModelPath = modelPath;
-        geometry.modelId = context.node.id.value;
         populateGeometryFromModelPath(modelPath, geometry);
         updatePayloadHash(geometry);
         if (payloadRegistry) {
@@ -198,11 +197,9 @@ bool NodeModel::populateGeometryFromModelPath(const std::string& modelPath, Geom
     }
 
     const std::string baseModelPath = geometry.baseModelPath;
-    const uint32_t modelId = geometry.modelId;
 
     geometry = std::move(loadedGeometry);
     geometry.baseModelPath = baseModelPath;
-    geometry.modelId = modelId;
 
     geometry.attributes.clear();
 

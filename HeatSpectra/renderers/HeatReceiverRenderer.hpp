@@ -2,22 +2,19 @@
 
 #include <vulkan/vulkan.h>
 #include <array>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
-#include "runtime/HeatOverlayData.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 class VulkanDevice;
 class UniformBufferManager;
-class HeatReceiverRuntime;
-class ModelRegistry;
 
 class HeatReceiverRenderer {
 public:
     struct ReceiverRenderBinding {
-        uint32_t runtimeModelId = 0;
+        ModelProduct model;
+        std::array<VkBufferView, 11> bufferViews{};
     };
 
     HeatReceiverRenderer(VulkanDevice& device, UniformBufferManager& uniformBufferManager);
@@ -25,9 +22,8 @@ public:
 
     void initialize(VkRenderPass renderPass, uint32_t maxFramesInFlight);
     void cleanup();
-    void updateDescriptors(const std::vector<HeatOverlayData>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
-    void updateDescriptors(const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
-    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers, ModelRegistry& resourceManager) const;
+    void updateDescriptors(const std::vector<ReceiverRenderBinding>& receivers, uint32_t maxFramesInFlight, bool forceReallocate);
+    void render(VkCommandBuffer commandBuffer, uint32_t frameIndex, const std::vector<ReceiverRenderBinding>& receivers) const;
 
 private:
     bool createDescriptorPool(uint32_t maxFramesInFlight);

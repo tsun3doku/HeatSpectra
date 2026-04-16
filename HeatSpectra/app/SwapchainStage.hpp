@@ -13,9 +13,9 @@ class SwapchainManager;
 class FrameGraph;
 class SceneRenderer;
 class FrameSync;
-class HeatSystemController;
-class ContactSystemController;
-class VoronoiSystemController;
+class HeatSystemComputeController;
+class ContactSystemComputeController;
+class VoronoiSystemComputeController;
 class VkFrameGraphBackend;
 
 class SwapchainStage {
@@ -28,9 +28,9 @@ public:
         VkFrameGraphBackend& frameGraphBackend,
         SceneRenderer& sceneRenderer,
         FrameSync& frameSync,
-        HeatSystemController* heatSystemController,
-        ContactSystemController* contactSystemController,
-        VoronoiSystemController* voronoiSystemController,
+        HeatSystemComputeController* heatSystemController,
+        ContactSystemComputeController* contactSystemController,
+        VoronoiSystemComputeController* voronoiSystemController,
         std::atomic<bool>& isShuttingDown);
 
     bool initializeSyncObjects();
@@ -49,8 +49,8 @@ private:
     VkFrameGraphBackend& frameGraphBackend;
     SceneRenderer& sceneRenderer;
     FrameSync& frameSync;
-    HeatSystemController* heatSystemController = nullptr;
-    ContactSystemController* contactSystemController = nullptr;
-    VoronoiSystemController* voronoiSystemController = nullptr;
+    HeatSystemComputeController* heatSystemController = nullptr;
+    ContactSystemComputeController* contactSystemController = nullptr;
+    VoronoiSystemComputeController* voronoiSystemController = nullptr;
     std::atomic<bool>& isShuttingDown;
 };

@@ -48,6 +48,10 @@ public:
     VkDeviceSize seedFlagsBufferOffset = 0;
     void* mappedSeedFlagsData = nullptr;
 
+    VkBuffer occupancyPointBuffer = VK_NULL_HANDLE;
+    VkDeviceSize occupancyPointBufferOffset = 0;
+    uint32_t occupancyPointCount = 0;
+
     VkBuffer voxelGridParamsBuffer = VK_NULL_HANDLE;
     VkDeviceSize voxelGridParamsBufferOffset = 0;
 

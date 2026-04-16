@@ -19,7 +19,6 @@ inline constexpr const char* Custom = "custom";
 namespace nodegraphparams {
 namespace model {
 constexpr uint32_t Path = 1;
-constexpr uint32_t ShowWireframe = 2;
 }
 
 namespace transform {

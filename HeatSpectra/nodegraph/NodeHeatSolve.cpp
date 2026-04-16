@@ -101,7 +101,7 @@ const char* NodeHeatSolve::typeId() const {
 bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
-    std::vector<HeatMaterialBindingEntry> materialBindings;
+    std::vector<HeatMaterialBinding> materialBindings;
     const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
 
     const NodeGraphNodeId selectedNodeId =
@@ -146,7 +146,7 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
 
     appendSourceHandlesFromContact(*contactInput, sourceHandles);
     receiverMeshHandles = voronoiInput->receiverMeshHandles;
-    materialBindings = makeHeatMaterialBindings(params);
+    materialBindings = makeHeatPayloadMaterialBindings(params);
 
     const bool wantsPaused = params.resetRequested
         ? false
@@ -168,7 +168,7 @@ void NodeHeatSolve::populateOutputPayloads(
     NodeGraphKernelContext& context,
     const std::vector<NodeDataHandle>& sourceHandles,
     const std::vector<NodeDataHandle>& receiverMeshHandles,
-    const std::vector<HeatMaterialBindingEntry>& materialBindings,
+    const std::vector<HeatMaterialBinding>& materialBindings,
     uint64_t voronoiPayloadHash,
     uint64_t contactPayloadHash,
     bool active,
@@ -202,8 +202,8 @@ void NodeHeatSolve::populateOutputPayloads(
             NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.paused ? 1u : 0u));
             NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.resetRequested ? 1u : 0u));
             NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.materialBindings.size()));
-            for (const HeatMaterialBindingEntry& binding : heatData.materialBindings) {
-                NodeGraphHash::combineString(heatData.payloadHash, binding.groupName);
+            for (const HeatMaterialBinding& binding : heatData.materialBindings) {
+                NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(binding.receiverModelNodeId));
                 NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(binding.presetId));
             }
             outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(heatData));
@@ -253,10 +253,10 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(contact->pair.kind));
 
     const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
-    const std::vector<HeatMaterialBindingEntry> materialBindings = makeHeatMaterialBindings(params);
+    const std::vector<HeatMaterialBinding> materialBindings = makeHeatPayloadMaterialBindings(params);
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(materialBindings.size()));
-    for (const HeatMaterialBindingEntry& binding : materialBindings) {
-        NodeGraphHash::combineString(outHash, binding.groupName);
+    for (const HeatMaterialBinding& binding : materialBindings) {
+        NodeGraphHash::combine(outHash, static_cast<uint64_t>(binding.receiverModelNodeId));
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(binding.presetId));
     }
     std::vector<NodeDataHandle> sourceHandles;

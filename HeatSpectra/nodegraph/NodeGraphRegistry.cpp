@@ -61,7 +61,6 @@ NodeTypeDefinition NodeGraphRegistry::buildModelNode() {
         },
         {
             {nodegraphparams::model::Path, "Model Path", NodeGraphParamType::String, 0.0, 0, false, "", false},
-            {nodegraphparams::model::ShowWireframe, "Show Wireframe", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
     };
 }

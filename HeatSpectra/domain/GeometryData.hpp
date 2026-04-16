@@ -34,7 +34,6 @@ struct GeometryGroup {
 struct GeometryData {
     uint64_t payloadHash = 0;
     std::string baseModelPath;
-    uint32_t modelId = 0;
     std::array<float, 16> localToWorld{
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,

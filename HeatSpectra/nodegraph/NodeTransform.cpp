@@ -12,6 +12,7 @@
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 
+#include <array>
 #include <utility>
 
 namespace {
@@ -50,6 +51,10 @@ void combineTransformParams(const NodeGraphNode& node, uint64_t& outHash) {
     NodeGraphHash::combineFloat(outHash, static_cast<float>(params.scaleZ));
 }
 
+std::array<float, 16> buildLocalTransformArray(const NodeGraphNode& node) {
+    return NodeModelTransform::toMatrixArray(buildLocalTransform(node));
+}
+
 }
 
 const char* NodeTransform::typeId() const {
@@ -65,11 +70,15 @@ bool NodeTransform::execute(NodeGraphKernelContext& context) const {
         inputMeshValue = nullptr;
     }
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
+    const std::array<float, 16> localTransform = buildLocalTransformArray(context.node);
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
         outputValue.dataType = NodePayloadType::None;
         outputValue.payloadHandle = {};
+        const uint64_t payloadKey = makeSocketKey(
+            context.node.id,
+            context.node.outputs[outputIndex].id);
 
         if (!payloadRegistry || !inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
             updateDataBlockMetadata(outputValue, payloadRegistry);
@@ -82,16 +91,13 @@ bool NodeTransform::execute(NodeGraphKernelContext& context) const {
             continue;
         }
 
-        GeometryData transformedGeometry = *inputGeometry;
-        transformedGeometry.localToWorld = NodeModelTransform::toMatrixArray(
-            NodeModelTransform::toMat4(inputGeometry->localToWorld) * buildLocalTransform(context.node));
-        updatePayloadHash(transformedGeometry);
-
+        GeometryData forwardedGeometry = *inputGeometry;
+        forwardedGeometry.localToWorld = NodeModelTransform::toMatrixArray(
+            NodeModelTransform::toMat4(forwardedGeometry.localToWorld) *
+            NodeModelTransform::toMat4(localTransform));
+        updatePayloadHash(forwardedGeometry);
         outputValue.dataType = NodePayloadType::Geometry;
-        const uint64_t payloadKey = makeSocketKey(
-            context.node.id,
-            context.node.outputs[outputIndex].id);
-        outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(transformedGeometry));
+        outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(forwardedGeometry));
         updateDataBlockMetadata(outputValue, payloadRegistry);
     }
 

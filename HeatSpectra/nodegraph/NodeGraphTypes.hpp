@@ -198,6 +198,7 @@ struct NodeGraphNode {
     std::string title;
     float x = 0.0f;
     float y = 0.0f;
+    bool displayEnabled = false;
     std::vector<NodeGraphSocket> inputs;
     std::vector<NodeGraphSocket> outputs;
     std::vector<NodeGraphParamValue> parameters;

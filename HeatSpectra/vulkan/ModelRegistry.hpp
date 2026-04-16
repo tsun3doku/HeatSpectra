@@ -28,6 +28,8 @@ public:
 	bool removeModelByID(uint32_t modelID);
 	std::vector<uint32_t> getRenderableModelIds() const;
 	bool hasModel(uint32_t modelID) const;
+	bool setModelVisible(uint32_t modelID, bool visible);
+	bool isModelVisible(uint32_t modelID) const;
 	bool exportProduct(uint32_t modelID, ModelProduct& outProduct) const;
 	bool setModelMatrix(uint32_t modelID, const glm::mat4& matrix);
 	bool tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) const;
@@ -75,6 +77,7 @@ private:
 	std::unique_ptr<Model> heatModel;
 	std::unordered_map<uint32_t, std::unique_ptr<Model>> additionalModelsById;
 	std::unordered_map<uint32_t, Model*> modelsById;
+	std::unordered_set<uint32_t> visibleModelIds;
 	std::vector<uint32_t> recycledModelIds;
 	uint32_t nextModelId = 1;
 };

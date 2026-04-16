@@ -4,7 +4,6 @@
 
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphCompiler.hpp"
-#include "contact/ContactSystemController.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
@@ -120,9 +119,6 @@ void NodeGraphRuntime::applyDelta(const NodeGraphDelta& delta) {
         rebuildNodeById();
         if (shouldClearCaches) {
             clearNodeCaches();
-            if (runtimeServices.contactSystemController) {
-                runtimeServices.contactSystemController->clearAllPreviews();
-            }
             if (runtimeServices.payloadRegistry) {
                 runtimeServices.payloadRegistry->clear();
             }

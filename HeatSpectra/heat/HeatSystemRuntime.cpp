@@ -19,11 +19,9 @@ const HeatSystemRuntime::SourceBinding* HeatSystemRuntime::findBaseSourceBinding
 }
 
 void HeatSystemRuntime::setSourcePayloads(
-    const std::vector<GeometryData>& sourceGeometries,
     const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
     const std::vector<uint32_t>& sourceRuntimeModelIds,
     const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId) {
-    activeSourceGeometries = sourceGeometries;
     activeSourceIntrinsicMeshes = sourceIntrinsicMeshes;
     activeSourceRuntimeModelIds = sourceRuntimeModelIds;
     activeSourceTemperatureByRuntimeId = sourceTemperatureByRuntimeId;
@@ -42,17 +40,14 @@ bool HeatSystemRuntime::ensureModelBindings(
 
     const std::size_t pairCount = std::min(
         activeSourceRuntimeModelIds.size(),
-        std::min(activeSourceGeometries.size(), activeSourceIntrinsicMeshes.size()));
+        activeSourceIntrinsicMeshes.size());
     std::unordered_set<uint32_t> seenSourceIds;
     for (std::size_t index = 0; index < pairCount; ++index) {
         const uint32_t sourceId = activeSourceRuntimeModelIds[index];
         if (sourceId == 0 || !seenSourceIds.insert(sourceId).second) {
             continue;
         }
-
-        const GeometryData& geometry = activeSourceGeometries[index];
         SourceBinding sourceBinding{};
-        sourceBinding.geometry = geometry;
         sourceBinding.runtimeModelId = sourceId;
         const auto tempIt = activeSourceTemperatureByRuntimeId.find(sourceId);
         const float initialTemperature =
@@ -60,7 +55,6 @@ bool HeatSystemRuntime::ensureModelBindings(
         sourceBinding.heatSource = std::make_unique<HeatSourceRuntime>(
             vulkanDevice,
             memoryAllocator,
-            geometry,
             activeSourceIntrinsicMeshes[index],
             renderCommandPool,
             initialTemperature);

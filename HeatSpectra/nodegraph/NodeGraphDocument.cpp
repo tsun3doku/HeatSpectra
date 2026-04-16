@@ -22,6 +22,7 @@ NodeGraphNodeId NodeGraphDocument::addNode(const NodeTypeId& typeId, const std::
     node.title = title.empty() ? definition->displayName : title;
     node.x = x;
     node.y = y;
+    node.displayEnabled = (definition->id == nodegraphtypes::Model);
     node.inputs = buildSocketsFromInterface(*definition, NodeGraphSocketDirection::Input);
     node.outputs = buildSocketsFromInterface(*definition, NodeGraphSocketDirection::Output);
     for (const NodeGraphParamDefinition& parameter : definition->parameters) {
@@ -64,6 +65,36 @@ bool NodeGraphDocument::moveNode(NodeGraphNodeId nodeId, float x, float y) {
 
     node->x = x;
     node->y = y;
+    bumpRevision();
+    return true;
+}
+
+bool NodeGraphDocument::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled) {
+    NodeGraphNode* node = findNode(nodeId);
+    if (!node) {
+        return false;
+    }
+
+    bool changed = false;
+    if (enabled) {
+        for (NodeGraphNode& candidate : nodes) {
+            const bool shouldBeDisplayed = (candidate.id == nodeId);
+            if (candidate.displayEnabled == shouldBeDisplayed) {
+                continue;
+            }
+
+            candidate.displayEnabled = shouldBeDisplayed;
+            changed = true;
+        }
+    } else if (node->displayEnabled) {
+        node->displayEnabled = false;
+        changed = true;
+    }
+
+    if (!changed) {
+        return false;
+    }
+
     bumpRevision();
     return true;
 }

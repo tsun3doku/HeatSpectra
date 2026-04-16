@@ -6,11 +6,11 @@
 #include <cstdint>
 
 #include "InputActions.hpp"
-#include "nodegraph/NodeGraphEditor.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
 
 class Camera;
 class GizmoController;
+class NodeGraphBridge;
 class ModelSelection;
 class ModelRegistry;
 class SceneController;
@@ -45,7 +45,7 @@ private:
     ModelSelection& modelSelection;
     ModelRegistry& resourceManager;
     SceneController& sceneController;
-    NodeGraphEditor nodeGraphEditor;
+    NodeGraphBridge& nodeGraphBridge;
     const SwapchainManager& swapchainManager;
     InputActionHandler& actionHandler;
 

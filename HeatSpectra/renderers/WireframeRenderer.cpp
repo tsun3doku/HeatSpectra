@@ -241,8 +241,7 @@ void WireframeRenderer::renderModels(VkCommandBuffer cmdBuffer, VkDescriptorSet 
     }
 }
 
-void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const ModelProduct& product,
-                                   VkDescriptorSet geometryDescriptorSet) {
+void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const ModelProduct& product, VkDescriptorSet geometryDescriptorSet) {
     if (!initialized) 
         return;
     

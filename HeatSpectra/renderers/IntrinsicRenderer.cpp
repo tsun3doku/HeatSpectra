@@ -3,7 +3,6 @@
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "mesh/remesher/iODT.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "util/File_utils.h"
 #include "util/Structs.hpp"
@@ -351,12 +350,12 @@ bool IntrinsicRenderer::createSupportingHalfedgeDescriptorSetLayout() {
     return true;
 }
 
-void IntrinsicRenderer::allocateDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight) {
-    if (packageKey == 0) {
+void IntrinsicRenderer::allocateDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight) {
+    if (socketKey == 0) {
         return;
     }
 
-    if (supportingHalfedgeDescriptorSetsByPackage.find(packageKey) != supportingHalfedgeDescriptorSetsByPackage.end()) {
+    if (supportingHalfedgeDescriptorSetsBySocket.find(socketKey) != supportingHalfedgeDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -374,7 +373,7 @@ void IntrinsicRenderer::allocateDescriptorSetsForPackage(uint64_t packageKey, ui
         return;
     }
 
-    supportingHalfedgeDescriptorSetsByPackage[packageKey] = descriptorSets;
+    supportingHalfedgeDescriptorSetsBySocket[socketKey] = descriptorSets;
 }
 
 bool IntrinsicRenderer::createIntrinsicNormalsDescriptorPool(uint32_t maxFramesInFlight) {
@@ -425,12 +424,12 @@ bool IntrinsicRenderer::createIntrinsicNormalsDescriptorSetLayout() {
     return true;
 }
 
-void IntrinsicRenderer::allocateNormalsDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight) {
-    if (packageKey == 0) {
+void IntrinsicRenderer::allocateNormalsDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight) {
+    if (socketKey == 0) {
         return;
     }
 
-    if (intrinsicNormalsDescriptorSetsByPackage.find(packageKey) != intrinsicNormalsDescriptorSetsByPackage.end()) {
+    if (intrinsicNormalsDescriptorSetsBySocket.find(socketKey) != intrinsicNormalsDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -448,7 +447,7 @@ void IntrinsicRenderer::allocateNormalsDescriptorSetsForPackage(uint64_t package
         return;
     }
 
-    intrinsicNormalsDescriptorSetsByPackage[packageKey] = descriptorSets;
+    intrinsicNormalsDescriptorSetsBySocket[socketKey] = descriptorSets;
 }
 
 bool IntrinsicRenderer::createIntrinsicVertexNormalsDescriptorPool(uint32_t maxFramesInFlight) {
@@ -499,12 +498,12 @@ bool IntrinsicRenderer::createIntrinsicVertexNormalsDescriptorSetLayout() {
     return true;
 }
 
-void IntrinsicRenderer::allocateVertexNormalsDescriptorSetsForPackage(uint64_t packageKey, uint32_t maxFramesInFlight) {
-    if (packageKey == 0) {
+void IntrinsicRenderer::allocateVertexNormalsDescriptorSetsForSocket(uint64_t socketKey, uint32_t maxFramesInFlight) {
+    if (socketKey == 0) {
         return;
     }
 
-    if (intrinsicVertexNormalsDescriptorSetsByPackage.find(packageKey) != intrinsicVertexNormalsDescriptorSetsByPackage.end()) {
+    if (intrinsicVertexNormalsDescriptorSetsBySocket.find(socketKey) != intrinsicVertexNormalsDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -522,19 +521,19 @@ void IntrinsicRenderer::allocateVertexNormalsDescriptorSetsForPackage(uint64_t p
         return;
     }
 
-    intrinsicVertexNormalsDescriptorSetsByPackage[packageKey] = descriptorSets;
+    intrinsicVertexNormalsDescriptorSetsBySocket[socketKey] = descriptorSets;
 }
 
-void IntrinsicRenderer::updatePayloadDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product) {
-    if (packageKey == 0 || !product.isValid()) {
+void IntrinsicRenderer::updatePayloadDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config) {
+    if (socketKey == 0 || !config.isValid()) {
         return;
     }
 
-    if (supportingHalfedgeDescriptorSetsByPackage.find(packageKey) == supportingHalfedgeDescriptorSetsByPackage.end()) {
-        allocateDescriptorSetsForPackage(packageKey, maxFramesInFlight);
+    if (supportingHalfedgeDescriptorSetsBySocket.find(socketKey) == supportingHalfedgeDescriptorSetsBySocket.end()) {
+        allocateDescriptorSetsForSocket(socketKey, maxFramesInFlight);
     }
-    auto descriptorSetIt = supportingHalfedgeDescriptorSetsByPackage.find(packageKey);
-    if (descriptorSetIt == supportingHalfedgeDescriptorSetsByPackage.end()) {
+    auto descriptorSetIt = supportingHalfedgeDescriptorSetsBySocket.find(socketKey);
+    if (descriptorSetIt == supportingHalfedgeDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -555,16 +554,16 @@ void IntrinsicRenderer::updatePayloadDescriptorSetsForPackage(uint64_t packageKe
         descriptorWrites[0].pBufferInfo = &uboBufferInfo;
 
         VkBufferView bufferViews[10] = {
-            product.supportingHalfedgeView,
-            product.supportingAngleView,
-            product.halfedgeView,
-            product.edgeView,
-            product.triangleView,
-            product.lengthView,
-            product.inputHalfedgeView,
-            product.inputEdgeView,
-            product.inputTriangleView,
-            product.inputLengthView
+            config.supportingHalfedgeView,
+            config.supportingAngleView,
+            config.halfedgeView,
+            config.edgeView,
+            config.triangleView,
+            config.lengthView,
+            config.inputHalfedgeView,
+            config.inputEdgeView,
+            config.inputTriangleView,
+            config.inputLengthView
         };
 
         for (int j = 0; j < 10; ++j) {
@@ -592,16 +591,16 @@ void IntrinsicRenderer::updatePayloadDescriptorSetsForPackage(uint64_t packageKe
     }
 }
 
-void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product) {
-    if (packageKey == 0 || !product.isValid() || product.intrinsicTriangleBuffer == VK_NULL_HANDLE) {
+void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config) {
+    if (socketKey == 0 || !config.isValid() || config.intrinsicTriangleBuffer == VK_NULL_HANDLE) {
         return;
     }
 
-    if (intrinsicNormalsDescriptorSetsByPackage.find(packageKey) == intrinsicNormalsDescriptorSetsByPackage.end()) {
-        allocateNormalsDescriptorSetsForPackage(packageKey, maxFramesInFlight);
+    if (intrinsicNormalsDescriptorSetsBySocket.find(socketKey) == intrinsicNormalsDescriptorSetsBySocket.end()) {
+        allocateNormalsDescriptorSetsForSocket(socketKey, maxFramesInFlight);
     }
-    auto descriptorSetIt = intrinsicNormalsDescriptorSetsByPackage.find(packageKey);
-    if (descriptorSetIt == intrinsicNormalsDescriptorSetsByPackage.end()) {
+    auto descriptorSetIt = intrinsicNormalsDescriptorSetsBySocket.find(socketKey);
+    if (descriptorSetIt == intrinsicNormalsDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -615,9 +614,9 @@ void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForPackage(uint64_t pa
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
         VkDescriptorBufferInfo triangleBufferInfo{};
-        triangleBufferInfo.buffer = product.intrinsicTriangleBuffer;
-        triangleBufferInfo.offset = product.intrinsicTriangleBufferOffset;
-        triangleBufferInfo.range = product.intrinsicTriangleCount * sizeof(IntrinsicTriangleData);
+        triangleBufferInfo.buffer = config.intrinsicTriangleBuffer;
+        triangleBufferInfo.offset = config.intrinsicTriangleBufferOffset;
+        triangleBufferInfo.range = config.intrinsicTriangleCount * sizeof(IntrinsicTriangleData);
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
@@ -637,16 +636,16 @@ void IntrinsicRenderer::updatePayloadNormalsDescriptorSetsForPackage(uint64_t pa
     }
 }
 
-void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForPackage(uint64_t packageKey, const RemeshProduct& product) {
-    if (packageKey == 0 || !product.isValid() || product.intrinsicVertexBuffer == VK_NULL_HANDLE) {
+void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForSocket(uint64_t socketKey, const RemeshDisplayController::Config& config) {
+    if (socketKey == 0 || !config.isValid() || config.intrinsicVertexBuffer == VK_NULL_HANDLE) {
         return;
     }
 
-    if (intrinsicVertexNormalsDescriptorSetsByPackage.find(packageKey) == intrinsicVertexNormalsDescriptorSetsByPackage.end()) {
-        allocateVertexNormalsDescriptorSetsForPackage(packageKey, maxFramesInFlight);
+    if (intrinsicVertexNormalsDescriptorSetsBySocket.find(socketKey) == intrinsicVertexNormalsDescriptorSetsBySocket.end()) {
+        allocateVertexNormalsDescriptorSetsForSocket(socketKey, maxFramesInFlight);
     }
-    auto descriptorSetIt = intrinsicVertexNormalsDescriptorSetsByPackage.find(packageKey);
-    if (descriptorSetIt == intrinsicVertexNormalsDescriptorSetsByPackage.end()) {
+    auto descriptorSetIt = intrinsicVertexNormalsDescriptorSetsBySocket.find(socketKey);
+    if (descriptorSetIt == intrinsicVertexNormalsDescriptorSetsBySocket.end()) {
         return;
     }
 
@@ -660,9 +659,9 @@ void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForPackage(uint6
         uboBufferInfo.range = sizeof(UniformBufferObject);
 
         VkDescriptorBufferInfo vertexBufferInfo{};
-        vertexBufferInfo.buffer = product.intrinsicVertexBuffer;
-        vertexBufferInfo.offset = product.intrinsicVertexBufferOffset;
-        vertexBufferInfo.range = product.intrinsicVertexCount * sizeof(IntrinsicVertexData);
+        vertexBufferInfo.buffer = config.intrinsicVertexBuffer;
+        vertexBufferInfo.offset = config.intrinsicVertexBufferOffset;
+        vertexBufferInfo.range = config.intrinsicVertexCount * sizeof(IntrinsicVertexData);
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
@@ -682,29 +681,29 @@ void IntrinsicRenderer::updatePayloadVertexNormalsDescriptorSetsForPackage(uint6
     }
 }
 
-void IntrinsicRenderer::bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product) {
-    if (socketKey == 0 || !product.isValid()) {
-        releaseDescriptorSetsForPackage(socketKey);
-        return;
-    }
-    remeshProductsByPackageKey[socketKey] = product;
-    runtimeModelIdByPackageKey[socketKey] = product.runtimeModelId;
-    updatePayloadDescriptorSetsForPackage(socketKey, product);
-    updatePayloadNormalsDescriptorSetsForPackage(socketKey, product);
-    updatePayloadVertexNormalsDescriptorSetsForPackage(socketKey, product);
-}
-
-void IntrinsicRenderer::removeIntrinsicPackage(uint64_t packageKey) {
-    releaseDescriptorSetsForPackage(packageKey);
-}
-
-void IntrinsicRenderer::releaseDescriptorSetsForPackage(uint64_t packageKey) {
-    if (packageKey == 0) {
+void IntrinsicRenderer::apply(uint64_t socketKey, const RemeshDisplayController::Config& config) {
+    if (socketKey == 0 || !config.anyVisible() || !config.isValid()) {
+        remove(socketKey);
         return;
     }
 
-    auto freeSets = [this, packageKey](VkDescriptorPool pool, auto& setMap) {
-        auto it = setMap.find(packageKey);
+    remeshConfigsBySocketKey[socketKey] = config;
+    updatePayloadDescriptorSetsForSocket(socketKey, config);
+    updatePayloadNormalsDescriptorSetsForSocket(socketKey, config);
+    updatePayloadVertexNormalsDescriptorSetsForSocket(socketKey, config);
+}
+
+void IntrinsicRenderer::remove(uint64_t socketKey) {
+    releaseDescriptorSetsForSocket(socketKey);
+}
+
+void IntrinsicRenderer::releaseDescriptorSetsForSocket(uint64_t socketKey) {
+    if (socketKey == 0) {
+        return;
+    }
+
+    auto freeSets = [this, socketKey](VkDescriptorPool pool, auto& setMap) {
+        auto it = setMap.find(socketKey);
         if (it == setMap.end()) {
             return;
         }
@@ -718,31 +717,26 @@ void IntrinsicRenderer::releaseDescriptorSetsForPackage(uint64_t packageKey) {
         setMap.erase(it);
     };
 
-    freeSets(supportingHalfedgeDescriptorPool, supportingHalfedgeDescriptorSetsByPackage);
-    freeSets(intrinsicNormalsDescriptorPool, intrinsicNormalsDescriptorSetsByPackage);
-    freeSets(intrinsicVertexNormalsDescriptorPool, intrinsicVertexNormalsDescriptorSetsByPackage);
+    freeSets(supportingHalfedgeDescriptorPool, supportingHalfedgeDescriptorSetsBySocket);
+    freeSets(intrinsicNormalsDescriptorPool, intrinsicNormalsDescriptorSetsBySocket);
+    freeSets(intrinsicVertexNormalsDescriptorPool, intrinsicVertexNormalsDescriptorSetsBySocket);
 
-    remeshProductsByPackageKey.erase(packageKey);
-    runtimeModelIdByPackageKey.erase(packageKey);
+    remeshConfigsBySocketKey.erase(socketKey);
 }
 
-void IntrinsicRenderer::pruneStalePackageResources(const ModelRegistry& resourceManager) {
-    std::vector<uint64_t> stalePackageKeys;
-    stalePackageKeys.reserve(remeshProductsByPackageKey.size());
+void IntrinsicRenderer::pruneStaleSocketResources() {
+    std::vector<uint64_t> staleSocketKeys;
+    staleSocketKeys.reserve(remeshConfigsBySocketKey.size());
 
-    for (const auto& [packageKey, product] : remeshProductsByPackageKey) {
-        const auto runtimeModelIt = runtimeModelIdByPackageKey.find(packageKey);
-        if (packageKey == 0 ||
-            !product.isValid() ||
-            runtimeModelIt == runtimeModelIdByPackageKey.end() ||
-            runtimeModelIt->second == 0 ||
-            !resourceManager.hasModel(runtimeModelIt->second)) {
-            stalePackageKeys.push_back(packageKey);
+    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
+        if (socketKey == 0 ||
+            !product.isValid()) {
+            staleSocketKeys.push_back(socketKey);
         }
     }
 
-    for (uint64_t packageKey : stalePackageKeys) {
-        releaseDescriptorSetsForPackage(packageKey);
+    for (uint64_t socketKey : staleSocketKeys) {
+        releaseDescriptorSetsForSocket(socketKey);
     }
 }
 
@@ -1251,27 +1245,22 @@ bool IntrinsicRenderer::createIntrinsicVertexNormalsPipeline(VkRenderPass render
     return true;
 }
 
-void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager) {
+void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     if (!initialized || supportingHalfedgePipeline == VK_NULL_HANDLE) {
         return;
     }
 
-    pruneStalePackageResources(resourceManager);
+    pruneStaleSocketResources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipeline);
     vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
 
-    for (const auto& [packageKey, product] : remeshProductsByPackageKey) {
-        const auto runtimeModelIt = runtimeModelIdByPackageKey.find(packageKey);
-        if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
-            continue;
-        }
-        ModelProduct modelProduct{};
-        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
+    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
+        if (!product.isValid() || !product.showRemeshOverlay) {
             continue;
         }
 
-        auto it = supportingHalfedgeDescriptorSetsByPackage.find(packageKey);
-        if (it == supportingHalfedgeDescriptorSetsByPackage.end()) {
+        auto it = supportingHalfedgeDescriptorSetsBySocket.find(socketKey);
+        if (it == supportingHalfedgeDescriptorSetsBySocket.end()) {
             continue;
         }
 
@@ -1280,40 +1269,35 @@ void IntrinsicRenderer::renderSupportingHalfedges(VkCommandBuffer commandBuffer,
             continue;
         }
 
-        glm::mat4 modelMatrix = modelProduct.modelMatrix;
+        glm::mat4 modelMatrix = product.modelMatrix;
         vkCmdPushConstants(commandBuffer, supportingHalfedgePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
 
-        VkBuffer modelVertexBuffer = modelProduct.vertexBuffer;
-        VkDeviceSize modelVertexOffset = modelProduct.vertexBufferOffset;
+        VkBuffer modelVertexBuffer = product.renderVertexBuffer;
+        VkDeviceSize modelVertexOffset = product.renderVertexBufferOffset;
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
-        vkCmdBindIndexBuffer(commandBuffer, modelProduct.indexBuffer, modelProduct.indexBufferOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, product.renderIndexBuffer, product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipelineLayout, 0, 1, &modelDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, modelProduct.indexCount, 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, product.renderIndexCount, 1, 0, 0, 0);
     }
 
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
 }
 
-void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     if (!initialized || intrinsicNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
 
-    pruneStalePackageResources(resourceManager);
+    pruneStaleSocketResources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipeline);
 
-    for (const auto& [packageKey, product] : remeshProductsByPackageKey) {
-        const auto runtimeModelIt = runtimeModelIdByPackageKey.find(packageKey);
-        if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
-            continue;
-        }
-        ModelProduct modelProduct{};
-        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
+    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
+        if (!product.isValid() || !product.showFaceNormals) {
             continue;
         }
 
-        auto it = intrinsicNormalsDescriptorSetsByPackage.find(packageKey);
-        if (it == intrinsicNormalsDescriptorSetsByPackage.end()) {
+        auto it = intrinsicNormalsDescriptorSetsBySocket.find(socketKey);
+        if (it == intrinsicNormalsDescriptorSetsBySocket.end()) {
             continue;
         }
 
@@ -1328,8 +1312,8 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = modelProduct.modelMatrix;
-        pushConstants.normalLength = normalLength;
+        pushConstants.modelMatrix = product.modelMatrix;
+        pushConstants.normalLength = product.normalLength;
         pushConstants.avgArea = product.averageTriangleArea;
 
         vkCmdPushConstants(commandBuffer, intrinsicNormalsPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
@@ -1338,26 +1322,21 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
     }
 }
 
-void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame, const ModelRegistry& resourceManager, float normalLength) {
+void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuffer, uint32_t currentFrame) {
     if (!initialized || intrinsicVertexNormalsPipeline == VK_NULL_HANDLE) {
         return;
     }
 
-    pruneStalePackageResources(resourceManager);
+    pruneStaleSocketResources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicVertexNormalsPipeline);
 
-    for (const auto& [packageKey, product] : remeshProductsByPackageKey) {
-        const auto runtimeModelIt = runtimeModelIdByPackageKey.find(packageKey);
-        if (runtimeModelIt == runtimeModelIdByPackageKey.end()) {
-            continue;
-        }
-        ModelProduct modelProduct{};
-        if (!resourceManager.exportProduct(runtimeModelIt->second, modelProduct) || !product.isValid()) {
+    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
+        if (!product.isValid() || !product.showVertexNormals) {
             continue;
         }
 
-        auto it = intrinsicVertexNormalsDescriptorSetsByPackage.find(packageKey);
-        if (it == intrinsicVertexNormalsDescriptorSetsByPackage.end()) {
+        auto it = intrinsicVertexNormalsDescriptorSetsBySocket.find(socketKey);
+        if (it == intrinsicVertexNormalsDescriptorSetsBySocket.end()) {
             continue;
         }
 
@@ -1372,8 +1351,8 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = modelProduct.modelMatrix;
-        pushConstants.normalLength = normalLength;
+        pushConstants.modelMatrix = product.modelMatrix;
+        pushConstants.normalLength = product.normalLength;
         pushConstants.avgArea = 0.0f;
 
         vkCmdPushConstants(commandBuffer, intrinsicVertexNormalsPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
@@ -1452,12 +1431,10 @@ void IntrinsicRenderer::cleanup() {
         wireframeTextureMemory = VK_NULL_HANDLE;
     }
 
-    supportingHalfedgeDescriptorSetsByPackage.clear();
-    intrinsicNormalsDescriptorSetsByPackage.clear();
-    intrinsicVertexNormalsDescriptorSetsByPackage.clear();
-    remeshProductsByPackageKey.clear();
-    runtimeModelIdByPackageKey.clear();
-
+    supportingHalfedgeDescriptorSetsBySocket.clear();
+    intrinsicNormalsDescriptorSetsBySocket.clear();
+    intrinsicVertexNormalsDescriptorSetsBySocket.clear();
+    remeshConfigsBySocketKey.clear();
     initialized = false;
 }
 

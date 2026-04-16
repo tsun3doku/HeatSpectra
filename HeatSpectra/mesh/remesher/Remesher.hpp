@@ -24,12 +24,12 @@ public:
         double maxEdgeLength,
         double stepSize,
         RemeshResult& outResult) const;
+    void cleanupGpuResources(SupportingHalfedge::GPUResources& resources) const;
 
 private:
     SupportingHalfedge::GPUResources buildIntrinsicGPUResources(
         const SupportingHalfedge& supportingHalfedge,
         const SupportingHalfedge::IntrinsicMesh& intrinsicMesh) const;
-    void cleanupGpuResources(SupportingHalfedge::GPUResources& resources) const;
     float computeAverageTriangleArea(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh) const;
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;

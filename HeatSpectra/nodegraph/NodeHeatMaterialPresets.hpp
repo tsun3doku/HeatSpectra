@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NodeGraphTypes.hpp"
+#include "domain/HeatData.hpp"
 #include <string>
 #include <vector>
 
@@ -18,4 +19,5 @@ bool tryMakeMaterialBindingRow(
     HeatMaterialBindingRow& outRow);
 std::vector<HeatMaterialBindingRow> readMaterialBindingRows(const NodeGraphParamValue& value);
 bool writeMaterialBindingRows(NodeGraphParamValue& value, const std::vector<HeatMaterialBindingRow>& rows);
-std::vector<HeatMaterialBindingEntry> readMaterialBindings(const NodeGraphParamValue& value);
+HeatMaterialBinding makeHeatMaterialBinding(const HeatMaterialBindingRow& row);
+std::vector<HeatMaterialBinding> makeHeatMaterialBindings(const std::vector<HeatMaterialBindingRow>& rows);

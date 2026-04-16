@@ -1,14 +1,14 @@
 #include "SwapchainStage.hpp"
 
 #include "SwapchainManager.hpp"
-#include "contact/ContactSystemController.hpp"
+#include "contact/ContactSystemComputeController.hpp"
 #include "framegraph/FrameGraph.hpp"
 #include "framegraph/FrameGraphVkTypes.hpp"
 #include "framegraph/FrameSync.hpp"
 #include "heat/HeatSystem.hpp"
-#include "heat/HeatSystemController.hpp"
+#include "heat/HeatSystemComputeController.hpp"
 #include "heat/VoronoiSystem.hpp"
-#include "heat/VoronoiSystemController.hpp"
+#include "heat/VoronoiSystemComputeController.hpp"
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/SceneRenderer.hpp"
@@ -27,9 +27,9 @@ SwapchainStage::SwapchainStage(
     VkFrameGraphBackend& frameGraphBackend,
     SceneRenderer& sceneRenderer,
     FrameSync& frameSync,
-    HeatSystemController* heatSystemController,
-    ContactSystemController* contactSystemController,
-    VoronoiSystemController* voronoiSystemController,
+    HeatSystemComputeController* heatSystemController,
+    ContactSystemComputeController* contactSystemController,
+    VoronoiSystemComputeController* voronoiSystemController,
     std::atomic<bool>& isShuttingDown)
     : windowState(windowState),
       vulkanDevice(vulkanDevice),

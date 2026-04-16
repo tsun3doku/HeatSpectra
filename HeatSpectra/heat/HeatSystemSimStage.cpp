@@ -5,8 +5,6 @@
 #include "HeatSourceRuntime.hpp"
 #include "HeatSystemResources.hpp"
 #include "HeatSystemSurfaceStage.hpp"
-#include "runtime/RuntimePackageController.hpp"
-
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <limits>

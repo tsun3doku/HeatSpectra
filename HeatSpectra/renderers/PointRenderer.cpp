@@ -1,6 +1,5 @@
 ﻿#include "PointRenderer.hpp"
 #include "vulkan/VulkanDevice.hpp"
-#include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanImage.hpp"
 #include "util/Structs.hpp"
@@ -10,8 +9,8 @@
 #include <cstring>
 #include <iostream>
 
-PointRenderer::PointRenderer(VulkanDevice& device, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager)
-    : vulkanDevice(device), memoryAllocator(allocator), uniformBufferManager(uniformBufferManager) {
+PointRenderer::PointRenderer(VulkanDevice& device, UniformBufferManager& uniformBufferManager)
+    : vulkanDevice(device), uniformBufferManager(uniformBufferManager) {
 }
 
 PointRenderer::~PointRenderer() {
@@ -220,7 +219,7 @@ bool PointRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass) {
     colorBlendAttachments[0].alphaBlendOp = VK_BLEND_OP_ADD;
 
     if (subpass == 2) {
-        // Surface overlay target disabled for point debug renderer.
+        // Surface overlay target disabled for point preview renderer.
         colorBlendAttachments[0].colorWriteMask = 0;
         colorBlendAttachments[0].blendEnable = VK_FALSE;
         colorBlendAttachments[1] = colorBlendAttachments[0];
@@ -304,33 +303,15 @@ bool PointRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass) {
     return true;
 }
 
-void PointRenderer::uploadPoints(const std::vector<PointVertex>& points) {
-    if (points.empty()) {
-        pointCount = 0;
-        return;
-    }
-
-    VkDeviceSize bufferSize = sizeof(PointVertex) * points.size();
-    
-    auto [buffer, offset] = memoryAllocator.allocate(
-        bufferSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        alignof(PointVertex)
-    );
-    
-    vertexBuffer = buffer;
-    vertexBufferOffset = offset;
-    pointCount = static_cast<uint32_t>(points.size());
-    
-    void* mappedPtr = memoryAllocator.getMappedPointer(vertexBuffer, vertexBufferOffset);
-    if (mappedPtr) {
-        memcpy(mappedPtr, points.data(), bufferSize);
-    }
-}
-
-void PointRenderer::render(VkCommandBuffer cmdBuffer, uint32_t frameIndex, const glm::mat4& modelMatrix, VkExtent2D extent) {
-    if (!initialized || !visible || pointCount == 0 || vertexBuffer == VK_NULL_HANDLE) 
+void PointRenderer::render(
+    VkCommandBuffer cmdBuffer,
+    uint32_t frameIndex,
+    VkBuffer vertexBuffer,
+    VkDeviceSize vertexBufferOffset,
+    uint32_t pointCount,
+    const glm::mat4& modelMatrix,
+    VkExtent2D extent) {
+    if (!initialized || !visible || pointCount == 0 || vertexBuffer == VK_NULL_HANDLE)
         return;
     
     if (frameIndex >= descriptorSets.size())
@@ -357,13 +338,7 @@ void PointRenderer::render(VkCommandBuffer cmdBuffer, uint32_t frameIndex, const
 
 void PointRenderer::cleanup() {
     VkDevice device = vulkanDevice.getDevice();
-    
-    if (vertexBuffer != VK_NULL_HANDLE && vertexBufferOffset != 0) {
-        memoryAllocator.free(vertexBuffer, vertexBufferOffset);
-        vertexBuffer = VK_NULL_HANDLE;
-        vertexBufferOffset = 0;
-    }
-    
+
     if (pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, pipeline, nullptr);
         pipeline = VK_NULL_HANDLE;

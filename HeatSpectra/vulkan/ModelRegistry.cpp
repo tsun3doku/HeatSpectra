@@ -58,6 +58,7 @@ uint32_t ModelRegistry::addModel(std::unique_ptr<Model> model, uint32_t preferre
     model->setRuntimeModelId(modelId);
     modelsById[modelId] = model.get();
     additionalModelsById.emplace(modelId, std::move(model));
+    visibleModelIds.erase(modelId);
     return modelId;
 }
 
@@ -87,10 +88,12 @@ bool ModelRegistry::removeModelByID(uint32_t modelID) {
 
 std::vector<uint32_t> ModelRegistry::getRenderableModelIds() const {
     std::vector<uint32_t> modelIds;
-    modelIds.reserve(modelsById.size());
-    for (const auto& [modelId, modelPtr] : modelsById) {
-        (void)modelPtr;
+    modelIds.reserve(visibleModelIds.size());
+    for (uint32_t modelId : visibleModelIds) {
         if (commonSubdivision && commonSubdivision->getRuntimeModelId() == modelId) {
+            continue;
+        }
+        if (modelsById.find(modelId) == modelsById.end()) {
             continue;
         }
         modelIds.push_back(modelId);
@@ -102,6 +105,24 @@ std::vector<uint32_t> ModelRegistry::getRenderableModelIds() const {
 
 bool ModelRegistry::hasModel(uint32_t modelID) const {
     return modelsById.find(modelID) != modelsById.end();
+}
+
+bool ModelRegistry::setModelVisible(uint32_t modelID, bool visible) {
+    if (modelID == 0 || !hasModel(modelID)) {
+        return false;
+    }
+
+    if (visible) {
+        visibleModelIds.insert(modelID);
+    } else {
+        visibleModelIds.erase(modelID);
+    }
+
+    return true;
+}
+
+bool ModelRegistry::isModelVisible(uint32_t modelID) const {
+    return visibleModelIds.find(modelID) != visibleModelIds.end();
 }
 
 bool ModelRegistry::exportProduct(uint32_t modelID, ModelProduct& outProduct) const {
@@ -281,6 +302,7 @@ void ModelRegistry::registerModel(std::unique_ptr<Model>& modelSlot, uint32_t pr
     }
     modelSlot->setRuntimeModelId(modelId);
     modelsById[modelId] = modelSlot.get();
+    visibleModelIds.insert(modelId);
 }
 
 void ModelRegistry::unregisterModel(std::unique_ptr<Model>& modelSlot) {
@@ -291,6 +313,7 @@ void ModelRegistry::unregisterModel(std::unique_ptr<Model>& modelSlot) {
     const uint32_t modelId = modelSlot->getRuntimeModelId();
     if (modelId != 0) {
         modelsById.erase(modelId);
+        visibleModelIds.erase(modelId);
         recycleModelId(modelId);
         modelSlot->setRuntimeModelId(0);
     }

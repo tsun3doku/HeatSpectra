@@ -81,7 +81,7 @@ NodeTransformPanel::NodeTransformPanel(QWidget* parent)
     layout->addLayout(scaleRow);
 
     QLabel* hintLabel = new QLabel(
-        "Transform composes onto the incoming GeometryData.localToWorld authored in the graph.",
+        "Transform composes the branch placement directly into the downstream mesh stream.",
         this);
     hintLabel->setWordWrap(true);
     layout->addWidget(hintLabel);

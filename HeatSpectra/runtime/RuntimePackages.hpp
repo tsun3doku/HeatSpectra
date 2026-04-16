@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -15,25 +16,47 @@
 #include "runtime/RuntimeThermalTypes.hpp"
 
 //                                                   [ Invariant:
-//                                                     - *Package types exist for backend sinks only
-//                                                     - Packages hold authored config and ProductHandle dependencies
-//                                                     - Packages are compiled from authored graph data into backend dependencies
-//                                                     - Packages should not duplicate runtime data that Products already provide ]
+//                                                     - Package types are the compiled runtime transport contract
+//                                                       consumed by runtime package sync/controllers
+//                                                     - Packages may combine authored/compiled settings with resolved
+//                                                       runtime dependency handles needed by compute or display transports
+//                                                     - Packages must not contain resolved runtime Products
+//                                                     - Packages are the runtime application boundary ]
 
-struct GeometryPackage {
+struct ModelPackage {
     uint64_t packageHash = 0;
     GeometryData geometry;
+    std::array<float, 16> localToWorld{
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
 
-    bool matches(const GeometryPackage& other) const {
+    bool matches(const ModelPackage& other) const {
         return packageHash == other.packageHash;
     }
 };
 
 struct RemeshPackage {
+    struct DisplaySettings {
+        bool showRemeshOverlay = false;
+        bool showFaceNormals = false;
+        bool showVertexNormals = false;
+        float normalLength = 0.05f;
+
+        bool anyVisible() const {
+            return showRemeshOverlay || showFaceNormals || showVertexNormals;
+        }
+    };
+
     uint64_t packageHash = 0;
+    uint64_t displayPackageHash = 0;
     GeometryData sourceGeometry;
     RemeshParams params{};
+    DisplaySettings display{};
     NodeDataHandle remeshHandle{};
+    ProductHandle modelProductHandle{};
 
     bool matches(const RemeshPackage& other) const {
         return packageHash == other.packageHash;
@@ -41,9 +64,20 @@ struct RemeshPackage {
 };
 
 struct VoronoiPackage {
+    struct DisplaySettings {
+        bool showVoronoi = false;
+        bool showPoints = false;
+
+        bool anyVisible() const {
+            return showVoronoi || showPoints;
+        }
+    };
+
     uint64_t packageHash = 0;
+    uint64_t displayPackageHash = 0;
     VoronoiData authored;
-    std::vector<GeometryData> receiverGeometries;
+    DisplaySettings display{};
+    std::vector<std::array<float, 16>> receiverLocalToWorlds;
     std::vector<ProductHandle> receiverModelProducts;
     std::vector<ProductHandle> receiverRemeshProducts;
 
@@ -53,14 +87,24 @@ struct VoronoiPackage {
 };
 
 struct HeatPackage {
+    struct DisplaySettings {
+        bool showHeatOverlay = false;
+
+        bool anyVisible() const {
+            return showHeatOverlay;
+        }
+    };
+
     uint64_t packageHash = 0;
+    uint64_t displayPackageHash = 0;
     HeatData authored;
+    DisplaySettings display{};
     ProductHandle voronoiProduct{};
     ProductHandle contactProduct{};
-    std::vector<GeometryData> sourceGeometries;
+    std::vector<ProductHandle> sourceModelProducts;
     std::vector<ProductHandle> sourceRemeshProducts;
     std::vector<float> sourceTemperatures;
-    std::vector<GeometryData> receiverGeometries;
+    std::vector<ProductHandle> receiverModelProducts;
     std::vector<ProductHandle> receiverRemeshProducts;
     std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
 
@@ -70,10 +114,32 @@ struct HeatPackage {
 };
 
 struct ContactPackage {
+    struct DisplaySettings {
+        bool showContactLines = false;
+
+        bool anyVisible() const {
+            return showContactLines;
+        }
+    };
+
     uint64_t packageHash = 0;
+    uint64_t displayPackageHash = 0;
     ContactData authored;
-    GeometryData emitterGeometry;
-    GeometryData receiverGeometry;
+    DisplaySettings display{};
+    std::array<float, 16> emitterLocalToWorld{
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    std::array<float, 16> receiverLocalToWorld{
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    ProductHandle emitterModelProduct{};
+    ProductHandle receiverModelProduct{};
     ProductHandle emitterRemeshProduct{};
     ProductHandle receiverRemeshProduct{};
 
@@ -83,7 +149,7 @@ struct ContactPackage {
 };
 
 struct RuntimePackageSet {
-    std::unordered_map<uint64_t, GeometryPackage> geometryBySocket;
+    std::unordered_map<uint64_t, ModelPackage> modelBySocket;
     std::unordered_map<uint64_t, RemeshPackage> remeshBySocket;
     std::unordered_map<uint64_t, VoronoiPackage> voronoiBySocket;
     std::unordered_map<uint64_t, ContactPackage> contactBySocket;

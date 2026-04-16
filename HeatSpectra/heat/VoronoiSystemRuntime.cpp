@@ -286,8 +286,7 @@ bool VoronoiSystemRuntime::prepare(
     VoronoiBuilder& voronoiBuilder,
     bool debugEnable,
     uint32_t maxNeighbors,
-    VoronoiGeoCompute* voronoiGeoCompute,
-    PointRenderer* pointRenderer) {
+    VoronoiGeoCompute* voronoiGeoCompute) {
     if (!voronoiBuilder.buildDomains(modelRuntimes, receiverVoronoiDomains, voronoiParams, maxNeighbors)) {
         std::cerr << "[VoronoiSystemRuntime] Failed to build Voronoi domains" << std::endl;
         return false;
@@ -315,8 +314,7 @@ bool VoronoiSystemRuntime::prepare(
             receiverVoronoiDomains,
             debugEnable,
             maxNeighbors,
-            voronoiGeoCompute,
-            pointRenderer)) {
+            voronoiGeoCompute)) {
         std::cerr << "[VoronoiSystemRuntime] Voronoi generation failed" << std::endl;
         return false;
     }
@@ -499,6 +497,8 @@ void VoronoiSystemRuntime::cleanup(MemoryAllocator& memoryAllocator) {
     resources.voronoi.mappedSeedPositionData = nullptr;
     freeBuffer(resources.voronoi.seedFlagsBuffer, resources.voronoi.seedFlagsBufferOffset);
     resources.voronoi.mappedSeedFlagsData = nullptr;
+    freeBuffer(resources.voronoi.occupancyPointBuffer, resources.voronoi.occupancyPointBufferOffset);
+    resources.voronoi.occupancyPointCount = 0;
     freeBuffer(resources.voronoi.debugCellGeometryBuffer, resources.voronoi.debugCellGeometryBufferOffset);
     resources.voronoi.mappedDebugCellGeometryData = nullptr;
     freeBuffer(resources.voronoi.voronoiDumpBuffer, resources.voronoi.voronoiDumpBufferOffset);

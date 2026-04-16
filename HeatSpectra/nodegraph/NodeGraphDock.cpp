@@ -364,7 +364,10 @@ void NodeGraphDock::handleGraphSelectionChanged(NodeGraphNodeId nodeId) {
     if (bridge && sceneController && nodeId.isValid()) {
         NodeGraphNode node{};
         if (bridge->getNode(nodeId, node) && getNodeTypeId(node.typeId) == nodegraphtypes::Model) {
-            sceneController->tryGetNodeModelRuntimeId(nodeId.value, runtimeModelId);
+            const NodeGraphSocket* outputSocket = findOutputSocketProducingPayload(node, NodePayloadType::Geometry);
+            if (outputSocket && outputSocket->id.isValid()) {
+                sceneController->tryGetSocketRuntimeModelId(makeSocketKey(node.id, outputSocket->id), runtimeModelId);
+            }
         }
     }
 
@@ -407,9 +410,10 @@ void NodeGraphDock::syncViewportSelectionToGraph() {
 
     NodeGraphNodeId nodeId{};
     if (selectedRuntimeModelId != 0) {
-        uint32_t nodeModelId = 0;
-        if (sceneController->tryGetRuntimeModelNodeId(selectedRuntimeModelId, nodeModelId)) {
-            nodeId = NodeGraphNodeId{nodeModelId};
+        uint64_t outputSocketKey = 0;
+        NodeGraphSocketId outputSocketId{};
+        if (sceneController->tryGetRuntimeModelSocketKey(selectedRuntimeModelId, outputSocketKey) &&
+            tryDecodeSocketKey(outputSocketKey, nodeId, outputSocketId)) {
         }
     }
 

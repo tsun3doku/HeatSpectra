@@ -17,7 +17,6 @@
 
 class CommandPool;
 class MemoryAllocator;
-class PointRenderer;
 class ModelRegistry;
 class VulkanDevice;
 class VoronoiCandidateCompute;
@@ -74,8 +73,7 @@ public:
         VoronoiBuilder& voronoiBuilder,
         bool debugEnable,
         uint32_t maxNeighbors,
-        VoronoiGeoCompute* voronoiGeoCompute,
-        PointRenderer* pointRenderer);
+        VoronoiGeoCompute* voronoiGeoCompute);
     void executeBufferTransfers(
         CommandPool& renderCommandPool,
         VoronoiSurfaceRuntime& surfaceRuntime,

@@ -237,7 +237,7 @@ void SceneRenderer::recordPasses(
     const render::FrameContext& frameContext,
     const render::SceneView& sceneView,
     const render::RenderFlags& flags,
-    const render::OverlayParams& overlayParams,
+
     render::RenderServices& services,
     VkQueryPool passTimingQueryPool,
     uint32_t passTimingQueryBase) {
@@ -262,7 +262,7 @@ void SceneRenderer::recordPasses(
                 startQuery);
         }
 
-        pass->record(frameContext, sceneView, flags, overlayParams, services);
+        pass->record(frameContext, sceneView, flags, services);
 
         if (passTimingQueryPool != VK_NULL_HANDLE) {
             const uint32_t endQuery = passTimingQueryBase + static_cast<uint32_t>(passIndex * 2 + 1);
@@ -314,20 +314,20 @@ void SceneRenderer::updateDescriptorSets() {
     updatePassDescriptors();
 }
 
-void SceneRenderer::bindRemeshProduct(uint64_t socketKey, const RemeshProduct& product) {
-    if (overlayPass) {
-        std::cout << "[SceneRenderer] bindRemeshProduct"
-                  << " socketKey=" << socketKey
-                  << " runtimeModelId=" << product.runtimeModelId
-                  << std::endl;
-        overlayPass->bindRemeshProduct(socketKey, product);
-    }
+IntrinsicRenderer* SceneRenderer::getIntrinsicRenderer() const {
+    return overlayPass ? overlayPass->getIntrinsicRenderer() : nullptr;
 }
 
-void SceneRenderer::removeIntrinsicPackage(uint64_t packageKey) {
-    if (overlayPass) {
-        overlayPass->removeIntrinsicPackage(packageKey);
-    }
+render::ContactOverlayRenderer* SceneRenderer::getContactOverlayRenderer() const {
+    return overlayPass ? overlayPass->getContactOverlayRenderer() : nullptr;
+}
+
+render::HeatOverlayRenderer* SceneRenderer::getHeatOverlayRenderer() const {
+    return overlayPass ? overlayPass->getHeatOverlayRenderer() : nullptr;
+}
+
+render::VoronoiOverlayRenderer* SceneRenderer::getVoronoiOverlayRenderer() const {
+    return overlayPass ? overlayPass->getVoronoiOverlayRenderer() : nullptr;
 }
 
 void SceneRenderer::setTimingOverlayLines(const std::vector<std::string>& lines) {
@@ -475,7 +475,7 @@ bool SceneRenderer::recordCommandBuffer(
         frameContext,
         frameRequest.sceneView,
         frameRequest.flags,
-        frameRequest.overlay,
+
         services,
         gpuTimingQueryPool,
         timingQueryBase + 2);

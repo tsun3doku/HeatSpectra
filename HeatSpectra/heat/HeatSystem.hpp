@@ -21,12 +21,9 @@ class MemoryAllocator;
 class VulkanDevice;
 class UniformBufferManager;
 class CommandPool;
-class HeatReceiverRenderer;
-class HeatSourceRenderer;
 class HeatSystemContactStage;
 class HeatSystemSimStage;
 class HeatSystemSurfaceStage;
-class HeatSystemRenderStage;
 class HeatSystemVoronoiStage;
 class HeatSystemResources;
 
@@ -38,13 +35,11 @@ public:
     ~HeatSystem();
 
     void update();
-    void updateRenderResources(VkRenderPass renderPass);
     void ensureConfigured();
     void setActive(bool active);
     bool isInitialized() const { return initialized; }
 
     void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkQueryPool timingQueryPool = VK_NULL_HANDLE, uint32_t timingQueryBase = 0);
-    void renderHeatOverlay(VkCommandBuffer cmdBuffer, uint32_t frameIndex);
     
     bool createComputeCommandBuffers(uint32_t maxFramesInFlight);
 
@@ -56,15 +51,15 @@ public:
     bool getIsActive() const { return isActive; }
     bool getIsPaused() const { return isPaused; } 
     void setIsPaused(bool paused) { isPaused = paused; } 
+    const std::vector<HeatSystemRuntime::SourceBinding>& getSourceBindings() const { return heatSources; }
+    const std::vector<std::unique_ptr<HeatReceiverRuntime>>& getReceivers() const { return surfaceRuntime.getReceivers(); }
     bool hasDispatchableComputeWork() const;
     bool voronoiReady() const;
     void setSourcePayloads(
-        const std::vector<GeometryData>& sourceGeometries,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
         const std::vector<uint32_t>& sourceRuntimeModelIds,
         const std::unordered_map<uint32_t, float>& sourceTemperatureByRuntimeId);
     void setReceiverPayloads(
-        const std::vector<GeometryData>& receiverGeometries,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
         const std::vector<uint32_t>& receiverRuntimeModelIds,
         const std::vector<VkBufferView>& supportingHalfedgeViews,
@@ -145,13 +140,10 @@ private:
     std::vector<uint32_t> receiverRuntimeModelIds;
     std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
     
-    std::unique_ptr<HeatSourceRenderer> heatSourceRenderer;
-    std::unique_ptr<HeatReceiverRenderer> heatReceiverRenderer;
     std::unique_ptr<HeatSystemContactStage> contactStage;
     std::unique_ptr<HeatSystemSimStage> simStage;
     std::unique_ptr<HeatSystemSurfaceStage> surfaceStage;
     std::unique_ptr<HeatSystemVoronoiStage> voronoiStage;
-    std::unique_ptr<HeatSystemRenderStage> renderStage;
     std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeOffsetByModelId;
     std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeCountByModelId;
     std::unordered_map<uint32_t, VkBuffer> receiverVoronoiSurfaceMappingBufferByModelId;

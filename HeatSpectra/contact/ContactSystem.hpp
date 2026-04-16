@@ -2,7 +2,6 @@
 
 #include "heat/ContactInterface.hpp"
 #include "ContactTypes.hpp"
-#include "contact/ContactSystemController.hpp"
 #include "renderers/ContactLineRenderer.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
@@ -14,6 +13,13 @@ class ContactSystemRuntime;
 class MemoryAllocator;
 class UniformBufferManager;
 class VulkanDevice;
+
+struct ContactSystemPreviewResult {
+    bool hasContact = false;
+    std::vector<ContactPair> pairs;
+    std::vector<ContactInterface::ContactLineVertex> outlineVertices;
+    std::vector<ContactInterface::ContactLineVertex> correspondenceVertices;
+};
 
 class ContactSystem {
 public:
@@ -47,7 +53,6 @@ public:
     void setReceiverTriangleIndices(const std::vector<uint32_t>& triangleIndices);
     void ensureConfigured();
     void disable();
-    bool exportProduct(ContactProduct& outProduct) const;
 
     void refreshPreview();
     bool computePairs(
@@ -63,6 +68,9 @@ public:
         std::vector<ContactPair>& outPairs);
     void clearPreview();
     void renderContactLines(VkCommandBuffer commandBuffer, uint32_t frameIndex, VkExtent2D extent);
+    const ContactSystemRuntime* runtimeState() const { return runtime.get(); }
+    const Result& previewState() const { return previewResult; }
+    bool hasPreviewState() const { return previewValid; }
 
 private:
     void rebuildPreviewBuffers();

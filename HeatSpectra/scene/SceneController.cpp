@@ -1,10 +1,8 @@
 #include "SceneController.hpp"
 
 #include "CameraController.hpp"
-#include "runtime/ModelRuntime.hpp"
+#include "runtime/ModelComputeRuntime.hpp"
 #include "vulkan/ModelRegistry.hpp"
-
-#include <glm/mat4x4.hpp>
 
 SceneController::SceneController(
     VulkanDevice& vulkanDevice,
@@ -21,68 +19,42 @@ SceneController::SceneController(
       isOperating(isOperating) {
 }
 
-void SceneController::setModelRuntime(ModelRuntime* updatedModelRuntime) {
-    modelRuntime = updatedModelRuntime;
+void SceneController::setModelComputeRuntime(ModelComputeRuntime* updatedModelComputeRuntime) {
+    modelComputeRuntime = updatedModelComputeRuntime;
 }
 
 uint32_t SceneController::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    if (!modelRuntime) {
+    if (!modelComputeRuntime) {
         return 0;
     }
 
-    return modelRuntime->loadModel(modelPath, preferredModelId);
+    return modelComputeRuntime->loadModel(modelPath, preferredModelId);
 }
 
 bool SceneController::removeModelByID(uint32_t modelId) {
-    if (!modelRuntime) {
+    if (!modelComputeRuntime) {
         return false;
     }
 
-    return modelRuntime->removeModelByID(modelId);
+    return modelComputeRuntime->removeModelByID(modelId);
 }
 
-uint32_t SceneController::materializeModelSink(uint32_t nodeModelId, const std::string& modelPath) {
-    if (!modelRuntime) {
-        return 0;
-    }
-
-    modelRuntime->queueApplySink(nodeModelId, modelPath, glm::mat4(1.0f));
-    modelRuntime->flush();
-
-    uint32_t runtimeModelId = 0;
-    if (!modelRuntime->tryGetRuntimeModelId(nodeModelId, runtimeModelId)) {
-        return 0;
-    }
-
-    return runtimeModelId;
-}
-
-bool SceneController::removeNodeModelSink(uint32_t nodeModelId) {
-    if (!modelRuntime) {
+bool SceneController::tryGetRuntimeModelSocketKey(uint32_t runtimeModelId, uint64_t& outSocketKey) const {
+    outSocketKey = 0;
+    if (!modelComputeRuntime) {
         return false;
     }
 
-    modelRuntime->queueRemoveSink(nodeModelId);
-    modelRuntime->flush();
-    return true;
+    return modelComputeRuntime->tryGetSocketKey(runtimeModelId, outSocketKey);
 }
 
-bool SceneController::tryGetNodeModelRuntimeId(uint32_t nodeModelId, uint32_t& outRuntimeModelId) const {
+bool SceneController::tryGetSocketRuntimeModelId(uint64_t socketKey, uint32_t& outRuntimeModelId) const {
     outRuntimeModelId = 0;
-    if (!modelRuntime) {
+    if (!modelComputeRuntime) {
         return false;
     }
 
-    return modelRuntime->tryGetRuntimeModelId(nodeModelId, outRuntimeModelId);
-}
-
-bool SceneController::tryGetRuntimeModelNodeId(uint32_t runtimeModelId, uint32_t& outNodeModelId) const {
-    outNodeModelId = 0;
-    if (!modelRuntime) {
-        return false;
-    }
-
-    return modelRuntime->tryGetNodeModelId(runtimeModelId, outNodeModelId);
+    return modelComputeRuntime->tryGetRuntimeModelId(socketKey, outRuntimeModelId);
 }
 
 void SceneController::focusOnVisibleModel() {

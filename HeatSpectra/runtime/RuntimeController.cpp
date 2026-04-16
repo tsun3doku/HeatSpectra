@@ -1,12 +1,12 @@
 #include "RuntimeController.hpp"
 
 #include "RenderContext.hpp"
+#include "RenderSettingsManager.hpp"
 #include "SceneContext.hpp"
 #include "VulkanCoreContext.hpp"
 #include "RuntimeExecutionController.hpp"
 #include "RuntimeInputController.hpp"
 #include "RuntimeRenderController.hpp"
-#include "RuntimeSimulationController.hpp"
 #include "render/RenderRuntime.hpp"
 #include "render/WindowRuntimeState.hpp"
 
@@ -23,17 +23,11 @@ bool RuntimeController::initialize(
         return true;
     }
 
-    if (!render.heatSystemController() || !render.modelRuntime() || !render.sceneController() || !render.nodeGraphBridge() || !render.nodeGraphController()) {
+    if (!render.heatSystemComputeController() || !render.modelComputeRuntime() || !render.sceneController() || !render.nodeGraphBridge() || !render.nodeGraphController()) {
         return false;
     }
 
-    runtimeSimulationController = std::make_unique<RuntimeSimulationController>(
-        *render.heatSystemController(),
-        *render.modelRuntime(),
-        *render.nodeGraphController(),
-        settingsManager);
-
-    if (!runtimeSimulationController || !render.initializeInputPipeline(scene, *runtimeSimulationController) || !render.runtime() ||
+    if (!render.initializeInputPipeline(scene, settingsManager) || !render.runtime() ||
         !render.inputController()) {
         shutdown();
         return false;
@@ -55,7 +49,6 @@ bool RuntimeController::initialize(
         *runtimeInputController,
         *render.nodeGraphController(),
         *runtimeRenderController,
-        *runtimeSimulationController,
         scene.cameraController(),
         renderPaused);
 
@@ -67,7 +60,6 @@ void RuntimeController::shutdown() {
     runtimeExecutionController.reset();
     runtimeRenderController.reset();
     runtimeInputController.reset();
-    runtimeSimulationController.reset();
     initialized = false;
 }
 
@@ -79,18 +71,6 @@ void RuntimeController::tick(float deltaTime, uint32_t& frameCounter) {
     if (runtimeExecutionController) {
         runtimeExecutionController->tick(deltaTime, frameCounter);
     }
-}
-
-const RuntimeQuery* RuntimeController::runtimeQuery() const {
-    return runtimeSimulationController.get();
-}
-
-RuntimeSimulationController* RuntimeController::simulationController() {
-    return runtimeSimulationController.get();
-}
-
-const RuntimeSimulationController* RuntimeController::simulationController() const {
-    return runtimeSimulationController.get();
 }
 
 bool RuntimeController::hasLastFrameSlot() const {
