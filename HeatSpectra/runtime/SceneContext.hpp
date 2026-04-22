@@ -7,7 +7,6 @@
 
 class LightingSystem;
 class MaterialSystem;
-class MeshModifiers;
 class ModelUploader;
 class ModelRegistry;
 class UniformBufferManager;
@@ -28,8 +27,6 @@ public:
     const UniformBufferManager* uniformBufferManager() const;
     ModelRegistry* resourceManager();
     const ModelRegistry* resourceManager() const;
-    MeshModifiers* meshModifiers();
-    const MeshModifiers* meshModifiers() const;
     ModelUploader* modelUploader();
     const ModelUploader* modelUploader() const;
     MaterialSystem* materialSystem();
@@ -42,10 +39,8 @@ private:
     CameraController cameraControllerState;
     std::unique_ptr<UniformBufferManager> uniformBufferManagerState;
     std::unique_ptr<ModelRegistry> resourceManagerState;
-    std::unique_ptr<MeshModifiers> meshModifiersState;
     std::unique_ptr<ModelUploader> modelUploaderState;
     std::unique_ptr<MaterialSystem> materialSystemState;
     std::unique_ptr<LightingSystem> lightingSystemState;
     bool initialized = false;
 };
-

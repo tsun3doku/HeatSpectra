@@ -1,4 +1,5 @@
 #include "NodeGraphHash.hpp"
+#include "NodeGraphDataTypes.hpp"
 
 #include <cstring>
 
@@ -22,4 +23,14 @@ void NodeGraphHash::combineString(uint64_t& hash, const std::string& value) {
     for (unsigned char ch : value) {
         combine(hash, ch);
     }
+}
+
+void NodeGraphHash::combineInputHash(uint64_t& hash, const NodeDataBlock* input) {
+    if (!input) {
+        combine(hash, 0u);
+        return;
+    }
+    combine(hash, static_cast<uint64_t>(input->dataType));
+    combine(hash, input->payloadHandle.key);
+    combine(hash, input->payloadHandle.revision);
 }

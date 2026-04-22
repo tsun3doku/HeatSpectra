@@ -12,11 +12,11 @@ public:
     bool createDescriptorSetLayout();
     bool createPipeline();
     void updateCouplingDescriptors(
-        HeatContactRuntime::ContactCoupling& coupling,
+        HeatContactRuntime::CouplingState& coupling,
         const class HeatSystemSimRuntime& simRuntime);
     void dispatchCoupling(
         VkCommandBuffer commandBuffer,
-        const HeatContactRuntime::ContactCoupling& coupling,
+        const HeatContactRuntime::CouplingState& coupling,
         const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
         bool evenSubstep) const;
     void insertInjectionBarrier(
@@ -24,7 +24,7 @@ public:
         const class HeatSystemSimRuntime& simRuntime) const;
 
 private:
-    bool ensureParamsBuffer(HeatContactRuntime::ContactCoupling& coupling);
+    bool ensureParamsBuffer(HeatContactRuntime::CouplingState& coupling);
     const HeatSystemRuntime::SourceBinding* findSourceBindingByRuntimeModelId(
         const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
         uint32_t runtimeModelId) const;

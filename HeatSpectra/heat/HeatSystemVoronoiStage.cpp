@@ -15,12 +15,6 @@ HeatSystemVoronoiStage::HeatSystemVoronoiStage(const HeatSystemStageContext& sta
     : context(stageContext) {
 }
 
-void HeatSystemVoronoiStage::onResourcesRecreated(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass) {
-    (void)maxFramesInFlight;
-    (void)extent;
-    (void)renderPass;
-}
-
 void HeatSystemVoronoiStage::dispatchDiffusionSubstep(
     VkCommandBuffer commandBuffer,
     uint32_t currentFrame,

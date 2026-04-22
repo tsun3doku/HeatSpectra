@@ -16,6 +16,9 @@
 struct RemeshData {
     uint64_t payloadHash = 0;
     NodeDataHandle sourceMeshHandle{};
+    uint64_t sourcePayloadHash = 0;
     RemeshParams params{};
     bool active = false;
+
+    void sealPayload();
 };

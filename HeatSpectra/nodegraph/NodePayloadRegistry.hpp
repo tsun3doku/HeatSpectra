@@ -1,36 +1,35 @@
 #pragma once
 
 #include "NodeGraphCoreTypes.hpp"
-#include "domain/GeometryData.hpp"
-#include "domain/RemeshData.hpp"
+#include "NodeGraphTypes.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <typeindex>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
+
+struct GeometryData;
 
 class NodePayloadRegistry {
 public:
     NodePayloadRegistry() = default;
 
     template <typename T>
-    NodeDataHandle upsert(uint64_t key, T payload) {
+    NodeDataHandle store(uint64_t key, T payload) {
         if (key == 0) {
             return {};
         }
+        payload.sealPayload();
         Entry entry{};
         entry.payload = std::make_shared<T>(std::move(payload));
         entry.type = std::type_index(typeid(T));
         entry.revision = revisionCounter.fetch_add(1, std::memory_order_relaxed);
-        entry.count = static_cast<uint32_t>(inferCount(*static_cast<T*>(entry.payload.get())));
         entries[key] = entry;
         NodeDataHandle handle{};
         handle.key = key;
         handle.revision = entry.revision;
-        handle.count = entry.count;
         return handle;
     }
 
@@ -46,46 +45,20 @@ public:
         return static_cast<const T*>(it->second.payload.get());
     }
 
-    void erase(uint64_t key) {
-        entries.erase(key);
-    }
+    void erase(uint64_t key);
+    void clear();
+    const GeometryData* resolveGeometryHandle(const NodeDataHandle& handle) const;
+    bool hasRemeshHandle(const NodeDataHandle& handle) const;
 
-    void clear() {
-        entries.clear();
-    }
-
-    const GeometryData* resolveGeometryHandle(const NodeDataHandle& handle) const {
-        if (handle.key == 0) {
-            return nullptr;
-        }
-
-        return get<GeometryData>(handle);
-    }
-
-    bool hasRemeshHandle(const NodeDataHandle& handle) const {
-        if (handle.key == 0) {
-            return false;
-        }
-
-        return get<RemeshData>(handle) != nullptr;
-    }
+    const GeometryData* resolveGeometry(NodePayloadType type, const NodeDataHandle& handle) const;
+    uint64_t resolvePayloadHash(NodePayloadType type, const NodeDataHandle& handle) const;
 
 private:
     struct Entry {
         std::shared_ptr<void> payload;
         std::type_index type{typeid(void)};
         uint64_t revision = 0;
-        uint32_t count = 0;
     };
-
-    template <typename T>
-    static auto inferCount(const T& value) -> decltype(value.size(), uint32_t{}) {
-        return static_cast<uint32_t>(value.size());
-    }
-
-    static uint32_t inferCount(...) {
-        return 0u;
-    }
 
     std::unordered_map<uint64_t, Entry> entries;
     std::atomic<uint64_t> revisionCounter{1};

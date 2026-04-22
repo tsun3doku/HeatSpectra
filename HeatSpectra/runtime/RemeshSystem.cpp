@@ -111,7 +111,7 @@ bool RemeshSystem::exportProduct(RemeshProduct& outProduct) const {
     outProduct.inputEdgeView = intrinsicGpuResources.viewEInput;
     outProduct.inputTriangleView = intrinsicGpuResources.viewTInput;
     outProduct.inputLengthView = intrinsicGpuResources.viewLInput;
-    outProduct.contentHash = computeContentHash(outProduct);
+    outProduct.productHash = buildProductHash(outProduct);
     return outProduct.isValid();
 }
 

@@ -1,24 +1,14 @@
 #pragma once
 
-#include "NodeGraphTypes.hpp"
-#include "runtime/RuntimePackageGraph.hpp"
-
 #include <unordered_set>
+#include <vector>
+
+#include "NodeGraphTypes.hpp"
+#include "runtime/RuntimeECS.hpp"
 
 class NodeGraphDisplay {
 public:
-    RuntimePackageGraph selectDisplayedSubgraph(
+    std::unordered_set<uint64_t> computeDisplaySelectedKeys(
         const NodeGraphState& graphState,
-        const RuntimePackageGraph& fullGraph) const;
-
-private:
-    void appendRootPackagesForNode(
-        const NodeGraphNode& node,
-        std::unordered_set<PackageKey, PackageKeyHash>& selectedKeys) const;
-    void expandDependencyClosure(
-        const RuntimePackageGraph& fullGraph,
-        std::unordered_set<PackageKey, PackageKeyHash>& selectedKeys) const;
-    RuntimePackageGraph filterGraph(
-        const RuntimePackageGraph& fullGraph,
-        const std::unordered_set<PackageKey, PackageKeyHash>& selectedKeys) const;
+        const ECSRegistry& registry) const;
 };

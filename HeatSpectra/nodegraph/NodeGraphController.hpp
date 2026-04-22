@@ -3,7 +3,7 @@
 #include "NodeGraphDisplay.hpp"
 #include "NodeGraphCompiler.hpp"
 #include "NodeGraphRuntime.hpp"
-#include "runtime/RuntimePackageSync.hpp"
+#include "runtime/RuntimeECS.hpp"
 
 #include <cstdint>
 
@@ -28,9 +28,6 @@ private:
     NodeGraphRuntime runtime;
     uint64_t revisionSeen = 0;
     NodeGraphCompiled plan{};
-    RuntimePackageGraph fullRuntimePackageGraph{};
-    RuntimePackageGraph displayRuntimePackageGraph{};
     NodeGraphDisplay nodeGraphDisplay{};
-    RuntimePackageSync computePackageSync{};
-    RuntimePackageSync displayPackageSync{};
+    ECSRegistry ecsRegistry{};
 };

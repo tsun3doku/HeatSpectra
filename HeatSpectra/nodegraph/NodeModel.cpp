@@ -19,7 +19,7 @@ const char* NodeModel::typeId() const {
     return nodegraphtypes::Model;
 }
 
-bool NodeModel::execute(NodeGraphKernelContext& context) const {
+void NodeModel::execute(NodeGraphKernelContext& context) const {
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
     const ModelNodeParams params = readModelNodeParams(context.node);
@@ -27,28 +27,24 @@ bool NodeModel::execute(NodeGraphKernelContext& context) const {
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodePayloadType::None;
+        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
         outputValue.payloadHandle = {};
         if (modelPath.empty()) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        outputValue.dataType = NodePayloadType::Geometry;
         GeometryData geometry{};
         geometry.baseModelPath = modelPath;
         populateGeometryFromModelPath(modelPath, geometry);
-        updatePayloadHash(geometry);
         if (payloadRegistry) {
             const uint64_t payloadKey = makeSocketKey(
                 context.node.id,
                 context.node.outputs[outputIndex].id);
-            outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(geometry));
+            outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(geometry));
         }
-        updateDataBlockMetadata(outputValue, payloadRegistry);
+        populateMetadata(outputValue, payloadRegistry);
     }
-
-    return false;
 }
 
 bool NodeModel::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
@@ -186,7 +182,6 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geo
         return false;
     }
 
-    normalizeGeometryGroups(geometry);
     return true;
 }
 
@@ -200,18 +195,6 @@ bool NodeModel::populateGeometryFromModelPath(const std::string& modelPath, Geom
 
     geometry = std::move(loadedGeometry);
     geometry.baseModelPath = baseModelPath;
-
-    geometry.attributes.clear();
-
-    GeometryAttribute positionAttribute{};
-    positionAttribute.name = "P";
-    positionAttribute.domain = GeometryAttributeDomain::Point;
-    positionAttribute.dataType = GeometryAttributeDataType::Float;
-    positionAttribute.tupleSize = 3;
-    positionAttribute.floatValues = geometry.pointPositions;
-    geometry.attributes.push_back(std::move(positionAttribute));
-
-    normalizeGeometryGroups(geometry);
     return true;
 }
 

@@ -1,19 +1,17 @@
 #include "HeatSystemComputeController.hpp"
 
+#include <iostream>
 #include "HeatSystem.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
-#include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 HeatSystemComputeController::HeatSystemComputeController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager,
-    UniformBufferManager& uniformBufferManager,
     CommandPool& renderCommandPool,
     uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
-      uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       maxFramesInFlight(maxFramesInFlight) {
 }
@@ -87,16 +85,36 @@ void HeatSystemComputeController::configure(uint64_t socketKey, const Config& co
         return;
     }
 
-    configuredConfigs[socketKey] = config;
     auto& instance = activeSystems[socketKey];
-    if (!instance.system && currentRenderPass != VK_NULL_HANDLE) {
-        instance.system = buildHeatSystem(instance.resources, currentExtent, currentRenderPass);
+    if (!instance.system) {
+        instance.system = buildHeatSystem(instance.resources);
     }
 
     if (instance.system) {
-        configureHeatSystem(*instance.system, config);
         instance.system->setActive(config.active);
         instance.system->setIsPaused(config.active && config.paused);
+
+        if (config.resetRequested) {
+            instance.system->resetHeatState();
+        }
+    }
+
+    // Always flush control-plane flags into the cached config so that
+    // isHeatSystemPaused() and friends never read stale values, even
+    // when the geometry hash hasn't changed.
+    const auto configIt = configuredConfigs.find(socketKey);
+    if (configIt != configuredConfigs.end()) {
+        configIt->second.paused = config.paused;
+        configIt->second.resetRequested = config.resetRequested;
+        if (configIt->second.computeHash == config.computeHash) {
+            return;
+        }
+    }
+
+    configuredConfigs[socketKey] = config;
+
+    if (instance.system) {
+        configureHeatSystem(*instance.system, config);
         instance.system->ensureConfigured();
     }
 }
@@ -171,17 +189,14 @@ bool HeatSystemComputeController::isHeatSystemPaused(uint64_t socketKey) const {
            configIt->second.paused;
 }
 
-std::unique_ptr<HeatSystem> HeatSystemComputeController::buildHeatSystem(HeatSystemResources& heatSystemResources, VkExtent2D extent, VkRenderPass renderPass) {
+std::unique_ptr<HeatSystem> HeatSystemComputeController::buildHeatSystem(HeatSystemResources& heatSystemResources) {
     std::unique_ptr<HeatSystem> system = std::make_unique<HeatSystem>(
         vulkanDevice,
         memoryAllocator,
         resourceManager,
         heatSystemResources,
-        uniformBufferManager,
         maxFramesInFlight,
-        renderCommandPool,
-        extent,
-        renderPass);
+        renderCommandPool);
     if (!system || !system->isInitialized()) {
         std::cerr << "[HeatSystemComputeController] HeatSystem initialization failed" << std::endl;
         return nullptr;
@@ -189,16 +204,8 @@ std::unique_ptr<HeatSystem> HeatSystemComputeController::buildHeatSystem(HeatSys
     return system;
 }
 
-HeatSystem* HeatSystemComputeController::getHeatSystem(uint64_t socketKey) const {
-    auto it = activeSystems.find(socketKey);
-    if (it != activeSystems.end()) {
-        return it->second.system.get();
-    }
-    return nullptr;
-}
-
-std::vector<HeatSystem*> HeatSystemComputeController::getActiveSystems() const {
-    std::vector<HeatSystem*> systems;
+std::vector<ComputePass*> HeatSystemComputeController::getActiveSystems() const {
+    std::vector<ComputePass*> systems;
     systems.reserve(activeSystems.size());
     for (const auto& [key, instance] : activeSystems) {
         if (instance.system) {
@@ -246,13 +253,8 @@ bool HeatSystemComputeController::exportProduct(uint64_t socketKey, HeatProduct&
         outProduct.receiverSurfaceBufferViews.push_back(receiver->getSurfaceBufferView());
     }
 
-    outProduct.contentHash = computeContentHash(outProduct);
+    outProduct.productHash = buildProductHash(outProduct);
     return outProduct.isValid();
-}
-
-void HeatSystemComputeController::createHeatSystem(VkExtent2D extent, VkRenderPass renderPass) {
-    currentExtent = extent;
-    currentRenderPass = renderPass;
 }
 
 void HeatSystemComputeController::destroyHeatSystem(uint64_t socketKey) {
@@ -264,14 +266,5 @@ void HeatSystemComputeController::destroyHeatSystem(uint64_t socketKey) {
         }
         activeSystems.erase(it);
     }
-}
-
-void HeatSystemComputeController::updateRenderContext(VkExtent2D extent, VkRenderPass renderPass) {
-    currentExtent = extent;
-    currentRenderPass = renderPass;
-}
-
-void HeatSystemComputeController::updateRenderResources() {
-    (void)currentRenderPass;
 }
 

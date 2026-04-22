@@ -66,9 +66,6 @@
     <ClCompile Include="render\RenderRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\RuntimeHost.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="runtime\VulkanCoreContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -85,18 +82,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimePackageCompiler.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimePackageGraph.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimePackageSync.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimeComputePackageController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimeDisplayPackageController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\ModelComputeRuntime.cpp">
@@ -123,9 +108,6 @@
     <ClCompile Include="runtime\HeatDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClInclude Include="runtime\RuntimeProductRegistry.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="runtime\ModelComputeRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -166,9 +148,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimeRenderController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="runtime\RuntimeExecutionController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimeSystems.cpp">
@@ -253,9 +232,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemComputeController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="heat\HeatSystemDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\VoronoiSystem.cpp">
@@ -408,13 +384,10 @@
     <ClCompile Include="voronoi\VoronoiGeoCompute.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\ContactInterface.cpp">
+    <ClCompile Include="contact\ContactSampling.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="contact\ContactSystemComputeController.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="contact\ContactSystemDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="contact\ContactSystem.cpp">
@@ -433,9 +406,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="scene\MaterialSystem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="mesh\MeshModifiers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderers\HeatReceiverRenderer.cpp">
@@ -475,6 +445,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphKernels.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodePayloadRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeModel.cpp">
@@ -568,6 +541,36 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphParamUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\ContactDisplayController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeModelParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeTransformParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeContactParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeRemeshParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeVoronoiParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeHeatSourceParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeHeatSolveParams.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime\RuntimeHandleResolver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -760,6 +763,9 @@
     <ClInclude Include="framegraph\FrameUpdateStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="framegraph\ComputePass.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="framegraph\FrameComputeStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -767,9 +773,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="render\RenderRuntime.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimeHost.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\VulkanCoreContext.hpp">
@@ -784,19 +787,7 @@
     <ClInclude Include="runtime\RuntimePackageCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimePackageGraph.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimePackageSync.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="runtime\RuntimePackages.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimeComputePackageController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RuntimeDisplayPackageController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeThermalTypes.hpp">
@@ -817,13 +808,13 @@
     <ClInclude Include="runtime\RuntimeRenderController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeExecutionController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="runtime\RuntimeSystems.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeInterfaces.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeECS.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scene\SceneController.hpp">
@@ -905,9 +896,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemComputeController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="heat\HeatSystemDisplayController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\VoronoiSystem.hpp">
@@ -1096,13 +1084,7 @@
     <ClInclude Include="contact\ContactSystemComputeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="contact\ContactSystemDisplayController.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="contact\ContactSystem.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="heat\ContactInterface.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="framegraph\FrameSync.hpp">
@@ -1118,9 +1100,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scene\MaterialSystem.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mesh\MeshModifiers.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderers\HeatReceiverRenderer.hpp">
@@ -1276,7 +1255,7 @@
     <ClInclude Include="nodegraph\NodeGraphPayloadTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\ContactSampling.hpp">
+    <ClInclude Include="contact\ContactSampling.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="domain\VoronoiData.hpp">
@@ -1327,6 +1306,45 @@
     <ClInclude Include="domain\HeatData.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nodegraph\NodeGraphParamUtils.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodePayloadRegistry.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\ContactDisplayController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeProducts.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeContactDisplayTransport.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeModelParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeTransformParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeContactParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeRemeshParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeVoronoiParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeHeatSourceParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\NodeHeatSolveParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime\RuntimeHandleResolver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="app\MainQt.h">
@@ -1334,4 +1352,3 @@
     </QtMoc>
   </ItemGroup>
 </Project>
-

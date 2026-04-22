@@ -3,7 +3,6 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphCompiler.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <algorithm>
@@ -194,7 +193,7 @@ void NodeGraphRuntime::applyChange(const NodeGraphChange& change) {
     }
 }
 
-void NodeGraphRuntime::tick(NodeGraphEvaluationState* outState) {
+void NodeGraphRuntime::tick(NodeGraphEvaluationState* outState, const NodeGraphCompiled& compiled) {
     if (!bridge) {
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
@@ -202,13 +201,10 @@ void NodeGraphRuntime::tick(NodeGraphEvaluationState* outState) {
         }
         return;
     }
-
-    executeDataflow(outState);
-
+    executeDataflow(outState, compiled);
 }
 
-void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState) {
-    NodeGraphCompiled compiled = NodeGraphCompiler::compile(graphState);
+void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState, const NodeGraphCompiled& compiled) {
     if (graphState.nodes.size() > 0 && compiled.executionOrder.size() != graphState.nodes.size()) {
         if (outState) {
             outState->sourceSocketByInputSocket.clear();
@@ -287,7 +283,7 @@ void NodeGraphRuntime::executeDataflow(NodeGraphEvaluationState* outState) {
                         inputDataValues[inputIndex] = &inputValue->data;
                     }
                 }
-                initializeOutputsFromInputs(node, inputDataValues, outputValues);
+                buildOutputs(node, inputDataValues, outputValues);
                 kernels.executeNode(node, kernelState, inputValues, outputValues);
 
                 if (canHash) {

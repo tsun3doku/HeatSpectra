@@ -12,7 +12,6 @@
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
-#include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
@@ -25,27 +24,21 @@ HeatSystem::HeatSystem(
     MemoryAllocator& memoryAllocator,
     ModelRegistry& resourceManager,
     HeatSystemResources& resources,
-    UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
-    CommandPool& renderCommandPool,
-    VkExtent2D extent,
-    VkRenderPass renderPass)
+    CommandPool& renderCommandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
       resources(resources),
-      uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       runtime(),
       heatSources(runtime.getSourceBindingsMutable()),
       maxFramesInFlight(maxFramesInFlight) {
-    (void)extent;
 
     HeatSystemStageContext stageContext{
         vulkanDevice,
         memoryAllocator,
         resourceManager,
-        uniformBufferManager,
         renderCommandPool,
         resources
     };
@@ -133,7 +126,7 @@ void HeatSystem::setThermalMaterials(const std::vector<RuntimeThermalMaterial>& 
     thermalMaterialsDirty = true;
 }
 
-void HeatSystem::setContactCouplings(const std::vector<ContactProduct>& contactCouplings) {
+void HeatSystem::setContactCouplings(const std::vector<ContactCoupling>& contactCouplings) {
     std::cerr << "[HeatSystem] setContactCouplings"
               << " receiverRuntimeModelIds=" << receiverRuntimeModelIds.size()
               << " products=" << contactCouplings.size()
@@ -346,7 +339,7 @@ bool HeatSystem::rebuildHeatStateRuntimes(bool forceDescriptorReallocate) {
     }
 
     if (contactStage && simRuntime.isInitialized()) {
-        for (ContactCoupling& coupling : heatContactRuntime.getCouplingsMutable()) {
+        for (HeatContactRuntime::CouplingState& coupling : heatContactRuntime.getCouplingsMutable()) {
             contactStage->updateCouplingDescriptors(
                 coupling,
                 simRuntime);

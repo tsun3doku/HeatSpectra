@@ -1,6 +1,6 @@
 #include "FrameComputeStage.hpp"
 
-#include "heat/HeatSystem.hpp"
+#include "ComputePass.hpp"
 #include "util/ComputeTiming.hpp"
 #include "FrameSync.hpp"
 #include "VkFrameGraphRuntime.hpp"
@@ -13,25 +13,25 @@ FrameComputeStage::FrameComputeStage(VulkanDevice& vulkanDevice, VkFrameGraphRun
       computeTiming(computeTiming) {
 }
 
-FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, const std::vector<HeatSystem*>& heatSystems, FrameSyncState& syncState, bool allowHeatSolve) {
+FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, const std::vector<ComputePass*>& computePasses, FrameSyncState& syncState) {
     syncState = {};
-    if (!allowHeatSolve || heatSystems.empty()) {
+    if (computePasses.empty()) {
         return FrameStageResult::Continue;
     }
 
     bool hasAnyComputeWrites = false;
     std::vector<VkCommandBuffer> submitCommandBuffers;
 
-    for (HeatSystem* heatSystem : heatSystems) {
-        if (!heatSystem) {
+    for (ComputePass* computePass : computePasses) {
+        if (!computePass) {
             continue;
         }
 
-        heatSystem->update();
+        computePass->update();
 
-        if (heatSystem->hasDispatchableComputeWork()) {
+        if (computePass->hasDispatchableComputeWork()) {
             hasAnyComputeWrites = true;
-            const auto& computeCommandBuffers = heatSystem->getComputeCommandBuffers();
+            const auto& computeCommandBuffers = computePass->getComputeCommandBuffers();
             if (frameIndex >= computeCommandBuffers.size()) {
                 syncState = {};
                 return FrameStageResult::Fatal;
@@ -39,7 +39,7 @@ FrameStageResult FrameComputeStage::execute(uint32_t frameIndex, const std::vect
 
             VkCommandBuffer computeCommandBuffer = computeCommandBuffers[frameIndex];
             vkResetCommandBuffer(computeCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-            heatSystem->recordComputeCommands(computeCommandBuffer, frameIndex, computeTiming.getQueryPool(), computeTiming.getQueryBase(frameIndex));
+            computePass->recordComputeCommands(computeCommandBuffer, frameIndex, computeTiming.getQueryPool(), computeTiming.getQueryBase(frameIndex));
             submitCommandBuffers.push_back(computeCommandBuffer);
         }
     }

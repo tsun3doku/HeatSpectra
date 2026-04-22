@@ -3,7 +3,6 @@
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
-#include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiCandidateCompute.hpp"
@@ -20,25 +19,19 @@ VoronoiSystem::VoronoiSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
     ModelRegistry& resourceManager,
-    UniformBufferManager& uniformBufferManager,
     uint32_t maxFramesInFlight,
-    CommandPool& renderCommandPool,
-    VkExtent2D extent,
-    VkRenderPass renderPass)
+    CommandPool& renderCommandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
-      uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       maxFramesInFlight(maxFramesInFlight),
       voronoiBuilder(vulkanDevice, memoryAllocator, runtime.voronoiResourcesRef()) {
-    (void)extent;
 
     VoronoiStageContext stageContext{
         vulkanDevice,
         memoryAllocator,
         resourceManager,
-        uniformBufferManager,
         renderCommandPool,
         runtime.resourcesRef()
     };
@@ -52,7 +45,6 @@ VoronoiSystem::VoronoiSystem(
         return;
     }
 
-    (void)renderPass;
     initializeVoronoiGeoCompute();
     initializeVoronoiCandidateCompute();
 

@@ -1,5 +1,7 @@
 #include "RemeshController.hpp"
 
+#include "vulkan/MemoryAllocator.hpp"
+
 RemeshController::OperatingScope::OperatingScope(std::atomic<bool>& isOperating)
     : isOperating(isOperating) {
     previousState = isOperating.exchange(true, std::memory_order_acq_rel);
@@ -10,14 +12,14 @@ RemeshController::OperatingScope::~OperatingScope() {
 }
 
 RemeshController::RemeshController(
-    Remesher& remesher,
     VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator,
     ModelRegistry& resourceManager,
     std::atomic<bool>& isOperating)
     : vulkanDevice(vulkanDevice),
       resourceManager(resourceManager),
       isOperating(isOperating),
-      remesher(remesher) {
+      remesher(vulkanDevice, memoryAllocator) {
 }
 
 void RemeshController::configure(const Config& config) {
@@ -25,10 +27,17 @@ void RemeshController::configure(const Config& config) {
         return;
     }
 
-    auto& system = remeshSystems[config.socketKey];
+    auto& system = activeSystems[config.socketKey];
     if (!system) {
         system = std::make_unique<RemeshSystem>(remesher, vulkanDevice, resourceManager);
     }
+
+    const auto configIt = configuredConfigs.find(config.socketKey);
+    if (configIt != configuredConfigs.end() && configIt->second.computeHash == config.computeHash) {
+        return;
+    }
+
+    configuredConfigs[config.socketKey] = config;
 
     system->setSourceGeometry(config.pointPositions, config.triangleIndices);
     system->setParams(config.iterations, config.minAngleDegrees, config.maxEdgeLength, config.stepSize);
@@ -36,7 +45,7 @@ void RemeshController::configure(const Config& config) {
 
     OperatingScope operatingScope(isOperating);
     if (!system->ensureConfigured() && !system->isReady()) {
-        remeshSystems.erase(config.socketKey);
+        activeSystems.erase(config.socketKey);
     }
 }
 
@@ -45,23 +54,25 @@ void RemeshController::disable(uint64_t socketKey) {
         return;
     }
 
-    auto it = remeshSystems.find(socketKey);
-    if (it != remeshSystems.end()) {
+    configuredConfigs.erase(socketKey);
+    auto it = activeSystems.find(socketKey);
+    if (it != activeSystems.end()) {
         if (it->second) {
             it->second->disable();
         }
-        remeshSystems.erase(it);
+        activeSystems.erase(it);
     }
 }
 
 void RemeshController::disable() {
-    for (auto& [socketKey, system] : remeshSystems) {
+    configuredConfigs.clear();
+    for (auto& [socketKey, system] : activeSystems) {
         (void)socketKey;
         if (system) {
             system->disable();
         }
     }
-    remeshSystems.clear();
+    activeSystems.clear();
 }
 
 
@@ -72,8 +83,12 @@ bool RemeshController::exportProduct(uint64_t socketKey, RemeshProduct& outProdu
         return false;
     }
 
-    const auto systemIt = remeshSystems.find(socketKey);
-    if (systemIt == remeshSystems.end() || !systemIt->second) {
+    if (configuredConfigs.find(socketKey) == configuredConfigs.end()) {
+        return false;
+    }
+
+    const auto systemIt = activeSystems.find(socketKey);
+    if (systemIt == activeSystems.end() || !systemIt->second) {
         return false;
     }
 

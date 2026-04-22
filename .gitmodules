@@ -7,3 +7,6 @@
 [submodule "HeatSpectra/libs/tinyobjloader"]
 	path = HeatSpectra/libs/tinyobjloader
 	url = https://github.com/tinyobjloader/tinyobjloader
+[submodule "HeatSpectra/libs/entt"]
+	path = HeatSpectra/libs/entt
+	url = https://github.com/skypjack/entt.git

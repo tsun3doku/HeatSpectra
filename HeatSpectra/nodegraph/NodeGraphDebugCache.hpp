@@ -8,15 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-struct NodeGraphRuntimeAttributeDebugInfo {
-    std::string name;
-    std::string domain;
-    std::string dataType;
-    uint32_t tupleSize = 1;
-    uint32_t elementCount = 0;
-    std::vector<std::string> sampleValues;
-};
-
 struct NodeGraphRuntimeSocketDebugInfo {
     NodeGraphSocketId socketId{};
     std::string socketName;
@@ -27,7 +18,6 @@ struct NodeGraphRuntimeSocketDebugInfo {
     std::string dataType = "none";
     std::unordered_map<std::string, std::string> metadata;
     std::vector<NodeGraphNodeId> lineageNodeIds;
-    std::vector<NodeGraphRuntimeAttributeDebugInfo> attributes;
 };
 
 struct NodeGraphRuntimeNodeDebugInfo {

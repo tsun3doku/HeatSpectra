@@ -8,7 +8,9 @@
 
 #include "mesh/remesher/Remesher.hpp"
 #include "runtime/RemeshSystem.hpp"
+#include "runtime/RuntimeProducts.hpp"
 
+class MemoryAllocator;
 class ModelRegistry;
 class VulkanDevice;
 
@@ -23,14 +25,18 @@ public:
         float maxEdgeLength = 0.1f;
         float stepSize = 0.25f;
         uint32_t runtimeModelId = 0;
+        uint64_t computeHash = 0;
     };
 
-    RemeshController(Remesher& remesher, VulkanDevice& vulkanDevice, ModelRegistry& resourceManager, std::atomic<bool>& isOperating);
+    RemeshController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager, std::atomic<bool>& isOperating);
 
     void configure(const Config& config);
     void disable(uint64_t socketKey);
     void disable();
     bool exportProduct(uint64_t socketKey, RemeshProduct& outProduct) const;
+
+    Remesher& getRemesher() { return remesher; }
+    const Remesher& getRemesher() const { return remesher; }
 
 private:
     class OperatingScope {
@@ -46,6 +52,20 @@ private:
     VulkanDevice& vulkanDevice;
     ModelRegistry& resourceManager;
     std::atomic<bool>& isOperating;
-    Remesher& remesher;
-    std::unordered_map<uint64_t, std::unique_ptr<RemeshSystem>> remeshSystems;
+    Remesher remesher;
+    std::unordered_map<uint64_t, std::unique_ptr<RemeshSystem>> activeSystems;
+    std::unordered_map<uint64_t, Config> configuredConfigs;
 };
+
+inline uint64_t buildComputeHash(const RemeshController::Config& config) {
+    uint64_t hash = 1469598103934665603ull;
+    hash = RuntimeProductHash::mixPod(hash, config.socketKey);
+    hash = RuntimeProductHash::mixPodVector(hash, config.pointPositions);
+    hash = RuntimeProductHash::mixPodVector(hash, config.triangleIndices);
+    hash = RuntimeProductHash::mixPod(hash, config.iterations);
+    hash = RuntimeProductHash::mixPod(hash, config.minAngleDegrees);
+    hash = RuntimeProductHash::mixPod(hash, config.maxEdgeLength);
+    hash = RuntimeProductHash::mixPod(hash, config.stepSize);
+    hash = RuntimeProductHash::mixPod(hash, config.runtimeModelId);
+    return hash;
+}

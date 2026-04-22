@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NodeGraphDataTypes.hpp"
 #include "NodeGraphKernels.hpp"
 
 #include <cstdint>
@@ -8,25 +9,20 @@
 
 class NodeGraphBridge;
 
-struct NodeGraphEvaluationState {
-    std::unordered_map<uint64_t, uint64_t> sourceSocketByInputSocket;
-    std::unordered_map<uint64_t, EvaluatedSocketValue> outputBySocket;
-};
-
 class NodeGraphRuntime {
 public:
     NodeGraphRuntime(NodeGraphBridge* nodeGraphBridge = nullptr, const NodeRuntimeServices& services = {});
     ~NodeGraphRuntime();
 
     void applyDelta(const NodeGraphDelta& delta);
-    void tick(NodeGraphEvaluationState* outState = nullptr);
+    void tick(NodeGraphEvaluationState* outState, const NodeGraphCompiled& compiled);
 
     const NodeGraphState& state() const {
         return graphState;
     }
 private:
     void applyChange(const NodeGraphChange& change);
-    void executeDataflow(NodeGraphEvaluationState* outState);
+    void executeDataflow(NodeGraphEvaluationState* outState, const NodeGraphCompiled& compiled);
     void rebuildNodeById();
     void clearNodeCaches();
     void invalidateNodeCaches(const std::unordered_set<uint32_t>& dirtyNodeIds);

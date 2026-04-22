@@ -2,6 +2,10 @@
 
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <vector>
+
+#include "contact/ContactTypes.hpp"
+#include "mesh/remesher/SupportingHalfedge.hpp"
 
 struct Quadrature {
     static constexpr uint32_t count = 7u;
@@ -30,3 +34,14 @@ struct ContactCellWeight {
     uint32_t sampleIndex = 0;
     float weight = 0.0f;
 };
+
+void mapSurfacePoints(
+    const SupportingHalfedge::IntrinsicMesh& sourceIntrinsicMesh,
+    const std::array<float, 16>& sourceLocalToWorld,
+    const std::vector<const SupportingHalfedge::IntrinsicMesh*>& receiverIntrinsicMeshes,
+    const std::vector<std::array<float, 16>>& receiverLocalToWorld,
+    std::vector<std::vector<ContactPair>>& receiverContactPairs,
+    std::vector<ContactLineVertex>& outOutlineVertices,
+    std::vector<ContactLineVertex>& outCorrespondenceVertices,
+    float contactRadius,
+    float minNormalDot);

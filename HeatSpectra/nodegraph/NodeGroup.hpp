@@ -5,7 +5,8 @@
 class NodeGroup final : public NodeKernel {
 public:
     const char* typeId() const override;
-    bool execute(NodeGraphKernelContext& context) const override;
+    void execute(NodeGraphKernelContext& context) const override;
+    bool computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const override;
 
 private:
     static bool equalsIgnoreCase(const std::string& lhs, const std::string& rhs);

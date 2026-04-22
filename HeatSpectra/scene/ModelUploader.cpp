@@ -3,7 +3,6 @@
 #include "Camera.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "mesh/MeshModifiers.hpp"
 #include "Model.hpp"
 #include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -17,9 +16,8 @@ ModelUploader::ModelUploader(VulkanDevice& vulkanDevice, MemoryAllocator& memory
       commandPool(commandPool) {
 }
 
-void ModelUploader::uploadInitialModels(ModelRegistry& resourceManager, MeshModifiers& meshModifiers) {
+void ModelUploader::uploadInitialModels(ModelRegistry& resourceManager) {
     resourceManager.setModels(nullptr, nullptr, nullptr);
-    meshModifiers.cleanup();
 }
 
 uint32_t ModelUploader::addModel(ModelRegistry& resourceManager, const std::string& modelPath, uint32_t preferredModelId) {
@@ -33,4 +31,3 @@ std::unique_ptr<Model> ModelUploader::createModel(const std::string& modelPath) 
     }
     return model;
 }
-

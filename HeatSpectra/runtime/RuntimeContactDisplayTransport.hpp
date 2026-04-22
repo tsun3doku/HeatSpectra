@@ -2,9 +2,10 @@
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
 #include "runtime/ContactDisplayController.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
+#include "runtime/RuntimeECS.hpp"
 
-#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 class RuntimeContactDisplayTransport {
 public:
@@ -12,29 +13,42 @@ public:
         controller = updatedController;
     }
 
-    void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
-        computeProductRegistry = updatedRegistry;
+    void setECSRegistry(ECSRegistry* updatedRegistry) {
+        ecsRegistry = updatedRegistry;
     }
 
-    void sync(const std::unordered_map<uint64_t, ContactPackage>& packagesBySocket) {
+    void setVisibleKeys(const std::unordered_set<uint64_t>* keys) {
+        visibleKeys = keys;
+    }
+
+    void sync(const ECSRegistry& registry) {
         if (!controller) {
             return;
         }
 
-        for (const auto& [socketKey, package] : packagesBySocket) {
+        auto view = registry.view<ContactPackage>();
+        for (auto entity : view) {
+            uint64_t socketKey = static_cast<uint64_t>(entity);
+            if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
+                continue;
+            }
+
+            const auto& package = registry.get<ContactPackage>(entity);
             applyPackage(socketKey, package);
         }
     }
 
     void finalizeSync() {
-        if (controller) {
-            controller->finalizeSync();
+        if (!controller) {
+            return;
         }
+
+        controller->finalizeSync();
     }
 
 private:
     void applyPackage(uint64_t socketKey, const ContactPackage& package) {
-        if (!controller || !computeProductRegistry || socketKey == 0) {
+        if (!controller || socketKey == 0) {
             return;
         }
 
@@ -43,10 +57,7 @@ private:
             return;
         }
 
-        const ProductHandle contactHandle =
-            computeProductRegistry->getPublishedHandle(NodeProductType::Contact, socketKey);
-        const ContactProduct* computeProduct =
-            computeProductRegistry->resolveContact(contactHandle);
+        const ContactProduct* computeProduct = tryGetProduct<ContactProduct>(*ecsRegistry, socketKey);
         if (!computeProduct || !computeProduct->isValid()) {
             controller->remove(socketKey);
             return;
@@ -60,11 +71,12 @@ private:
         config.receiverRuntimeModelId = computeProduct->receiverRuntimeModelId;
         config.outlineVertices = computeProduct->outlineVertices;
         config.correspondenceVertices = computeProduct->correspondenceVertices;
-        config.contentHash = computeContentHash(config);
+        config.displayHash = buildDisplayHash(config, computeProduct->productHash);
 
         controller->apply(socketKey, config);
     }
 
     ContactDisplayController* controller = nullptr;
-    RuntimeProductRegistry* computeProductRegistry = nullptr;
+    ECSRegistry* ecsRegistry = nullptr;
+    const std::unordered_set<uint64_t>* visibleKeys = nullptr;
 };

@@ -1,17 +1,15 @@
 #pragma once
 
-#include "contact/ContactSystemComputeController.hpp"
+#include "contact/ContactTypes.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 #include <vector>
 
-class ContactSystem;
 class MemoryAllocator;
 class VulkanDevice;
 
 class ContactSystemRuntime {
 public:
-    const ContactProduct* getProduct() const { return productValid ? &product : nullptr; }
     bool needsRebuild() const { return bindingDirty; }
 
     void setParams(
@@ -29,28 +27,19 @@ public:
         const SupportingHalfedge::IntrinsicMesh& intrinsicMesh,
         uint32_t runtimeModelId);
     void setReceiverTriangleIndices(const std::vector<uint32_t>& triangleIndices);
-    bool ensureProduct(
-        ContactSystem& contactSystem,
-        VulkanDevice& vulkanDevice,
-        MemoryAllocator& memoryAllocator);
+    bool buildCoupling(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator);
 
     void clear(MemoryAllocator& memoryAllocator);
     bool hasValidBinding() const;
-    ContactCouplingType getCouplingType() const { return couplingType; }
-    float getMinNormalDot() const { return minNormalDot; }
-    float getContactRadius() const { return contactRadius; }
-    uint32_t getEmitterModelId() const { return emitterModelId; }
-    const std::array<float, 16>& getEmitterLocalToWorld() const { return emitterLocalToWorld; }
-    const SupportingHalfedge::IntrinsicMesh& getEmitterIntrinsicMesh() const { return emitterIntrinsicMesh; }
-    uint32_t getEmitterRuntimeModelId() const { return emitterRuntimeModelId; }
-    uint32_t getReceiverModelId() const { return receiverModelId; }
-    const std::array<float, 16>& getReceiverLocalToWorld() const { return receiverLocalToWorld; }
-    const SupportingHalfedge::IntrinsicMesh& getReceiverIntrinsicMesh() const { return receiverIntrinsicMesh; }
-    uint32_t getReceiverRuntimeModelId() const { return receiverRuntimeModelId; }
-    const std::vector<uint32_t>& getReceiverTriangleIndices() const { return receiverTriangleIndices; }
+    const ContactCoupling* getContactCoupling() const { return couplingValid ? &coupling : nullptr; }
+    VkBuffer getContactPairBuffer() const { return contactPairBuffer; }
+    VkDeviceSize getContactPairBufferOffset() const { return contactPairBufferOffset; }
+    const std::vector<ContactLineVertex>& getOutlineVertices() const { return outlineVertices; }
+    const std::vector<ContactLineVertex>& getCorrespondenceVertices() const { return correspondenceVertices; }
+    bool hasContact() const { return hasContactFlag; }
 
 private:
-    void clearProductBuffers(MemoryAllocator& memoryAllocator);
+    void clearPairBuffer(MemoryAllocator& memoryAllocator);
     bool recreateProductBuffer(
         MemoryAllocator& memoryAllocator,
         VulkanDevice& vulkanDevice,
@@ -59,7 +48,8 @@ private:
         void** mappedData,
         const void* data,
         VkDeviceSize size);
-    void clearProduct(MemoryAllocator& memoryAllocator);
+    void clearComputedState(MemoryAllocator& memoryAllocator);
+    bool computeContactPairs(std::vector<ContactPair>& outPairs);
 
     ContactCouplingType couplingType = ContactCouplingType::SourceToReceiver;
     float minNormalDot = -0.65f;
@@ -83,7 +73,13 @@ private:
     SupportingHalfedge::IntrinsicMesh receiverIntrinsicMesh;
     uint32_t receiverRuntimeModelId = 0;
     std::vector<uint32_t> receiverTriangleIndices;
-    ContactProduct product{};
-    bool productValid = false;
+    ContactCoupling coupling{};
+    VkBuffer contactPairBuffer = VK_NULL_HANDLE;
+    VkDeviceSize contactPairBufferOffset = 0;
+    bool couplingValid = false;
     bool bindingDirty = false;
+
+    std::vector<ContactLineVertex> outlineVertices;
+    std::vector<ContactLineVertex> correspondenceVertices;
+    bool hasContactFlag = false;
 };

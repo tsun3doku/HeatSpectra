@@ -17,7 +17,6 @@ class HeatSystemVoronoiStage {
 public:
     explicit HeatSystemVoronoiStage(const HeatSystemStageContext& stageContext);
 
-    void onResourcesRecreated(uint32_t maxFramesInFlight, VkExtent2D extent, VkRenderPass renderPass);
     void dispatchDiffusionSubstep(
         VkCommandBuffer commandBuffer,
         uint32_t currentFrame,

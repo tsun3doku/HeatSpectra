@@ -1,10 +1,11 @@
 #pragma once
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
+#include "runtime/RuntimeECS.hpp"
 #include "runtime/VoronoiDisplayController.hpp"
 
-#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 class RuntimeVoronoiDisplayTransport {
 public:
@@ -12,29 +13,42 @@ public:
         controller = updatedController;
     }
 
-    void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
-        computeProductRegistry = updatedRegistry;
+    void setECSRegistry(ECSRegistry* updatedRegistry) {
+        ecsRegistry = updatedRegistry;
     }
 
-    void sync(const std::unordered_map<uint64_t, VoronoiPackage>& packagesBySocket) {
+    void setVisibleKeys(const std::unordered_set<uint64_t>* keys) {
+        visibleKeys = keys;
+    }
+
+    void sync(const ECSRegistry& registry) {
         if (!controller) {
             return;
         }
 
-        for (const auto& [socketKey, package] : packagesBySocket) {
+        auto view = registry.view<VoronoiPackage>();
+        for (auto entity : view) {
+            uint64_t socketKey = static_cast<uint64_t>(entity);
+            if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
+                continue;
+            }
+
+            const auto& package = registry.get<VoronoiPackage>(entity);
             applyPackage(socketKey, package);
         }
     }
 
     void finalizeSync() {
-        if (controller) {
-            controller->finalizeSync();
+        if (!controller) {
+            return;
         }
+
+        controller->finalizeSync();
     }
 
 private:
     void applyPackage(uint64_t socketKey, const VoronoiPackage& package) {
-        if (!controller || !computeProductRegistry || socketKey == 0) {
+        if (!controller || socketKey == 0) {
             return;
         }
 
@@ -43,10 +57,7 @@ private:
             return;
         }
 
-        ProductHandle computeHandle =
-            computeProductRegistry->getPublishedHandle(NodeProductType::Voronoi, socketKey);
-        const VoronoiProduct* computeProduct =
-            computeProductRegistry->resolveVoronoi(computeHandle);
+        const VoronoiProduct* computeProduct = tryGetProduct<VoronoiProduct>(*ecsRegistry, socketKey);
         if (!computeProduct || !computeProduct->isValid()) {
             controller->remove(socketKey);
             return;
@@ -69,11 +80,12 @@ private:
         if (package.display.showVoronoi) {
             config.surfaces = computeProduct->surfaces;
         }
-        config.contentHash = computeContentHash(config);
+        config.displayHash = buildDisplayHash(config, computeProduct->productHash);
 
         controller->apply(socketKey, config);
     }
 
     VoronoiDisplayController* controller = nullptr;
-    RuntimeProductRegistry* computeProductRegistry = nullptr;
+    ECSRegistry* ecsRegistry = nullptr;
+    const std::unordered_set<uint64_t>* visibleKeys = nullptr;
 };

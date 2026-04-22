@@ -1,37 +1,32 @@
 #include "VoronoiSystemComputeController.hpp"
 
+#include <iostream>
 #include "VoronoiSystem.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
-#include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 VoronoiSystemComputeController::VoronoiSystemComputeController(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
     ModelRegistry& resourceManager,
-    UniformBufferManager& uniformBufferManager,
     CommandPool& renderCommandPool,
     uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
       resourceManager(resourceManager),
-      uniformBufferManager(uniformBufferManager),
       renderCommandPool(renderCommandPool),
       maxFramesInFlight(maxFramesInFlight) {
 }
 
-std::unique_ptr<VoronoiSystem> VoronoiSystemComputeController::buildVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass) {
+std::unique_ptr<VoronoiSystem> VoronoiSystemComputeController::buildVoronoiSystem() {
     auto system = std::make_unique<VoronoiSystem>(
         vulkanDevice,
         memoryAllocator,
         resourceManager,
-        uniformBufferManager,
         maxFramesInFlight,
-        renderCommandPool,
-        extent,
-        renderPass);
+        renderCommandPool);
     if (!system || !system->isInitialized()) {
         return nullptr;
     }
@@ -39,29 +34,22 @@ std::unique_ptr<VoronoiSystem> VoronoiSystemComputeController::buildVoronoiSyste
     return system;
 }
 
-void VoronoiSystemComputeController::createVoronoiSystem(VkExtent2D extent, VkRenderPass renderPass) {
-    currentExtent = extent;
-    currentRenderPass = renderPass;
-}
-
-void VoronoiSystemComputeController::updateRenderContext(VkExtent2D extent, VkRenderPass renderPass) {
-    currentExtent = extent;
-    currentRenderPass = renderPass;
-}
-
-void VoronoiSystemComputeController::updateRenderResources() {
-    (void)currentRenderPass;
-}
-
 void VoronoiSystemComputeController::configure(uint64_t socketKey, const Config& config) {
     if (socketKey == 0) {
         return;
     }
 
-    auto& system = voronoiSystems[socketKey];
-    if (!system && currentRenderPass != VK_NULL_HANDLE) {
-        system = buildVoronoiSystem(currentExtent, currentRenderPass);
+    auto& system = activeSystems[socketKey];
+    if (!system) {
+        system = buildVoronoiSystem();
     }
+
+    const auto configIt = configuredConfigs.find(socketKey);
+    if (configIt != configuredConfigs.end() && configIt->second.computeHash == config.computeHash) {
+        return;
+    }
+
+    configuredConfigs[socketKey] = config;
 
     if (system) {
         system->setReceiverPayloads(
@@ -98,52 +86,50 @@ void VoronoiSystemComputeController::disable(uint64_t socketKey) {
         return;
     }
 
-    auto it = voronoiSystems.find(socketKey);
-    if (it != voronoiSystems.end()) {
+    configuredConfigs.erase(socketKey);
+    auto it = activeSystems.find(socketKey);
+    if (it != activeSystems.end()) {
         if (it->second) {
             it->second->cleanupResources();
             it->second->cleanup();
         }
-        voronoiSystems.erase(it);
+        activeSystems.erase(it);
     }
 }
 
 void VoronoiSystemComputeController::disableAll() {
-    for (auto& [key, system] : voronoiSystems) {
+    configuredConfigs.clear();
+    for (auto& [key, system] : activeSystems) {
         (void)key;
         if (system) {
             system->cleanupResources();
             system->cleanup();
         }
     }
-    voronoiSystems.clear();
-}
-
-VoronoiSystem* VoronoiSystemComputeController::getVoronoiSystem(uint64_t socketKey) const {
-    const auto it = voronoiSystems.find(socketKey);
-    if (it != voronoiSystems.end()) {
-        return it->second.get();
-    }
-    return nullptr;
+    activeSystems.clear();
 }
 
 std::vector<VoronoiSystem*> VoronoiSystemComputeController::getActiveSystems() const {
-    std::vector<VoronoiSystem*> activeSystems;
-    activeSystems.reserve(voronoiSystems.size());
-    for (const auto& [key, system] : voronoiSystems) {
+    std::vector<VoronoiSystem*> systems;
+    systems.reserve(activeSystems.size());
+    for (const auto& [key, system] : activeSystems) {
         (void)key;
         if (system && system->isReady()) {
-            activeSystems.push_back(system.get());
+            systems.push_back(system.get());
         }
     }
-    return activeSystems;
+    return systems;
 }
 
 bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiProduct& outProduct) const {
     outProduct = {};
 
-    const auto it = voronoiSystems.find(socketKey);
-    if (it == voronoiSystems.end() || !it->second || !it->second->isReady()) {
+    if (configuredConfigs.find(socketKey) == configuredConfigs.end()) {
+        return false;
+    }
+
+    const auto it = activeSystems.find(socketKey);
+    if (it == activeSystems.end() || !it->second || !it->second->isReady()) {
         return false;
     }
 
@@ -214,7 +200,7 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
         outProduct.surfaces.push_back(std::move(surfaceProduct));
     }
 
-    outProduct.contentHash = computeContentHash(outProduct);
+    outProduct.productHash = buildProductHash(outProduct);
 
     return outProduct.isValid();
 }

@@ -15,7 +15,6 @@
 class VoronoiModelRuntime;
 class MemoryAllocator;
 class ModelRegistry;
-class UniformBufferManager;
 class VulkanDevice;
 class CommandPool;
 class VoronoiGeoCompute;
@@ -28,11 +27,8 @@ public:
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         ModelRegistry& resourceManager,
-        UniformBufferManager& uniformBufferManager,
         uint32_t maxFramesInFlight,
-        CommandPool& renderCommandPool,
-        VkExtent2D extent,
-        VkRenderPass renderPass);
+        CommandPool& renderCommandPool);
     ~VoronoiSystem();
 
     bool isInitialized() const { return initialized; }
@@ -93,7 +89,6 @@ private:
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ModelRegistry& resourceManager;
-    UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     VoronoiSystemRuntime runtime;
     VoronoiSurfaceRuntime surfaceRuntime;

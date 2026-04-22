@@ -6,6 +6,7 @@ class RenderRuntime;
 class FrameSync;
 class MemoryAllocator;
 class RenderSettingsManager;
+class HeatSystemComputeController;
 
 struct RuntimeRenderFrameResult {
     bool submitted = false;
@@ -14,7 +15,7 @@ struct RuntimeRenderFrameResult {
 
 class RuntimeRenderController {
 public:
-    RuntimeRenderController(RenderRuntime& renderRuntime, FrameSync& frameSync, MemoryAllocator* memoryAllocator, RenderSettingsManager& settingsManager);
+    RuntimeRenderController(RenderRuntime& renderRuntime, FrameSync& frameSync, MemoryAllocator* memoryAllocator, RenderSettingsManager& settingsManager, HeatSystemComputeController* heatSystemComputeController);
 
     RuntimeRenderFrameResult renderFrame(bool allowHeatSolve, uint32_t& frameCounter);
 
@@ -23,4 +24,5 @@ private:
     FrameSync& frameSync;
     MemoryAllocator* memoryAllocator = nullptr;
     RenderSettingsManager& settingsManager;
+    HeatSystemComputeController* heatSystemComputeController = nullptr;
 };

@@ -1,66 +1,12 @@
-﻿#include "NodeGraphValidator.hpp"
+#include "NodeGraphValidator.hpp"
+
+#include "NodeGraphTypes.hpp"
 
 #include <algorithm>
 #include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-
-namespace {
-
-const char* nodePayloadTypeName(NodePayloadType payloadType) {
-    switch (payloadType) {
-    case NodePayloadType::Geometry:
-        return "geometry";
-    case NodePayloadType::Remesh:
-        return "remesh";
-    case NodePayloadType::HeatReceiver:
-        return "heat_receiver";
-    case NodePayloadType::HeatSource:
-        return "heat_source";
-    case NodePayloadType::Contact:
-        return "contact";
-    case NodePayloadType::Heat:
-        return "heat";
-    case NodePayloadType::Voronoi:
-        return "voronoi";
-    case NodePayloadType::None:
-    default:
-        return "none";
-    }
-}
-
-const char* domainName(GeometryAttributeDomain domain) {
-    switch (domain) {
-    case GeometryAttributeDomain::Point:
-        return "point";
-    case GeometryAttributeDomain::Primitive:
-        return "primitive";
-    case GeometryAttributeDomain::Vertex:
-        return "vertex";
-    case GeometryAttributeDomain::Detail:
-        return "detail";
-    default:
-        return "unknown";
-    }
-}
-
-bool guaranteesAttribute(
-    const NodeGraphSocket& outputSocket,
-    const NodeGraphAttributeContract& requiredAttribute) {
-    const auto it = std::find_if(
-        outputSocket.contract.guaranteedAttributes.begin(),
-        outputSocket.contract.guaranteedAttributes.end(),
-        [&](const NodeGraphAttributeContract& guaranteedAttribute) {
-            return guaranteedAttribute.name == requiredAttribute.name &&
-                guaranteedAttribute.domain == requiredAttribute.domain &&
-                guaranteedAttribute.dataType == requiredAttribute.dataType &&
-                guaranteedAttribute.tupleSize >= requiredAttribute.tupleSize;
-        });
-    return it != outputSocket.contract.guaranteedAttributes.end();
-}
-
-} // namespace
 
 bool NodeGraphValidator::canCreateConnection(
     const NodeGraphDocument& document,
@@ -106,17 +52,6 @@ bool NodeGraphValidator::canCreateConnection(
         errorMessage = "Data contract mismatch: output '" + srcSocket->name + "' provides '" +
             std::string(nodePayloadTypeName(producedPayloadType)) + "' but input '" + dstSocket->name +
             "' does not accept it.";
-        return false;
-    }
-
-    for (const NodeGraphAttributeContract& requiredAttribute : dstSocket->contract.requiredAttributes) {
-        if (guaranteesAttribute(*srcSocket, requiredAttribute)) {
-            continue;
-        }
-
-        errorMessage = "Data contract mismatch: input '" + dstSocket->name + "' requires attribute '" +
-            requiredAttribute.name + "' on " + domainName(requiredAttribute.domain) +
-            " domain, but output '" + srcSocket->name + "' does not guarantee it.";
         return false;
     }
 

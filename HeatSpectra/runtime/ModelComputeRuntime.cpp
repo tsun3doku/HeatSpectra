@@ -123,8 +123,17 @@ bool ModelComputeRuntime::exportProduct(uint32_t runtimeModelId, ModelProduct& o
     }
 
     outProduct.runtimeModelId = runtimeModelId;
-    outProduct.contentHash = computeContentHash(outProduct);
+    outProduct.productHash = buildProductHash(outProduct);
     return outProduct.isValid();
+}
+
+bool ModelComputeRuntime::setModelMatrix(uint32_t runtimeModelId, const glm::mat4& matrix) {
+    std::lock_guard<std::mutex> lock(executionMutex);
+    if (runtimeModelId == 0) {
+        return false;
+    }
+
+    return resourceManager.setModelMatrix(runtimeModelId, matrix);
 }
 
 uint32_t ModelComputeRuntime::materializeSocketImmediate(uint64_t socketKey, const std::string& modelPath) {

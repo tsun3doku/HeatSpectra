@@ -2,10 +2,9 @@
 
 #include "heat/VoronoiSystemComputeController.hpp"
 #include "nodegraph/NodeModelTransform.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
+#include "runtime/RuntimeECS.hpp"
 #include "runtime/RuntimePackages.hpp"
 
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -15,11 +14,11 @@ public:
         controller = updatedController;
     }
 
-    void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
-        productRegistry = updatedRegistry;
+    void setECSRegistry(ECSRegistry* updatedRegistry) {
+        ecsRegistry = updatedRegistry;
     }
 
-    void sync(const std::unordered_map<uint64_t, VoronoiPackage>& packagesBySocket);
+    void sync(const ECSRegistry& registry);
     void finalizeSync();
 
 private:
@@ -27,8 +26,7 @@ private:
     void publishProduct(uint64_t socketKey);
 
     VoronoiSystemComputeController* controller = nullptr;
-    RuntimeProductRegistry* productRegistry = nullptr;
+    ECSRegistry* ecsRegistry = nullptr;
     std::unordered_set<uint64_t> activeSocketKeys;
-    std::unordered_set<uint64_t> publishedSocketKeys;
-    std::vector<uint64_t> staleSocketKeys;
+    std::unordered_map<uint64_t, uint64_t> appliedPackageHash;
 };

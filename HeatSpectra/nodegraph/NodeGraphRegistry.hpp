@@ -93,22 +93,14 @@ public:
     static const NodeTypeDefinition* findNodeById(const NodeTypeId& typeId);
 
 private:
-    static NodeGraphAttributeContract makeAttributeContract(
-        const char* name,
-        GeometryAttributeDomain domain,
-        GeometryAttributeDataType dataType = GeometryAttributeDataType::Float,
-        uint32_t tupleSize = 1);
-
     static NodeSocketSignature makeInputSocket(
         const char* name,
-        NodeGraphValueType valueType,
-        std::vector<NodeGraphAttributeContract> requiredAttributes = {});
+        NodeGraphValueType valueType);
 
     static NodeSocketSignature makeOutputSocket(
         const char* name,
         NodeGraphValueType valueType,
-        NodePayloadType producedPayloadType,
-        std::vector<NodeGraphAttributeContract> guaranteedAttributes = {});
+        NodePayloadType producedPayloadType);
 
     static NodeTypeDefinition buildModelNode();
     static NodeTypeDefinition buildTransformNode();

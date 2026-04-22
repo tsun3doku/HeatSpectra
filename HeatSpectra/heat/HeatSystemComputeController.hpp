@@ -7,8 +7,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "heat/HeatSystem.hpp"
 #include "HeatSystemPresets.hpp"
 #include "HeatSystemResources.hpp"
+#include "framegraph/ComputePass.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "runtime/RuntimeThermalTypes.hpp"
@@ -16,10 +18,7 @@
 class VulkanDevice;
 class MemoryAllocator;
 class ModelRegistry;
-class UniformBufferManager;
 class CommandPool;
-class RenderRuntime;
-class HeatSystem;
 
 class HeatSystemComputeController {
 public:
@@ -63,14 +62,14 @@ public:
         std::unordered_map<uint32_t, VkDeviceSize> receiverVoronoiSurfaceMappingBufferOffsetByModelId;
         std::unordered_map<uint32_t, std::vector<uint32_t>> receiverVoronoiSurfaceCellIndicesByModelId;
         std::unordered_map<uint32_t, std::vector<uint32_t>> receiverVoronoiSeedFlagsByModelId;
-        std::vector<ContactProduct> contactCouplings;
+        std::vector<ContactCoupling> contactCouplings;
+        uint64_t computeHash = 0;
     };
 
     HeatSystemComputeController(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         ModelRegistry& resourceManager,
-        UniformBufferManager& uniformBufferManager,
         CommandPool& renderCommandPool,
         uint32_t maxFramesInFlight);
 
@@ -82,13 +81,9 @@ public:
     void configure(uint64_t socketKey, const Config& config);
     void disable(uint64_t socketKey);
     void disableAll();
-    HeatSystem* getHeatSystem(uint64_t socketKey) const;
-    std::vector<HeatSystem*> getActiveSystems() const;
+    std::vector<ComputePass*> getActiveSystems() const;
     bool exportProduct(uint64_t socketKey, HeatProduct& outProduct) const;
 
-    void createHeatSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void updateRenderContext(VkExtent2D extent, VkRenderPass renderPass);
-    void updateRenderResources();
     void destroyHeatSystem(uint64_t socketKey);
 
 private:
@@ -97,19 +92,115 @@ private:
         std::unique_ptr<HeatSystem> system;
     };
 
-    std::unique_ptr<HeatSystem> buildHeatSystem(HeatSystemResources& heatSystemResources, VkExtent2D extent, VkRenderPass renderPass);
+    std::unique_ptr<HeatSystem> buildHeatSystem(HeatSystemResources& heatSystemResources);
     void configureHeatSystem(HeatSystem& system, const Config& config);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ModelRegistry& resourceManager;
-    UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
 
     std::unordered_map<uint64_t, SystemInstance> activeSystems;
     std::unordered_map<uint64_t, Config> configuredConfigs;
     const uint32_t maxFramesInFlight;
-    VkExtent2D currentExtent = {0, 0};
-    VkRenderPass currentRenderPass = VK_NULL_HANDLE;
 };
 
+inline uint64_t buildComputeHash(const HeatSystemComputeController::Config& config) {
+    uint64_t hash = 1469598103934665603ull;
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.sourceIntrinsicMeshes.size()));
+    for (const SupportingHalfedge::IntrinsicMesh& mesh : config.sourceIntrinsicMeshes) {
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.vertices);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.indices);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.faceIds);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.triangles);
+    }
+    hash = RuntimeProductHash::mixPodVector(hash, config.sourceRuntimeModelIds);
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverIntrinsicMeshes.size()));
+    for (const SupportingHalfedge::IntrinsicMesh& mesh : config.receiverIntrinsicMeshes) {
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.vertices);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.indices);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.faceIds);
+        hash = RuntimeProductHash::mixPodVector(hash, mesh.triangles);
+    }
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverRuntimeModelIds);
+    hash = RuntimeProductHash::mixPodVector(hash, config.supportingHalfedgeViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.supportingAngleViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.halfedgeViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.edgeViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.triangleViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.lengthViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.inputHalfedgeViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.inputEdgeViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.inputTriangleViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.inputLengthViews);
+    hash = RuntimeProductHash::mixPodVector(hash, config.runtimeThermalMaterials);
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.sourceTemperatureByRuntimeId.size()));
+    for (const auto& [id, temp] : config.sourceTemperatureByRuntimeId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, temp);
+    }
+    hash = RuntimeProductHash::mixPod(hash, config.voronoiNodeCount);
+    if (config.voronoiNodeCount != 0 && config.voronoiNodes != nullptr) {
+        hash = RuntimeProductHash::mixBytes(
+            hash,
+            config.voronoiNodes,
+            sizeof(VoronoiNode) * config.voronoiNodeCount);
+    }
+    hash = RuntimeProductHash::mixPod(hash, config.voronoiNodeBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.voronoiNodeBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.voronoiNeighborBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.voronoiNeighborBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.neighborIndicesBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.neighborIndicesBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.interfaceAreasBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.interfaceAreasBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.interfaceNeighborIdsBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.interfaceNeighborIdsBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.seedFlagsBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.seedFlagsBufferOffset);
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiNodeOffsetByModelId.size()));
+    for (const auto& [id, offset] : config.receiverVoronoiNodeOffsetByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, offset);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiNodeCountByModelId.size()));
+    for (const auto& [id, count] : config.receiverVoronoiNodeCountByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, count);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceMappingBufferByModelId.size()));
+    for (const auto& [id, buffer] : config.receiverVoronoiSurfaceMappingBufferByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, buffer);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceMappingBufferOffsetByModelId.size()));
+    for (const auto& [id, offset] : config.receiverVoronoiSurfaceMappingBufferOffsetByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, offset);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceCellIndicesByModelId.size()));
+    for (const auto& [id, indices] : config.receiverVoronoiSurfaceCellIndicesByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPodVector(hash, indices);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSeedFlagsByModelId.size()));
+    for (const auto& [id, flags] : config.receiverVoronoiSeedFlagsByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPodVector(hash, flags);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.contactCouplings.size()));
+    for (const ContactCoupling& coupling : config.contactCouplings) {
+        hash = RuntimeProductHash::mixPod(hash, static_cast<uint32_t>(coupling.couplingType));
+        hash = RuntimeProductHash::mixPod(hash, coupling.emitterRuntimeModelId);
+        hash = RuntimeProductHash::mixPod(hash, coupling.receiverRuntimeModelId);
+        hash = RuntimeProductHash::mixPodVector(hash, coupling.receiverTriangleIndices);
+        hash = RuntimeProductHash::mixPod(hash, coupling.contactPairCount);
+        if (coupling.contactPairCount != 0 && coupling.mappedContactPairs != nullptr) {
+            hash = RuntimeProductHash::mixBytes(
+                hash,
+                coupling.mappedContactPairs,
+                sizeof(ContactPair) * coupling.contactPairCount);
+        }
+    }
+    return hash;
+}

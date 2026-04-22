@@ -18,7 +18,7 @@ void HeatSystemSimStage::recordComputeCommands(
     uint32_t currentFrame,
     const HeatSystemSimRuntime& simRuntime,
     const HeatSourcePushConstant& basePushConstant,
-    const std::vector<HeatContactRuntime::ContactCoupling>& contactCouplings,
+    const std::vector<HeatContactRuntime::CouplingState>& contactCouplings,
     const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
     const HeatSystemContactStage& contactStage,
@@ -40,7 +40,7 @@ void HeatSystemSimStage::recordComputeCommands(
     const uint32_t workGroupCount = (nodeCount + workGroupSize - 1) / workGroupSize;
     for (uint32_t substepIndex = 0; substepIndex < numSubsteps; ++substepIndex) {
         const bool evenSubstep = ((substepIndex % 2) == 0);
-        for (const HeatContactRuntime::ContactCoupling& coupling : contactCouplings) {
+        for (const HeatContactRuntime::CouplingState& coupling : contactCouplings) {
             contactStage.dispatchCoupling(commandBuffer, coupling, sourceBindings, evenSubstep);
         }
         if (!contactCouplings.empty()) {

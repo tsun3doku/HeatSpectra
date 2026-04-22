@@ -3,7 +3,6 @@
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "heat/HeatSystemPresets.hpp"
 
-#include <cstddef>
 #include <vector>
 
 //                                                      [ Invariant:
@@ -16,12 +15,18 @@
 struct HeatSourceData {
     uint64_t payloadHash = 0;
     NodeDataHandle meshHandle{};
+    uint64_t meshPayloadHash = 0;
     float temperature = 100.0f;
+
+    void sealPayload();
 };
 
 struct HeatReceiverData {
     uint64_t payloadHash = 0;
     NodeDataHandle meshHandle{};
+    uint64_t meshPayloadHash = 0;
+
+    void sealPayload();
 };
 
 struct HeatMaterialBinding {
@@ -31,6 +36,8 @@ struct HeatMaterialBinding {
 
 struct HeatData {
     uint64_t payloadHash = 0;
+    uint64_t voronoiPayloadHash = 0;
+    uint64_t contactPayloadHash = 0;
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<HeatMaterialBinding> materialBindings;
@@ -38,7 +45,5 @@ struct HeatData {
     bool paused = false;
     bool resetRequested = false;
 
-    std::size_t size() const {
-        return receiverMeshHandles.size();
-    }
+    void sealPayload();
 };

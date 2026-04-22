@@ -1,6 +1,6 @@
 #include "HeatContactRuntime.hpp"
 
-#include "ContactSampling.hpp"
+#include "contact/ContactSampling.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
@@ -42,9 +42,9 @@ bool recreateBuffer(
 
 }
 
-bool HeatContactRuntime::areContactProductsEqual(
-    const std::vector<ContactProduct>& lhs,
-    const std::vector<ContactProduct>& rhs) {
+bool HeatContactRuntime::areContactCouplingsEqual(
+    const std::vector<ContactCoupling>& lhs,
+    const std::vector<ContactCoupling>& rhs) {
     return lhs == rhs;
 }
 
@@ -80,30 +80,30 @@ uint32_t HeatContactRuntime::findReceiverIndexByRuntimeModelId(
 
 void HeatContactRuntime::setContactCouplings(
     const std::vector<uint32_t>& receiverRuntimeModelIds,
-    const std::vector<ContactProduct>& contactProducts) {
+    const std::vector<ContactCoupling>& contactInputs) {
     if (activeReceiverRuntimeModelIds == receiverRuntimeModelIds &&
-        areContactProductsEqual(activeContactProducts, contactProducts)) {
+        areContactCouplingsEqual(activeContactCouplings, contactInputs)) {
         std::cerr << "[HeatContactRuntime] setContactCouplings unchanged"
                   << " receivers=" << receiverRuntimeModelIds.size()
-                  << " products=" << contactProducts.size()
+                  << " products=" << contactInputs.size()
                   << std::endl;
         return;
     }
 
     activeReceiverRuntimeModelIds = receiverRuntimeModelIds;
-    activeContactProducts = contactProducts;
+    activeContactCouplings = contactInputs;
     couplingsDirty = true;
 
     std::cerr << "[HeatContactRuntime] setContactCouplings updated"
               << " receivers=" << activeReceiverRuntimeModelIds.size()
-              << " products=" << activeContactProducts.size()
+              << " products=" << activeContactCouplings.size()
               << std::endl;
-    for (const ContactProduct& product : activeContactProducts) {
+    for (const ContactCoupling& coupling : activeContactCouplings) {
         std::cerr << "[HeatContactRuntime]   product"
-                  << " emitterRuntimeModelId=" << product.emitterRuntimeModelId
-                  << " receiverRuntimeModelId=" << product.receiverRuntimeModelId
-                  << " pairCount=" << product.contactPairCount
-                  << " receiverTriangles=" << product.receiverTriangleIndices.size()
+                  << " emitterRuntimeModelId=" << coupling.emitterRuntimeModelId
+                  << " receiverRuntimeModelId=" << coupling.receiverRuntimeModelId
+                  << " pairCount=" << coupling.contactPairCount
+                  << " receiverTriangles=" << coupling.receiverTriangleIndices.size()
                   << std::endl;
     }
 }
@@ -125,85 +125,85 @@ bool HeatContactRuntime::ensureCouplings(
     std::cerr << "[HeatContactRuntime] ensureCouplings rebuilding"
               << " receiverRuntimeModelIds=" << activeReceiverRuntimeModelIds.size()
               << " sourceBindings=" << sourceBindings.size()
-              << " contactProducts=" << activeContactProducts.size()
+              << " contactProducts=" << activeContactCouplings.size()
               << std::endl;
 
-    for (const ContactProduct& productCoupling : activeContactProducts) {
+    for (const ContactCoupling& contactCoupling : activeContactCouplings) {
         const uint32_t receiverIndex = findReceiverIndexByRuntimeModelId(
             activeReceiverRuntimeModelIds,
-            productCoupling.receiverRuntimeModelId);
+            contactCoupling.receiverRuntimeModelId);
         if (receiverIndex == std::numeric_limits<uint32_t>::max()) {
             std::cerr << "[HeatContactRuntime]   skipping product: receiver model not found"
-                      << " receiverRuntimeModelId=" << productCoupling.receiverRuntimeModelId
+                      << " receiverRuntimeModelId=" << contactCoupling.receiverRuntimeModelId
                       << std::endl;
             continue;
         }
-        const auto receiverCellsIt = receiverSurfaceCellIndicesByModelId.find(productCoupling.receiverRuntimeModelId);
+        const auto receiverCellsIt = receiverSurfaceCellIndicesByModelId.find(contactCoupling.receiverRuntimeModelId);
         if (receiverCellsIt == receiverSurfaceCellIndicesByModelId.end()) {
             std::cerr << "[HeatContactRuntime]   skipping product: receiver surface cells missing"
-                      << " receiverRuntimeModelId=" << productCoupling.receiverRuntimeModelId
+                      << " receiverRuntimeModelId=" << contactCoupling.receiverRuntimeModelId
                       << std::endl;
             continue;
         }
 
-        ContactCoupling coupling{};
-        coupling.couplingType = productCoupling.couplingType;
-        coupling.emitterModelId = productCoupling.emitterRuntimeModelId;
-        coupling.receiverModelId = productCoupling.receiverRuntimeModelId;
-        coupling.receiverIndex = receiverIndex;
-        coupling.params = HeatContactParams{};
+        CouplingState builtCoupling{};
+        builtCoupling.couplingType = contactCoupling.couplingType;
+        builtCoupling.emitterModelId = contactCoupling.emitterRuntimeModelId;
+        builtCoupling.receiverModelId = contactCoupling.receiverRuntimeModelId;
+        builtCoupling.receiverIndex = receiverIndex;
+        builtCoupling.params = HeatContactParams{};
 
-        if (productCoupling.couplingType == ContactCouplingType::SourceToReceiver) {
+        if (contactCoupling.couplingType == ContactCouplingType::SourceToReceiver) {
             const HeatSystemRuntime::SourceBinding* sourceBinding =
-                findSourceBindingByRuntimeModelId(sourceBindings, productCoupling.emitterRuntimeModelId);
+                findSourceBindingByRuntimeModelId(sourceBindings, contactCoupling.emitterRuntimeModelId);
             if (!sourceBinding) {
                 std::cerr << "[HeatContactRuntime]   skipping product: source binding missing"
-                          << " emitterRuntimeModelId=" << productCoupling.emitterRuntimeModelId
+                          << " emitterRuntimeModelId=" << contactCoupling.emitterRuntimeModelId
                           << std::endl;
                 continue;
             }
         } else {
             const uint32_t emitterReceiverIndex =
-                findReceiverIndexByRuntimeModelId(activeReceiverRuntimeModelIds, productCoupling.emitterRuntimeModelId);
+                findReceiverIndexByRuntimeModelId(activeReceiverRuntimeModelIds, contactCoupling.emitterRuntimeModelId);
             if (emitterReceiverIndex == std::numeric_limits<uint32_t>::max() ||
                 emitterReceiverIndex == receiverIndex) {
                 std::cerr << "[HeatContactRuntime]   skipping receiver-to-receiver product"
-                          << " emitterRuntimeModelId=" << productCoupling.emitterRuntimeModelId
-                          << " receiverRuntimeModelId=" << productCoupling.receiverRuntimeModelId
+                          << " emitterRuntimeModelId=" << contactCoupling.emitterRuntimeModelId
+                          << " receiverRuntimeModelId=" << contactCoupling.receiverRuntimeModelId
                           << " emitterReceiverIndex=" << emitterReceiverIndex
                           << " receiverIndex=" << receiverIndex
                           << std::endl;
                 continue;
             }
-            coupling.emitterReceiverIndex = emitterReceiverIndex;
+            builtCoupling.emitterReceiverIndex = emitterReceiverIndex;
         }
 
         if (!rebuildCouplingBuffers(
                 vulkanDevice,
                 memoryAllocator,
-                coupling,
-                productCoupling,
+                builtCoupling,
+                contactCoupling,
                 receiverCellsIt->second,
                 receiverSurfaceMappingBufferByModelId,
                 receiverSurfaceMappingBufferOffsetByModelId)) {
             std::cerr << "[HeatContactRuntime]   rebuildCouplingBuffers failed"
-                      << " emitterRuntimeModelId=" << productCoupling.emitterRuntimeModelId
-                      << " receiverRuntimeModelId=" << productCoupling.receiverRuntimeModelId
+                      << " emitterRuntimeModelId=" << contactCoupling.emitterRuntimeModelId
+                      << " receiverRuntimeModelId=" << contactCoupling.receiverRuntimeModelId
                       << std::endl;
             clearCouplings(memoryAllocator);
             return false;
         }
 
         std::cerr << "[HeatContactRuntime]   built coupling"
-                  << " type=" << static_cast<uint32_t>(coupling.couplingType)
-                  << " emitterRuntimeModelId=" << coupling.emitterModelId
-                  << " receiverRuntimeModelId=" << coupling.receiverModelId
-                  << " receiverIndex=" << coupling.receiverIndex
-                  << " sampleCount=" << coupling.contactSampleCount
-                  << " cellMapCount=" << coupling.contactCellMapCount
-                  << " cellRangeCount=" << coupling.contactCellRangeCount
+                  << " type=" << static_cast<uint32_t>(builtCoupling.couplingType)
+                  << " emitterRuntimeModelId=" << builtCoupling.emitterModelId
+                  << " receiverRuntimeModelId=" << builtCoupling.receiverModelId
+                  << " receiverIndex=" << builtCoupling.receiverIndex
+                  << " sampleCount=" << builtCoupling.contactSampleCount
+                  << " cellMapCount=" << builtCoupling.contactCellMapCount
+                  << " cellRangeCount=" << builtCoupling.contactCellRangeCount
                   << std::endl;
-        contactCouplings.push_back(std::move(coupling));
+        contactCouplings.push_back(std::move(builtCoupling));
     }
 
     std::cerr << "[HeatContactRuntime] ensureCouplings complete"
@@ -216,24 +216,24 @@ bool HeatContactRuntime::ensureCouplings(
 bool HeatContactRuntime::rebuildCouplingBuffers(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ContactCoupling& coupling,
-    const ContactProduct& productCoupling,
+    CouplingState& coupling,
+    const ContactCoupling& contactCoupling,
     const std::vector<uint32_t>& receiverCellIndices,
     const std::unordered_map<uint32_t, VkBuffer>& receiverSurfaceMappingBufferByModelId,
     const std::unordered_map<uint32_t, VkDeviceSize>& receiverSurfaceMappingBufferOffsetByModelId) const {
-    if (productCoupling.mappedContactPairs == nullptr || productCoupling.contactPairCount == 0) {
+    if (contactCoupling.mappedContactPairs == nullptr || contactCoupling.contactPairCount == 0) {
         std::cerr << "[HeatContactRuntime]   rebuildCouplingBuffers abort: missing mapped pairs"
-                  << " pairCount=" << productCoupling.contactPairCount
+                  << " pairCount=" << contactCoupling.contactPairCount
                   << std::endl;
         return false;
     }
 
-    const auto& triangleIndices = productCoupling.receiverTriangleIndices;
+    const auto& triangleIndices = contactCoupling.receiverTriangleIndices;
     const std::size_t triangleCount = triangleIndices.size() / 3;
-    const std::size_t contactPairCount = std::min<std::size_t>(productCoupling.contactPairCount, triangleCount);
+    const std::size_t contactPairCount = std::min<std::size_t>(contactCoupling.contactPairCount, triangleCount);
     if (contactPairCount == 0 || receiverCellIndices.empty()) {
         std::cerr << "[HeatContactRuntime]   rebuildCouplingBuffers abort: no usable contact triangles"
-                  << " pairCount=" << productCoupling.contactPairCount
+                  << " pairCount=" << contactCoupling.contactPairCount
                   << " receiverTriangleCount=" << triangleCount
                   << " receiverCellCount=" << receiverCellIndices.size()
                   << std::endl;
@@ -247,7 +247,7 @@ bool HeatContactRuntime::rebuildCouplingBuffers(
     cellWeights.reserve(contactPairCount * Quadrature::count * 3);
 
     for (std::size_t triangleIndex = 0; triangleIndex < contactPairCount; ++triangleIndex) {
-        const ContactPair& contactPair = productCoupling.mappedContactPairs[triangleIndex];
+        const ContactPair& contactPair = contactCoupling.mappedContactPairs[triangleIndex];
         if (contactPair.contactArea <= 0.0f) {
             continue;
         }
@@ -360,13 +360,13 @@ bool HeatContactRuntime::rebuildCouplingBuffers(
     coupling.contactCellMapCount = static_cast<uint32_t>(contactCellMap.size());
     coupling.contactCellRangeCount = static_cast<uint32_t>(contactCellRanges.size());
 
-    if (productCoupling.couplingType == ContactCouplingType::ReceiverToReceiver) {
-        const auto emitterMappingIt = receiverSurfaceMappingBufferByModelId.find(productCoupling.emitterRuntimeModelId);
-        const auto emitterOffsetIt = receiverSurfaceMappingBufferOffsetByModelId.find(productCoupling.emitterRuntimeModelId);
+    if (contactCoupling.couplingType == ContactCouplingType::ReceiverToReceiver) {
+        const auto emitterMappingIt = receiverSurfaceMappingBufferByModelId.find(contactCoupling.emitterRuntimeModelId);
+        const auto emitterOffsetIt = receiverSurfaceMappingBufferOffsetByModelId.find(contactCoupling.emitterRuntimeModelId);
         if (emitterMappingIt == receiverSurfaceMappingBufferByModelId.end() ||
             emitterOffsetIt == receiverSurfaceMappingBufferOffsetByModelId.end()) {
             std::cerr << "[HeatContactRuntime]   rebuildCouplingBuffers abort: emitter mapping missing"
-                      << " emitterRuntimeModelId=" << productCoupling.emitterRuntimeModelId
+                      << " emitterRuntimeModelId=" << contactCoupling.emitterRuntimeModelId
                       << std::endl;
             return false;
         }
@@ -384,7 +384,7 @@ void HeatContactRuntime::clearCouplings(MemoryAllocator& memoryAllocator) {
                   << " count=" << contactCouplings.size()
                   << std::endl;
     }
-    for (ContactCoupling& coupling : contactCouplings) {
+    for (CouplingState& coupling : contactCouplings) {
         coupling.contactDescriptorsReady = false;
         coupling.contactComputeSetA = VK_NULL_HANDLE;
         coupling.contactComputeSetB = VK_NULL_HANDLE;

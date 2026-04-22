@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "contact/ContactSystemComputeController.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
+#include "runtime/RuntimeECS.hpp"
 #include "runtime/RuntimePackages.hpp"
 
 class RuntimeContactComputeTransport {
@@ -13,58 +13,55 @@ public:
         controller = updatedController;
     }
 
-    void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
-        productRegistry = updatedRegistry;
+    void setECSRegistry(ECSRegistry* updatedRegistry) {
+        ecsRegistry = updatedRegistry;
     }
 
-    void sync(const std::unordered_map<uint64_t, ContactPackage>& packagesBySocket) {
+    void sync(const ECSRegistry& registry) {
         if (!controller) {
             return;
         }
 
-        staleSocketKeys.clear();
         std::unordered_set<uint64_t> nextSocketKeys;
 
-        for (const auto& [socketKey, package] : packagesBySocket) {
+        auto view = registry.view<ContactPackage>();
+        for (auto entity : view) {
+            uint64_t socketKey = static_cast<uint64_t>(entity);
+            const auto& package = registry.get<ContactPackage>(entity);
             if (!package.authored.active || !package.authored.pair.hasValidContact) {
                 continue;
             }
 
-            ContactSystemComputeController::Config config{};
-            bool isPackageReady = true;
-            const RemeshProduct* emitterRemeshProduct =
-                (productRegistry && package.emitterRemeshProduct.isValid())
-                ? productRegistry->resolveRemesh(package.emitterRemeshProduct)
-                : nullptr;
-            const RemeshProduct* receiverRemeshProduct =
-                (productRegistry && package.receiverRemeshProduct.isValid())
-                ? productRegistry->resolveRemesh(package.receiverRemeshProduct)
-                : nullptr;
-            if (!emitterRemeshProduct || !receiverRemeshProduct) {
-                isPackageReady = false;
-            }
-
-            const bool hasEmitterModelProduct =
-                productRegistry &&
-                package.emitterModelProduct.isValid() &&
-                productRegistry->resolveModel(package.emitterModelProduct);
-            const bool hasReceiverModelProduct =
-                productRegistry &&
-                package.receiverModelProduct.isValid() &&
-                productRegistry->resolveModel(package.receiverModelProduct);
-            if (!hasEmitterModelProduct || !hasReceiverModelProduct) {
-                isPackageReady = false;
-            }
-
-            if (!isPackageReady) {
-                const bool wasApplied = publishedSocketKeys.find(socketKey) != publishedSocketKeys.end();
-                if (wasApplied) {
-                    nextSocketKeys.insert(socketKey);
-                }
+            auto hashIt = appliedPackageHash.find(socketKey);
+            if (hashIt != appliedPackageHash.end() && hashIt->second == package.packageHash) {
+                nextSocketKeys.insert(socketKey);
                 continue;
             }
 
-            config.couplingType = package.authored.pair.kind;
+            ContactSystemComputeController::Config config{};
+            const RemeshProduct* emitterRemeshProduct =
+                package.emitterRemeshProduct.isValid()
+                ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.emitterRemeshProduct.outputSocketKey)
+                : nullptr;
+            const RemeshProduct* receiverRemeshProduct =
+                package.receiverRemeshProduct.isValid()
+                ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.receiverRemeshProduct.outputSocketKey)
+                : nullptr;
+            if (!emitterRemeshProduct || !receiverRemeshProduct) {
+                continue;
+            }
+
+            const bool hasEmitterModelProduct =
+                package.emitterModelProduct.isValid() &&
+                tryGetProduct<ModelProduct>(*ecsRegistry, package.emitterModelProduct.outputSocketKey);
+            const bool hasReceiverModelProduct =
+                package.receiverModelProduct.isValid() &&
+                tryGetProduct<ModelProduct>(*ecsRegistry, package.receiverModelProduct.outputSocketKey);
+            if (!hasEmitterModelProduct || !hasReceiverModelProduct) {
+                continue;
+            }
+
+            config.couplingType = package.authored.pair.type;
             config.minNormalDot = package.authored.pair.minNormalDot;
             config.contactRadius = package.authored.pair.contactRadius;
             config.emitterModelId = emitterRemeshProduct->runtimeModelId;
@@ -78,32 +75,22 @@ public:
             config.receiverTriangleIndices = receiverRemeshProduct->intrinsicMesh.indices;
 
             if (!config.isValid()) {
-                const bool wasApplied = publishedSocketKeys.find(socketKey) != publishedSocketKeys.end();
-                if (wasApplied) {
-                    nextSocketKeys.insert(socketKey);
-                }
                 continue;
             }
 
+            config.computeHash = buildComputeHash(config);
             controller->configure(socketKey, config);
             nextSocketKeys.insert(socketKey);
         }
 
-        auto it = publishedSocketKeys.begin();
-        while (it != publishedSocketKeys.end()) {
-            if (nextSocketKeys.find(*it) == nextSocketKeys.end()) {
-                controller->disable(*it);
-                staleSocketKeys.push_back(*it);
-                it = publishedSocketKeys.erase(it);
-            } else {
-                ++it;
+        for (uint64_t socketKey : activeSocketKeys) {
+            if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
+                controller->disable(socketKey);
+                appliedPackageHash.erase(socketKey);
             }
         }
 
-        activeSocketKeys.clear();
-        for (uint64_t nextSocketKey : nextSocketKeys) {
-            activeSocketKeys.insert(nextSocketKey);
-        }
+        activeSocketKeys = std::move(nextSocketKeys);
     }
 
     void finalizeSync() {
@@ -111,42 +98,58 @@ public:
             return;
         }
 
-        for (uint64_t socketKey : staleSocketKeys) {
+        std::vector<uint64_t> removals;
+        auto productView = ecsRegistry->view<ContactProduct>();
+        for (auto entity : productView) {
+            const uint64_t socketKey = static_cast<uint64_t>(entity);
+            if (activeSocketKeys.find(socketKey) == activeSocketKeys.end()) {
+                removals.push_back(socketKey);
+            }
+        }
+        for (uint64_t socketKey : removals) {
             removePublishedProduct(socketKey);
         }
-        staleSocketKeys.clear();
-
         for (uint64_t socketKey : activeSocketKeys) {
-            publishProduct(socketKey);
+            auto entity = static_cast<ECSEntity>(socketKey);
+            const auto& package = ecsRegistry->get<ContactPackage>(entity);
+            auto hashIt = appliedPackageHash.find(socketKey);
+            const ContactProduct* product = tryGetProduct<ContactProduct>(*ecsRegistry, socketKey);
+            if (!product || hashIt == appliedPackageHash.end() || hashIt->second != package.packageHash) {
+                publishProduct(socketKey);
+            }
         }
-
-        publishedSocketKeys = activeSocketKeys;
     }
 
 private:
     void removePublishedProduct(uint64_t socketKey) {
-        if (productRegistry && socketKey != 0) {
-            productRegistry->removeContact(socketKey);
+        if (socketKey == 0) {
+            return;
         }
+
+        auto entity = static_cast<ECSEntity>(socketKey);
+        ecsRegistry->remove<ContactProduct>(entity);
     }
 
     void publishProduct(uint64_t socketKey) {
-        if (!productRegistry || !controller || socketKey == 0) {
+        if (!controller || socketKey == 0) {
             return;
         }
 
         ContactProduct product{};
         if (!controller->exportProduct(socketKey, product)) {
-            productRegistry->removeContact(socketKey);
+            auto entity = static_cast<ECSEntity>(socketKey);
+            ecsRegistry->remove<ContactProduct>(entity);
             return;
         }
 
-        productRegistry->publishContact(socketKey, product);
+        auto entity = static_cast<ECSEntity>(socketKey);
+        const auto& package = ecsRegistry->get<ContactPackage>(entity);
+        ecsRegistry->emplace_or_replace<ContactProduct>(entity, product);
+        appliedPackageHash[socketKey] = package.packageHash;
     }
 
     ContactSystemComputeController* controller = nullptr;
-    RuntimeProductRegistry* productRegistry = nullptr;
+    ECSRegistry* ecsRegistry = nullptr;
     std::unordered_set<uint64_t> activeSocketKeys;
-    std::unordered_set<uint64_t> publishedSocketKeys;
-    std::vector<uint64_t> staleSocketKeys;
+    std::unordered_map<uint64_t, uint64_t> appliedPackageHash;
 };

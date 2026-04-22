@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 #include "contact/ContactTypes.hpp"
@@ -13,11 +12,10 @@
 #include "domain/VoronoiData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "nodegraph/NodeGraphProductTypes.hpp"
-#include "runtime/RuntimeThermalTypes.hpp"
 
 //                                                   [ Invariant:
 //                                                     - Package types are the compiled runtime transport contract
-//                                                       consumed by runtime package sync/controllers
+//                                                       consumed by compute and display transports
 //                                                     - Packages may combine authored/compiled settings with resolved
 //                                                       runtime dependency handles needed by compute or display transports
 //                                                     - Packages must not contain resolved runtime Products
@@ -51,7 +49,6 @@ struct RemeshPackage {
     };
 
     uint64_t packageHash = 0;
-    uint64_t displayPackageHash = 0;
     GeometryData sourceGeometry;
     RemeshParams params{};
     DisplaySettings display{};
@@ -59,7 +56,11 @@ struct RemeshPackage {
     ProductHandle modelProductHandle{};
 
     bool matches(const RemeshPackage& other) const {
-        return packageHash == other.packageHash;
+        return packageHash == other.packageHash &&
+            display.showRemeshOverlay == other.display.showRemeshOverlay &&
+            display.showFaceNormals == other.display.showFaceNormals &&
+            display.showVertexNormals == other.display.showVertexNormals &&
+            display.normalLength == other.display.normalLength;
     }
 };
 
@@ -74,7 +75,6 @@ struct VoronoiPackage {
     };
 
     uint64_t packageHash = 0;
-    uint64_t displayPackageHash = 0;
     VoronoiData authored;
     DisplaySettings display{};
     std::vector<std::array<float, 16>> receiverLocalToWorlds;
@@ -82,7 +82,9 @@ struct VoronoiPackage {
     std::vector<ProductHandle> receiverRemeshProducts;
 
     bool matches(const VoronoiPackage& other) const {
-        return packageHash == other.packageHash;
+        return packageHash == other.packageHash &&
+            display.showVoronoi == other.display.showVoronoi &&
+            display.showPoints == other.display.showPoints;
     }
 };
 
@@ -94,9 +96,8 @@ struct HeatPackage {
             return showHeatOverlay;
         }
     };
-
+    
     uint64_t packageHash = 0;
-    uint64_t displayPackageHash = 0;
     HeatData authored;
     DisplaySettings display{};
     ProductHandle voronoiProduct{};
@@ -106,10 +107,10 @@ struct HeatPackage {
     std::vector<float> sourceTemperatures;
     std::vector<ProductHandle> receiverModelProducts;
     std::vector<ProductHandle> receiverRemeshProducts;
-    std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
 
     bool matches(const HeatPackage& other) const {
-        return packageHash == other.packageHash;
+        return packageHash == other.packageHash &&
+            display.showHeatOverlay == other.display.showHeatOverlay;
     }
 };
 
@@ -123,7 +124,6 @@ struct ContactPackage {
     };
 
     uint64_t packageHash = 0;
-    uint64_t displayPackageHash = 0;
     ContactData authored;
     DisplaySettings display{};
     std::array<float, 16> emitterLocalToWorld{
@@ -144,14 +144,7 @@ struct ContactPackage {
     ProductHandle receiverRemeshProduct{};
 
     bool matches(const ContactPackage& other) const {
-        return packageHash == other.packageHash;
+        return packageHash == other.packageHash &&
+            display.showContactLines == other.display.showContactLines;
     }
-};
-
-struct RuntimePackageSet {
-    std::unordered_map<uint64_t, ModelPackage> modelBySocket;
-    std::unordered_map<uint64_t, RemeshPackage> remeshBySocket;
-    std::unordered_map<uint64_t, VoronoiPackage> voronoiBySocket;
-    std::unordered_map<uint64_t, ContactPackage> contactBySocket;
-    std::unordered_map<uint64_t, HeatPackage> heatBySocket;
 };

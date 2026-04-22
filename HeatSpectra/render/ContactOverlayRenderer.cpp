@@ -10,7 +10,7 @@
 
 namespace render {
 
-ContactLineRenderer::LineVertex toLineVertex(const ContactInterface::ContactLineVertex& vertex) {
+ContactLineRenderer::LineVertex toLineVertex(const ContactLineVertex& vertex) {
     ContactLineRenderer::LineVertex lineVertex{};
     lineVertex.position = vertex.position;
     lineVertex.color = vertex.color;
@@ -75,12 +75,12 @@ void ContactOverlayRenderer::rebuildLineBuffers() {
     for (const auto& [socketKey, config] : configsBySocket) {
         (void)socketKey;
         outlineVertices.reserve(outlineVertices.size() + config.outlineVertices.size());
-        for (const ContactInterface::ContactLineVertex& vertex : config.outlineVertices) {
+        for (const ContactLineVertex& vertex : config.outlineVertices) {
             outlineVertices.push_back(toLineVertex(vertex));
         }
 
         correspondenceVertices.reserve(correspondenceVertices.size() + config.correspondenceVertices.size());
-        for (const ContactInterface::ContactLineVertex& vertex : config.correspondenceVertices) {
+        for (const ContactLineVertex& vertex : config.correspondenceVertices) {
             correspondenceVertices.push_back(toLineVertex(vertex));
         }
     }

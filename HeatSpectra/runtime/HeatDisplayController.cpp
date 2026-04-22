@@ -1,11 +1,6 @@
 #include "HeatDisplayController.hpp"
 
-#include "heat/HeatSystemDisplayController.hpp"
 #include "render/HeatOverlayRenderer.hpp"
-
-void HeatDisplayController::setController(HeatSystemDisplayController* updatedController) {
-    controller = updatedController;
-}
 
 void HeatDisplayController::setOverlayRenderer(render::HeatOverlayRenderer* updatedOverlayRenderer) {
     overlayRenderer = updatedOverlayRenderer;
@@ -16,7 +11,7 @@ void HeatDisplayController::apply(uint64_t socketKey, const Config& config) {
         return;
     }
 
-    touchedSocketKeys.insert(socketKey);
+    syncedSockets.insert(socketKey);
 
     const bool previewEnabled =
         config.authoredActive &&
@@ -27,22 +22,16 @@ void HeatDisplayController::apply(uint64_t socketKey, const Config& config) {
         return;
     }
 
-    const auto existingIt = activeConfigsBySocket.find(socketKey);
-    if (existingIt != activeConfigsBySocket.end() && existingIt->second == config) {
+    const auto existingIt = configsBySocket.find(socketKey);
+    if (existingIt != configsBySocket.end() && existingIt->second.displayHash == config.displayHash) {
         return;
-    }
-
-    if (controller) {
-        HeatSystemDisplayController::Config displayConfig{};
-        displayConfig.showHeatOverlay = true;
-        controller->apply(socketKey, displayConfig);
     }
 
     if (overlayRenderer) {
         overlayRenderer->apply(socketKey, config);
     }
 
-    activeConfigsBySocket[socketKey] = config;
+    configsBySocket[socketKey] = config;
 }
 
 void HeatDisplayController::remove(uint64_t socketKey) {
@@ -50,22 +39,19 @@ void HeatDisplayController::remove(uint64_t socketKey) {
         return;
     }
 
-    if (controller) {
-        controller->disable(socketKey);
-    }
     if (overlayRenderer) {
         overlayRenderer->remove(socketKey);
     }
 
-    activeConfigsBySocket.erase(socketKey);
+    configsBySocket.erase(socketKey);
 }
 
 void HeatDisplayController::finalizeSync() {
     std::vector<uint64_t> staleSocketKeys;
-    staleSocketKeys.reserve(activeConfigsBySocket.size());
-    for (const auto& [socketKey, config] : activeConfigsBySocket) {
+    staleSocketKeys.reserve(configsBySocket.size());
+    for (const auto& [socketKey, config] : configsBySocket) {
         (void)config;
-        if (touchedSocketKeys.find(socketKey) == touchedSocketKeys.end()) {
+        if (syncedSockets.find(socketKey) == syncedSockets.end()) {
             staleSocketKeys.push_back(socketKey);
         }
     }
@@ -74,5 +60,5 @@ void HeatDisplayController::finalizeSync() {
         remove(socketKey);
     }
 
-    touchedSocketKeys.clear();
+    syncedSockets.clear();
 }

@@ -2,7 +2,7 @@
 
 #include "HeatContactParams.hpp"
 #include "HeatSystemRuntime.hpp"
-#include "runtime/RuntimeProducts.hpp"
+#include "contact/ContactTypes.hpp"
 
 #include <limits>
 #include <unordered_map>
@@ -15,7 +15,7 @@ class VulkanDevice;
 
 class HeatContactRuntime {
 public:
-    struct ContactCoupling {
+    struct CouplingState {
         ContactCouplingType couplingType = ContactCouplingType::SourceToReceiver;
         uint32_t emitterModelId = 0;
         uint32_t receiverModelId = 0;
@@ -42,12 +42,12 @@ public:
         bool contactDescriptorsReady = false;
     };
 
-    const std::vector<ContactCoupling>& getCouplings() const { return contactCouplings; }
-    std::vector<ContactCoupling>& getCouplingsMutable() { return contactCouplings; }
+    const std::vector<CouplingState>& getCouplings() const { return contactCouplings; }
+    std::vector<CouplingState>& getCouplingsMutable() { return contactCouplings; }
 
     void setContactCouplings(
         const std::vector<uint32_t>& receiverRuntimeModelIds,
-        const std::vector<ContactProduct>& contactProducts);
+        const std::vector<ContactCoupling>& contactCouplings);
     bool ensureCouplings(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
@@ -59,9 +59,9 @@ public:
     void clearCouplings(MemoryAllocator& memoryAllocator);
 
 private:
-    static bool areContactProductsEqual(
-        const std::vector<ContactProduct>& lhs,
-        const std::vector<ContactProduct>& rhs);
+    static bool areContactCouplingsEqual(
+        const std::vector<ContactCoupling>& lhs,
+        const std::vector<ContactCoupling>& rhs);
     const HeatSystemRuntime::SourceBinding* findSourceBindingByRuntimeModelId(
         const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
         uint32_t runtimeModelId) const;
@@ -71,14 +71,14 @@ private:
     bool rebuildCouplingBuffers(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ContactCoupling& coupling,
-        const ContactProduct& productCoupling,
+        CouplingState& coupling,
+        const ContactCoupling& contactCoupling,
         const std::vector<uint32_t>& receiverCellIndices,
         const std::unordered_map<uint32_t, VkBuffer>& receiverSurfaceMappingBufferByModelId,
         const std::unordered_map<uint32_t, VkDeviceSize>& receiverSurfaceMappingBufferOffsetByModelId) const;
 
     std::vector<uint32_t> activeReceiverRuntimeModelIds;
-    std::vector<ContactProduct> activeContactProducts;
-    std::vector<ContactCoupling> contactCouplings;
+    std::vector<ContactCoupling> activeContactCouplings;
+    std::vector<CouplingState> contactCouplings;
     bool couplingsDirty = true;
 };

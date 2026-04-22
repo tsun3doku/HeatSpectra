@@ -15,16 +15,6 @@
 //                                                          backend/controller objects or GPU resources 
 //                                                        - They must not be used directly by any backends ]
 
-struct GeometryAttribute {
-    std::string name;
-    GeometryAttributeDomain domain = GeometryAttributeDomain::Point;
-    GeometryAttributeDataType dataType = GeometryAttributeDataType::Float;
-    uint32_t tupleSize = 1;
-    std::vector<float> floatValues;
-    std::vector<int64_t> intValues;
-    std::vector<uint8_t> boolValues;
-};
-
 struct GeometryGroup {
     uint32_t id = 0;
     std::string name;
@@ -44,5 +34,6 @@ struct GeometryData {
     std::vector<uint32_t> triangleIndices;
     std::vector<uint32_t> triangleGroupIds;
     std::vector<GeometryGroup> groups;
-    std::vector<GeometryAttribute> attributes;
+
+    void sealPayload();
 };

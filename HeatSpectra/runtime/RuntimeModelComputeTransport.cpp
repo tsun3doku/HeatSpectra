@@ -1,18 +1,27 @@
 #include "RuntimeModelComputeTransport.hpp"
 
+#include "nodegraph/NodeModelTransform.hpp"
 #include "runtime/ModelComputeRuntime.hpp"
 
-void RuntimeModelComputeTransport::sync(const std::unordered_map<uint64_t, ModelPackage>& packagesBySocket) {
+void RuntimeModelComputeTransport::sync(const ECSRegistry& registry) {
     if (!modelRuntime) {
         return;
     }
 
-    staleSocketKeys.clear();
-    pendingPublishes.clear();
     std::unordered_set<uint64_t> nextSocketKeys;
 
-    for (const auto& [socketKey, package] : packagesBySocket) {
+    auto view = registry.view<ModelPackage>();
+    for (auto entity : view) {
+        uint64_t socketKey = static_cast<uint64_t>(entity);
+        const auto& package = registry.get<ModelPackage>(entity);
         nextSocketKeys.insert(socketKey);
+
+        const ModelProduct* product = tryGetProduct<ModelProduct>(registry, socketKey);
+        auto hashIt = appliedPackageHash.find(socketKey);
+        if (product && hashIt != appliedPackageHash.end() && hashIt->second == package.packageHash) {
+            continue;
+        }
+
         applyPackage(socketKey, package);
     }
 
@@ -22,13 +31,10 @@ void RuntimeModelComputeTransport::sync(const std::unordered_map<uint64_t, Model
         }
 
         modelRuntime->queueReleaseSocket(socketKey);
-        staleSocketKeys.push_back(socketKey);
+        appliedPackageHash.erase(socketKey);
     }
 
-    activeSocketKeys.clear();
-    for (uint64_t socketKey : nextSocketKeys) {
-        activeSocketKeys.insert(socketKey);
-    }
+    activeSocketKeys = std::move(nextSocketKeys);
 }
 
 void RuntimeModelComputeTransport::finalizeSync() {
@@ -38,20 +44,31 @@ void RuntimeModelComputeTransport::finalizeSync() {
 
     modelRuntime->flush();
 
-    for (uint64_t socketKey : staleSocketKeys) {
-        removePublishedProduct(socketKey);
-    }
-    staleSocketKeys.clear();
-
-    for (uint64_t socketKey : pendingPublishes) {
-        uint32_t runtimeModelId = 0;
-        if (modelRuntime->tryGetRuntimeModelId(socketKey, runtimeModelId) && runtimeModelId != 0) {
-            publishProduct(socketKey, runtimeModelId);
-        } else {
-            removePublishedProduct(socketKey);
+    std::vector<uint64_t> removals;
+    auto productView = ecsRegistry->view<ModelProduct>();
+    for (auto entity : productView) {
+        const uint64_t socketKey = static_cast<uint64_t>(entity);
+        if (activeSocketKeys.find(socketKey) == activeSocketKeys.end()) {
+            removals.push_back(socketKey);
         }
     }
-    pendingPublishes.clear();
+    for (uint64_t socketKey : removals) {
+        removePublishedProduct(socketKey);
+    }
+    for (uint64_t socketKey : activeSocketKeys) {
+        auto entity = static_cast<ECSEntity>(socketKey);
+        const auto& package = ecsRegistry->get<ModelPackage>(entity);
+        auto hashIt = appliedPackageHash.find(socketKey);
+        const ModelProduct* product = tryGetProduct<ModelProduct>(*ecsRegistry, socketKey);
+        if (!product || hashIt == appliedPackageHash.end() || hashIt->second != package.packageHash) {
+            uint32_t runtimeModelId = 0;
+            if (modelRuntime->tryGetRuntimeModelId(socketKey, runtimeModelId) && runtimeModelId != 0) {
+                publishProduct(socketKey, runtimeModelId);
+            } else {
+                removePublishedProduct(socketKey);
+            }
+        }
+    }
 }
 
 void RuntimeModelComputeTransport::applyPackage(uint64_t socketKey, const ModelPackage& package) {
@@ -60,31 +77,32 @@ void RuntimeModelComputeTransport::applyPackage(uint64_t socketKey, const ModelP
     }
 
     modelRuntime->queueAcquireSocket(socketKey, package.geometry.baseModelPath);
-    queuePublishedModel(socketKey);
-}
-
-void RuntimeModelComputeTransport::queuePublishedModel(uint64_t socketKey) {
-    pendingPublishes.push_back(socketKey);
 }
 
 void RuntimeModelComputeTransport::removePublishedProduct(uint64_t socketKey) {
-    if (!productRegistry || socketKey == 0) {
+    if (socketKey == 0) {
         return;
     }
 
-    productRegistry->removeModel(socketKey);
+    auto entity = static_cast<ECSEntity>(socketKey);
+    ecsRegistry->remove<ModelProduct>(entity);
 }
 
 void RuntimeModelComputeTransport::publishProduct(uint64_t socketKey, uint32_t runtimeModelId) {
-    if (!productRegistry || !modelRuntime || socketKey == 0 || runtimeModelId == 0) {
+    if (!modelRuntime || socketKey == 0 || runtimeModelId == 0) {
         return;
     }
+
+    auto entity = static_cast<ECSEntity>(socketKey);
+    const auto& package = ecsRegistry->get<ModelPackage>(entity);
+    modelRuntime->setModelMatrix(runtimeModelId, NodeModelTransform::toMat4(package.localToWorld));
 
     ModelProduct product{};
     if (!modelRuntime->exportProduct(runtimeModelId, product)) {
-        productRegistry->removeModel(socketKey);
+        ecsRegistry->remove<ModelProduct>(entity);
         return;
     }
 
-    productRegistry->publishModel(socketKey, product);
+    ecsRegistry->emplace_or_replace<ModelProduct>(entity, product);
+    appliedPackageHash[socketKey] = package.packageHash;
 }

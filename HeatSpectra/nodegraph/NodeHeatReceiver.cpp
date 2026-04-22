@@ -2,15 +2,15 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphDataTypes.hpp"
 #include "NodeGraphUtils.hpp"
-#include "NodeGraphPayloadTypes.hpp"
 #include "NodeGraphHash.hpp"
+#include "NodeGraphPayloadTypes.hpp"
 #include "NodePayloadRegistry.hpp"
 
 const char* NodeHeatReceiver::typeId() const {
     return nodegraphtypes::HeatReceiver;
 }
 
-bool NodeHeatReceiver::execute(NodeGraphKernelContext& context) const {
+void NodeHeatReceiver::execute(NodeGraphKernelContext& context) const {
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
     const EvaluatedSocketValue* inputMesh =
         meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
@@ -19,32 +19,28 @@ bool NodeHeatReceiver::execute(NodeGraphKernelContext& context) const {
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodePayloadType::None;
+        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
         outputValue.payloadHandle = {};
         if (!payloadRegistry) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0 ||
+            valueTypeOf(inputMeshValue->dataType) != NodeGraphValueType::Mesh) {
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
-
-        outputValue.dataType = NodePayloadType::HeatReceiver;
-        const uint64_t meshPayloadHash = payloadHashForDataBlock(*inputMeshValue, payloadRegistry);
+        const uint64_t meshPayloadHash = payloadRegistry->resolvePayloadHash(inputMeshValue->dataType, inputMeshValue->payloadHandle);
         HeatReceiverData payload{};
         payload.meshHandle = inputMeshValue->payloadHandle;
-        payload.payloadHash = NodeGraphHash::start();
-        NodeGraphHash::combine(payload.payloadHash, meshPayloadHash);
+        payload.meshPayloadHash = meshPayloadHash;
         const uint64_t payloadKey = makeSocketKey(
             context.node.id,
             context.node.outputs[outputIndex].id);
-        outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(payload));
-        updateDataBlockMetadata(outputValue, payloadRegistry);
+        outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(payload));
+        populateMetadata(outputValue, payloadRegistry);
     }
-
-    return false;
 }
 
 bool NodeHeatReceiver::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
@@ -55,16 +51,6 @@ bool NodeHeatReceiver::computeInputHash(const NodeGraphKernelHashContext& contex
 
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-
-    if (!inputMeshValue) {
-        NodeGraphHash::combine(outHash, 0u);
-        return true;
-    }
-
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->dataType));
-    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.key);
-    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.revision);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->payloadHandle.count));
+    NodeGraphHash::combineInputHash(outHash, inputMeshValue);
     return true;
 }
-

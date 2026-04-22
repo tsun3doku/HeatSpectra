@@ -145,7 +145,7 @@ bool ModelRegistry::exportProduct(uint32_t modelID, ModelProduct& outProduct) co
     outProduct.renderIndexBufferOffset = model->getRenderIndexBufferOffset();
     outProduct.renderIndexCount = static_cast<uint32_t>(model->getRenderIndices().size());
     outProduct.modelMatrix = model->getModelMatrix();
-    outProduct.contentHash = computeContentHash(outProduct);
+    outProduct.productHash = buildProductHash(outProduct);
     return outProduct.isValid();
 }
 

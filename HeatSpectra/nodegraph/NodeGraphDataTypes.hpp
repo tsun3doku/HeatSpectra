@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-struct GeometryData;
 class NodePayloadRegistry;
 
 struct NodeDataBlock {
@@ -21,11 +20,22 @@ struct NodeDataBlock {
     std::vector<NodeGraphNodeId> lineageNodeIds;
 };
 
-const char* nodePayloadTypeName(NodePayloadType payloadType);
-const GeometryData* resolveGeometryForDataBlock(const NodeDataBlock& dataBlock, const NodePayloadRegistry* registry);
-void setGeometryPrimitiveIntAttribute(GeometryData& geometry, const std::string& name, const std::vector<uint32_t>& values);
-void normalizeGeometryGroups(GeometryData& geometry);
-void updatePayloadHash(GeometryData& geometry);
-uint64_t payloadHashForDataBlock(const NodeDataBlock& dataBlock, const NodePayloadRegistry* registry);
-void updateDataBlockMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* registry = nullptr);
-void initializeOutputsFromInputs(const NodeGraphNode& node, const std::vector<const NodeDataBlock*>& inputs, std::vector<NodeDataBlock>& outputs);
+enum class EvaluatedSocketStatus : uint8_t {
+    Missing,
+    Value,
+    Error,
+};
+
+struct EvaluatedSocketValue {
+    EvaluatedSocketStatus status = EvaluatedSocketStatus::Missing;
+    NodeDataBlock data{};
+    std::string error;
+};
+
+struct NodeGraphEvaluationState {
+    std::unordered_map<uint64_t, uint64_t> sourceSocketByInputSocket;
+    std::unordered_map<uint64_t, EvaluatedSocketValue> outputBySocket;
+};
+
+void populateMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* registry = nullptr);
+void buildOutputs(const NodeGraphNode& node, const std::vector<const NodeDataBlock*>& inputs, std::vector<NodeDataBlock>& outputs);

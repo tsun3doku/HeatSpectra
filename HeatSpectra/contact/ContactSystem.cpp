@@ -3,57 +3,17 @@
 #include "ContactSystemRuntime.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"
-#include "vulkan/UniformBufferManager.hpp"
-
-#include <glm/glm.hpp>
-
-#include <vector>
-
-namespace {
-
-bool hasUsableContactPairs(const std::vector<ContactPair>& pairs) {
-    for (const ContactPair& pair : pairs) {
-        if (pair.contactArea > 0.0f) {
-            return true;
-        }
-    }
-
-    return false;
-}
-}
 
 ContactSystem::ContactSystem(
     VulkanDevice& vulkanDeviceRef,
-    MemoryAllocator& memoryAllocatorRef,
-    UniformBufferManager& uniformBufferManagerRef,
-    uint32_t maxFramesInFlight,
-    VkRenderPass renderPass)
+    MemoryAllocator& memoryAllocatorRef)
     : vulkanDevice(vulkanDeviceRef),
       memoryAllocator(memoryAllocatorRef),
-      uniformBufferManager(uniformBufferManagerRef),
       runtime(std::make_unique<ContactSystemRuntime>()) {
-    updateRenderResources(maxFramesInFlight, renderPass);
 }
 
 ContactSystem::~ContactSystem() {
     disable();
-    clearRenderer();
-}
-
-void ContactSystem::updateRenderResources(uint32_t maxFramesInFlight, VkRenderPass renderPass) {
-    clearRenderer();
-    contactLineRenderer = std::make_unique<ContactLineRenderer>(
-        vulkanDevice,
-        memoryAllocator,
-        uniformBufferManager);
-    if (!contactLineRenderer) {
-        initialized = false;
-        return;
-    }
-
-    contactLineRenderer->initialize(renderPass, 2, maxFramesInFlight);
-    initialized = true;
-    previewDirty = true;
 }
 
 void ContactSystem::setParams(
@@ -104,198 +64,37 @@ void ContactSystem::ensureConfigured() {
         return;
     }
 
-    runtime->ensureProduct(
-        *this,
-        vulkanDevice,
-        memoryAllocator);
+    runtime->buildCoupling(vulkanDevice, memoryAllocator);
 }
 
 void ContactSystem::disable() {
-    clearPreview();
     if (runtime) {
         runtime->clear(memoryAllocator);
     }
 }
 
-static bool computeContactPairs(
-    ContactInterface& contactInterface,
-    uint32_t emitterModelId,
-    const std::array<float, 16>& emitterLocalToWorld,
-    const SupportingHalfedge::IntrinsicMesh& emitterIntrinsicMesh,
-    uint32_t receiverModelId,
-    const std::array<float, 16>& receiverLocalToWorld,
-    const SupportingHalfedge::IntrinsicMesh& receiverIntrinsicMesh,
-    ContactCouplingType couplingType,
-    float minNormalDot,
-    float contactRadius,
-    ContactSystem::Result& outResult) {
-    (void)couplingType;
-    outResult = {};
-    if (emitterModelId == 0 ||
-        receiverModelId == 0 ||
-        emitterModelId == receiverModelId ||
-        emitterIntrinsicMesh.vertices.empty() ||
-        receiverIntrinsicMesh.vertices.empty()) {
-        return false;
-    }
-
-    ContactInterface::Settings settings{};
-    settings.minNormalDot = minNormalDot;
-    settings.contactRadius = contactRadius;
-
-    std::vector<std::vector<ContactPair>> receiverContactPairs;
-    std::vector<const SupportingHalfedge::IntrinsicMesh*> receiverIntrinsicMeshes;
-    std::vector<std::array<float, 16>> receiverLocalToWorlds;
-    receiverIntrinsicMeshes.push_back(&receiverIntrinsicMesh);
-    receiverLocalToWorlds.push_back(receiverLocalToWorld);
-
-    contactInterface.mapSurfacePoints(
-        emitterIntrinsicMesh,
-        emitterLocalToWorld,
-        receiverIntrinsicMeshes,
-        receiverLocalToWorlds,
-        receiverContactPairs,
-        outResult.outlineVertices,
-        outResult.correspondenceVertices,
-        settings);
-
-    if (!receiverContactPairs.empty()) {
-        outResult.pairs = receiverContactPairs.front();
-    }
-    outResult.hasContact = hasUsableContactPairs(outResult.pairs);
-    return outResult.hasContact;
+const ContactCoupling* ContactSystem::getContactCoupling() const {
+    return runtime ? runtime->getContactCoupling() : nullptr;
 }
 
-void ContactSystem::refreshPreview() {
-    if (!runtime) {
-        clearPreview();
-        return;
-    }
-
-    if (!runtime->hasValidBinding()) {
-        clearPreview();
-        return;
-    }
-
-    Result freshResult{};
-    if (!computeContactPairs(
-            contactInterface,
-            runtime->getEmitterModelId(),
-            runtime->getEmitterLocalToWorld(),
-            runtime->getEmitterIntrinsicMesh(),
-            runtime->getReceiverModelId(),
-            runtime->getReceiverLocalToWorld(),
-            runtime->getReceiverIntrinsicMesh(),
-            runtime->getCouplingType(),
-            runtime->getMinNormalDot(),
-            runtime->getContactRadius(),
-            freshResult)) {
-        clearPreview();
-        return;
-    }
-
-    previewResult = freshResult;
-    previewValid = true;
-    previewDirty = true;
+VkBuffer ContactSystem::getContactPairBuffer() const {
+    return runtime ? runtime->getContactPairBuffer() : VK_NULL_HANDLE;
 }
 
-bool ContactSystem::computePairs(
-    uint32_t emitterModelId,
-    const std::array<float, 16>& emitterLocalToWorld,
-    const SupportingHalfedge::IntrinsicMesh& emitterIntrinsicMesh,
-    uint32_t receiverModelId,
-    const std::array<float, 16>& receiverLocalToWorld,
-    const SupportingHalfedge::IntrinsicMesh& receiverIntrinsicMesh,
-    ContactCouplingType couplingType,
-    float minNormalDot,
-    float contactRadius,
-    std::vector<ContactPair>& outPairs) {
-    outPairs.clear();
-    if (!emitterModelId ||
-        !receiverModelId ||
-        emitterIntrinsicMesh.vertices.empty() ||
-        receiverIntrinsicMesh.vertices.empty()) {
-        return false;
-    }
-
-    Result freshResult{};
-    if (!computeContactPairs(
-            contactInterface,
-            emitterModelId,
-            emitterLocalToWorld,
-            emitterIntrinsicMesh,
-            receiverModelId,
-            receiverLocalToWorld,
-            receiverIntrinsicMesh,
-            couplingType,
-            minNormalDot,
-            contactRadius,
-            freshResult) ||
-        !freshResult.hasContact) {
-        return false;
-    }
-
-    outPairs = freshResult.pairs;
-    return !outPairs.empty();
+VkDeviceSize ContactSystem::getContactPairBufferOffset() const {
+    return runtime ? runtime->getContactPairBufferOffset() : 0;
 }
 
-void ContactSystem::clearPreview() {
-    if (!previewValid &&
-        previewResult.outlineVertices.empty() &&
-        previewResult.correspondenceVertices.empty()) {
-        return;
-    }
-
-    previewResult = {};
-    previewValid = false;
-    previewDirty = true;
+const std::vector<ContactLineVertex>& ContactSystem::getOutlineVertices() const {
+    static const std::vector<ContactLineVertex> empty;
+    return runtime ? runtime->getOutlineVertices() : empty;
 }
 
-void ContactSystem::renderContactLines(
-    VkCommandBuffer commandBuffer,
-    uint32_t frameIndex,
-    VkExtent2D extent) {
-    if (!contactLineRenderer || !initialized) {
-        return;
-    }
-    if (previewDirty) {
-        rebuildPreviewBuffers();
-        previewDirty = false;
-    }
-    contactLineRenderer->render(commandBuffer, frameIndex, glm::mat4(1.0f), extent);
+const std::vector<ContactLineVertex>& ContactSystem::getCorrespondenceVertices() const {
+    static const std::vector<ContactLineVertex> empty;
+    return runtime ? runtime->getCorrespondenceVertices() : empty;
 }
 
-void ContactSystem::rebuildPreviewBuffers() {
-    if (!contactLineRenderer) {
-        return;
-    }
-
-    std::vector<ContactLineRenderer::LineVertex> outlineVertices;
-    outlineVertices.reserve(previewResult.outlineVertices.size());
-    for (const ContactInterface::ContactLineVertex& sourceVertex : previewResult.outlineVertices) {
-        ContactLineRenderer::LineVertex vertex{};
-        vertex.position = sourceVertex.position;
-        vertex.color = sourceVertex.color;
-        outlineVertices.push_back(vertex);
-    }
-
-    std::vector<ContactLineRenderer::LineVertex> correspondenceVertices;
-    correspondenceVertices.reserve(previewResult.correspondenceVertices.size());
-    for (const ContactInterface::ContactLineVertex& sourceVertex : previewResult.correspondenceVertices) {
-        ContactLineRenderer::LineVertex vertex{};
-        vertex.position = sourceVertex.position;
-        vertex.color = sourceVertex.color;
-        correspondenceVertices.push_back(vertex);
-    }
-
-    contactLineRenderer->uploadOutlines(outlineVertices);
-    contactLineRenderer->uploadCorrespondences(correspondenceVertices);
-}
-
-void ContactSystem::clearRenderer() {
-    if (contactLineRenderer) {
-        contactLineRenderer->cleanup();
-        contactLineRenderer.reset();
-    }
-    initialized = false;
+bool ContactSystem::hasContact() const {
+    return runtime ? runtime->hasContact() : false;
 }

@@ -37,3 +37,25 @@ bool acceptsPayload(const NodeGraphSocket& socket, NodePayloadType payloadType) 
 bool producesPayload(const NodeGraphSocket& socket, NodePayloadType payloadType) {
     return socket.contract.producedPayloadType == payloadType;
 }
+
+const char* nodePayloadTypeName(NodePayloadType payloadType) {
+    switch (payloadType) {
+    case NodePayloadType::Geometry:
+        return "geometry";
+    case NodePayloadType::Remesh:
+        return "remesh";
+    case NodePayloadType::HeatReceiver:
+        return "heat_receiver";
+    case NodePayloadType::HeatSource:
+        return "heat_source";
+    case NodePayloadType::Contact:
+        return "contact";
+    case NodePayloadType::Heat:
+        return "heat";
+    case NodePayloadType::Voronoi:
+        return "voronoi";
+    case NodePayloadType::None:
+    default:
+        return "none";
+    }
+}

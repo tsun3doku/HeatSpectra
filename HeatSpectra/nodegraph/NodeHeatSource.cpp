@@ -10,7 +10,7 @@ const char* NodeHeatSource::typeId() const {
     return nodegraphtypes::HeatSource;
 }
 
-bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
+void NodeHeatSource::execute(NodeGraphKernelContext& context) const {
     const HeatSourceNodeParams params = readHeatSourceNodeParams(context.node);
     const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
     const EvaluatedSocketValue* inputMesh =
@@ -20,35 +20,30 @@ bool NodeHeatSource::execute(NodeGraphKernelContext& context) const {
 
     for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = NodePayloadType::None;
+        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
         outputValue.payloadHandle = {};
         if (!payloadRegistry) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0 ||
+            valueTypeOf(inputMeshValue->dataType) != NodeGraphValueType::Mesh) {
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
-
-        outputValue.dataType = NodePayloadType::HeatSource;
         const float temperature = static_cast<float>(params.temperature);
-        const uint64_t meshPayloadHash = payloadHashForDataBlock(*inputMeshValue, payloadRegistry);
+        const uint64_t meshPayloadHash = payloadRegistry->resolvePayloadHash(inputMeshValue->dataType, inputMeshValue->payloadHandle);
         HeatSourceData payload{};
         payload.meshHandle = inputMeshValue->payloadHandle;
+        payload.meshPayloadHash = meshPayloadHash;
         payload.temperature = temperature;
-        payload.payloadHash = NodeGraphHash::start();
-        NodeGraphHash::combine(payload.payloadHash, meshPayloadHash);
-        NodeGraphHash::combineFloat(payload.payloadHash, payload.temperature);
         const uint64_t payloadKey = makeSocketKey(
             context.node.id,
             context.node.outputs[outputIndex].id);
-        outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(payload));
-        updateDataBlockMetadata(outputValue, payloadRegistry);
+        outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(payload));
+        populateMetadata(outputValue, payloadRegistry);
     }
-
-    return false;
 }
 
 
@@ -61,16 +56,7 @@ bool NodeHeatSource::computeInputHash(const NodeGraphKernelHashContext& context,
 
     outHash = NodeGraphHash::start();
     NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-
-    if (!inputMeshValue) {
-        NodeGraphHash::combine(outHash, 0u);
-        return true;
-    }
-
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->dataType));
-    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.key);
-    NodeGraphHash::combine(outHash, inputMeshValue->payloadHandle.revision);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputMeshValue->payloadHandle.count));
+    NodeGraphHash::combineInputHash(outHash, inputMeshValue);
     NodeGraphHash::combineFloat(outHash, static_cast<float>(params.temperature));
     return true;
 }

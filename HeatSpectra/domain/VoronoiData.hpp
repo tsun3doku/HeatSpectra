@@ -3,7 +3,6 @@
 #include "domain/VoronoiParams.hpp"
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 
-#include <cstddef>
 #include <vector>
 
 //                                                      [ Invariant:
@@ -16,9 +15,8 @@ struct VoronoiData {
     uint64_t payloadHash = 0;
     VoronoiParams params{};
     std::vector<NodeDataHandle> receiverMeshHandles;
+    std::vector<uint64_t> receiverPayloadHashes;
     bool active = false;
 
-    std::size_t size() const {
-        return receiverMeshHandles.size();
-    }
+    void sealPayload();
 };

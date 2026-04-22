@@ -24,7 +24,7 @@ public:
         uint32_t currentFrame,
         const HeatSystemSimRuntime& simRuntime,
         const HeatSourcePushConstant& basePushConstant,
-        const std::vector<HeatContactRuntime::ContactCoupling>& contactCouplings,
+        const std::vector<HeatContactRuntime::CouplingState>& contactCouplings,
         const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
         const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
         const HeatSystemContactStage& contactStage,

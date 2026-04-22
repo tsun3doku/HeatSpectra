@@ -2,41 +2,41 @@
 
 #include "nodegraph/NodeModelTransform.hpp"
 #include "runtime/ModelDisplayRuntime.hpp"
+#include "runtime/RuntimeECS.hpp"
 
-void RuntimeModelDisplayTransport::sync(const std::unordered_map<uint64_t, ModelPackage>& packagesBySocket) {
+void RuntimeModelDisplayTransport::sync(const ECSRegistry& registry) {
     if (!modelRuntime) {
         return;
     }
 
-    staleSocketKeys.clear();
     std::unordered_set<uint64_t> nextSocketKeys;
 
-    for (const auto& [socketKey, package] : packagesBySocket) {
+    auto view = registry.view<ModelPackage>();
+    for (auto entity : view) {
+        uint64_t socketKey = static_cast<uint64_t>(entity);
+        if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
+            continue;
+        }
+
+        const auto& package = registry.get<ModelPackage>(entity);
         nextSocketKeys.insert(socketKey);
+
         modelRuntime->queueShowSocket(socketKey, NodeModelTransform::toMat4(package.localToWorld));
     }
-    staleSocketKeys.reserve(activeSocketKeys.size());
+
     for (uint64_t socketKey : activeSocketKeys) {
         if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
-            staleSocketKeys.push_back(socketKey);
+            modelRuntime->queueHideSocket(socketKey);
         }
     }
 
-    activeSocketKeys.clear();
-    for (uint64_t socketKey : nextSocketKeys) {
-        activeSocketKeys.insert(socketKey);
-    }
+    activeSocketKeys = std::move(nextSocketKeys);
 }
 
 void RuntimeModelDisplayTransport::finalizeSync() {
     if (!modelRuntime) {
         return;
     }
-
-    for (uint64_t socketKey : staleSocketKeys) {
-        modelRuntime->queueHideSocket(socketKey);
-    }
-    staleSocketKeys.clear();
 
     modelRuntime->flush();
 }

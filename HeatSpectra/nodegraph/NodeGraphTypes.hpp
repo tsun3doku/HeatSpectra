@@ -77,19 +77,6 @@ enum class NodePayloadType : uint8_t {
     Contact = 7
 };
 
-enum class GeometryAttributeDomain : uint8_t {
-    Point = 0,
-    Primitive = 1,
-    Vertex = 2,
-    Detail = 3
-};
-
-enum class GeometryAttributeDataType : uint8_t {
-    Float = 0,
-    Int = 1,
-    Bool = 2
-};
-
 enum class NodeGraphSocketDirection {
     Input,
     Output
@@ -105,17 +92,8 @@ enum class NodeGraphNodeCategory {
 
 using NodeTypeId = std::string;
 
-struct NodeGraphAttributeContract {
-    std::string name;
-    GeometryAttributeDomain domain = GeometryAttributeDomain::Point;
-    GeometryAttributeDataType dataType = GeometryAttributeDataType::Float;
-    uint32_t tupleSize = 1;
-};
-
 struct NodeGraphSocketContract {
     NodePayloadType producedPayloadType = NodePayloadType::None;
-    std::vector<NodeGraphAttributeContract> requiredAttributes;
-    std::vector<NodeGraphAttributeContract> guaranteedAttributes;
 };
 
 struct NodeSocketSignature {
@@ -251,5 +229,14 @@ NodeGraphValueType valueTypeOf(NodePayloadType payloadType);
 bool acceptsPayload(NodeGraphValueType valueType, NodePayloadType payloadType);
 bool acceptsPayload(const NodeGraphSocket& socket, NodePayloadType payloadType);
 bool producesPayload(const NodeGraphSocket& socket, NodePayloadType payloadType);
+
+const char* nodePayloadTypeName(NodePayloadType payloadType);
+
+struct NodeGraphCompiled {
+    uint64_t revision = 0;
+    bool isValid = false;
+    std::vector<NodeGraphNodeId> executionOrder;
+    std::vector<std::string> compilationErrors;
+};
 
 

@@ -14,9 +14,6 @@
 #include "NodeVoronoiPanel.hpp"
 #include "runtime/RuntimeInterfaces.hpp"
 
-#include <QAbstractScrollArea>
-#include <QAbstractItemView>
-#include <QAbstractTableModel>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFrame>
@@ -29,146 +26,15 @@
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTabWidget>
-#include <QTableView>
-#include <QTableWidget>
-#include <QTableWidgetItem>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <algorithm>
-#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace {
-
-class AttributeSamplesTableModel final : public QAbstractTableModel {
-public:
-    explicit AttributeSamplesTableModel(QObject* parent = nullptr)
-        : QAbstractTableModel(parent) {
-    }
-
-    int rowCount(const QModelIndex& parent = QModelIndex()) const override {
-        if (parent.isValid()) {
-            return 0;
-        }
-        return totalSampleRowCount;
-    }
-
-    int columnCount(const QModelIndex& parent = QModelIndex()) const override {
-        if (parent.isValid()) {
-            return 0;
-        }
-        return 3;
-    }
-
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override {
-        if (!index.isValid() || role != Qt::DisplayRole) {
-            return {};
-        }
-
-        if (index.row() < 0 || index.row() >= totalSampleRowCount || index.column() < 0 || index.column() >= 3) {
-            return {};
-        }
-
-        int elementIndex = 0;
-        const NodeGraphRuntimeAttributeDebugInfo* attribute = attributeForRow(index.row(), elementIndex);
-        if (!attribute) {
-            return {};
-        }
-
-        switch (index.column()) {
-        case 0:
-            return QString::fromStdString(attribute->name);
-        case 1:
-            return elementIndex;
-        case 2:
-            if (elementIndex < 0 || elementIndex >= static_cast<int>(attribute->sampleValues.size())) {
-                return {};
-            }
-            return QString::fromStdString(attribute->sampleValues[static_cast<std::size_t>(elementIndex)]);
-        default:
-            return {};
-        }
-    }
-
-    QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override {
-        if (role != Qt::DisplayRole) {
-            return {};
-        }
-
-        if (orientation == Qt::Horizontal) {
-            switch (section) {
-            case 0:
-                return QStringLiteral("Attribute");
-            case 1:
-                return QStringLiteral("Element");
-            case 2:
-                return QStringLiteral("Value");
-            default:
-                return {};
-            }
-        }
-
-        return section + 1;
-    }
-
-    void setAttributes(std::vector<NodeGraphRuntimeAttributeDebugInfo> attributes) {
-        beginResetModel();
-        attributeRows = std::move(attributes);
-        rowOffsets.clear();
-        rowOffsets.reserve(attributeRows.size() + 1);
-        rowOffsets.push_back(0);
-
-        totalSampleRowCount = 0;
-        for (const NodeGraphRuntimeAttributeDebugInfo& attribute : attributeRows) {
-            const std::size_t sampleCount = attribute.sampleValues.size();
-            const int remainingRows = std::numeric_limits<int>::max() - totalSampleRowCount;
-            if (sampleCount <= static_cast<std::size_t>(remainingRows)) {
-                totalSampleRowCount += static_cast<int>(sampleCount);
-            } else {
-                totalSampleRowCount = std::numeric_limits<int>::max();
-            }
-            rowOffsets.push_back(totalSampleRowCount);
-        }
-        endResetModel();
-    }
-
-    void clear() {
-        setAttributes({});
-    }
-
-private:
-    const NodeGraphRuntimeAttributeDebugInfo* attributeForRow(int row, int& outElementIndex) const {
-        if (row < 0 || row >= totalSampleRowCount || rowOffsets.empty()) {
-            outElementIndex = 0;
-            return nullptr;
-        }
-
-        const auto offsetIt = std::upper_bound(rowOffsets.begin(), rowOffsets.end(), row);
-        if (offsetIt == rowOffsets.begin() || offsetIt == rowOffsets.end()) {
-            outElementIndex = 0;
-            return nullptr;
-        }
-
-        const std::size_t attributeIndex = static_cast<std::size_t>(std::distance(rowOffsets.begin(), offsetIt) - 1);
-        if (attributeIndex >= attributeRows.size()) {
-            outElementIndex = 0;
-            return nullptr;
-        }
-
-        const int startRow = rowOffsets[attributeIndex];
-        outElementIndex = row - startRow;
-        return &attributeRows[attributeIndex];
-    }
-
-    std::vector<NodeGraphRuntimeAttributeDebugInfo> attributeRows;
-    std::vector<int> rowOffsets;
-    int totalSampleRowCount = 0;
-};
 
 QString nodeTypeDisplayName(const NodeTypeId& typeId) {
     const NodeTypeDefinition* definition = NodeGraphRegistry::findNodeById(typeId);
@@ -531,31 +397,7 @@ void NodeInspectorDialog::buildUi() {
         spreadsheetSummaryLabel->setText("No node selected");
         spreadsheetLayout->addWidget(spreadsheetSummaryLabel);
 
-        spreadsheetAttributesTable = new QTableWidget(spreadsheetTab);
-        spreadsheetAttributesTable->setColumnCount(5);
-        spreadsheetAttributesTable->setHorizontalHeaderLabels({"Attribute", "Domain", "Type", "Tuple", "Elements"});
-        spreadsheetAttributesTable->horizontalHeader()->setStretchLastSection(true);
-        spreadsheetAttributesTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        spreadsheetAttributesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        spreadsheetAttributesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        spreadsheetAttributesTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        spreadsheetAttributesTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        spreadsheetAttributesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        spreadsheetAttributesTable->setSelectionMode(QAbstractItemView::NoSelection);
-        spreadsheetAttributesTable->setMinimumHeight(130);
-        spreadsheetLayout->addWidget(spreadsheetAttributesTable, 1);
-
-        spreadsheetSamplesTable = new QTableView(spreadsheetTab);
-        spreadsheetSamplesModel = new AttributeSamplesTableModel(spreadsheetSamplesTable);
-        spreadsheetSamplesTable->setModel(spreadsheetSamplesModel);
-        spreadsheetSamplesTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        spreadsheetSamplesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        spreadsheetSamplesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-        spreadsheetSamplesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        spreadsheetSamplesTable->setSelectionMode(QAbstractItemView::NoSelection);
-        spreadsheetSamplesTable->setMinimumHeight(130);
-        spreadsheetLayout->addWidget(spreadsheetSamplesTable, 1);
-
+        spreadsheetLayout->addStretch();
         mainTabWidget->addTab(spreadsheetTab, "Spreadsheet");
     }
     {
@@ -655,8 +497,7 @@ void NodeInspectorDialog::updateDataflowView() {
 }
 
 void NodeInspectorDialog::updateSpreadsheetView() {
-    if (!spreadsheetSocketComboBox || !spreadsheetSummaryLabel ||
-        !spreadsheetAttributesTable || !spreadsheetSamplesTable || !spreadsheetSamplesModel) {
+    if (!spreadsheetSocketComboBox || !spreadsheetSummaryLabel) {
         return;
     }
 
@@ -664,7 +505,7 @@ void NodeInspectorDialog::updateSpreadsheetView() {
         spreadsheetSocketComboBox->blockSignals(true);
         spreadsheetSocketComboBox->clear();
         spreadsheetSocketComboBox->blockSignals(false);
-        clearSpreadsheetView("Select a node to inspect geometry attributes");
+        clearSpreadsheetView("Select a node to inspect socket data");
         return;
     }
 
@@ -673,7 +514,7 @@ void NodeInspectorDialog::updateSpreadsheetView() {
         spreadsheetSocketComboBox->blockSignals(true);
         spreadsheetSocketComboBox->clear();
         spreadsheetSocketComboBox->blockSignals(false);
-        clearSpreadsheetView("No runtime geometry data yet \n Run the graph for at least one frame");
+        clearSpreadsheetView("No runtime data yet \n Run the graph for at least one frame");
         return;
     }
 
@@ -719,37 +560,13 @@ void NodeInspectorDialog::updateSpreadsheetView() {
     }
 
     spreadsheetSummaryLabel->setText(
-        QString("Data Type: %1 | Lineage: %2 | Attributes: %3")
+        QString("Data Type: %1 | Lineage: %2")
             .arg(QString::fromStdString(selectedSocketDebug.dataType))
-            .arg(QString::fromStdString(formatLineagePath(selectedSocketDebug.lineageNodeIds)))
-            .arg(static_cast<int>(selectedSocketDebug.attributes.size())));
-
-    spreadsheetAttributesTable->clearContents();
-    spreadsheetAttributesTable->setRowCount(static_cast<int>(selectedSocketDebug.attributes.size()));
-    for (int row = 0; row < static_cast<int>(selectedSocketDebug.attributes.size()); ++row) {
-        const NodeGraphRuntimeAttributeDebugInfo& attributeDebug =
-            selectedSocketDebug.attributes[static_cast<std::size_t>(row)];
-        spreadsheetAttributesTable->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(attributeDebug.name)));
-        spreadsheetAttributesTable->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(attributeDebug.domain)));
-        spreadsheetAttributesTable->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(attributeDebug.dataType)));
-        spreadsheetAttributesTable->setItem(row, 3, new QTableWidgetItem(QString::number(attributeDebug.tupleSize)));
-        spreadsheetAttributesTable->setItem(row, 4, new QTableWidgetItem(QString::number(attributeDebug.elementCount)));
-    }
-
-    if (AttributeSamplesTableModel* sampleModel = dynamic_cast<AttributeSamplesTableModel*>(spreadsheetSamplesModel)) {
-        sampleModel->setAttributes(selectedSocketDebug.attributes);
-    }
+            .arg(QString::fromStdString(formatLineagePath(selectedSocketDebug.lineageNodeIds))));
 }
 
 void NodeInspectorDialog::clearSpreadsheetView(const QString& message) {
     if (spreadsheetSummaryLabel) {
         spreadsheetSummaryLabel->setText(message);
-    }
-    if (spreadsheetAttributesTable) {
-        spreadsheetAttributesTable->clearContents();
-        spreadsheetAttributesTable->setRowCount(0);
-    }
-    if (AttributeSamplesTableModel* sampleModel = dynamic_cast<AttributeSamplesTableModel*>(spreadsheetSamplesModel)) {
-        sampleModel->clear();
     }
 }

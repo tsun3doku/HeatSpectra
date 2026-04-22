@@ -8,7 +8,6 @@ class Camera;
 class CommandPool;
 class MemoryAllocator;
 class Model;
-class MeshModifiers;
 class ModelRegistry;
 class VulkanDevice;
 
@@ -19,7 +18,7 @@ public:
 
     ModelUploader(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool);
 
-    void uploadInitialModels(ModelRegistry& resourceManager, MeshModifiers& meshModifiers);
+    void uploadInitialModels(ModelRegistry& resourceManager);
     uint32_t addModel(ModelRegistry& resourceManager, const std::string& modelPath, uint32_t preferredModelId = 0);
 
 private:

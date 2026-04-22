@@ -5,7 +5,6 @@
 
 #include "framegraph/FrameSync.hpp"
 #include "contact/ContactSystemComputeController.hpp"
-#include "contact/ContactSystemDisplayController.hpp"
 #include "runtime/RemeshController.hpp"
 #include "runtime/ModelComputeRuntime.hpp"
 #include "runtime/ModelDisplayRuntime.hpp"
@@ -13,23 +12,17 @@
 #include "runtime/ContactDisplayController.hpp"
 #include "runtime/RuntimeContactComputeTransport.hpp"
 #include "runtime/RuntimeContactDisplayTransport.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
 #include "runtime/HeatDisplayController.hpp"
 #include "runtime/RuntimeHeatComputeTransport.hpp"
 #include "runtime/RuntimeHeatDisplayTransport.hpp"
 #include "runtime/RuntimeModelDisplayTransport.hpp"
 #include "runtime/RuntimeModelComputeTransport.hpp"
-#include "runtime/RuntimeComputePackageController.hpp"
-#include "runtime/RuntimeDisplayPackageController.hpp"
 #include "runtime/RuntimeRemeshDisplayTransport.hpp"
 #include "runtime/RuntimeRemeshComputeTransport.hpp"
 #include "runtime/RuntimeVoronoiComputeTransport.hpp"
 #include "runtime/RuntimeVoronoiDisplayTransport.hpp"
 #include "runtime/VoronoiDisplayController.hpp"
-#include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemComputeController.hpp"
-#include "heat/HeatSystemDisplayController.hpp"
-#include "heat/VoronoiSystem.hpp"
 #include "heat/VoronoiSystemComputeController.hpp"
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphController.hpp"
@@ -65,8 +58,6 @@ public:
     ContactSystemComputeController* contactSystemComputeController();
     ModelComputeRuntime* modelComputeRuntime();
     const ModelComputeRuntime* modelComputeRuntime() const;
-    RuntimeComputePackageController* runtimeComputePackageController();
-    RuntimeDisplayPackageController* runtimeDisplayPackageController();
     SceneController* sceneController();
     const SceneController* sceneController() const;
     NodeGraphBridge* nodeGraphBridge();
@@ -88,21 +79,16 @@ private:
     std::unique_ptr<RuntimeRemeshComputeTransport> runtimeRemeshTransportState;
     std::unique_ptr<RuntimeVoronoiComputeTransport> runtimeVoronoiComputeTransportState;
     std::unique_ptr<RuntimeVoronoiDisplayTransport> runtimeVoronoiDisplayTransportState;
-    std::unique_ptr<RuntimeProductRegistry> runtimeProductRegistryState;
     std::unique_ptr<ModelComputeRuntime> modelComputeRuntimeState;
     std::unique_ptr<ModelDisplayRuntime> modelDisplayRuntimeState;
     std::unique_ptr<RemeshController> remeshControllerState;
     std::unique_ptr<RemeshDisplayController> remeshDisplayControllerState;
     std::unique_ptr<ContactDisplayController> contactDisplayControllerState;
-    std::unique_ptr<ContactSystemDisplayController> contactSystemDisplayControllerState;
     std::unique_ptr<HeatDisplayController> heatDisplayControllerState;
-    std::unique_ptr<HeatSystemDisplayController> heatSystemDisplayControllerState;
     std::unique_ptr<VoronoiDisplayController> voronoiDisplayControllerState;
     std::unique_ptr<VoronoiSystemComputeController> voronoiSystemComputeControllerState;
     std::unique_ptr<HeatSystemComputeController> heatSystemComputeControllerState;
     std::unique_ptr<ContactSystemComputeController> contactSystemComputeControllerState;
-    std::unique_ptr<RuntimeComputePackageController> runtimeComputePackageControllerState;
-    std::unique_ptr<RuntimeDisplayPackageController> runtimeDisplayPackageControllerState;
     std::unique_ptr<SceneController> sceneControllerState;
     std::unique_ptr<InputController> inputControllerState;
     std::unique_ptr<NodeGraphBridge> nodeGraphBridgeState;

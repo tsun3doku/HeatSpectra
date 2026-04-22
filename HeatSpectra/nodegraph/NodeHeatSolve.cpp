@@ -6,7 +6,6 @@
 #include "NodeHeatSolveParams.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 
@@ -21,10 +20,8 @@ void appendSourceHandlesFromContact(
     }
 
     const ContactPairEndpoint* sourceEndpoint = nullptr;
-    if (pair.endpointA.role == ContactPairRole::Source) {
+    if (pair.type == ContactCouplingType::SourceToReceiver) {
         sourceEndpoint = &pair.endpointA;
-    } else if (pair.endpointB.role == ContactPairRole::Source) {
-        sourceEndpoint = &pair.endpointB;
     }
 
     if (!sourceEndpoint || sourceEndpoint->payloadHandle.key == 0) {
@@ -98,28 +95,14 @@ const char* NodeHeatSolve::typeId() const {
     return nodegraphtypes::HeatSolve;
 }
 
-bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
+void NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<HeatMaterialBinding> materialBindings;
     const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
 
-    const NodeGraphNodeId selectedNodeId =
+    const NodeGraphNodeId activeNodeId =
         selectHeatSolveNode(context.executionState.state, context.executionState);
-    if (!selectedNodeId.isValid() || selectedNodeId != context.node.id) {
-        populateOutputPayloads(
-            context,
-            sourceHandles,
-            receiverMeshHandles,
-            materialBindings,
-            0,
-            0,
-            false,
-            false,
-            false);
-        return false;
-    }
-
     const NodePayloadRegistry* payloadRegistry = context.executionState.services.payloadRegistry;
     const VoronoiData* voronoiInput = readVoronoiInput(
         context.node,
@@ -141,13 +124,14 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
             false,
             false,
             false);
-        return false;
+        return;
     }
 
     appendSourceHandlesFromContact(*contactInput, sourceHandles);
     receiverMeshHandles = voronoiInput->receiverMeshHandles;
     materialBindings = makeHeatPayloadMaterialBindings(params);
 
+    const bool active = activeNodeId.isValid() && activeNodeId == context.node.id;
     const bool wantsPaused = params.resetRequested
         ? false
         : params.paused;
@@ -158,10 +142,9 @@ bool NodeHeatSolve::execute(NodeGraphKernelContext& context) const {
         materialBindings,
         voronoiInput->payloadHash,
         contactInput->payloadHash,
-        true,
-        wantsPaused,
-        params.resetRequested);
-    return false;
+        active,
+        active ? wantsPaused : false,
+        active ? params.resetRequested : false);
 }
 
 void NodeHeatSolve::populateOutputPayloads(
@@ -182,75 +165,45 @@ void NodeHeatSolve::populateOutputPayloads(
         outputValue.dataType = outputSocket.contract.producedPayloadType;
 
         if (!payloadRegistry) {
-            updateDataBlockMetadata(outputValue, payloadRegistry);
+            populateMetadata(outputValue, payloadRegistry);
             continue;
         }
 
         const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
         if (outputSocket.contract.producedPayloadType == NodePayloadType::Heat) {
             HeatData heatData{};
+            heatData.voronoiPayloadHash = voronoiPayloadHash;
+            heatData.contactPayloadHash = contactPayloadHash;
             heatData.sourceHandles = sourceHandles;
             heatData.receiverMeshHandles = receiverMeshHandles;
             heatData.materialBindings = materialBindings;
             heatData.active = active;
             heatData.paused = paused;
             heatData.resetRequested = resetRequested;
-            heatData.payloadHash = NodeGraphHash::start();
-            NodeGraphHash::combine(heatData.payloadHash, voronoiPayloadHash);
-            NodeGraphHash::combine(heatData.payloadHash, contactPayloadHash);
-            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.active ? 1u : 0u));
-            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.paused ? 1u : 0u));
-            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.resetRequested ? 1u : 0u));
-            NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(heatData.materialBindings.size()));
-            for (const HeatMaterialBinding& binding : heatData.materialBindings) {
-                NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(binding.receiverModelNodeId));
-                NodeGraphHash::combine(heatData.payloadHash, static_cast<uint64_t>(binding.presetId));
-            }
-            outputValue.payloadHandle = payloadRegistry->upsert(payloadKey, std::move(heatData));
+            outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(heatData));
         }
 
-        updateDataBlockMetadata(outputValue, payloadRegistry);
+        populateMetadata(outputValue, payloadRegistry);
     }
 }
 
 bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
-    const NodeGraphNodeId selectedNodeId =
+    const NodeGraphNodeId activeNodeId =
         selectHeatSolveNode(context.executionState.state, context.executionState);
-    if (!selectedNodeId.isValid() || selectedNodeId != context.node.id) {
-        return false;
-    }
-
     outHash = NodeGraphHash::start();
-
-    const NodePayloadRegistry* payloadRegistry = context.executionState.services.payloadRegistry;
-    const VoronoiData* voronoi = readVoronoiInput(context.node, context.executionState, payloadRegistry);
-    const ContactData* contact = readContactInput(context.node, context.executionState, payloadRegistry);
-    if (!voronoi || !contact) {
-        return false;
-    }
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
 
     const NodeGraphSocket* voronoiSocket = findInputSocket(context.node, NodeGraphValueType::Volume);
     const NodeGraphSocket* contactSocket = findInputSocket(context.node, NodeGraphValueType::Field);
-    for (const NodeGraphSocket* inputSocket : {voronoiSocket, contactSocket}) {
-        if (!inputSocket) {
-            continue;
-        }
+    const NodeDataBlock* voronoiInput = voronoiSocket
+        ? readInputValue(readEvaluatedInput(context.node, voronoiSocket->id, context.executionState))
+        : nullptr;
+    const NodeDataBlock* contactInput = contactSocket
+        ? readInputValue(readEvaluatedInput(context.node, contactSocket->id, context.executionState))
+        : nullptr;
 
-        const NodeDataBlock* inputValue = readInputValue(
-            readEvaluatedInput(context.node, inputSocket->id, context.executionState));
-        if (!inputValue) {
-            continue;
-        }
-
-        NodeGraphHash::combine(outHash, static_cast<uint64_t>(inputValue->dataType));
-        NodeGraphHash::combine(outHash, inputValue->payloadHandle.key);
-        NodeGraphHash::combine(outHash, inputValue->payloadHandle.revision);
-    }
-
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(context.node.id.value));
-    NodeGraphHash::combineFloat(outHash, voronoi->params.cellSize);
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(voronoi->params.voxelResolution));
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(contact->pair.kind));
+    NodeGraphHash::combineInputHash(outHash, voronoiInput);
+    NodeGraphHash::combineInputHash(outHash, contactInput);
 
     const HeatSolveNodeParams params = readHeatSolveNodeParams(context.node);
     const std::vector<HeatMaterialBinding> materialBindings = makeHeatPayloadMaterialBindings(params);
@@ -259,21 +212,10 @@ bool NodeHeatSolve::computeInputHash(const NodeGraphKernelHashContext& context, 
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(binding.receiverModelNodeId));
         NodeGraphHash::combine(outHash, static_cast<uint64_t>(binding.presetId));
     }
-    std::vector<NodeDataHandle> sourceHandles;
-    appendSourceHandlesFromContact(*contact, sourceHandles);
-    for (const NodeDataHandle& sourceHandle : sourceHandles) {
-        if (sourceHandle.key == 0) {
-            continue;
-        }
-
-        NodeGraphHash::combine(outHash, static_cast<uint64_t>(NodePayloadType::HeatSource));
-        NodeGraphHash::combine(outHash, sourceHandle.key);
-        NodeGraphHash::combine(outHash, sourceHandle.revision);
-        NodeGraphHash::combine(outHash, static_cast<uint64_t>(sourceHandle.count));
-    }
-
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(params.paused));
-    NodeGraphHash::combine(outHash, static_cast<uint64_t>(params.resetRequested));
+    const bool active = activeNodeId.isValid() && activeNodeId == context.node.id;
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(active ? 1u : 0u));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(active && params.paused ? 1u : 0u));
+    NodeGraphHash::combine(outHash, static_cast<uint64_t>(active && params.resetRequested ? 1u : 0u));
 
     return true;
 }

@@ -3,44 +3,25 @@
 
 #include "domain/RemeshParams.hpp"
 
-#include <utility>
-
-NodeGraphAttributeContract NodeGraphRegistry::makeAttributeContract(
-    const char* name,
-    GeometryAttributeDomain domain,
-    GeometryAttributeDataType dataType,
-    uint32_t tupleSize) {
-    NodeGraphAttributeContract contract{};
-    contract.name = name;
-    contract.domain = domain;
-    contract.dataType = dataType;
-    contract.tupleSize = tupleSize;
-    return contract;
-}
-
 NodeSocketSignature NodeGraphRegistry::makeInputSocket(
     const char* name,
-    NodeGraphValueType valueType,
-    std::vector<NodeGraphAttributeContract> requiredAttributes) {
+    NodeGraphValueType valueType) {
     NodeSocketSignature signature{};
     signature.name = name;
     signature.direction = NodeGraphSocketDirection::Input;
     signature.valueType = valueType;
-    signature.contract.requiredAttributes = std::move(requiredAttributes);
     return signature;
 }
 
 NodeSocketSignature NodeGraphRegistry::makeOutputSocket(
     const char* name,
     NodeGraphValueType valueType,
-    NodePayloadType producedPayloadType,
-    std::vector<NodeGraphAttributeContract> guaranteedAttributes) {
+    NodePayloadType producedPayloadType) {
     NodeSocketSignature signature{};
     signature.name = name;
     signature.direction = NodeGraphSocketDirection::Output;
     signature.valueType = valueType;
     signature.contract.producedPayloadType = producedPayloadType;
-    signature.contract.guaranteedAttributes = std::move(guaranteedAttributes);
     return signature;
 }
 
@@ -53,11 +34,7 @@ NodeTypeDefinition NodeGraphRegistry::buildModelNode() {
             makeOutputSocket(
                 "Mesh",
                 NodeGraphValueType::Mesh,
-                NodePayloadType::Geometry,
-                {
-                    makeAttributeContract("P", GeometryAttributeDomain::Point, GeometryAttributeDataType::Float, 3),
-                    makeAttributeContract("group.id", GeometryAttributeDomain::Primitive, GeometryAttributeDataType::Int),
-                }),
+                NodePayloadType::Geometry),
         },
         {
             {nodegraphparams::model::Path, "Model Path", NodeGraphParamType::String, 0.0, 0, false, "", false},
@@ -75,11 +52,7 @@ NodeTypeDefinition NodeGraphRegistry::buildTransformNode() {
             makeOutputSocket(
                 "Mesh",
                 NodeGraphValueType::Mesh,
-                NodePayloadType::Geometry,
-                {
-                    makeAttributeContract("P", GeometryAttributeDomain::Point, GeometryAttributeDataType::Float, 3),
-                    makeAttributeContract("group.id", GeometryAttributeDomain::Primitive, GeometryAttributeDataType::Int),
-                }),
+                NodePayloadType::Geometry),
         },
         {
             {nodegraphparams::transform::TranslateX, "Translate X", NodeGraphParamType::Float, 0.0, 0, false, "", false},
@@ -105,11 +78,7 @@ NodeTypeDefinition NodeGraphRegistry::buildGroupNode() {
             makeOutputSocket(
                 "Mesh",
                 NodeGraphValueType::Mesh,
-                NodePayloadType::Geometry,
-                {
-                    makeAttributeContract("P", GeometryAttributeDomain::Point, GeometryAttributeDataType::Float, 3),
-                    makeAttributeContract("group.id", GeometryAttributeDomain::Primitive, GeometryAttributeDataType::Int),
-                }),
+                NodePayloadType::Geometry),
         },
         {
             {nodegraphparams::group::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, true, "", false},
@@ -155,10 +124,7 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatReceiverNode() {
             makeOutputSocket(
                 "Receiver",
                 NodeGraphValueType::Receiver,
-                NodePayloadType::HeatReceiver,
-                {
-                    makeAttributeContract("receiver.active", GeometryAttributeDomain::Detail, GeometryAttributeDataType::Bool),
-                }),
+                NodePayloadType::HeatReceiver),
         },
         {},
     };
@@ -174,11 +140,7 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSourceNode() {
             makeOutputSocket(
                 "Source",
                 NodeGraphValueType::Emitter,
-                NodePayloadType::HeatSource,
-                {
-                    makeAttributeContract("source.active", GeometryAttributeDomain::Detail, GeometryAttributeDataType::Bool),
-                    makeAttributeContract("temperature", GeometryAttributeDomain::Point, GeometryAttributeDataType::Float),
-                }),
+                NodePayloadType::HeatSource),
         },
         {
             {nodegraphparams::heatsource::Temperature, "Temperature", NodeGraphParamType::Float, 100.0, 0, false, "", false},
@@ -264,7 +226,7 @@ NodeTypeDefinition NodeGraphRegistry::buildCustomNode() {
         "Custom",
         NodeGraphNodeCategory::Custom,
         {
-            makeInputSocket("In", NodeGraphValueType::None, {}),
+            makeInputSocket("In", NodeGraphValueType::None),
             makeOutputSocket("Out", NodeGraphValueType::None, NodePayloadType::None),
         },
         {},

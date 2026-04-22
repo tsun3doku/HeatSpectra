@@ -12,7 +12,6 @@
 #include "domain/GeometryData.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "nodegraph/NodeGraphCoreTypes.hpp"
-#include "heat/ContactInterface.hpp"
 #include "contact/ContactTypes.hpp"
 #include "util/Structs.hpp"
 
@@ -62,7 +61,7 @@ struct ModelProduct {
     VkDeviceSize renderIndexBufferOffset = 0;
     uint32_t renderIndexCount = 0;
     glm::mat4 modelMatrix{ 1.0f };
-    uint64_t contentHash = 0;
+    uint64_t productHash = 0;
 
     bool isValid() const {
         return runtimeModelId != 0 &&
@@ -74,21 +73,6 @@ struct ModelProduct {
             renderIndexCount != 0;
     }
 
-    bool operator==(const ModelProduct& other) const {
-        return runtimeModelId == other.runtimeModelId &&
-            vertexBuffer == other.vertexBuffer &&
-            vertexBufferOffset == other.vertexBufferOffset &&
-            indexBuffer == other.indexBuffer &&
-            indexBufferOffset == other.indexBufferOffset &&
-            indexCount == other.indexCount &&
-            renderVertexBuffer == other.renderVertexBuffer &&
-            renderVertexBufferOffset == other.renderVertexBufferOffset &&
-            renderIndexBuffer == other.renderIndexBuffer &&
-            renderIndexBufferOffset == other.renderIndexBufferOffset &&
-            renderIndexCount == other.renderIndexCount &&
-            modelMatrix == other.modelMatrix &&
-            contentHash == other.contentHash;
-    }
 };
 
 
@@ -141,34 +125,6 @@ struct VoronoiSurfaceProduct {
             inputLengthView != VK_NULL_HANDLE;
     }
 
-    bool operator==(const VoronoiSurfaceProduct& other) const {
-        return runtimeModelId == other.runtimeModelId &&
-            nodeOffset == other.nodeOffset &&
-            nodeCount == other.nodeCount &&
-            surfaceMappingBuffer == other.surfaceMappingBuffer &&
-            surfaceMappingBufferOffset == other.surfaceMappingBufferOffset &&
-            vertexBuffer == other.vertexBuffer &&
-            vertexBufferOffset == other.vertexBufferOffset &&
-            indexBuffer == other.indexBuffer &&
-            indexBufferOffset == other.indexBufferOffset &&
-            indexCount == other.indexCount &&
-            modelMatrix == other.modelMatrix &&
-            intrinsicVertexCount == other.intrinsicVertexCount &&
-            candidateBuffer == other.candidateBuffer &&
-            candidateBufferOffset == other.candidateBufferOffset &&
-            supportingHalfedgeView == other.supportingHalfedgeView &&
-            supportingAngleView == other.supportingAngleView &&
-            halfedgeView == other.halfedgeView &&
-            edgeView == other.edgeView &&
-            triangleView == other.triangleView &&
-            lengthView == other.lengthView &&
-            inputHalfedgeView == other.inputHalfedgeView &&
-            inputEdgeView == other.inputEdgeView &&
-            inputTriangleView == other.inputTriangleView &&
-            inputLengthView == other.inputLengthView &&
-            surfaceCellIndices == other.surfaceCellIndices &&
-            seedFlags == other.seedFlags;
-    }
 };
 
 struct RemeshProduct {
@@ -193,7 +149,7 @@ struct RemeshProduct {
     VkBufferView inputEdgeView = VK_NULL_HANDLE;
     VkBufferView inputTriangleView = VK_NULL_HANDLE;
     VkBufferView inputLengthView = VK_NULL_HANDLE;
-    uint64_t contentHash = 0;
+    uint64_t productHash = 0;
 
     bool isValid() const {
         return !geometryPositions.empty() &&
@@ -214,37 +170,6 @@ struct RemeshProduct {
             inputLengthView != VK_NULL_HANDLE;
     }
 
-    bool hasDisplayBinding() const {
-        return runtimeModelId != 0;
-    }
-
-    bool operator==(const RemeshProduct& other) const {
-        return runtimeModelId == other.runtimeModelId &&
-            geometryPositions.size() == other.geometryPositions.size() &&
-            geometryTriangleIndices == other.geometryTriangleIndices &&
-            intrinsicMesh.vertices.size() == other.intrinsicMesh.vertices.size() &&
-            intrinsicMesh.indices == other.intrinsicMesh.indices &&
-            intrinsicMesh.faceIds == other.intrinsicMesh.faceIds &&
-            intrinsicMesh.triangles.size() == other.intrinsicMesh.triangles.size() &&
-            intrinsicTriangleBuffer == other.intrinsicTriangleBuffer &&
-            intrinsicTriangleBufferOffset == other.intrinsicTriangleBufferOffset &&
-            intrinsicVertexBuffer == other.intrinsicVertexBuffer &&
-            intrinsicVertexBufferOffset == other.intrinsicVertexBufferOffset &&
-            intrinsicTriangleCount == other.intrinsicTriangleCount &&
-            intrinsicVertexCount == other.intrinsicVertexCount &&
-            averageTriangleArea == other.averageTriangleArea &&
-            supportingHalfedgeView == other.supportingHalfedgeView &&
-            supportingAngleView == other.supportingAngleView &&
-            halfedgeView == other.halfedgeView &&
-            edgeView == other.edgeView &&
-            triangleView == other.triangleView &&
-            lengthView == other.lengthView &&
-            inputHalfedgeView == other.inputHalfedgeView &&
-            inputEdgeView == other.inputEdgeView &&
-            inputTriangleView == other.inputTriangleView &&
-            inputLengthView == other.inputLengthView &&
-            contentHash == other.contentHash;
-    }
 };
 
 struct VoronoiProduct {
@@ -275,7 +200,7 @@ struct VoronoiProduct {
     uint32_t occupancyPointCount = 0;
 
     std::vector<VoronoiSurfaceProduct> surfaces;
-    uint64_t contentHash = 0;
+    uint64_t productHash = 0;
 
     bool isValid() const {
         return nodeCount != 0 &&
@@ -285,67 +210,26 @@ struct VoronoiProduct {
             seedPositionBuffer != VK_NULL_HANDLE;
     }
 
-    bool operator==(const VoronoiProduct& other) const {
-        return nodeCount == other.nodeCount &&
-            mappedVoronoiNodes == other.mappedVoronoiNodes &&
-            nodeBuffer == other.nodeBuffer &&
-            nodeBufferOffset == other.nodeBufferOffset &&
-            voronoiNeighborBuffer == other.voronoiNeighborBuffer &&
-            voronoiNeighborBufferOffset == other.voronoiNeighborBufferOffset &&
-            neighborIndicesBuffer == other.neighborIndicesBuffer &&
-            neighborIndicesBufferOffset == other.neighborIndicesBufferOffset &&
-            interfaceAreasBuffer == other.interfaceAreasBuffer &&
-            interfaceAreasBufferOffset == other.interfaceAreasBufferOffset &&
-            interfaceNeighborIdsBuffer == other.interfaceNeighborIdsBuffer &&
-            interfaceNeighborIdsBufferOffset == other.interfaceNeighborIdsBufferOffset &&
-            seedFlagsBuffer == other.seedFlagsBuffer &&
-            seedFlagsBufferOffset == other.seedFlagsBufferOffset &&
-            seedPositionBuffer == other.seedPositionBuffer &&
-            seedPositionBufferOffset == other.seedPositionBufferOffset &&
-            occupancyPointBuffer == other.occupancyPointBuffer &&
-            occupancyPointBufferOffset == other.occupancyPointBufferOffset &&
-            occupancyPointCount == other.occupancyPointCount &&
-            surfaces == other.surfaces &&
-            contentHash == other.contentHash;
-    }
 };
 
 struct ContactProduct {
-    ContactCouplingType couplingType = ContactCouplingType::SourceToReceiver;
-    uint32_t emitterRuntimeModelId = 0;
-    uint32_t receiverRuntimeModelId = 0;
-    std::vector<uint32_t> receiverTriangleIndices;
-    std::vector<ContactInterface::ContactLineVertex> outlineVertices;
-    std::vector<ContactInterface::ContactLineVertex> correspondenceVertices;
-
+    // Compute output 
+    ContactCoupling coupling{};
     VkBuffer contactPairBuffer = VK_NULL_HANDLE;
     VkDeviceSize contactPairBufferOffset = 0;
-    uint32_t contactPairCount = 0;
-    const ContactPair* mappedContactPairs = nullptr;
-    uint64_t contentHash = 0;
+
+    uint32_t emitterRuntimeModelId = 0;
+    uint32_t receiverRuntimeModelId = 0;
+    std::vector<ContactLineVertex> outlineVertices;
+    std::vector<ContactLineVertex> correspondenceVertices;
+
+    uint64_t productHash = 0;
 
     bool isValid() const {
-        return emitterRuntimeModelId != 0 &&
-            receiverRuntimeModelId != 0 &&
-            !receiverTriangleIndices.empty() &&
-            contactPairBuffer != VK_NULL_HANDLE &&
-            contactPairCount != 0 &&
-            mappedContactPairs != nullptr;
+        return coupling.isValid() &&
+            contactPairBuffer != VK_NULL_HANDLE;
     }
 
-    bool operator==(const ContactProduct& other) const {
-        return couplingType == other.couplingType &&
-            emitterRuntimeModelId == other.emitterRuntimeModelId &&
-            receiverRuntimeModelId == other.receiverRuntimeModelId &&
-            receiverTriangleIndices == other.receiverTriangleIndices &&
-            outlineVertices == other.outlineVertices &&
-            correspondenceVertices == other.correspondenceVertices &&
-            contactPairBuffer == other.contactPairBuffer &&
-            contactPairBufferOffset == other.contactPairBufferOffset &&
-            contactPairCount == other.contactPairCount &&
-            mappedContactPairs == other.mappedContactPairs &&
-            contentHash == other.contentHash;
-    }
 };
 
 struct HeatProduct {
@@ -354,24 +238,16 @@ struct HeatProduct {
     std::vector<uint32_t> sourceRuntimeModelIds;
     std::vector<uint32_t> receiverRuntimeModelIds;
     std::vector<VkBufferView> receiverSurfaceBufferViews;
-    uint64_t contentHash = 0;
+    uint64_t productHash = 0;
 
     bool isValid() const {
         return !receiverRuntimeModelIds.empty() &&
             receiverRuntimeModelIds.size() == receiverSurfaceBufferViews.size();
     }
 
-    bool operator==(const HeatProduct& other) const {
-        return active == other.active &&
-            paused == other.paused &&
-            sourceRuntimeModelIds == other.sourceRuntimeModelIds &&
-            receiverRuntimeModelIds == other.receiverRuntimeModelIds &&
-            receiverSurfaceBufferViews == other.receiverSurfaceBufferViews &&
-            contentHash == other.contentHash;
-    }
 };
 
-inline uint64_t computeContentHash(const ModelProduct& product) {
+inline uint64_t buildProductHash(const ModelProduct& product) {
     uint64_t hash = 1469598103934665603ull;
     hash = RuntimeProductHash::mixPod(hash, product.runtimeModelId);
     hash = RuntimeProductHash::mixPod(hash, product.vertexBuffer);
@@ -388,7 +264,7 @@ inline uint64_t computeContentHash(const ModelProduct& product) {
     return hash;
 }
 
-inline uint64_t computeContentHash(const RemeshProduct& product) {
+inline uint64_t buildProductHash(const RemeshProduct& product) {
     uint64_t hash = 1469598103934665603ull;
     hash = RuntimeProductHash::mixPod(hash, product.runtimeModelId);
     hash = RuntimeProductHash::mixPodVector(hash, product.geometryPositions);
@@ -403,7 +279,7 @@ inline uint64_t computeContentHash(const RemeshProduct& product) {
     return hash;
 }
 
-inline uint64_t computeContentHash(const VoronoiProduct& product) {
+inline uint64_t buildProductHash(const VoronoiProduct& product) {
     uint64_t hash = 1469598103934665603ull;
     hash = RuntimeProductHash::mixPod(hash, product.nodeCount);
     if (product.nodeCount != 0 && product.mappedVoronoiNodes != nullptr) {
@@ -450,25 +326,27 @@ inline uint64_t computeContentHash(const VoronoiProduct& product) {
     return hash;
 }
 
-inline uint64_t computeContentHash(const ContactProduct& product) {
+inline uint64_t buildProductHash(const ContactProduct& product) {
     uint64_t hash = 1469598103934665603ull;
-    hash = RuntimeProductHash::mixPod(hash, static_cast<uint32_t>(product.couplingType));
-    hash = RuntimeProductHash::mixPod(hash, product.emitterRuntimeModelId);
-    hash = RuntimeProductHash::mixPod(hash, product.receiverRuntimeModelId);
-    hash = RuntimeProductHash::mixPodVector(hash, product.receiverTriangleIndices);
-    hash = RuntimeProductHash::mixPodVector(hash, product.outlineVertices);
-    hash = RuntimeProductHash::mixPodVector(hash, product.correspondenceVertices);
-    hash = RuntimeProductHash::mixPod(hash, product.contactPairCount);
-    if (product.contactPairCount != 0 && product.mappedContactPairs != nullptr) {
+    hash = RuntimeProductHash::mixPod(hash, static_cast<uint32_t>(product.coupling.couplingType));
+    hash = RuntimeProductHash::mixPod(hash, product.coupling.emitterRuntimeModelId);
+    hash = RuntimeProductHash::mixPod(hash, product.coupling.receiverRuntimeModelId);
+    hash = RuntimeProductHash::mixPodVector(hash, product.coupling.receiverTriangleIndices);
+    hash = RuntimeProductHash::mixPod(hash, product.coupling.contactPairCount);
+    if (product.coupling.contactPairCount != 0 && product.coupling.mappedContactPairs != nullptr) {
         hash = RuntimeProductHash::mixBytes(
             hash,
-            product.mappedContactPairs,
-            sizeof(ContactPair) * product.contactPairCount);
+            product.coupling.mappedContactPairs,
+            sizeof(ContactPair) * product.coupling.contactPairCount);
     }
+    hash = RuntimeProductHash::mixPod(hash, product.emitterRuntimeModelId);
+    hash = RuntimeProductHash::mixPod(hash, product.receiverRuntimeModelId);
+    hash = RuntimeProductHash::mixPodVector(hash, product.outlineVertices);
+    hash = RuntimeProductHash::mixPodVector(hash, product.correspondenceVertices);
     return hash;
 }
 
-inline uint64_t computeContentHash(const HeatProduct& product) {
+inline uint64_t buildProductHash(const HeatProduct& product) {
     uint64_t hash = 1469598103934665603ull;
     hash = RuntimeProductHash::mixPod(hash, static_cast<uint64_t>(product.active ? 1u : 0u));
     hash = RuntimeProductHash::mixPod(hash, static_cast<uint64_t>(product.paused ? 1u : 0u));

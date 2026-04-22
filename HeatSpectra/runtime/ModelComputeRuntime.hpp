@@ -32,6 +32,7 @@ public:
     bool tryGetRuntimeModelId(uint64_t socketKey, uint32_t& outRuntimeModelId) const;
     bool tryGetSocketKey(uint32_t runtimeModelId, uint64_t& outSocketKey) const;
     bool exportProduct(uint32_t runtimeModelId, ModelProduct& outProduct) const;
+    bool setModelMatrix(uint32_t runtimeModelId, const glm::mat4& matrix);
 
 private:
     class OperatingScope {

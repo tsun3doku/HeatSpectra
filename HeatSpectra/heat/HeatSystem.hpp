@@ -2,6 +2,7 @@
 
 #include "HeatContactRuntime.hpp"
 #include "contact/ContactTypes.hpp"
+#include "framegraph/ComputePass.hpp"
 #include "util/Structs.hpp"
 #include "HeatSystemSimRuntime.hpp"
 #include "HeatSystemSurfaceRuntime.hpp"
@@ -19,7 +20,6 @@ static constexpr int NUM_SUBSTEPS = 8;
 class ModelRegistry;
 class MemoryAllocator;
 class VulkanDevice;
-class UniformBufferManager;
 class CommandPool;
 class HeatSystemContactStage;
 class HeatSystemSimStage;
@@ -27,34 +27,34 @@ class HeatSystemSurfaceStage;
 class HeatSystemVoronoiStage;
 class HeatSystemResources;
 
-class HeatSystem {
+class HeatSystem : public ComputePass {
 public:
     HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager, HeatSystemResources& resources,
-        UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, CommandPool& renderCommandPool,
-        VkExtent2D extent, VkRenderPass renderPass);
+        uint32_t maxFramesInFlight, CommandPool& renderCommandPool);
     ~HeatSystem();
 
-    void update();
+    void update() override;
     void ensureConfigured();
     void setActive(bool active);
     bool isInitialized() const { return initialized; }
 
-    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkQueryPool timingQueryPool = VK_NULL_HANDLE, uint32_t timingQueryBase = 0);
+    void recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t currentFrame, VkQueryPool timingQueryPool, uint32_t timingQueryBase) override;
     
     bool createComputeCommandBuffers(uint32_t maxFramesInFlight);
 
     void cleanupResources();
     void cleanup();
 
-    const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const { return computeCommandBuffers; }
+    const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const override { return computeCommandBuffers; }
 
     bool getIsActive() const { return isActive; }
     bool getIsPaused() const { return isPaused; } 
     void setIsPaused(bool paused) { isPaused = paused; } 
     const std::vector<HeatSystemRuntime::SourceBinding>& getSourceBindings() const { return heatSources; }
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& getReceivers() const { return surfaceRuntime.getReceivers(); }
-    bool hasDispatchableComputeWork() const;
+    bool hasDispatchableComputeWork() const override;
     bool voronoiReady() const;
+    void resetHeatState();
     void setSourcePayloads(
         const std::vector<SupportingHalfedge::IntrinsicMesh>& sourceIntrinsicMeshes,
         const std::vector<uint32_t>& sourceRuntimeModelIds,
@@ -73,7 +73,7 @@ public:
         const std::vector<VkBufferView>& inputTriangleViews,
         const std::vector<VkBufferView>& inputLengthViews);
     void setThermalMaterials(const std::vector<RuntimeThermalMaterial>& runtimeThermalMaterials);
-    void setContactCouplings(const std::vector<ContactProduct>& contactCouplings);
+    void setContactCouplings(const std::vector<ContactCoupling>& contactCouplings);
     void clearVoronoiInputs();
     void setVoronoiBuffers(
         uint32_t nodeCount,
@@ -101,7 +101,6 @@ public:
 
 private:    
     using SourceBinding = HeatSystemRuntime::SourceBinding;
-    using ContactCoupling = HeatContactRuntime::ContactCoupling;
     using ContactCouplingType = ::ContactCouplingType;
 
     void failInitialization(const char* stage);
@@ -110,13 +109,11 @@ private:
     bool initializeVoronoiMaterialNodes();
     void rebuildReceiverThermalMaterialMap();
     void cleanupVoronoiRuntime();
-    void resetHeatState();
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ModelRegistry& resourceManager;
     HeatSystemResources& resources;
-    UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool; 
     HeatSystemRuntime runtime;
     HeatSystemSimRuntime simRuntime;

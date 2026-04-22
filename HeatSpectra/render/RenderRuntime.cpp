@@ -13,7 +13,6 @@
 #include "MainRenderGraph.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "scene/MaterialSystem.hpp"
-#include "mesh/MeshModifiers.hpp"
 #include "scene/ModelSelection.hpp"
 #include "RenderConfig.hpp"
 #include "vulkan/ModelRegistry.hpp"
@@ -23,7 +22,6 @@
 #include "framegraph/VkFrameGraphBackend.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "renderers/WireframeRenderer.hpp"
-#include "contact/ContactSystemComputeController.hpp"
 
 #include <iostream>
 
@@ -117,26 +115,10 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
     return true;
 }
 
-bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& services) {
+bool RenderRuntime::initializeFrameController(const FrameControllerServices& services) {
     if (!modelSelection || !gizmoController || !wireframeRenderer || !frameGraph || !frameGraphBackend || !sceneRenderer) {
         return false;
     }
-
-    FrameControllerServices frameServices{
-        services.resourceManager,
-        services.meshModifiers,
-        services.uniformBufferManager,
-        services.heatSystemComputeController,
-        services.heatSystemDisplayController,
-        services.contactSystemController,
-        services.voronoiSystemComputeController,
-        *modelSelection,
-        *gizmoController,
-        *wireframeRenderer,
-        services.inputController,
-        services.lightingSystem,
-        services.materialSystem
-    };
 
     frameController = std::make_unique<FrameController>(
         windowState,
@@ -149,7 +131,7 @@ bool RenderRuntime::initializeFrameController(const RenderRuntimeServices& servi
         computeTiming,
         frameStats,
         cameraController,
-        frameServices,
+        services,
         isOperating,
         isShuttingDown);
 
@@ -173,9 +155,9 @@ void RenderRuntime::shutdownSyncObjects() {
     frameSync.shutdown();
 }
 
-void RenderRuntime::renderFrame(const render::RenderFlags& flags, bool allowHeatSolve) {
+void RenderRuntime::renderFrame(const render::RenderFlags& flags, const std::vector<ComputePass*>& computePasses) {
     if (frameController) {
-        frameController->drawFrame(flags, allowHeatSolve);
+        frameController->drawFrame(flags, computePasses);
     }
 }
 
@@ -258,5 +240,13 @@ GizmoController& RenderRuntime::getGizmoController() {
 
 const GizmoController& RenderRuntime::getGizmoController() const {
     return *gizmoController;
+}
+
+WireframeRenderer& RenderRuntime::getWireframeRenderer() {
+    return *wireframeRenderer;
+}
+
+const WireframeRenderer& RenderRuntime::getWireframeRenderer() const {
+    return *wireframeRenderer;
 }
 

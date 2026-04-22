@@ -16,7 +16,6 @@ enum class NodeProductType : uint8_t {
 struct ProductHandle {
     NodeProductType type = NodeProductType::None;
     uint64_t outputSocketKey = 0;
-    uint64_t outputRevision = 0;
 
     bool isValid() const {
         return type != NodeProductType::None &&
@@ -25,7 +24,6 @@ struct ProductHandle {
 
     bool operator==(const ProductHandle& other) const {
         return type == other.type &&
-            outputSocketKey == other.outputSocketKey &&
-            outputRevision == other.outputRevision;
+            outputSocketKey == other.outputSocketKey;
     }
 };

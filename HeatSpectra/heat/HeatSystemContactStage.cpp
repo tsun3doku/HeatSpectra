@@ -16,7 +16,7 @@ HeatSystemContactStage::HeatSystemContactStage(const HeatSystemStageContext& sta
     : context(stageContext) {
 }
 
-bool HeatSystemContactStage::ensureParamsBuffer(HeatContactRuntime::ContactCoupling& coupling) {
+bool HeatSystemContactStage::ensureParamsBuffer(HeatContactRuntime::CouplingState& coupling) {
     if (coupling.paramsBuffer == VK_NULL_HANDLE) {
         const auto bufferResult = context.memoryAllocator.allocate(
             sizeof(HeatContactParams),
@@ -170,7 +170,7 @@ bool HeatSystemContactStage::createPipeline() {
 }
 
 void HeatSystemContactStage::updateCouplingDescriptors(
-    HeatContactRuntime::ContactCoupling& coupling,
+    HeatContactRuntime::CouplingState& coupling,
     const HeatSystemSimRuntime& simRuntime) {
     coupling.contactDescriptorsReady = false;
     if (coupling.contactSampleBuffer == VK_NULL_HANDLE ||
@@ -257,7 +257,7 @@ void HeatSystemContactStage::updateCouplingDescriptors(
 
 void HeatSystemContactStage::dispatchCoupling(
     VkCommandBuffer commandBuffer,
-    const HeatContactRuntime::ContactCoupling& coupling,
+    const HeatContactRuntime::CouplingState& coupling,
     const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
     bool evenSubstep) const {
     if (!coupling.contactDescriptorsReady || coupling.contactCellRangeCount == 0) {

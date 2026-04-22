@@ -6,13 +6,6 @@
 #include <vector>
 #include <unordered_set>
 
-struct NodeGraphCompiled {
-    uint64_t revision = 0;
-    bool isValid = false;
-    std::vector<NodeGraphNodeId> executionOrder;
-    std::vector<std::string> compilationErrors;
-};
-
 class NodeGraphCompiler {
 public:
     static NodeGraphCompiled compile(const NodeGraphState& state);

@@ -4,7 +4,6 @@
 
 #include "FramePass.hpp"
 #include "FrameSync.hpp"
-#include "mesh/MeshModifiers.hpp"
 #include "render/SceneRenderer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
@@ -12,20 +11,18 @@ FrameGraphicsStage::FrameGraphicsStage(
     VulkanDevice& vulkanDevice,
     FrameSync& frameSync,
     SceneRenderer& sceneRenderer,
-    MeshModifiers& meshModifiers,
     ModelSelection& modelSelection,
     GizmoController& gizmoController,
     WireframeRenderer& wireframeRenderer)
     : vulkanDevice(vulkanDevice),
       frameSync(frameSync),
       sceneRenderer(sceneRenderer),
-      meshModifiers(meshModifiers),
       modelSelection(modelSelection),
       gizmoController(gizmoController),
       wireframeRenderer(wireframeRenderer) {
 }
 
-FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const FrameSyncState& syncState, bool allowHeatSolve) {
+FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const FrameSyncState& syncState) {
     const auto& commandBuffers = sceneRenderer.getCommandBuffers();
     if (frameState.frameIndex >= commandBuffers.size()) {
         std::cout << "[FrameGraphicsStage] Missing scene renderer command buffer for frame index" << std::endl;
@@ -42,8 +39,6 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const
     frameRequest.extent = frameState.extent;
     frameRequest.sceneView = frameState.sceneView;
     frameRequest.flags = frameState.flags;
-    (void)allowHeatSolve;
-
 
     render::RenderServices services{};
     services.modelSelection = &modelSelection;

@@ -1,10 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <unordered_set>
 
 #include "contact/ContactTypes.hpp"
 #include "heat/HeatSystemComputeController.hpp"
-#include "runtime/RuntimeProductRegistry.hpp"
+#include "heat/HeatSystemPresets.hpp"
+#include "runtime/RuntimeECS.hpp"
 #include "runtime/RuntimePackages.hpp"
 
 class RuntimeHeatComputeTransport {
@@ -13,67 +15,61 @@ public:
         controller = updatedController;
     }
 
-    void setProductRegistry(RuntimeProductRegistry* updatedRegistry) {
-        productRegistry = updatedRegistry;
+    void setECSRegistry(ECSRegistry* updatedRegistry) {
+        ecsRegistry = updatedRegistry;
     }
 
-    void sync(const std::unordered_map<uint64_t, HeatPackage>& packagesBySocket) {
+    void sync(const ECSRegistry& registry) {
         if (!controller) {
             return;
         }
 
-        std::unordered_set<uint64_t> activeSockets;
+        std::unordered_set<uint64_t> nextSocketKeys;
 
-        for (const auto& [socketKey, package] : packagesBySocket) {
+        auto view = registry.view<HeatPackage>();
+        for (auto entity : view) {
+            uint64_t socketKey = static_cast<uint64_t>(entity);
+            const auto& package = registry.get<HeatPackage>(entity);
             if (!package.authored.active) {
+                continue;
+            }
+            if (package.sourceTemperatures.size() < package.sourceRemeshProducts.size()) {
+                continue;
+            }
+
+            auto hashIt = appliedPackageHash.find(socketKey);
+            if (hashIt != appliedPackageHash.end() && hashIt->second == package.packageHash) {
+                nextSocketKeys.insert(socketKey);
                 continue;
             }
 
             HeatSystemComputeController::Config config{};
-            bool isPackageReady = true;
             config.active = package.authored.active;
             config.paused = package.authored.paused;
             config.resetRequested = package.authored.resetRequested;
             config.sourceIntrinsicMeshes.reserve(package.sourceRemeshProducts.size());
             config.sourceRuntimeModelIds.reserve(package.sourceRemeshProducts.size());
             config.sourceTemperatureByRuntimeId.clear();
-            std::unordered_set<uint32_t> seenSourceRuntimeModelIds;
-            for (size_t index = 0; index < package.sourceRemeshProducts.size(); ++index) {
-                const ProductHandle& remeshProductHandle = package.sourceRemeshProducts[index];
+            size_t sourceIndex = 0;
+            for (; sourceIndex < package.sourceRemeshProducts.size(); ++sourceIndex) {
+                const ProductHandle& remeshProductHandle = package.sourceRemeshProducts[sourceIndex];
                 const RemeshProduct* product =
-                    productRegistry ? productRegistry->resolveRemesh(remeshProductHandle) : nullptr;
+                    tryGetProduct<RemeshProduct>(*ecsRegistry, remeshProductHandle.outputSocketKey);
                 if (!product || product->runtimeModelId == 0) {
-                    isPackageReady = false;
                     break;
-                }
-                if (!seenSourceRuntimeModelIds.insert(product->runtimeModelId).second) {
-                    continue;
                 }
 
                 config.sourceIntrinsicMeshes.push_back(product->intrinsicMesh);
                 config.sourceRuntimeModelIds.push_back(product->runtimeModelId);
-                const float sourceTemperature =
-                    (index < package.sourceTemperatures.size())
-                    ? package.sourceTemperatures[index]
-                    : 100.0f;
-                config.sourceTemperatureByRuntimeId[product->runtimeModelId] = sourceTemperature;
+                config.sourceTemperatureByRuntimeId[product->runtimeModelId] = package.sourceTemperatures[sourceIndex];
+            }
+            if (sourceIndex != package.sourceRemeshProducts.size()) {
+                continue;
             }
 
-            config.receiverIntrinsicMeshes.reserve(package.receiverRemeshProducts.size());
-            config.receiverRuntimeModelIds.reserve(package.receiverRemeshProducts.size());
-            for (const ProductHandle& remeshProductHandle : package.receiverRemeshProducts) {
-                const RemeshProduct* product =
-                    productRegistry ? productRegistry->resolveRemesh(remeshProductHandle) : nullptr;
-                if (!product || product->runtimeModelId == 0) {
-                    isPackageReady = false;
-                    break;
-                }
-
-                config.receiverIntrinsicMeshes.push_back(product->intrinsicMesh);
-                config.receiverRuntimeModelIds.push_back(product->runtimeModelId);
-            }
-
-            const size_t receiverCount = config.receiverRuntimeModelIds.size();
+            const size_t receiverCount = package.receiverRemeshProducts.size();
+            config.receiverIntrinsicMeshes.resize(receiverCount);
+            config.receiverRuntimeModelIds.resize(receiverCount, 0);
             config.supportingHalfedgeViews.resize(receiverCount, VK_NULL_HANDLE);
             config.supportingAngleViews.resize(receiverCount, VK_NULL_HANDLE);
             config.halfedgeViews.resize(receiverCount, VK_NULL_HANDLE);
@@ -85,15 +81,16 @@ public:
             config.inputTriangleViews.resize(receiverCount, VK_NULL_HANDLE);
             config.inputLengthViews.resize(receiverCount, VK_NULL_HANDLE);
             size_t receiverIndex = 0;
-            for (size_t index = 0; isPackageReady && index < package.receiverRemeshProducts.size() && receiverIndex < receiverCount; ++index) {
-                const ProductHandle& remeshProductHandle = package.receiverRemeshProducts[index];
+            for (; receiverIndex < receiverCount; ++receiverIndex) {
+                const ProductHandle& remeshProductHandle = package.receiverRemeshProducts[receiverIndex];
                 const RemeshProduct* product =
-                    productRegistry ? productRegistry->resolveRemesh(remeshProductHandle) : nullptr;
+                    tryGetProduct<RemeshProduct>(*ecsRegistry, remeshProductHandle.outputSocketKey);
                 if (!product || product->runtimeModelId == 0) {
-                    isPackageReady = false;
                     break;
                 }
 
+                config.receiverIntrinsicMeshes[receiverIndex] = product->intrinsicMesh;
+                config.receiverRuntimeModelIds[receiverIndex] = product->runtimeModelId;
                 config.supportingHalfedgeViews[receiverIndex] = product->supportingHalfedgeView;
                 config.supportingAngleViews[receiverIndex] = product->supportingAngleView;
                 config.halfedgeViews[receiverIndex] = product->halfedgeView;
@@ -104,78 +101,110 @@ public:
                 config.inputEdgeViews[receiverIndex] = product->inputEdgeView;
                 config.inputTriangleViews[receiverIndex] = product->inputTriangleView;
                 config.inputLengthViews[receiverIndex] = product->inputLengthView;
-                ++receiverIndex;
             }
-            config.runtimeThermalMaterials = package.runtimeThermalMaterials;
-
-            if (productRegistry && package.voronoiProduct.isValid()) {
-                const VoronoiProduct* product = productRegistry->resolveVoronoi(package.voronoiProduct);
-                if (!product) {
-                    isPackageReady = false;
-                } else {
-                    config.voronoiNodeCount = product->nodeCount;
-                    config.voronoiNodes = product->mappedVoronoiNodes;
-                    config.voronoiNodeBuffer = product->nodeBuffer;
-                    config.voronoiNodeBufferOffset = product->nodeBufferOffset;
-                    config.voronoiNeighborBuffer = product->voronoiNeighborBuffer;
-                    config.voronoiNeighborBufferOffset = product->voronoiNeighborBufferOffset;
-                    config.neighborIndicesBuffer = product->neighborIndicesBuffer;
-                    config.neighborIndicesBufferOffset = product->neighborIndicesBufferOffset;
-                    config.interfaceAreasBuffer = product->interfaceAreasBuffer;
-                    config.interfaceAreasBufferOffset = product->interfaceAreasBufferOffset;
-                    config.interfaceNeighborIdsBuffer = product->interfaceNeighborIdsBuffer;
-                    config.interfaceNeighborIdsBufferOffset = product->interfaceNeighborIdsBufferOffset;
-                    config.seedFlagsBuffer = product->seedFlagsBuffer;
-                    config.seedFlagsBufferOffset = product->seedFlagsBufferOffset;
-
-                    for (const VoronoiSurfaceProduct& surfaceProduct : product->surfaces) {
-                        const uint32_t runtimeModelId = surfaceProduct.runtimeModelId;
-                        if (runtimeModelId == 0) {
-                            continue;
-                        }
-
-                        config.receiverVoronoiNodeOffsetByModelId[runtimeModelId] = surfaceProduct.nodeOffset;
-                        config.receiverVoronoiNodeCountByModelId[runtimeModelId] = surfaceProduct.nodeCount;
-                        config.receiverVoronoiSurfaceMappingBufferByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBuffer;
-                        config.receiverVoronoiSurfaceMappingBufferOffsetByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBufferOffset;
-                        config.receiverVoronoiSurfaceCellIndicesByModelId[runtimeModelId] = surfaceProduct.surfaceCellIndices;
-                        config.receiverVoronoiSeedFlagsByModelId[runtimeModelId] = surfaceProduct.seedFlags;
-                    }
-                }
-            }
-
-            if (productRegistry && package.contactProduct.isValid()) {
-                const ContactProduct* product = productRegistry->resolveContact(package.contactProduct);
-                if (!product) {
-                    isPackageReady = false;
-                } else {
-                    config.contactCouplings = { *product };
-                }
-            }
-
-            if (!isPackageReady) {
-                const bool wasApplied = activeSocketKeys.find(socketKey) != activeSocketKeys.end();
-                if (wasApplied) {
-                    activeSockets.insert(socketKey);
-                }
+            if (receiverIndex != receiverCount) {
                 continue;
             }
 
+            std::unordered_map<uint32_t, HeatMaterialPresetId> presetByNodeModelId;
+            for (const HeatMaterialBinding& binding : package.authored.materialBindings) {
+                if (binding.receiverModelNodeId != 0) {
+                    presetByNodeModelId[binding.receiverModelNodeId] = binding.presetId;
+                }
+            }
+
+            config.runtimeThermalMaterials.reserve(receiverCount);
+            std::unordered_set<uint32_t> seenRuntimeModelIds;
+            for (size_t receiverIndex = 0; receiverIndex < receiverCount; ++receiverIndex) {
+                const uint32_t runtimeModelId = config.receiverRuntimeModelIds[receiverIndex];
+                if (runtimeModelId == 0) {
+                    continue;
+                }
+                if (!seenRuntimeModelIds.insert(runtimeModelId).second) {
+                    continue;
+                }
+
+                const uint32_t receiverModelNodeId = static_cast<uint32_t>(package.receiverModelProducts[receiverIndex].outputSocketKey >> 32);
+                const auto explicitIt = presetByNodeModelId.find(receiverModelNodeId);
+                if (explicitIt == presetByNodeModelId.end()) {
+                    continue;
+                }
+
+                const HeatMaterialPresetId presetId = explicitIt->second;
+                const HeatMaterialPreset& preset = heatMaterialPresetById(presetId);
+                RuntimeThermalMaterial runtimeMaterial{};
+                runtimeMaterial.runtimeModelId = runtimeModelId;
+                runtimeMaterial.density = preset.density;
+                runtimeMaterial.specificHeat = preset.specificHeat;
+                runtimeMaterial.conductivity = preset.conductivity;
+                config.runtimeThermalMaterials.push_back(runtimeMaterial);
+            }
+
+            std::sort(
+                config.runtimeThermalMaterials.begin(),
+                config.runtimeThermalMaterials.end(),
+                [](const RuntimeThermalMaterial& lhs, const RuntimeThermalMaterial& rhs) {
+                    return lhs.runtimeModelId < rhs.runtimeModelId;
+                });
+
+            if (package.voronoiProduct.isValid()) {
+                const VoronoiProduct* product = tryGetProduct<VoronoiProduct>(*ecsRegistry, package.voronoiProduct.outputSocketKey);
+                if (!product) {
+                    continue;
+                }
+
+                config.voronoiNodeCount = product->nodeCount;
+                config.voronoiNodes = product->mappedVoronoiNodes;
+                config.voronoiNodeBuffer = product->nodeBuffer;
+                config.voronoiNodeBufferOffset = product->nodeBufferOffset;
+                config.voronoiNeighborBuffer = product->voronoiNeighborBuffer;
+                config.voronoiNeighborBufferOffset = product->voronoiNeighborBufferOffset;
+                config.neighborIndicesBuffer = product->neighborIndicesBuffer;
+                config.neighborIndicesBufferOffset = product->neighborIndicesBufferOffset;
+                config.interfaceAreasBuffer = product->interfaceAreasBuffer;
+                config.interfaceAreasBufferOffset = product->interfaceAreasBufferOffset;
+                config.interfaceNeighborIdsBuffer = product->interfaceNeighborIdsBuffer;
+                config.interfaceNeighborIdsBufferOffset = product->interfaceNeighborIdsBufferOffset;
+                config.seedFlagsBuffer = product->seedFlagsBuffer;
+                config.seedFlagsBufferOffset = product->seedFlagsBufferOffset;
+
+                for (const VoronoiSurfaceProduct& surfaceProduct : product->surfaces) {
+                    const uint32_t runtimeModelId = surfaceProduct.runtimeModelId;
+                    if (runtimeModelId == 0) {
+                        continue;
+                    }
+
+                    config.receiverVoronoiNodeOffsetByModelId[runtimeModelId] = surfaceProduct.nodeOffset;
+                    config.receiverVoronoiNodeCountByModelId[runtimeModelId] = surfaceProduct.nodeCount;
+                    config.receiverVoronoiSurfaceMappingBufferByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBuffer;
+                    config.receiverVoronoiSurfaceMappingBufferOffsetByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBufferOffset;
+                    config.receiverVoronoiSurfaceCellIndicesByModelId[runtimeModelId] = surfaceProduct.surfaceCellIndices;
+                    config.receiverVoronoiSeedFlagsByModelId[runtimeModelId] = surfaceProduct.seedFlags;
+                }
+            }
+
+            if (package.contactProduct.isValid()) {
+                const ContactProduct* product = tryGetProduct<ContactProduct>(*ecsRegistry, package.contactProduct.outputSocketKey);
+                if (!product) {
+                    continue;
+                }
+
+                config.contactCouplings = { product->coupling };
+            }
+
+            config.computeHash = buildComputeHash(config);
             controller->configure(socketKey, config);
-            activeSockets.insert(socketKey);
+            nextSocketKeys.insert(socketKey);
         }
 
-        auto it = activeSocketKeys.begin();
-        while (it != activeSocketKeys.end()) {
-            if (activeSockets.find(*it) == activeSockets.end()) {
-                controller->disable(*it);
-                it = activeSocketKeys.erase(it);
-            } else {
-                ++it;
+        for (uint64_t socketKey : activeSocketKeys) {
+            if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
+                controller->disable(socketKey);
+                appliedPackageHash.erase(socketKey);
             }
         }
 
-        activeSocketKeys = activeSockets;
+        activeSocketKeys = std::move(nextSocketKeys);
     }
 
     void finalizeSync() {
@@ -183,49 +212,52 @@ public:
             return;
         }
 
-        std::unordered_set<uint64_t> staleSocketKeys;
-        for (uint64_t socketKey : activeSocketKeys) {
-            if (publishedSocketKeys.find(socketKey) == publishedSocketKeys.end()) {
-                continue;
+        std::vector<uint64_t> removals;
+        auto productView = ecsRegistry->view<HeatProduct>();
+        for (auto entity : productView) {
+            const uint64_t socketKey = static_cast<uint64_t>(entity);
+            if (activeSocketKeys.find(socketKey) == activeSocketKeys.end()) {
+                removals.push_back(socketKey);
             }
         }
 
-        for (uint64_t publishedSocketKey : publishedSocketKeys) {
-            if (activeSocketKeys.find(publishedSocketKey) == activeSocketKeys.end()) {
-                staleSocketKeys.insert(publishedSocketKey);
-            }
-        }
-
-        for (uint64_t socketKey : staleSocketKeys) {
-            if (productRegistry) {
-                productRegistry->removeHeat(socketKey);
-            }
+        for (uint64_t socketKey : removals) {
+            auto entity = static_cast<ECSEntity>(socketKey);
+            ecsRegistry->remove<HeatProduct>(entity);
         }
 
         for (uint64_t socketKey : activeSocketKeys) {
-            publishProduct(socketKey);
+            auto entity = static_cast<ECSEntity>(socketKey);
+            const auto& package = ecsRegistry->get<HeatPackage>(entity);
+            auto hashIt = appliedPackageHash.find(socketKey);
+            const HeatProduct* product = tryGetProduct<HeatProduct>(*ecsRegistry, socketKey);
+            if (!product || hashIt == appliedPackageHash.end() || hashIt->second != package.packageHash) {
+                publishProduct(socketKey);
+            }
         }
-
-        publishedSocketKeys = activeSocketKeys;
     }
 
 private:
     void publishProduct(uint64_t socketKey) {
-        if (!productRegistry || !controller || socketKey == 0) {
+        if (!controller || socketKey == 0) {
             return;
         }
 
         HeatProduct product{};
         if (!controller->exportProduct(socketKey, product)) {
-            productRegistry->removeHeat(socketKey);
+            auto entity = static_cast<ECSEntity>(socketKey);
+            ecsRegistry->remove<HeatProduct>(entity);
             return;
         }
 
-        productRegistry->publishHeat(socketKey, product);
+        auto entity = static_cast<ECSEntity>(socketKey);
+        const auto& package = ecsRegistry->get<HeatPackage>(entity);
+        ecsRegistry->emplace_or_replace<HeatProduct>(entity, product);
+        appliedPackageHash[socketKey] = package.packageHash;
     }
 
     HeatSystemComputeController* controller = nullptr;
-    RuntimeProductRegistry* productRegistry = nullptr;
+    ECSRegistry* ecsRegistry = nullptr;
     std::unordered_set<uint64_t> activeSocketKeys;
-    std::unordered_set<uint64_t> publishedSocketKeys;
+    std::unordered_map<uint64_t, uint64_t> appliedPackageHash;
 };

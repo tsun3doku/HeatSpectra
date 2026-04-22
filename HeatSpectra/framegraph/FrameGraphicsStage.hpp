@@ -7,7 +7,6 @@
 class VulkanDevice;
 class FrameSync;
 class SceneRenderer;
-class MeshModifiers;
 class ModelSelection;
 class GizmoController;
 class WireframeRenderer;
@@ -18,18 +17,16 @@ public:
         VulkanDevice& vulkanDevice,
         FrameSync& frameSync,
         SceneRenderer& sceneRenderer,
-        MeshModifiers& meshModifiers,
         ModelSelection& modelSelection,
         GizmoController& gizmoController,
         WireframeRenderer& wireframeRenderer);
 
-    FrameStageResult execute(const FrameState& frameState, const FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(const FrameState& frameState, const FrameSyncState& syncState);
 
 private:
     VulkanDevice& vulkanDevice;
     FrameSync& frameSync;
     SceneRenderer& sceneRenderer;
-    MeshModifiers& meshModifiers;
     ModelSelection& modelSelection;
     GizmoController& gizmoController;
     WireframeRenderer& wireframeRenderer;

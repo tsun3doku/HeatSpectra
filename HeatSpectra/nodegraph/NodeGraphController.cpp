@@ -6,12 +6,18 @@
 #include "NodeGraphDebugCache.hpp"
 #include "NodeGraphRuntimeBridge.hpp"
 #include "NodePayloadRegistry.hpp"
-#include "runtime/RuntimeComputePackageController.hpp"
-#include "runtime/RuntimeDisplayPackageController.hpp"
+#include "runtime/RuntimeContactComputeTransport.hpp"
+#include "runtime/RuntimeContactDisplayTransport.hpp"
+#include "runtime/RuntimeHeatComputeTransport.hpp"
+#include "runtime/RuntimeHeatDisplayTransport.hpp"
+#include "runtime/RuntimeModelComputeTransport.hpp"
+#include "runtime/RuntimeModelDisplayTransport.hpp"
 #include "runtime/RuntimePackageCompiler.hpp"
-
-#include <algorithm>
-#include <utility>
+#include "runtime/RuntimeRemeshComputeTransport.hpp"
+#include "runtime/RuntimeRemeshDisplayTransport.hpp"
+#include "runtime/RuntimeVoronoiComputeTransport.hpp"
+#include "runtime/RuntimeVoronoiDisplayTransport.hpp"
+#include "runtime/RuntimeECS.hpp"
 
 NodeGraphController::NodeGraphController(
     NodeGraphBridge* bridge,
@@ -20,6 +26,16 @@ NodeGraphController::NodeGraphController(
       runtimeServices(services),
       runtime(bridge, services) {
     plan.isValid = false;
+    if (runtimeServices.modelComputeTransport) { runtimeServices.modelComputeTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.remeshComputeTransport) { runtimeServices.remeshComputeTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.voronoiComputeTransport) { runtimeServices.voronoiComputeTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.contactComputeTransport) { runtimeServices.contactComputeTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.heatComputeTransport) { runtimeServices.heatComputeTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.modelDisplayTransport) { runtimeServices.modelDisplayTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.remeshDisplayTransport) { runtimeServices.remeshDisplayTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.voronoiDisplayTransport) { runtimeServices.voronoiDisplayTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.contactDisplayTransport) { runtimeServices.contactDisplayTransport->setECSRegistry(&ecsRegistry); }
+    if (runtimeServices.heatDisplayTransport) { runtimeServices.heatDisplayTransport->setECSRegistry(&ecsRegistry); }
     applyPendingChanges();
 }
 
@@ -45,51 +61,107 @@ void NodeGraphController::tick() {
     }
 
     NodeGraphEvaluationState execState{};
-    runtime.tick(&execState);
+    runtime.tick(&execState, plan);
 
-    if (runtimeServices.runtimeComputePackageController ||
-        runtimeServices.runtimeDisplayPackageController) {
+    const bool hasComputeTransports = runtimeServices.modelComputeTransport ||
+        runtimeServices.remeshComputeTransport ||
+        runtimeServices.voronoiComputeTransport ||
+        runtimeServices.contactComputeTransport ||
+        runtimeServices.heatComputeTransport;
+    const bool hasDisplayTransports = runtimeServices.modelDisplayTransport ||
+        runtimeServices.remeshDisplayTransport ||
+        runtimeServices.voronoiDisplayTransport ||
+        runtimeServices.contactDisplayTransport ||
+        runtimeServices.heatDisplayTransport;
+
+    if (hasComputeTransports || hasDisplayTransports) {
         RuntimePackageCompiler packageCompiler{};
         packageCompiler.setRuntimeBridge(runtimeServices.runtimeBridge);
-        packageCompiler.setRuntimeProductRegistry(runtimeServices.runtimeProductRegistry);
-        const RuntimePackageGraph fullPackageGraph = packageCompiler.buildRuntimePackageGraph(
+
+        // Snapshot all package entities as stale before compilation
+        std::unordered_set<ECSEntity> staleEntities = collectPackageEntities(ecsRegistry);
+
+        // Compile and apply packages directly to registry (removes live entities from staleEntities)
+        packageCompiler.compileAndApply(
             runtime.state(),
             execState,
-            runtimeServices.payloadRegistry);
+            runtimeServices.payloadRegistry,
+            ecsRegistry,
+            staleEntities);
 
-        if (runtimeServices.runtimeComputePackageController) {
-            fullRuntimePackageGraph = computePackageSync.sync(
-                fullRuntimePackageGraph,
-                fullPackageGraph,
-                *runtimeServices.runtimeComputePackageController);
-        } else {
-            fullRuntimePackageGraph = fullPackageGraph;
+        // Destroy stale entities (packages + products removed together)
+        destroyStaleEntities(ecsRegistry, staleEntities);
+
+        // Sync compute transports (dependency order: model → remesh → voronoi → contact → heat)
+        if (runtimeServices.modelComputeTransport) {
+            runtimeServices.modelComputeTransport->sync(ecsRegistry);
+            runtimeServices.modelComputeTransport->finalizeSync();
+        }
+        if (runtimeServices.remeshComputeTransport) {
+            runtimeServices.remeshComputeTransport->sync(ecsRegistry);
+            runtimeServices.remeshComputeTransport->finalizeSync();
+        }
+        if (runtimeServices.voronoiComputeTransport) {
+            runtimeServices.voronoiComputeTransport->sync(ecsRegistry);
+            runtimeServices.voronoiComputeTransport->finalizeSync();
+        }
+        if (runtimeServices.contactComputeTransport) {
+            runtimeServices.contactComputeTransport->sync(ecsRegistry);
+            runtimeServices.contactComputeTransport->finalizeSync();
+        }
+        if (runtimeServices.heatComputeTransport) {
+            runtimeServices.heatComputeTransport->sync(ecsRegistry);
+            runtimeServices.heatComputeTransport->finalizeSync();
         }
 
-        if (runtimeServices.runtimeDisplayPackageController) {
-            const RuntimePackageGraph displayedPackageGraph = nodeGraphDisplay.selectDisplayedSubgraph(
-                runtime.state(),
-                fullPackageGraph);
-            displayRuntimePackageGraph = displayPackageSync.sync(
-                displayRuntimePackageGraph,
-                displayedPackageGraph,
-                *runtimeServices.runtimeDisplayPackageController);
-        } else {
-            displayRuntimePackageGraph = {};
-        }
-    }
+        if (hasDisplayTransports) {
+            const std::unordered_set<uint64_t> visibleKeys =
+                nodeGraphDisplay.computeDisplaySelectedKeys(
+                    runtime.state(),
+                    ecsRegistry);
 
-    if (runtimeServices.runtimeBridge) {
-        runtimeServices.runtimeBridge->clear();
-        for (const auto& [socketKey, package] : fullRuntimePackageGraph.compiledPackages.packageSet.remeshBySocket) {
-            if (socketKey == 0 || package.remeshHandle.key == 0) {
-                continue;
+            if (runtimeServices.modelDisplayTransport) { runtimeServices.modelDisplayTransport->setVisibleKeys(&visibleKeys); }
+            if (runtimeServices.remeshDisplayTransport) { runtimeServices.remeshDisplayTransport->setVisibleKeys(&visibleKeys); }
+            if (runtimeServices.voronoiDisplayTransport) { runtimeServices.voronoiDisplayTransport->setVisibleKeys(&visibleKeys); }
+            if (runtimeServices.contactDisplayTransport) { runtimeServices.contactDisplayTransport->setVisibleKeys(&visibleKeys); }
+            if (runtimeServices.heatDisplayTransport) { runtimeServices.heatDisplayTransport->setVisibleKeys(&visibleKeys); }
+
+            if (runtimeServices.modelDisplayTransport) {
+                runtimeServices.modelDisplayTransport->sync(ecsRegistry);
+                runtimeServices.modelDisplayTransport->finalizeSync();
             }
+            if (runtimeServices.remeshDisplayTransport) {
+                runtimeServices.remeshDisplayTransport->sync(ecsRegistry);
+                runtimeServices.remeshDisplayTransport->finalizeSync();
+            }
+            if (runtimeServices.voronoiDisplayTransport) {
+                runtimeServices.voronoiDisplayTransport->sync(ecsRegistry);
+                runtimeServices.voronoiDisplayTransport->finalizeSync();
+            }
+            if (runtimeServices.contactDisplayTransport) {
+                runtimeServices.contactDisplayTransport->sync(ecsRegistry);
+                runtimeServices.contactDisplayTransport->finalizeSync();
+            }
+            if (runtimeServices.heatDisplayTransport) {
+                runtimeServices.heatDisplayTransport->sync(ecsRegistry);
+                runtimeServices.heatDisplayTransport->finalizeSync();
+            }
+        }
 
-            ProductHandle handle{};
-            handle.type = NodeProductType::Remesh;
-            handle.outputSocketKey = socketKey;
-            runtimeServices.runtimeBridge->setRemeshProductForPayload(package.remeshHandle, handle);
+        if (runtimeServices.runtimeBridge) {
+            runtimeServices.runtimeBridge->clear();
+            for (auto entity : ecsRegistry.view<RemeshPackage>()) {
+                uint64_t socketKey = static_cast<uint64_t>(entity);
+                const auto& package = ecsRegistry.get<RemeshPackage>(entity);
+                if (socketKey == 0 || package.remeshHandle.key == 0) {
+                    continue;
+                }
+
+                ProductHandle handle{};
+                handle.type = NodeProductType::Remesh;
+                handle.outputSocketKey = socketKey;
+                runtimeServices.runtimeBridge->setRemeshProductForPayload(package.remeshHandle, handle);
+            }
         }
     }
 

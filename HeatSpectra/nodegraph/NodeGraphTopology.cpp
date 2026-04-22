@@ -29,10 +29,7 @@ const NodeGraphEdge* NodeGraphTopology::findIncomingEdge(NodeGraphNodeId toNodeI
     return it != incomingEdgeByInputSocket.end() ? it->second : nullptr;
 }
 
-bool NodeGraphTopology::findFirstUpstreamNodeByType(
-    NodeGraphNodeId startNodeId,
-    const NodeTypeId& targetTypeId,
-    NodeGraphNodeId& outNodeId) const {
+bool NodeGraphTopology::findFirstUpstreamNodeByType(NodeGraphNodeId startNodeId, const NodeTypeId& targetTypeId, NodeGraphNodeId& outNodeId) const {
     outNodeId = {};
     if (!startNodeId.isValid()) {
         return false;
@@ -80,10 +77,7 @@ bool NodeGraphTopology::findFirstUpstreamNodeByType(
     return false;
 }
 
-bool NodeGraphTopology::findFirstUpstreamNodeByType(
-    uint64_t outputSocketKey,
-    const NodeTypeId& targetTypeId,
-    NodeGraphNodeId& outNodeId) const {
+bool NodeGraphTopology::findFirstUpstreamNodeByType(uint64_t outputSocketKey, const NodeTypeId& targetTypeId, NodeGraphNodeId& outNodeId) const {
     outNodeId = {};
 
     NodeGraphNodeId producerNodeId{};

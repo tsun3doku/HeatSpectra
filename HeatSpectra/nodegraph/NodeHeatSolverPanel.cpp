@@ -477,6 +477,19 @@ void NodeHeatSolverPanel::resetHeatSystem() {
         return;
     }
 
+    // Defer the flag-clear to the next event loop tick so the node graph
+    // evaluation has a chance to see resetRequested=true and the controller
+    // can call resetHeatState() before the flag disappears. Writing both
+    // writes synchronously collapses them into a single evaluation that
+    // only ever sees the second (false) value, making reset look like resume.
+    QTimer::singleShot(0, this, [this]() {
+        HeatSolveNodeParams clearParams{};
+        if (tryLoadNodeParams(clearParams)) {
+            clearParams.resetRequested = false;
+            writeNodeParams(clearParams);
+        }
+    });
+
     updateHeatStatus();
     setStatus("Heat solve reset requested.");
 }

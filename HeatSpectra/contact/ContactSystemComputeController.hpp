@@ -11,7 +11,6 @@
 #include <vector>
 
 class MemoryAllocator;
-class UniformBufferManager;
 class VulkanDevice;
 class ContactSystem;
 
@@ -40,6 +39,7 @@ public:
         uint32_t emitterRuntimeModelId = 0;
         uint32_t receiverRuntimeModelId = 0;
         std::vector<uint32_t> receiverTriangleIndices;
+        uint64_t computeHash = 0;
 
         bool isValid() const {
             return emitterRuntimeModelId != 0 &&
@@ -55,29 +55,40 @@ public:
 
     ContactSystemComputeController(
         VulkanDevice& vulkanDevice,
-        MemoryAllocator& memoryAllocator,
-        UniformBufferManager& uniformBufferManager,
-        uint32_t maxFramesInFlight);
+        MemoryAllocator& memoryAllocator);
     ~ContactSystemComputeController();
 
-    void createContactSystem(VkExtent2D extent, VkRenderPass renderPass);
-    void updateRenderContext(VkExtent2D extent, VkRenderPass renderPass);
-    void updateRenderResources();
     void configure(uint64_t socketKey, const Config& config);
     void disable(uint64_t socketKey);
     void disableAll();
     bool exportProduct(uint64_t socketKey, ContactProduct& outProduct);
-    ContactSystem* getContactSystem(uint64_t socketKey) const;
-    std::vector<ContactSystem*> getActiveSystems() const;
 
 private:
-    std::unique_ptr<ContactSystem> buildContactSystem(VkRenderPass renderPass);
-
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    UniformBufferManager& uniformBufferManager;
-    uint32_t maxFramesInFlight = 0;
-    VkExtent2D currentExtent{ 0, 0 };
-    VkRenderPass currentRenderPass = VK_NULL_HANDLE;
-    std::unordered_map<uint64_t, std::unique_ptr<ContactSystem>> contactSystems;
+    std::unordered_map<uint64_t, std::unique_ptr<ContactSystem>> activeSystems;
+    std::unordered_map<uint64_t, Config> configuredConfigs;
 };
+
+inline uint64_t buildComputeHash(const ContactSystemComputeController::Config& config) {
+    uint64_t hash = 1469598103934665603ull;
+    hash = RuntimeProductHash::mixPod(hash, static_cast<uint32_t>(config.couplingType));
+    hash = RuntimeProductHash::mixPod(hash, config.minNormalDot);
+    hash = RuntimeProductHash::mixPod(hash, config.contactRadius);
+    hash = RuntimeProductHash::mixPod(hash, config.emitterModelId);
+    hash = RuntimeProductHash::mixPod(hash, config.emitterLocalToWorld);
+    hash = RuntimeProductHash::mixPodVector(hash, config.emitterIntrinsicMesh.vertices);
+    hash = RuntimeProductHash::mixPodVector(hash, config.emitterIntrinsicMesh.indices);
+    hash = RuntimeProductHash::mixPodVector(hash, config.emitterIntrinsicMesh.faceIds);
+    hash = RuntimeProductHash::mixPodVector(hash, config.emitterIntrinsicMesh.triangles);
+    hash = RuntimeProductHash::mixPod(hash, config.receiverModelId);
+    hash = RuntimeProductHash::mixPod(hash, config.receiverLocalToWorld);
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverIntrinsicMesh.vertices);
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverIntrinsicMesh.indices);
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverIntrinsicMesh.faceIds);
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverIntrinsicMesh.triangles);
+    hash = RuntimeProductHash::mixPod(hash, config.emitterRuntimeModelId);
+    hash = RuntimeProductHash::mixPod(hash, config.receiverRuntimeModelId);
+    hash = RuntimeProductHash::mixPodVector(hash, config.receiverTriangleIndices);
+    return hash;
+}

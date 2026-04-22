@@ -5,8 +5,10 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "util/ComputeTiming.hpp"
+#include "framegraph/ComputePass.hpp"
 #include "framegraph/FrameStats.hpp"
 #include "framegraph/FramePass.hpp"
 #include "WindowRuntimeState.hpp"
@@ -19,7 +21,6 @@ class CameraController;
 class MemoryAllocator;
 class ModelRegistry;
 class UniformBufferManager;
-class MeshModifiers;
 class InputController;
 class LightingSystem;
 class MaterialSystem;
@@ -31,24 +32,8 @@ class WireframeRenderer;
 class FrameController;
 class VkFrameGraphBackend;
 class VkFrameGraphRuntime;
-class VkFrameGraphRuntime;
-class HeatSystemComputeController;
-class HeatSystemDisplayController;
-class ContactSystemComputeController;
-class VoronoiSystemComputeController;
 
-struct RenderRuntimeServices {
-    ModelRegistry& resourceManager;
-    MeshModifiers& meshModifiers;
-    UniformBufferManager& uniformBufferManager;
-    HeatSystemComputeController* heatSystemComputeController = nullptr;
-    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
-    ContactSystemComputeController* contactSystemController = nullptr;
-    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
-    InputController& inputController;
-    LightingSystem& lightingSystem;
-    MaterialSystem& materialSystem;
-};
+struct FrameControllerServices;
 
 class RenderRuntime {
 public:
@@ -64,11 +49,11 @@ public:
     ~RenderRuntime();
 
     bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& resourceManager, UniformBufferManager& ubo);
-    bool initializeFrameController(const RenderRuntimeServices& services);
+    bool initializeFrameController(const FrameControllerServices& services);
 
     bool initializeSyncObjects();
     void shutdownSyncObjects();
-    void renderFrame(const render::RenderFlags& flags, bool allowHeatSolve);
+    void renderFrame(const render::RenderFlags& flags, const std::vector<ComputePass*>& computePasses);
     void cleanupSwapChain();
     void cleanup();
 
@@ -82,6 +67,8 @@ public:
     const ModelSelection& getModelSelection() const;
     GizmoController& getGizmoController();
     const GizmoController& getGizmoController() const;
+    WireframeRenderer& getWireframeRenderer();
+    const WireframeRenderer& getWireframeRenderer() const;
 
 private:
     const WindowRuntimeState& windowState;

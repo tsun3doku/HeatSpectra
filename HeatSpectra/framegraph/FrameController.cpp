@@ -1,7 +1,5 @@
 #include "FrameController.hpp"
 
-#include "contact/ContactSystemComputeController.hpp"
-#include "contact/ContactSystem.hpp"
 #include "scene/CameraController.hpp"
 #include "util/ComputeTiming.hpp"
 #include "FrameStats.hpp"
@@ -9,11 +7,7 @@
 #include "render/SceneRenderer.hpp"
 #include "app/SwapchainManager.hpp"
 #include "VkFrameGraphBackend.hpp"
-#include "heat/HeatSystem.hpp"
-#include "heat/HeatSystemComputeController.hpp"
-#include "heat/HeatSystemDisplayController.hpp"
-#include "heat/VoronoiSystem.hpp"
-#include "heat/VoronoiSystemComputeController.hpp"
+#include "framegraph/ComputePass.hpp"
 #include "render/RenderConfig.hpp"
 #include "render/WindowRuntimeState.hpp"
 
@@ -41,10 +35,6 @@ FrameController::FrameController(
       computeTiming(computeTiming),
       frameStats(frameStats),
       cameraController(cameraController),
-      heatSystemComputeController(services.heatSystemComputeController),
-      heatSystemDisplayController(services.heatSystemDisplayController),
-      contactSystemController(services.contactSystemController),
-      voronoiSystemComputeController(services.voronoiSystemComputeController),
       isOperating(isOperating),
       isShuttingDown(isShuttingDown),
       swapchainStage(
@@ -55,9 +45,6 @@ FrameController::FrameController(
           frameGraphBackend,
           sceneRenderer,
           frameSync,
-          heatSystemComputeController,
-          contactSystemController,
-          voronoiSystemComputeController,
           isShuttingDown),
       frameUpdateStage(
           services.inputController,
@@ -76,7 +63,6 @@ FrameController::FrameController(
           vulkanDevice,
           frameSync,
           sceneRenderer,
-          services.meshModifiers,
           services.modelSelection,
           services.gizmoController,
           services.wireframeRenderer) {
@@ -98,7 +84,7 @@ bool FrameController::recreateSwapChain() {
     return swapchainStage.recreateSwapChain();
 }
 
-void FrameController::drawFrame(const render::RenderFlags& flags, bool allowHeatSolve) {
+void FrameController::drawFrame(const render::RenderFlags& flags, const std::vector<ComputePass*>& computePasses) {
     if (isShuttingDown.load(std::memory_order_acquire) || isOperating.load(std::memory_order_acquire)) {
         return;
     }
@@ -129,7 +115,6 @@ void FrameController::drawFrame(const render::RenderFlags& flags, bool allowHeat
     std::vector<std::string> timingLines = buildFrameTimingLines(frameState.frameIndex);
     frameUpdateStage.processPicking(frameState.frameIndex);
 
-    std::vector<HeatSystem*> currentHeatComputeSystems = heatSystemComputeController ? heatSystemComputeController->getActiveSystems() : std::vector<HeatSystem*>{};
     frameState.extent = swapchainManager.getExtent();
     frameState.imageIndex = imageIndex;
     frameState.sceneView = cameraController.buildSceneView(frameState.extent);
@@ -137,13 +122,13 @@ void FrameController::drawFrame(const render::RenderFlags& flags, bool allowHeat
     frameUpdateStage.updateFrameState(frameState.frameIndex, frameState.sceneView);
 
     FrameSyncState syncState{};
-    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, currentHeatComputeSystems, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameComputeStage.execute(frameState.frameIndex, computePasses, syncState))) {
         return;
     }
 
     updateTimingOverlay(timingLines, frameState.flags);
 
-    if (!handleStageResult(frameGraphicsStage.execute(frameState, syncState, allowHeatSolve))) {
+    if (!handleStageResult(frameGraphicsStage.execute(frameState, syncState))) {
         return;
     }
 

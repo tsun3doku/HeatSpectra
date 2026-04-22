@@ -1,19 +1,20 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "FrameTypes.hpp"
 
 class VulkanDevice;
 class FrameSync;
 class ComputeTiming;
-class HeatSystem;
+class ComputePass;
 class VkFrameGraphRuntime;
 
 class FrameComputeStage {
 public:
     FrameComputeStage(VulkanDevice& vulkanDevice, VkFrameGraphRuntime& frameGraphRuntime, FrameSync& frameSync, ComputeTiming& computeTiming);
-    FrameStageResult execute(uint32_t frameIndex, const std::vector<HeatSystem*>& heatSystems, FrameSyncState& syncState, bool allowHeatSolve);
+    FrameStageResult execute(uint32_t frameIndex, const std::vector<ComputePass*>& computePasses, FrameSyncState& syncState);
 
 private:
     VulkanDevice& vulkanDevice;

@@ -1,4 +1,4 @@
-#include "ContactInterface.hpp"
+#include "ContactSampling.hpp"
 #include "util/GeometryUtils.hpp"
 
 #include "mesh/remesher/iODT.hpp"
@@ -42,7 +42,7 @@ glm::mat4 toMat4(const std::array<float, 16>& values) {
 
 }
 
-void ContactInterface::mapSurfacePoints(
+void mapSurfacePoints(
     const SupportingHalfedge::IntrinsicMesh& sourceMesh,
     const std::array<float, 16>& sourceLocalToWorld,
     const std::vector<const SupportingHalfedge::IntrinsicMesh*>& receiverIntrinsicMeshes,
@@ -50,7 +50,8 @@ void ContactInterface::mapSurfacePoints(
     std::vector<std::vector<ContactPair>>& receiverContactPairs,
     std::vector<ContactLineVertex>& outOutlineVertices,
     std::vector<ContactLineVertex>& outCorrespondenceVertices,
-    const Settings& settings) {
+    float contactRadius,
+    float minNormalDot) {
     receiverContactPairs.clear();
     outOutlineVertices.clear();
     outCorrespondenceVertices.clear();
@@ -69,7 +70,7 @@ void ContactInterface::mapSurfacePoints(
         sourceBoundsMax = glm::max(sourceBoundsMax, vertex.position);
     }
 
-    const float contactPadding = std::max(settings.contactRadius, 1e-4f);
+    const float contactPadding = std::max(contactRadius, 1e-4f);
     const glm::vec3 contactPaddingVec(contactPadding);
     TriangleHashGrid sourceTriangleGrid;
     sourceTriangleGrid.build(
@@ -164,7 +165,7 @@ void ContactInterface::mapSurfacePoints(
                 sourceTriangleGrid.getTrianglesAlongRay(
                     srcPos,
                     srcDirPlus,
-                    settings.contactRadius,
+                    contactRadius,
                     candidateTriangles);
 
 				for (size_t candidateTriIdx : candidateTriangles) {
@@ -182,12 +183,12 @@ void ContactInterface::mapSurfacePoints(
 
 					glm::vec3 sNWorld = normalizedOrZero(glm::vec3(srcNormalMat * sTri.normal));
 					float nd = glm::dot(worldN, sNWorld);
-					if (settings.minNormalDot < 0.0f) {
-						if (nd > settings.minNormalDot) {
+					if (minNormalDot < 0.0f) {
+						if (nd > minNormalDot) {
 							continue;
 						}
 					} else {
-						if (nd < settings.minNormalDot) {
+						if (nd < minNormalDot) {
 							continue;
 						}
 					}
@@ -202,7 +203,7 @@ void ContactInterface::mapSurfacePoints(
 					if (!intersectRayTriangle(srcPos, srcDirPlus, v0, v1, v2, t, u, v)) {
 						continue;
 					}
-					if (t > settings.contactRadius) {
+					if (t > contactRadius) {
 						continue;
 					}
 					if (t < bestT) {

@@ -4,7 +4,6 @@
 #include <string>
 
 struct NodeGraphKernelExecutionState;
-struct EvaluatedSocketValue;
 
 uint64_t makeSocketKey(NodeGraphNodeId nodeId, NodeGraphSocketId socketId);
 bool tryDecodeSocketKey(uint64_t socketKey, NodeGraphNodeId& outNodeId, NodeGraphSocketId& outSocketId);

@@ -1,11 +1,25 @@
 #include "ContactSystemRuntime.hpp"
 
-#include "ContactSystem.hpp"
+#include "contact/ContactSampling.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 #include <vector>
+
+namespace {
+
+bool hasUsableContactPairs(const std::vector<ContactPair>& pairs) {
+    for (const ContactPair& pair : pairs) {
+        if (pair.contactArea > 0.0f) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+}
 
 void ContactSystemRuntime::setParams(
     ContactCouplingType updatedCouplingType,
@@ -46,14 +60,14 @@ void ContactSystemRuntime::setReceiverTriangleIndices(const std::vector<uint32_t
     bindingDirty = true;
 }
 
-void ContactSystemRuntime::clearProductBuffers(MemoryAllocator& memoryAllocator) {
-    if (product.contactPairBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(product.contactPairBuffer, product.contactPairBufferOffset);
-        product.contactPairBuffer = VK_NULL_HANDLE;
-        product.contactPairBufferOffset = 0;
+void ContactSystemRuntime::clearPairBuffer(MemoryAllocator& memoryAllocator) {
+    if (contactPairBuffer != VK_NULL_HANDLE) {
+        memoryAllocator.free(contactPairBuffer, contactPairBufferOffset);
+        contactPairBuffer = VK_NULL_HANDLE;
+        contactPairBufferOffset = 0;
     }
-    product.contactPairCount = 0;
-    product.mappedContactPairs = nullptr;
+    coupling.contactPairCount = 0;
+    coupling.mappedContactPairs = nullptr;
 }
 
 bool ContactSystemRuntime::recreateProductBuffer(
@@ -89,14 +103,17 @@ bool ContactSystemRuntime::recreateProductBuffer(
         buffer != VK_NULL_HANDLE;
 }
 
-void ContactSystemRuntime::clearProduct(MemoryAllocator& memoryAllocator) {
-    clearProductBuffers(memoryAllocator);
-    product = {};
-    productValid = false;
+void ContactSystemRuntime::clearComputedState(MemoryAllocator& memoryAllocator) {
+    clearPairBuffer(memoryAllocator);
+    coupling = {};
+    couplingValid = false;
+    outlineVertices.clear();
+    correspondenceVertices.clear();
+    hasContactFlag = false;
 }
 
 void ContactSystemRuntime::clear(MemoryAllocator& memoryAllocator) {
-    clearProduct(memoryAllocator);
+    clearComputedState(memoryAllocator);
     couplingType = ContactCouplingType::SourceToReceiver;
     minNormalDot = -0.65f;
     contactRadius = 0.01f;
@@ -133,42 +150,64 @@ bool ContactSystemRuntime::hasValidBinding() const {
         !receiverTriangleIndices.empty();
 }
 
-bool ContactSystemRuntime::ensureProduct(
-    ContactSystem& contactSystem,
-    VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator) {
-    if (!bindingDirty) {
-        return productValid;
+bool ContactSystemRuntime::computeContactPairs(std::vector<ContactPair>& outPairs) {
+    outPairs.clear();
+    if (emitterModelId == 0 ||
+        receiverModelId == 0 ||
+        emitterIntrinsicMesh.vertices.empty() ||
+        receiverIntrinsicMesh.vertices.empty()) {
+        return false;
     }
 
-    clearProduct(memoryAllocator);
+    std::vector<std::vector<ContactPair>> receiverContactPairs;
+    std::vector<const SupportingHalfedge::IntrinsicMesh*> receiverIntrinsicMeshes;
+    std::vector<std::array<float, 16>> receiverLocalToWorlds;
+    receiverIntrinsicMeshes.push_back(&receiverIntrinsicMesh);
+    receiverLocalToWorlds.push_back(receiverLocalToWorld);
+
+    std::vector<ContactLineVertex> computedOutlineVertices;
+    std::vector<ContactLineVertex> computedCorrespondenceVertices;
+
+    mapSurfacePoints(
+        emitterIntrinsicMesh,
+        emitterLocalToWorld,
+        receiverIntrinsicMeshes,
+        receiverLocalToWorlds,
+        receiverContactPairs,
+        computedOutlineVertices,
+        computedCorrespondenceVertices,
+        contactRadius,
+        minNormalDot);
+
+    outlineVertices = std::move(computedOutlineVertices);
+    correspondenceVertices = std::move(computedCorrespondenceVertices);
+
+    if (!receiverContactPairs.empty()) {
+        outPairs = std::move(receiverContactPairs.front());
+    }
+    return hasUsableContactPairs(outPairs);
+}
+
+bool ContactSystemRuntime::buildCoupling(
+    VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator) {
+    clearComputedState(memoryAllocator);
 
     if (!hasValidBinding()) {
         return false;
     }
 
     std::vector<ContactPair> pairs;
-    if (!contactSystem.computePairs(
-            emitterModelId,
-            emitterLocalToWorld,
-            emitterIntrinsicMesh,
-            receiverModelId,
-            receiverLocalToWorld,
-            receiverIntrinsicMesh,
-            couplingType,
-            minNormalDot,
-            contactRadius,
-            pairs) ||
-        pairs.empty()) {
+    if (!computeContactPairs(pairs) || pairs.empty()) {
         return false;
     }
 
-    product.couplingType = couplingType;
-    product.emitterRuntimeModelId = emitterRuntimeModelId;
-    product.receiverRuntimeModelId = receiverRuntimeModelId;
-    product.receiverTriangleIndices = receiverTriangleIndices;
-    if (product.receiverTriangleIndices.empty()) {
-        clearProduct(memoryAllocator);
+    coupling.couplingType = couplingType;
+    coupling.emitterRuntimeModelId = emitterRuntimeModelId;
+    coupling.receiverRuntimeModelId = receiverRuntimeModelId;
+    coupling.receiverTriangleIndices = receiverTriangleIndices;
+    if (coupling.receiverTriangleIndices.empty()) {
+        clearComputedState(memoryAllocator);
         return false;
     }
 
@@ -176,20 +215,21 @@ bool ContactSystemRuntime::ensureProduct(
     if (!recreateProductBuffer(
             memoryAllocator,
             vulkanDevice,
-            product.contactPairBuffer,
-            product.contactPairBufferOffset,
+            contactPairBuffer,
+            contactPairBufferOffset,
             &mappedPairData,
             pairs.data(),
             sizeof(ContactPair) * pairs.size())) {
-        clearProduct(memoryAllocator);
+        clearComputedState(memoryAllocator);
         return false;
     }
 
-    product.contactPairCount = static_cast<uint32_t>(pairs.size());
-    product.mappedContactPairs = static_cast<const ContactPair*>(mappedPairData);
-    productValid = product.isValid();
-    if (productValid) {
+    coupling.contactPairCount = static_cast<uint32_t>(pairs.size());
+    coupling.mappedContactPairs = static_cast<const ContactPair*>(mappedPairData);
+    couplingValid = coupling.isValid();
+    hasContactFlag = couplingValid;
+    if (couplingValid) {
         bindingDirty = false;
     }
-    return productValid;
+    return couplingValid;
 }

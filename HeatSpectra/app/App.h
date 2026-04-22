@@ -6,7 +6,7 @@
 
 #include "app/AppTypes.hpp"
 #include "runtime/SimulationError.hpp"
-#include "runtime/RuntimeHost.hpp"
+#include "runtime/RuntimeSystems.hpp"
 
 class NodeGraphBridge;
 class ModelSelection;
@@ -40,5 +40,5 @@ public:
     const ModelSelection* getModelSelection() const;
 
 private:
-    std::unique_ptr<RuntimeHost> runtimeHost;
+    std::unique_ptr<RuntimeSystems> systems;
 };

@@ -3,10 +3,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include "runtime/RuntimeHost.hpp"
+#include "runtime/RuntimeSystems.hpp"
 
 App::App()
-    : runtimeHost(std::make_unique<RuntimeHost>()) {
+    : systems(std::make_unique<RuntimeSystems>()) {
 }
 
 App::~App() {
@@ -14,110 +14,110 @@ App::~App() {
 }
 
 bool App::initialize(WindowRuntimeState& runtimeState, const AppVulkanContext& vulkanContext) {
-    return runtimeHost && runtimeHost->initialize(runtimeState, vulkanContext);
+    return systems && systems->initialize(runtimeState, vulkanContext);
 }
 
 void App::tickFrame(float deltaTime) {
-    if (runtimeHost) {
-        runtimeHost->tickFrame(deltaTime);
+    if (systems) {
+        systems->tickFrame(deltaTime);
     }
 }
 
 void App::shutdown() {
-    if (runtimeHost) {
-        runtimeHost->shutdown();
+    if (systems) {
+        systems->shutdown();
     }
 }
 
 bool App::isInitialized() const {
-    return runtimeHost && runtimeHost->isInitialized();
+    return systems && systems->isInitialized();
 }
 
 const RuntimeQuery* App::runtimeQuery() const {
-    if (runtimeHost) {
-        return runtimeHost->runtimeQuery();
+    if (systems) {
+        return systems->runtimeQuery();
     }
     return nullptr;
 }
 
 std::vector<SimulationError> App::consumeSimulationErrors() {
-    if (runtimeHost) {
-        return runtimeHost->consumeSimulationErrors();
+    if (systems) {
+        return systems->consumeSimulationErrors();
     }
     return {};
 }
 
 void App::setPanSensitivity(float sensitivity) {
-    if (runtimeHost) {
-        runtimeHost->setPanSensitivity(sensitivity);
+    if (systems) {
+        systems->setPanSensitivity(sensitivity);
     }
 }
 
 RenderSettingsController* App::getSettingsController() {
-    if (runtimeHost) {
-        return runtimeHost->getSettingsController();
+    if (systems) {
+        return systems->getSettingsController();
     }
     return nullptr;
 }
 
 const RenderSettingsController* App::getSettingsController() const {
-    if (runtimeHost) {
-        return runtimeHost->getSettingsController();
+    if (systems) {
+        return systems->getSettingsController();
     }
     return nullptr;
 }
 
 NodeGraphBridge* App::getNodeGraphBridge() {
-    if (runtimeHost) {
-        return runtimeHost->getNodeGraphBridge();
+    if (systems) {
+        return systems->getNodeGraphBridge();
     }
     return nullptr;
 }
 
 const NodeGraphBridge* App::getNodeGraphBridge() const {
-    if (runtimeHost) {
-        return runtimeHost->getNodeGraphBridge();
+    if (systems) {
+        return systems->getNodeGraphBridge();
     }
     return nullptr;
 }
 
 SceneController* App::getSceneController() {
-    if (runtimeHost) {
-        return runtimeHost->getSceneController();
+    if (systems) {
+        return systems->getSceneController();
     }
     return nullptr;
 }
 
 const SceneController* App::getSceneController() const {
-    if (runtimeHost) {
-        return runtimeHost->getSceneController();
+    if (systems) {
+        return systems->getSceneController();
     }
     return nullptr;
 }
 
 ModelSelection* App::getModelSelection() {
-    if (runtimeHost) {
-        return runtimeHost->getModelSelection();
+    if (systems) {
+        return systems->getModelSelection();
     }
     return nullptr;
 }
 
 const ModelSelection* App::getModelSelection() const {
-    if (runtimeHost) {
-        return runtimeHost->getModelSelection();
+    if (systems) {
+        return systems->getModelSelection();
     }
     return nullptr;
 }
 
 void App::setRenderPaused(bool paused) {
-    if (runtimeHost) {
-        runtimeHost->setRenderPaused(paused);
+    if (systems) {
+        systems->setRenderPaused(paused);
     }
 }
 
 uint32_t App::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    if (runtimeHost) {
-        return runtimeHost->loadModel(modelPath, preferredModelId);
+    if (systems) {
+        return systems->loadModel(modelPath, preferredModelId);
     }
     return 0;
 }

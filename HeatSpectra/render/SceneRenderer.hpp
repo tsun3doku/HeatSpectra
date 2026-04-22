@@ -104,14 +104,13 @@ private:
         const render::FrameContext& frameContext,
         const render::SceneView& sceneView,
         const render::RenderFlags& flags,
-
         render::RenderServices& services,
         VkQueryPool passTimingQueryPool = VK_NULL_HANDLE,
         uint32_t passTimingQueryBase = 0);
     void destroyPasses();
     void createGpuTimingQueryPool();
     void destroyGpuTimingQueryPool();
-
+    
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     FrameGraph& frameGraph;

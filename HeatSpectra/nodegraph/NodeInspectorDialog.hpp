@@ -15,18 +15,15 @@ class QHideEvent;
 class QTextEdit;
 class QTabWidget;
 class QComboBox;
-class QTableWidget;
-class QTableView;
-class QAbstractTableModel;
 class QCheckBox;
 class QString;
 class NodeGroupPanel;
 class NodeHeatSolverPanel;
-class NodeHeatSourcePanel;
 class NodeModelPanel;
 class NodeTransformPanel;
 class NodeRemeshPanel;
 class NodeContactPanel;
+class NodeHeatSourcePanel;
 class NodeVoronoiPanel;
 
 class NodeInspectorDialog : public QWidget {
@@ -82,8 +79,5 @@ private:
     QPushButton* dataflowRefreshButton = nullptr;
     QComboBox* spreadsheetSocketComboBox = nullptr;
     QLabel* spreadsheetSummaryLabel = nullptr;
-    QTableWidget* spreadsheetAttributesTable = nullptr;
-    QTableView* spreadsheetSamplesTable = nullptr;
-    QAbstractTableModel* spreadsheetSamplesModel = nullptr;
     QPushButton* spreadsheetRefreshButton = nullptr;
 };

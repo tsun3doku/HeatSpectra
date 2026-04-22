@@ -7,13 +7,8 @@
 #include <string>
 #include <vector>
 
-class HeatSystemComputeController;
-class HeatSystemDisplayController;
-class ContactSystemComputeController;
-class VoronoiSystemComputeController;
-class ContactSystem;
-
 #include "FrameComputeStage.hpp"
+#include "ComputePass.hpp"
 #include "FrameGraphicsStage.hpp"
 #include "FrameTypes.hpp"
 #include "FrameUpdateStage.hpp"
@@ -29,7 +24,6 @@ class ComputeTiming;
 class FrameStats;
 class CameraController;
 class ModelRegistry;
-class MeshModifiers;
 class UniformBufferManager;
 class ModelSelection;
 class GizmoController;
@@ -41,12 +35,7 @@ class MaterialSystem;
 
 struct FrameControllerServices {
     ModelRegistry& resourceManager;
-    MeshModifiers& meshModifiers;
     UniformBufferManager& uniformBufferManager;
-    HeatSystemComputeController* heatSystemComputeController = nullptr;
-    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
-    ContactSystemComputeController* contactSystemController = nullptr;
-    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
     ModelSelection& modelSelection;
     GizmoController& gizmoController;
     WireframeRenderer& wireframeRenderer;
@@ -76,7 +65,7 @@ public:
     void shutdownSyncObjects();
     void cleanupSwapChain();
     bool recreateSwapChain();
-    void drawFrame(const render::RenderFlags& flags, bool allowHeatSolve);
+    void drawFrame(const render::RenderFlags& flags, const std::vector<ComputePass*>& computePasses);
 
 private:
     const WindowRuntimeState& windowState;
@@ -86,10 +75,6 @@ private:
     ComputeTiming& computeTiming;
     FrameStats& frameStats;
     CameraController& cameraController;
-    HeatSystemComputeController* heatSystemComputeController = nullptr;
-    HeatSystemDisplayController* heatSystemDisplayController = nullptr;
-    ContactSystemComputeController* contactSystemController = nullptr;
-    VoronoiSystemComputeController* voronoiSystemComputeController = nullptr;
     std::atomic<bool>& isOperating;
     std::atomic<bool>& isShuttingDown;
 
