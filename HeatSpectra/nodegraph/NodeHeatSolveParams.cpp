@@ -3,7 +3,7 @@
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphUtils.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 HeatSolveNodeParams readHeatSolveNodeParams(const NodeGraphNode& node) {
     HeatSolveNodeParams params{};

@@ -541,13 +541,8 @@ void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     float interval = 0.5f;
     float halfW = gridSize.x * 0.5f;
     float halfD = gridSize.y * 0.5f;
-    float height = gridSize.z;
     float offset = 0.05f;
     float scale = 0.08f;
-
-    // Y-Axis Labels (Vertical)
-    const glm::vec3 yRight(-1.0f, 0.0f, 0.0f);
-    const glm::vec3 yUp(0.0f, 1.0f, 0.0f);
 
     // X-Axis Labels (Floor)
     const glm::vec3 xRight(-1.0f, 0.0f, 0.0f); 
@@ -556,13 +551,6 @@ void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     // Z-Axis Labels (Floor)
     const glm::vec3 zRight(0.0f, 0.0f, 1.0f);
     const glm::vec3 zUp(1.0f, 0.0f, 0.0f);
-
-    // Y-Axis
-    // Draw labels on all four corners with billboard flag enabled
-    addEdgeLabels(glm::vec3(-halfW, 0, -halfD), 1, 0, height, interval, scale, yRight, yUp, true, true);
-    addEdgeLabels(glm::vec3(halfW, 0, -halfD), 1, 0, height, interval, scale, yRight, yUp, true, true);
-    addEdgeLabels(glm::vec3(halfW, 0, halfD), 1, 0, height, interval, scale, yRight, yUp, true, true);
-    addEdgeLabels(glm::vec3(-halfW, 0, halfD), 1, 0, height, interval, scale, yRight, yUp, true, true);
 
     // Central X-Axis Labels (at Z=0)
     glm::vec3 xAxisBasePos = glm::vec3(-0.005f, 0.001f, -0.025f);

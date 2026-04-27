@@ -2,7 +2,7 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeHeatSolveParams.hpp"
 #include "NodeGraphUtils.hpp"
-#include "NodeGraphSceneUtils.hpp"
+#include "nodegraph/ui/scene/NodeGraphSceneUtils.hpp"
 
 #include <sstream>
 #include <unordered_map>

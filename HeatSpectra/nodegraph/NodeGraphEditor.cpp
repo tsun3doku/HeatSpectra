@@ -3,8 +3,8 @@
 #include "NodeGraphUtils.hpp"
 
 #include "NodeGraphBridge.hpp"
-#include "NodeGraphSceneUtils.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/scene/NodeGraphSceneUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 #include <algorithm>
 #include <unordered_map>
@@ -79,17 +79,27 @@ void NodeGraphEditor::resetToDefaultGraph() {
         return node.outputs.empty() ? NodeGraphSocketId{} : node.outputs.front().id;
     };
 
-    const CreatedNode receiverModel = createNode(nodegraphtypes::Model, "Receiver Model", 30.0f, 40.0f);
-    const CreatedNode receiverTransform = createNode(nodegraphtypes::Transform, "Receiver Transform", 220.0f, 40.0f);
-    const CreatedNode receiverRemesh = createNode(nodegraphtypes::Remesh, "Receiver Remesh", 410.0f, 40.0f);
-    const CreatedNode sourceModel = createNode(nodegraphtypes::Model, "Source Model", 30.0f, 280.0f);
-    const CreatedNode sourceTransform = createNode(nodegraphtypes::Transform, "Source Transform", 220.0f, 280.0f);
-    const CreatedNode sourceRemesh = createNode(nodegraphtypes::Remesh, "Source Remesh", 410.0f, 280.0f);
-    const CreatedNode heatReceiver = createNode(nodegraphtypes::HeatReceiver, "", 650.0f, 40.0f);
-    const CreatedNode heatSource = createNode(nodegraphtypes::HeatSource, "", 650.0f, 280.0f);
-    const CreatedNode contact = createNode(nodegraphtypes::Contact, "", 860.0f, 180.0f);
-    const CreatedNode voronoi = createNode(nodegraphtypes::Voronoi, "", 860.0f, 20.0f);
-    const CreatedNode heatSolve = createNode(nodegraphtypes::HeatSolve, "", 1130.0f, 180.0f);
+    constexpr float leftColumnX = 82.5f;
+    constexpr float rightColumnX = 184.8f;
+    constexpr float centerColumnX = 133.7f;
+    constexpr float row1Y = 26.4f;
+    constexpr float row2Y = 82.5f;
+    constexpr float row3Y = 141.9f;
+    constexpr float row4Y = 204.6f;
+    constexpr float row5Y = 270.6f;
+    constexpr float row6Y = 336.6f;
+
+    const CreatedNode receiverModel = createNode(nodegraphtypes::Model, "Receiver Model", leftColumnX, row1Y);
+    const CreatedNode sourceModel = createNode(nodegraphtypes::Model, "Source Model", rightColumnX, row1Y);
+    const CreatedNode receiverTransform = createNode(nodegraphtypes::Transform, "Receiver Transform", leftColumnX, row2Y);
+    const CreatedNode sourceTransform = createNode(nodegraphtypes::Transform, "Source Transform", rightColumnX, row2Y);
+    const CreatedNode receiverRemesh = createNode(nodegraphtypes::Remesh, "Receiver Remesh", leftColumnX, row3Y);
+    const CreatedNode sourceRemesh = createNode(nodegraphtypes::Remesh, "Source Remesh", rightColumnX, row3Y);
+    const CreatedNode heatReceiver = createNode(nodegraphtypes::HeatReceiver, "", leftColumnX, row4Y);
+    const CreatedNode heatSource = createNode(nodegraphtypes::HeatSource, "", rightColumnX, row4Y);
+    const CreatedNode voronoi = createNode(nodegraphtypes::Voronoi, "", leftColumnX, row5Y);
+    const CreatedNode contact = createNode(nodegraphtypes::Contact, "", rightColumnX, row5Y);
+    const CreatedNode heatSolve = createNode(nodegraphtypes::HeatSolve, "", centerColumnX, row6Y);
 
     if (!receiverModel.id.isValid() || !receiverTransform.id.isValid() || !receiverRemesh.id.isValid() ||
         !sourceModel.id.isValid() || !sourceTransform.id.isValid() || !sourceRemesh.id.isValid() ||
@@ -172,14 +182,19 @@ bool NodeGraphEditor::moveNode(NodeGraphNodeId nodeId, float x, float y) {
     return bridge && bridge->moveNode(nodeId, x, y);
 }
 
+bool NodeGraphEditor::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled) {
+    return bridge && bridge->setNodeDisplayEnabled(nodeId, enabled);
+}
+
+bool NodeGraphEditor::setNodeFrozen(NodeGraphNodeId nodeId, bool frozen) {
+    return bridge && bridge->setNodeFrozen(nodeId, frozen);
+}
+
 bool NodeGraphEditor::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter) {
     return bridge && bridge->setNodeParameter(nodeId, parameter);
 }
 
-bool NodeGraphEditor::updateNodeParameter(
-    NodeGraphNodeId nodeId,
-    uint32_t paramId,
-    const std::function<bool(NodeGraphParamValue&)>& updater) {
+bool NodeGraphEditor::updateNodeParameter(NodeGraphNodeId nodeId, uint32_t paramId, const std::function<bool(NodeGraphParamValue&)>& updater) {
     if (!bridge || !nodeId.isValid() || !updater) {
         return false;
     }

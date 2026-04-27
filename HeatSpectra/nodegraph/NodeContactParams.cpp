@@ -2,7 +2,7 @@
 
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 ContactNodeParams readContactNodeParams(const NodeGraphNode& node) {
     ContactNodeParams params{};

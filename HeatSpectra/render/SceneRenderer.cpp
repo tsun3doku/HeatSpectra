@@ -3,7 +3,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "SceneColorSpace.hpp"
 #include "framegraph/FrameGraph.hpp"
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/FrameGraphResources.hpp"
@@ -440,7 +439,7 @@ bool SceneRenderer::recordCommandBuffer(
         } else {
             clearValue.color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
             if (resource.name == framegraph::resources::LightingMSAA) {
-                clearValue.color = { { clearColorValues[0], clearColorValues[1], clearColorValues[2], 1.0f } };
+                clearValue.color = { { clearColorLinear[0], clearColorLinear[1], clearColorLinear[2], 1.0f } };
             }
         }
 

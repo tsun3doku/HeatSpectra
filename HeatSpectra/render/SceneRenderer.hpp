@@ -4,8 +4,8 @@
 
 #include <glm/glm.hpp>
 #include "framegraph/FramePass.hpp"
-#include "SceneColorSpace.hpp"
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,7 +52,7 @@ struct GpuTimingStats {
     std::vector<GpuPassTiming> passTimings;
 };
 
-inline const auto& clearColorValues = clearColorLinear;
+inline constexpr std::array<float, 4> clearColorLinear = {0.0144f, 0.0144f, 0.0168f, 1.0f};
 
 class SceneRenderer {
 public:

@@ -37,6 +37,8 @@ public:
     NodeGraphNodeId addNode(const NodeTypeId& typeId, const std::string& title, float x, float y);
     bool removeNode(NodeGraphNodeId nodeId);
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
+    bool setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled);
+    bool setNodeFrozen(NodeGraphNodeId nodeId, bool frozen);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
     bool updateNodeParameter(NodeGraphNodeId nodeId, uint32_t paramId, const std::function<bool(NodeGraphParamValue&)>& updater);
     bool connectSockets(

@@ -402,12 +402,6 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         simStage &&
         surfaceStage &&
         voronoiStage) {
-        std::cerr << "[HeatSystem] recordComputeCommands dispatching"
-                  << " couplings=" << heatContactRuntime.getCouplings().size()
-                  << " nodeCount=" << simRuntime.getNodeCount()
-                  << " isActive=" << (isActive ? "true" : "false")
-                  << " isPaused=" << (isPaused ? "true" : "false")
-                  << std::endl;
         HeatSourcePushConstant basePushConstant{};
         basePushConstant.heatSourceModelMatrix = glm::mat4(1.0f);
         basePushConstant.visModelMatrix = glm::mat4(1.0f);
@@ -423,11 +417,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
         if (timingQueryPool != VK_NULL_HANDLE) {
             vkCmdResetQueryPool(commandBuffer, timingQueryPool, timingQueryBase, 2);
-            vkCmdWriteTimestamp(
-                commandBuffer,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                timingQueryPool,
-                timingQueryBase);
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timingQueryPool, timingQueryBase);
         }
 
         simStage->recordComputeCommands(
@@ -445,21 +435,9 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
             NUM_SUBSTEPS);
 
         if (timingQueryPool != VK_NULL_HANDLE) {
-            vkCmdWriteTimestamp(
-                commandBuffer,
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                timingQueryPool,
-                timingQueryBase + 1);
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timingQueryPool, timingQueryBase + 1);
         }
-    } else {
-        std::cerr << "[HeatSystem] recordComputeCommands skipped"
-                  << " hasDispatchableComputeWork=" << (hasDispatchableComputeWork() ? "true" : "false")
-                  << " contactStage=" << (contactStage ? "yes" : "no")
-                  << " simStage=" << (simStage ? "yes" : "no")
-                  << " surfaceStage=" << (surfaceStage ? "yes" : "no")
-                  << " voronoiStage=" << (voronoiStage ? "yes" : "no")
-                  << std::endl;
-    }
+    } 
 
     vkEndCommandBuffer(commandBuffer);
 }

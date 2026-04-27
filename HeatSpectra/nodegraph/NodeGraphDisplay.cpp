@@ -4,11 +4,8 @@
 #include "NodeGraphUtils.hpp"
 #include "runtime/RuntimeECS.hpp"
 
-std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplaySelectedKeys(
-    const NodeGraphState& graphState,
-    const ECSRegistry& registry) const {
-
-    // Build dependency graph: socketKey -> vector of dependency socketKeys
+std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplaySelectedKeys(const NodeGraphState& graphState, const ECSRegistry& registry) const {
+    // Build dependency graph
     std::unordered_map<uint64_t, std::vector<uint64_t>> depsByKey;
 
     for (auto entity : registry.view<ModelPackage>()) {
@@ -90,7 +87,7 @@ std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplaySelectedKeys(
         depsByKey[socketKey] = std::move(deps);
     }
 
-    // Collect display-enabled output socket keys
+    // Collect display enabled output socket keys
     std::unordered_set<uint64_t> selectedKeys;
     for (const NodeGraphNode& node : graphState.nodes) {
         if (!node.displayEnabled) {

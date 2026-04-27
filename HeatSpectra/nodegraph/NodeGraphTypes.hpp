@@ -177,6 +177,7 @@ struct NodeGraphNode {
     float x = 0.0f;
     float y = 0.0f;
     bool displayEnabled = false;
+    bool frozen = false;
     std::vector<NodeGraphSocket> inputs;
     std::vector<NodeGraphSocket> outputs;
     std::vector<NodeGraphParamValue> parameters;
@@ -207,7 +208,8 @@ enum class NodeGraphChangeType : uint8_t {
 enum class NodeGraphChangeReason : uint8_t {
     Topology = 0,
     Parameter = 1,
-    Layout = 2
+    Layout = 2,
+    State = 3
 };
 
 struct NodeGraphChange {

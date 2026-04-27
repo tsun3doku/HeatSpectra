@@ -8,19 +8,9 @@
 #include <vector>
 
 NodeGraphParamField makeParamField(const char* name, NodeGraphParamDefinition definition);
-NodeGraphParamDefinition makeStructParamDefinition(
-    uint32_t id,
-    const char* name,
-    std::vector<NodeGraphParamField> fields);
-NodeGraphParamDefinition makeArrayParamDefinition(
-    uint32_t id,
-    const char* name,
-    NodeGraphParamDefinition elementDefinition);
-NodeGraphParamDefinition makeEnumParamDefinition(
-    uint32_t id,
-    const char* name,
-    const char* defaultValue,
-    std::vector<std::string> enumOptions);
+NodeGraphParamDefinition makeStructParamDefinition(uint32_t id, const char* name, std::vector<NodeGraphParamField> fields);
+NodeGraphParamDefinition makeArrayParamDefinition(uint32_t id, const char* name, NodeGraphParamDefinition elementDefinition);
+NodeGraphParamDefinition makeEnumParamDefinition(uint32_t id, const char* name,  const char* defaultValue, std::vector<std::string> enumOptions);
 NodeGraphParamDefinition makeIntParamDefinition(uint32_t id, const char* name, int64_t defaultValue = 0);
 
 NodeGraphParamFieldValue makeParamFieldValue(const char* name, NodeGraphParamValue value);

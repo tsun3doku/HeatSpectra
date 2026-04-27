@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -23,7 +24,7 @@ public:
     void finalizeSync();
 
 private:
-    void applyPackage(uint64_t socketKey, const ModelPackage& package);
+    bool tryBuildRuntimeModelPath(uint64_t socketKey, const ModelPackage& package, const std::string*& outModelPath) const;
     void removePublishedProduct(uint64_t socketKey);
     void publishProduct(uint64_t socketKey, uint32_t runtimeModelId);
 

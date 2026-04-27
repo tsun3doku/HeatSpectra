@@ -1,6 +1,6 @@
 #include "MainQt.h"
 #include "App.h"
-#include "nodegraph/NodeGraphDock.hpp"
+#include "nodegraph/ui/scene/NodeGraphDock.hpp"
 #include "util/UiTheme.hpp"
 #include "VulkanWindow.hpp"
 
@@ -30,7 +30,7 @@
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("HeatSpectra");
     resize(1280, 720);
-    setStyleSheet(QString::fromStdString(ui::splitterStyleSheet()));
+    setStyleSheet(QString::fromStdString(ui::appStyleSheet()));
 
     createMenuBar();
     createNodeGraphDock();
@@ -67,7 +67,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     mainSplitter->setStretchFactor(0, 0);
     mainSplitter->setStretchFactor(1, 1);
-    mainSplitter->setSizes({320, 1100});
+    mainSplitter->setSizes({430, 850});
 
     setCentralWidget(centralHost);
     connect(mainSplitter, &QSplitter::splitterMoved, this, [this](int, int) {

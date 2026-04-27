@@ -48,11 +48,7 @@ void NodeGraphKernels::executeNode(
         return;
     }
 
-    NodeGraphKernelContext context{
-        node,
-        inputs,
-        outputs,
-        executionState};
+    NodeGraphKernelContext context{node, inputs, outputs, executionState};
 
     kernelIt->second->execute(context);
 }

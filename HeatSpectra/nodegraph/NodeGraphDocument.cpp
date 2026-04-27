@@ -99,6 +99,17 @@ bool NodeGraphDocument::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabl
     return true;
 }
 
+bool NodeGraphDocument::setNodeFrozen(NodeGraphNodeId nodeId, bool frozen) {
+    NodeGraphNode* node = findNode(nodeId);
+    if (!node || node->frozen == frozen) {
+        return false;
+    }
+
+    node->frozen = frozen;
+    bumpRevision();
+    return true;
+}
+
 bool NodeGraphDocument::setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter) {
     NodeGraphNode* node = findNode(nodeId);
     if (!node) {

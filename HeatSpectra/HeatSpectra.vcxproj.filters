@@ -426,7 +426,7 @@
     <ClCompile Include="nodegraph\NodeGraphDocument.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphDock.cpp">
+    <ClCompile Include="nodegraph\ui\scene\NodeGraphDock.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphEditor.cpp">
@@ -456,28 +456,28 @@
     <ClCompile Include="nodegraph\NodeModelTransform.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeModelPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeModelPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeTransform.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeTransformPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeTransformPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGroup.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGroupPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeGroupPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeRemesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeRemeshPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeRemeshPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeVoronoiPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeVoronoiPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeHeatReceiver.cpp">
@@ -486,7 +486,7 @@
     <ClCompile Include="nodegraph\NodeHeatSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeHeatSourcePanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeHeatSourcePanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeContact.cpp">
@@ -501,13 +501,16 @@
     <ClCompile Include="nodegraph\NodeHeatMaterialPresets.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeContactPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeContactPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeHeatSolverPanel.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeHeatSolverPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodePanelUtils.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodePanelBase.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\ui\widgets\NodePanelUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphDisplay.cpp">
@@ -516,16 +519,31 @@
     <ClCompile Include="nodegraph\NodeGraphCompiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeInspectorDialog.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodePanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphScene.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeGraphWidgetStyle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphSceneStyle.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeGraphSliderItem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="nodegraph\NodeGraphSceneUtils.cpp">
+    <ClCompile Include="nodegraph\ui\widgets\NodeGraphSliderRow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\NodeGraphIconRegistry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\ui\scene\NodeGraphNodeItem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\ui\scene\NodeGraphScene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\ui\scene\NodeGraphSceneStyle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nodegraph\ui\scene\NodeGraphSceneUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nodegraph\NodeGraphTypes.cpp">
@@ -1123,7 +1141,7 @@
     <ClInclude Include="nodegraph\NodeGraphDocument.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphDock.hpp">
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphDock.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphEditor.hpp">
@@ -1150,28 +1168,28 @@
     <ClInclude Include="nodegraph\NodeModelTransform.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeModelPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeModelPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeTransform.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeTransformPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeTransformPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGroup.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGroupPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeGroupPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeRemesh.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeRemeshPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeRemeshPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeVoronoiPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeVoronoiPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeHeatReceiver.hpp">
@@ -1180,7 +1198,7 @@
     <ClInclude Include="nodegraph\NodeHeatSource.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeHeatSourcePanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeHeatSourcePanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeContact.hpp">
@@ -1195,13 +1213,16 @@
     <ClInclude Include="nodegraph\NodeHeatMaterialPresets.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeContactPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeContactPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeHeatSolverPanel.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeHeatSolverPanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodePanelUtils.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodePanelBase.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\ui\widgets\NodePanelUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphDisplay.hpp">
@@ -1210,16 +1231,22 @@
     <ClInclude Include="nodegraph\NodeGraphCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeInspectorDialog.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodePanel.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphScene.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeGraphSliderItem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphSceneStyle.hpp">
+    <ClInclude Include="nodegraph\ui\widgets\NodeGraphSliderRow.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphSceneUtils.hpp">
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphScene.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphSceneStyle.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphSceneUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphTypes.hpp">
@@ -1228,10 +1255,13 @@
     <ClInclude Include="nodegraph\NodeGraphValidator.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphNodeRectItem.hpp">
+    <ClInclude Include="nodegraph\NodeGraphIconRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="render\SceneColorSpace.hpp">
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphNodeItem.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\ui\scene\NodeGraphSocketItem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="render\WindowRuntimeState.hpp">
@@ -1343,6 +1373,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeHandleResolver.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nodegraph\ui\widgets\NodeGraphWidgetStyle.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

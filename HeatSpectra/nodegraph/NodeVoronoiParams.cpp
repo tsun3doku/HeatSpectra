@@ -2,7 +2,7 @@
 
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 #include "domain/VoronoiParams.hpp"
 
 VoronoiNodeParams readVoronoiNodeParams(const NodeGraphNode& node) {

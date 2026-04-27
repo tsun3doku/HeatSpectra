@@ -11,15 +11,8 @@ public:
     const NodeGraphNode* findNode(NodeGraphNodeId nodeId) const;
     const NodeGraphEdge* findIncomingEdge(NodeGraphNodeId toNodeId, NodeGraphSocketId toSocketId) const;
 
-    bool findFirstUpstreamNodeByType(
-        NodeGraphNodeId startNodeId,
-        const NodeTypeId& targetTypeId,
-        NodeGraphNodeId& outNodeId) const;
-
-    bool findFirstUpstreamNodeByType(
-        uint64_t outputSocketKey,
-        const NodeTypeId& targetTypeId,
-        NodeGraphNodeId& outNodeId) const;
+    bool findFirstUpstreamNodeByType(NodeGraphNodeId startNodeId, const NodeTypeId& targetTypeId, NodeGraphNodeId& outNodeId) const;
+    bool findFirstUpstreamNodeByType(uint64_t outputSocketKey, const NodeTypeId& targetTypeId, NodeGraphNodeId& outNodeId) const;
 
 private:
     std::unordered_map<uint32_t, const NodeGraphNode*> nodeById;

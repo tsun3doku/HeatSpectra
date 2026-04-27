@@ -112,10 +112,7 @@ void populateMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* regis
     }
 }
 
-void buildOutputs(
-    const NodeGraphNode& node,
-    const std::vector<const NodeDataBlock*>& inputs,
-    std::vector<NodeDataBlock>& outputs) {
+void buildOutputs(const NodeGraphNode& node, const std::vector<const NodeDataBlock*>& inputs, std::vector<NodeDataBlock>& outputs) {
     std::unordered_map<std::string, std::string> mergedMetadata;
     std::vector<NodeGraphNodeId> mergedLineage;
     std::unordered_set<uint32_t> seenNodeIds;

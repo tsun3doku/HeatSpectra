@@ -31,11 +31,17 @@ public:
             uint64_t socketKey = static_cast<uint64_t>(entity);
             if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
                 continue;
-            }
-
-            const auto& package = registry.get<ContactPackage>(entity);
-            applyPackage(socketKey, package);
         }
+
+        const auto& package = registry.get<ContactPackage>(entity);
+        ContactDisplayController::Config config{};
+        if (!tryBuildConfig(socketKey, package, config)) {
+            controller->remove(socketKey);
+            continue;
+        }
+
+        controller->apply(socketKey, config);
+    }
     }
 
     void finalizeSync() {
@@ -47,33 +53,29 @@ public:
     }
 
 private:
-    void applyPackage(uint64_t socketKey, const ContactPackage& package) {
-        if (!controller || socketKey == 0) {
-            return;
+    bool tryBuildConfig(uint64_t socketKey, const ContactPackage& package, ContactDisplayController::Config& outConfig) const {
+        if (!controller || !ecsRegistry || socketKey == 0) {
+            return false;
         }
-
         if (!package.display.showContactLines) {
-            controller->remove(socketKey);
-            return;
+            return false;
         }
 
         const ContactProduct* computeProduct = tryGetProduct<ContactProduct>(*ecsRegistry, socketKey);
         if (!computeProduct || !computeProduct->isValid()) {
-            controller->remove(socketKey);
-            return;
+            return false;
         }
 
-        ContactDisplayController::Config config{};
-        config.showContactLines = package.display.showContactLines;
-        config.authoredActive = package.authored.active;
-        config.hasValidContact = package.authored.pair.hasValidContact;
-        config.emitterRuntimeModelId = computeProduct->emitterRuntimeModelId;
-        config.receiverRuntimeModelId = computeProduct->receiverRuntimeModelId;
-        config.outlineVertices = computeProduct->outlineVertices;
-        config.correspondenceVertices = computeProduct->correspondenceVertices;
-        config.displayHash = buildDisplayHash(config, computeProduct->productHash);
-
-        controller->apply(socketKey, config);
+        outConfig = {};
+        outConfig.showContactLines = package.display.showContactLines;
+        outConfig.authoredActive = package.authored.active;
+        outConfig.hasValidContact = package.authored.pair.hasValidContact;
+        outConfig.emitterRuntimeModelId = computeProduct->emitterRuntimeModelId;
+        outConfig.receiverRuntimeModelId = computeProduct->receiverRuntimeModelId;
+        outConfig.outlineVertices = computeProduct->outlineVertices;
+        outConfig.correspondenceVertices = computeProduct->correspondenceVertices;
+        outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->productHash);
+        return true;
     }
 
     ContactDisplayController* controller = nullptr;

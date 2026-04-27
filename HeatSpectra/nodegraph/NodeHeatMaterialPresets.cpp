@@ -2,7 +2,7 @@
 
 #include "NodeGraphParamUtils.hpp"
 #include "NodeGraphUtils.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 bool tryResolveHeatPresetId(const std::string& value, HeatMaterialPresetId& outId) {
     const std::string normalized = NodePanelUtils::normalizePresetName(value);

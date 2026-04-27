@@ -3,7 +3,7 @@
 #include "NodeGraphBridge.hpp"
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 TransformNodeParams readTransformNodeParams(const NodeGraphNode& node) {
     TransformNodeParams params{};

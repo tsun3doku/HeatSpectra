@@ -2,7 +2,7 @@
 
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 
 HeatSourceNodeParams readHeatSourceNodeParams(const NodeGraphNode& node) {
     HeatSourceNodeParams params{};

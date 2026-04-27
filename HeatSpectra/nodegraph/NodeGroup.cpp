@@ -2,7 +2,7 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphUtils.hpp"
 #include "NodeGraphHash.hpp"
-#include "NodePanelUtils.hpp"
+#include "nodegraph/ui/widgets/NodePanelUtils.hpp"
 #include "NodePayloadRegistry.hpp"
 
 #include <algorithm>

@@ -28,10 +28,6 @@ public:
         for (auto entity : view) {
             uint64_t socketKey = static_cast<uint64_t>(entity);
             const auto& package = registry.get<ContactPackage>(entity);
-            if (!package.authored.active || !package.authored.pair.hasValidContact) {
-                continue;
-            }
-
             auto hashIt = appliedPackageHash.find(socketKey);
             if (hashIt != appliedPackageHash.end() && hashIt->second == package.packageHash) {
                 nextSocketKeys.insert(socketKey);
@@ -39,46 +35,9 @@ public:
             }
 
             ContactSystemComputeController::Config config{};
-            const RemeshProduct* emitterRemeshProduct =
-                package.emitterRemeshProduct.isValid()
-                ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.emitterRemeshProduct.outputSocketKey)
-                : nullptr;
-            const RemeshProduct* receiverRemeshProduct =
-                package.receiverRemeshProduct.isValid()
-                ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.receiverRemeshProduct.outputSocketKey)
-                : nullptr;
-            if (!emitterRemeshProduct || !receiverRemeshProduct) {
+            if (!tryBuildConfig(socketKey, package, config)) {
                 continue;
             }
-
-            const bool hasEmitterModelProduct =
-                package.emitterModelProduct.isValid() &&
-                tryGetProduct<ModelProduct>(*ecsRegistry, package.emitterModelProduct.outputSocketKey);
-            const bool hasReceiverModelProduct =
-                package.receiverModelProduct.isValid() &&
-                tryGetProduct<ModelProduct>(*ecsRegistry, package.receiverModelProduct.outputSocketKey);
-            if (!hasEmitterModelProduct || !hasReceiverModelProduct) {
-                continue;
-            }
-
-            config.couplingType = package.authored.pair.type;
-            config.minNormalDot = package.authored.pair.minNormalDot;
-            config.contactRadius = package.authored.pair.contactRadius;
-            config.emitterModelId = emitterRemeshProduct->runtimeModelId;
-            config.emitterLocalToWorld = package.emitterLocalToWorld;
-            config.emitterIntrinsicMesh = emitterRemeshProduct->intrinsicMesh;
-            config.receiverModelId = receiverRemeshProduct->runtimeModelId;
-            config.receiverLocalToWorld = package.receiverLocalToWorld;
-            config.receiverIntrinsicMesh = receiverRemeshProduct->intrinsicMesh;
-            config.emitterRuntimeModelId = emitterRemeshProduct->runtimeModelId;
-            config.receiverRuntimeModelId = receiverRemeshProduct->runtimeModelId;
-            config.receiverTriangleIndices = receiverRemeshProduct->intrinsicMesh.indices;
-
-            if (!config.isValid()) {
-                continue;
-            }
-
-            config.computeHash = buildComputeHash(config);
             controller->configure(socketKey, config);
             nextSocketKeys.insert(socketKey);
         }
@@ -121,6 +80,47 @@ public:
     }
 
 private:
+    bool tryBuildConfig(uint64_t socketKey, const ContactPackage& package, ContactSystemComputeController::Config& outConfig) const {
+        if (socketKey == 0 || !ecsRegistry) {
+            return false;
+        }
+        if (!package.authored.active || !package.authored.pair.hasValidContact) {
+            return false;
+        }
+
+        const RemeshProduct* emitterRemeshProduct =
+            package.emitterRemeshProduct.isValid()
+            ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.emitterRemeshProduct.outputSocketKey)
+            : nullptr;
+        const RemeshProduct* receiverRemeshProduct =
+            package.receiverRemeshProduct.isValid()
+            ? tryGetProduct<RemeshProduct>(*ecsRegistry, package.receiverRemeshProduct.outputSocketKey)
+            : nullptr;
+        if (!emitterRemeshProduct || !receiverRemeshProduct) {
+            return false;
+        }
+
+        outConfig = {};
+        outConfig.couplingType = package.authored.pair.type;
+        outConfig.minNormalDot = package.authored.pair.minNormalDot;
+        outConfig.contactRadius = package.authored.pair.contactRadius;
+        outConfig.emitterModelId = emitterRemeshProduct->runtimeModelId;
+        outConfig.emitterLocalToWorld = package.emitterLocalToWorld;
+        outConfig.emitterIntrinsicMesh = emitterRemeshProduct->intrinsicMesh;
+        outConfig.receiverModelId = receiverRemeshProduct->runtimeModelId;
+        outConfig.receiverLocalToWorld = package.receiverLocalToWorld;
+        outConfig.receiverIntrinsicMesh = receiverRemeshProduct->intrinsicMesh;
+        outConfig.emitterRuntimeModelId = emitterRemeshProduct->runtimeModelId;
+        outConfig.receiverRuntimeModelId = receiverRemeshProduct->runtimeModelId;
+        outConfig.receiverTriangleIndices = receiverRemeshProduct->intrinsicMesh.indices;
+        if (!outConfig.isValid()) {
+            return false;
+        }
+
+        outConfig.computeHash = buildComputeHash(outConfig);
+        return true;
+    }
+
     void removePublishedProduct(uint64_t socketKey) {
         if (socketKey == 0) {
             return;

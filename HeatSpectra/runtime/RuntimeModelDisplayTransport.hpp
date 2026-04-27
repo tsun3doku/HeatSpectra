@@ -15,10 +15,6 @@ public:
         modelRuntime = updatedRuntime;
     }
 
-    void setECSRegistry(ECSRegistry* updatedRegistry) {
-        ecsRegistry = updatedRegistry;
-    }
-
     void setVisibleKeys(const std::unordered_set<uint64_t>* keys) {
         visibleKeys = keys;
     }
@@ -28,7 +24,6 @@ public:
 
 private:
     ModelDisplayRuntime* modelRuntime = nullptr;
-    ECSRegistry* ecsRegistry = nullptr;
     const std::unordered_set<uint64_t>* visibleKeys = nullptr;
     std::unordered_set<uint64_t> activeSocketKeys;
 };

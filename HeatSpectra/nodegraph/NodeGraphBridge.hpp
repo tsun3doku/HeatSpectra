@@ -19,6 +19,7 @@ public:
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
     bool getNode(NodeGraphNodeId nodeId, NodeGraphNode& outNode) const;
     bool setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled);
+    bool setNodeFrozen(NodeGraphNodeId nodeId, bool frozen);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
 
     bool connectSockets(

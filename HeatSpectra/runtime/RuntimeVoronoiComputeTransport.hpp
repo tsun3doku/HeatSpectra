@@ -22,6 +22,7 @@ public:
     void finalizeSync();
 
 private:
+    bool tryBuildConfig(uint64_t socketKey, const VoronoiPackage& package, VoronoiSystemComputeController::Config& outConfig) const;
     void removePublishedProduct(uint64_t socketKey);
     void publishProduct(uint64_t socketKey);
 

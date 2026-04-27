@@ -140,10 +140,10 @@ bool NodeGraphBridge::getNode(NodeGraphNodeId nodeId, NodeGraphNode& outNode) co
 bool NodeGraphBridge::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled) {
     std::lock_guard<std::mutex> lock(mutex);
 
-    std::unordered_map<uint32_t, bool> displayByNodeId;
-    displayByNodeId.reserve(document.getNodes().size());
+    std::unordered_map<uint32_t, std::pair<bool, bool>> stateByNodeId;
+    stateByNodeId.reserve(document.getNodes().size());
     for (const NodeGraphNode& existingNode : document.getNodes()) {
-        displayByNodeId.emplace(existingNode.id.value, existingNode.displayEnabled);
+        stateByNodeId.emplace(existingNode.id.value, std::make_pair(existingNode.displayEnabled, existingNode.frozen));
     }
 
     if (!document.setNodeDisplayEnabled(nodeId, enabled)) {
@@ -152,16 +152,36 @@ bool NodeGraphBridge::setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled
 
     std::vector<NodeGraphChange> changes;
     for (const NodeGraphNode& updatedNode : document.getNodes()) {
-        const auto previousIt = displayByNodeId.find(updatedNode.id.value);
-        const bool previousDisplayEnabled =
-            previousIt != displayByNodeId.end() ? previousIt->second : false;
-        if (previousDisplayEnabled == updatedNode.displayEnabled) {
+        const auto previousIt = stateByNodeId.find(updatedNode.id.value);
+        const bool previousDisplayEnabled = previousIt != stateByNodeId.end() ? previousIt->second.first : false;
+        const bool previousFrozen = previousIt != stateByNodeId.end() ? previousIt->second.second : false;
+        if (previousDisplayEnabled == updatedNode.displayEnabled && previousFrozen == updatedNode.frozen) {
             continue;
         }
 
         NodeGraphChange change{NodeGraphChangeType::NodeUpsert};
-        change.reason = NodeGraphChangeReason::Parameter;
+        change.reason = NodeGraphChangeReason::State;
         change.node = updatedNode;
+        changes.push_back(std::move(change));
+    }
+
+    rebuildStateLocked();
+    pushChangesLocked(changes);
+    return true;
+}
+
+bool NodeGraphBridge::setNodeFrozen(NodeGraphNodeId nodeId, bool frozen) {
+    std::lock_guard<std::mutex> lock(mutex);
+
+    if (!document.setNodeFrozen(nodeId, frozen)) {
+        return false;
+    }
+
+    std::vector<NodeGraphChange> changes;
+    if (const NodeGraphNode* node = document.findNode(nodeId)) {
+        NodeGraphChange change{NodeGraphChangeType::NodeUpsert};
+        change.reason = NodeGraphChangeReason::State;
+        change.node = *node;
         changes.push_back(std::move(change));
     }
 

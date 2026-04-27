@@ -84,6 +84,13 @@ inline uint64_t buildDisplayHash(const RemeshDisplayController::Config& config, 
     hash = RuntimeProductHash::mixPod(hash, static_cast<uint64_t>(config.showFaceNormals ? 1u : 0u));
     hash = RuntimeProductHash::mixPod(hash, static_cast<uint64_t>(config.showVertexNormals ? 1u : 0u));
     hash = RuntimeProductHash::mixPod(hash, config.normalLength);
+    hash = RuntimeProductHash::mixPod(hash, config.runtimeModelId);
+    hash = RuntimeProductHash::mixPod(hash, config.renderVertexBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.renderVertexBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.renderIndexBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.renderIndexBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.renderIndexCount);
+    hash = RuntimeProductHash::mixPod(hash, config.modelMatrix);
     hash = RuntimeProductHash::mixPod(hash, productHash);
     return hash;
 }

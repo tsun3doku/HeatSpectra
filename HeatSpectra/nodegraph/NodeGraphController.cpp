@@ -19,9 +19,7 @@
 #include "runtime/RuntimeVoronoiDisplayTransport.hpp"
 #include "runtime/RuntimeECS.hpp"
 
-NodeGraphController::NodeGraphController(
-    NodeGraphBridge* bridge,
-    const NodeRuntimeServices& services)
+NodeGraphController::NodeGraphController(NodeGraphBridge* bridge, const NodeRuntimeServices& services)
     : bridge(bridge),
       runtimeServices(services),
       runtime(bridge, services) {
@@ -31,7 +29,6 @@ NodeGraphController::NodeGraphController(
     if (runtimeServices.voronoiComputeTransport) { runtimeServices.voronoiComputeTransport->setECSRegistry(&ecsRegistry); }
     if (runtimeServices.contactComputeTransport) { runtimeServices.contactComputeTransport->setECSRegistry(&ecsRegistry); }
     if (runtimeServices.heatComputeTransport) { runtimeServices.heatComputeTransport->setECSRegistry(&ecsRegistry); }
-    if (runtimeServices.modelDisplayTransport) { runtimeServices.modelDisplayTransport->setECSRegistry(&ecsRegistry); }
     if (runtimeServices.remeshDisplayTransport) { runtimeServices.remeshDisplayTransport->setECSRegistry(&ecsRegistry); }
     if (runtimeServices.voronoiDisplayTransport) { runtimeServices.voronoiDisplayTransport->setECSRegistry(&ecsRegistry); }
     if (runtimeServices.contactDisplayTransport) { runtimeServices.contactDisplayTransport->setECSRegistry(&ecsRegistry); }
@@ -81,18 +78,12 @@ void NodeGraphController::tick() {
         // Snapshot all package entities as stale before compilation
         std::unordered_set<ECSEntity> staleEntities = collectPackageEntities(ecsRegistry);
 
-        // Compile and apply packages directly to registry (removes live entities from staleEntities)
-        packageCompiler.compileAndApply(
-            runtime.state(),
-            execState,
-            runtimeServices.payloadRegistry,
-            ecsRegistry,
-            staleEntities);
+        // Compile and apply packages directly to registry 
+        packageCompiler.compileAndApply(runtime.state(), execState, runtimeServices.payloadRegistry, ecsRegistry, staleEntities);
 
-        // Destroy stale entities (packages + products removed together)
         destroyStaleEntities(ecsRegistry, staleEntities);
 
-        // Sync compute transports (dependency order: model → remesh → voronoi → contact → heat)
+        // Sync compute transports 
         if (runtimeServices.modelComputeTransport) {
             runtimeServices.modelComputeTransport->sync(ecsRegistry);
             runtimeServices.modelComputeTransport->finalizeSync();

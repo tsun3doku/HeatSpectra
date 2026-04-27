@@ -22,7 +22,13 @@ void RuntimeModelComputeTransport::sync(const ECSRegistry& registry) {
             continue;
         }
 
-        applyPackage(socketKey, package);
+        const std::string* modelPath = nullptr;
+        if (!tryBuildRuntimeModelPath(socketKey, package, modelPath)) {
+            continue;
+        }
+
+        modelRuntime->queueAcquireSocket(socketKey, *modelPath);
+        nextSocketKeys.insert(socketKey);
     }
 
     for (uint64_t socketKey : activeSocketKeys) {
@@ -71,12 +77,17 @@ void RuntimeModelComputeTransport::finalizeSync() {
     }
 }
 
-void RuntimeModelComputeTransport::applyPackage(uint64_t socketKey, const ModelPackage& package) {
-    if (!modelRuntime || socketKey == 0) {
-        return;
+bool RuntimeModelComputeTransport::tryBuildRuntimeModelPath(
+    uint64_t socketKey,
+    const ModelPackage& package,
+    const std::string*& outModelPath) const {
+    outModelPath = nullptr;
+    if (socketKey == 0 || package.geometry.baseModelPath.empty()) {
+        return false;
     }
 
-    modelRuntime->queueAcquireSocket(socketKey, package.geometry.baseModelPath);
+    outModelPath = &package.geometry.baseModelPath;
+    return true;
 }
 
 void RuntimeModelComputeTransport::removePublishedProduct(uint64_t socketKey) {

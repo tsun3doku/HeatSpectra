@@ -36,7 +36,13 @@ public:
                 continue;
             }
 
-            applyPackage(socketKey, package);
+            RemeshController::Config config{};
+            if (!tryBuildConfig(socketKey, package, config)) {
+                continue;
+            }
+
+            controller->configure(config);
+            nextSocketKeys.insert(socketKey);
         }
 
         for (uint64_t socketKey : activeSocketKeys) {
@@ -77,23 +83,24 @@ public:
     }
 
 private:
-    void applyPackage(uint64_t socketKey, const RemeshPackage& package) {
-        if (socketKey == 0 || !controller) {
-            return;
+    bool tryBuildConfig(uint64_t socketKey, const RemeshPackage& package, RemeshController::Config& outConfig) const {
+        if (socketKey == 0 || !ecsRegistry) {
+            return false;
         }
 
-        RemeshController::Config config{};
-        config.socketKey = socketKey;
-        config.pointPositions = package.sourceGeometry.pointPositions;
-        config.triangleIndices = package.sourceGeometry.triangleIndices;
-        config.iterations = package.params.iterations;
-        config.minAngleDegrees = package.params.minAngleDegrees;
-        config.maxEdgeLength = package.params.maxEdgeLength;
-        config.stepSize = package.params.stepSize;
+        outConfig = {};
+        outConfig.socketKey = socketKey;
+        outConfig.pointPositions = package.sourceGeometry.pointPositions;
+        outConfig.triangleIndices = package.sourceGeometry.triangleIndices;
+        outConfig.iterations = package.params.iterations;
+        outConfig.minAngleDegrees = package.params.minAngleDegrees;
+        outConfig.maxEdgeLength = package.params.maxEdgeLength;
+        outConfig.stepSize = package.params.stepSize;
+
         const ModelProduct* modelProduct = tryGetProduct<ModelProduct>(*ecsRegistry, package.modelProductHandle.outputSocketKey);
-        config.runtimeModelId = modelProduct ? modelProduct->runtimeModelId : 0;
-        config.computeHash = buildComputeHash(config);
-        controller->configure(config);
+        outConfig.runtimeModelId = modelProduct ? modelProduct->runtimeModelId : 0;
+        outConfig.computeHash = buildComputeHash(outConfig);
+        return true;
     }
 
     void removePublishedProduct(uint64_t socketKey) {

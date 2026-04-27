@@ -31,11 +31,17 @@ public:
             uint64_t socketKey = static_cast<uint64_t>(entity);
             if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
                 continue;
-            }
-
-            const auto& package = registry.get<HeatPackage>(entity);
-            applyPackage(socketKey, package);
         }
+
+        const auto& package = registry.get<HeatPackage>(entity);
+        HeatDisplayController::Config config{};
+        if (!tryBuildConfig(socketKey, package, config)) {
+            controller->remove(socketKey);
+            continue;
+        }
+
+        controller->apply(socketKey, config);
+    }
     }
 
     void finalizeSync() {
@@ -47,27 +53,30 @@ public:
     }
 
 private:
-    void applyPackage(uint64_t socketKey, const HeatPackage& package) {
-        if (!controller || socketKey == 0) {
-            return;
+    bool tryBuildConfig(uint64_t socketKey, const HeatPackage& package, HeatDisplayController::Config& outConfig) const {
+        if (!controller || !ecsRegistry || socketKey == 0) {
+            return false;
         }
-
         if (!package.display.showHeatOverlay) {
-            controller->remove(socketKey);
-            return;
+            return false;
+        }
+        if (package.sourceModelProducts.size() != package.sourceTemperatures.size()) {
+            return false;
+        }
+        if (package.receiverModelProducts.size() != package.receiverRemeshProducts.size()) {
+            return false;
         }
 
         const HeatProduct* computeProduct = tryGetProduct<HeatProduct>(*ecsRegistry, socketKey);
         if (!computeProduct || !computeProduct->isValid()) {
-            controller->remove(socketKey);
-            return;
+            return false;
         }
 
-        HeatDisplayController::Config config{};
-        config.showHeatOverlay = package.display.showHeatOverlay;
-        config.authoredActive = package.authored.active;
-        config.active = computeProduct->active;
-        config.paused = computeProduct->paused;
+        outConfig = {};
+        outConfig.showHeatOverlay = package.display.showHeatOverlay;
+        outConfig.authoredActive = package.authored.active;
+        outConfig.active = computeProduct->active;
+        outConfig.paused = computeProduct->paused;
         std::unordered_map<uint32_t, VkBufferView> surfaceBufferViewByRuntimeModelId;
         surfaceBufferViewByRuntimeModelId.reserve(computeProduct->receiverRuntimeModelIds.size());
         for (size_t index = 0; index < computeProduct->receiverRuntimeModelIds.size(); ++index) {
@@ -77,16 +86,13 @@ private:
 
         for (size_t index = 0; index < package.sourceModelProducts.size(); ++index) {
             const ProductHandle& modelHandle = package.sourceModelProducts[index];
-            const ProductHandle& remeshHandle = package.sourceRemeshProducts[index];
             const ModelProduct* modelProduct = tryGetProduct<ModelProduct>(*ecsRegistry, modelHandle.outputSocketKey);
-            const RemeshProduct* remeshProduct = tryGetProduct<RemeshProduct>(*ecsRegistry, remeshHandle.outputSocketKey);
-            if (!remeshProduct || !modelProduct || modelProduct->runtimeModelId == 0) {
-                controller->remove(socketKey);
-                return;
+            if (!modelProduct || modelProduct->runtimeModelId == 0) {
+                return false;
             }
 
-            config.sourceModels.push_back(*modelProduct);
-            config.sourceTemperatures.push_back(package.sourceTemperatures[index]);
+            outConfig.sourceModels.push_back(*modelProduct);
+            outConfig.sourceTemperatures.push_back(package.sourceTemperatures[index]);
         }
 
         for (size_t index = 0; index < package.receiverModelProducts.size(); ++index) {
@@ -95,8 +101,7 @@ private:
             const ModelProduct* modelProduct = tryGetProduct<ModelProduct>(*ecsRegistry, modelHandle.outputSocketKey);
             const RemeshProduct* remeshProduct = tryGetProduct<RemeshProduct>(*ecsRegistry, remeshHandle.outputSocketKey);
             if (!remeshProduct || !modelProduct || modelProduct->runtimeModelId == 0) {
-                controller->remove(socketKey);
-                return;
+                return false;
             }
 
             const auto surfaceBufferViewIt = surfaceBufferViewByRuntimeModelId.find(modelProduct->runtimeModelId);
@@ -123,16 +128,15 @@ private:
                 }
             }
             if (!receiverValid) {
-                controller->remove(socketKey);
-                return;
+                return false;
             }
 
-            config.receiverModels.push_back(*modelProduct);
-            config.receiverBufferViews.push_back(receiverBufferViews);
+            outConfig.receiverModels.push_back(*modelProduct);
+            outConfig.receiverBufferViews.push_back(receiverBufferViews);
         }
 
-        config.displayHash = buildDisplayHash(config, computeProduct->productHash);
-        controller->apply(socketKey, config);
+        outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->productHash);
+        return true;
     }
 
     HeatDisplayController* controller = nullptr;

@@ -31,11 +31,17 @@ public:
             uint64_t socketKey = static_cast<uint64_t>(entity);
             if (visibleKeys && visibleKeys->find(socketKey) == visibleKeys->end()) {
                 continue;
-            }
-
-            const auto& package = registry.get<VoronoiPackage>(entity);
-            applyPackage(socketKey, package);
         }
+
+        const auto& package = registry.get<VoronoiPackage>(entity);
+        VoronoiDisplayController::Config config{};
+        if (!tryBuildConfig(socketKey, package, config)) {
+            controller->remove(socketKey);
+            continue;
+        }
+
+        controller->apply(socketKey, config);
+    }
     }
 
     void finalizeSync() {
@@ -47,42 +53,38 @@ public:
     }
 
 private:
-    void applyPackage(uint64_t socketKey, const VoronoiPackage& package) {
-        if (!controller || socketKey == 0) {
-            return;
+    bool tryBuildConfig(uint64_t socketKey, const VoronoiPackage& package, VoronoiDisplayController::Config& outConfig) const {
+        if (!controller || !ecsRegistry || socketKey == 0) {
+            return false;
         }
-
         if (!package.display.showVoronoi && !package.display.showPoints) {
-            controller->remove(socketKey);
-            return;
+            return false;
         }
 
         const VoronoiProduct* computeProduct = tryGetProduct<VoronoiProduct>(*ecsRegistry, socketKey);
         if (!computeProduct || !computeProduct->isValid()) {
-            controller->remove(socketKey);
-            return;
+            return false;
         }
 
-        VoronoiDisplayController::Config config{};
-        config.showVoronoi = package.display.showVoronoi;
-        config.showPoints = package.display.showPoints;
-        config.nodeCount = computeProduct->nodeCount;
-        config.mappedVoronoiNodes = computeProduct->mappedVoronoiNodes;
-        config.nodeBuffer = computeProduct->nodeBuffer;
-        config.nodeBufferOffset = computeProduct->nodeBufferOffset;
-        config.seedPositionBuffer = computeProduct->seedPositionBuffer;
-        config.seedPositionBufferOffset = computeProduct->seedPositionBufferOffset;
-        config.neighborIndicesBuffer = computeProduct->neighborIndicesBuffer;
-        config.neighborIndicesBufferOffset = computeProduct->neighborIndicesBufferOffset;
-        config.occupancyPointBuffer = computeProduct->occupancyPointBuffer;
-        config.occupancyPointBufferOffset = computeProduct->occupancyPointBufferOffset;
-        config.occupancyPointCount = computeProduct->occupancyPointCount;
+        outConfig = {};
+        outConfig.showVoronoi = package.display.showVoronoi;
+        outConfig.showPoints = package.display.showPoints;
+        outConfig.nodeCount = computeProduct->nodeCount;
+        outConfig.mappedVoronoiNodes = computeProduct->mappedVoronoiNodes;
+        outConfig.nodeBuffer = computeProduct->nodeBuffer;
+        outConfig.nodeBufferOffset = computeProduct->nodeBufferOffset;
+        outConfig.seedPositionBuffer = computeProduct->seedPositionBuffer;
+        outConfig.seedPositionBufferOffset = computeProduct->seedPositionBufferOffset;
+        outConfig.neighborIndicesBuffer = computeProduct->neighborIndicesBuffer;
+        outConfig.neighborIndicesBufferOffset = computeProduct->neighborIndicesBufferOffset;
+        outConfig.occupancyPointBuffer = computeProduct->occupancyPointBuffer;
+        outConfig.occupancyPointBufferOffset = computeProduct->occupancyPointBufferOffset;
+        outConfig.occupancyPointCount = computeProduct->occupancyPointCount;
         if (package.display.showVoronoi) {
-            config.surfaces = computeProduct->surfaces;
+            outConfig.surfaces = computeProduct->surfaces;
         }
-        config.displayHash = buildDisplayHash(config, computeProduct->productHash);
-
-        controller->apply(socketKey, config);
+        outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->productHash);
+        return true;
     }
 
     VoronoiDisplayController* controller = nullptr;

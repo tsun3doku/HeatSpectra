@@ -14,6 +14,7 @@ public:
     bool removeNode(NodeGraphNodeId nodeId);
     bool moveNode(NodeGraphNodeId nodeId, float x, float y);
     bool setNodeDisplayEnabled(NodeGraphNodeId nodeId, bool enabled);
+    bool setNodeFrozen(NodeGraphNodeId nodeId, bool frozen);
     bool setNodeParameter(NodeGraphNodeId nodeId, const NodeGraphParamValue& parameter);
     bool appendSocket(NodeGraphNodeId nodeId, const NodeSocketSignature& socketSignature, NodeGraphSocketId* outSocketId = nullptr);
 
