@@ -7,6 +7,7 @@
 
 #include "HeatSystemPresets.hpp"
 #include "HeatSystemStageContext.hpp"
+#include "heat/HeatGpuStructs.hpp"
 #include "util/Structs.hpp"
 #include "voronoi/VoronoiDomain.hpp"
 
@@ -21,7 +22,7 @@ public:
         VkCommandBuffer commandBuffer,
         uint32_t currentFrame,
         const HeatSystemSimRuntime& simRuntime,
-        const HeatSourcePushConstant& basePushConstant,
+        const heat::SourcePushConstant& basePushConstant,
         int substepIndex,
         uint32_t workGroupCount) const;
     void insertInterSubstepBarrier(

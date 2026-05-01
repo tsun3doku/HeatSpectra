@@ -40,7 +40,7 @@ public:
 
 private:
     void clearPairBuffer(MemoryAllocator& memoryAllocator);
-    bool recreateProductBuffer(
+    bool recreateContactPairBuffer(
         MemoryAllocator& memoryAllocator,
         VulkanDevice& vulkanDevice,
         VkBuffer& buffer,

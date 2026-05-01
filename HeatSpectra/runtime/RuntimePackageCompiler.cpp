@@ -75,10 +75,10 @@ static uint64_t buildRemeshPackageHash(const RemeshPackage& package, const ECSRe
     NodeGraphHash::combine(hash, 2u);
     NodeGraphHash::combine(hash, package.sourceGeometry.payloadHash);
     combineProductDependencyHash(hash, ecsRegistry, package.modelProductHandle);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.params.iterations));
-    NodeGraphHash::combineFloat(hash, package.params.minAngleDegrees);
-    NodeGraphHash::combineFloat(hash, package.params.maxEdgeLength);
-    NodeGraphHash::combineFloat(hash, package.params.stepSize);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(package.iterations));
+    NodeGraphHash::combineFloat(hash, package.minAngleDegrees);
+    NodeGraphHash::combineFloat(hash, package.maxEdgeLength);
+    NodeGraphHash::combineFloat(hash, package.stepSize);
     return hash;
 }
 
@@ -262,7 +262,10 @@ RemeshPackage RuntimePackageCompiler::buildRemeshPackage(
     }
 
     package.sourceGeometry = *sourceGeometry;
-    package.params = remesh.params;
+    package.iterations = remesh.iterations;
+    package.minAngleDegrees = remesh.minAngleDegrees;
+    package.maxEdgeLength = remesh.maxEdgeLength;
+    package.stepSize = remesh.stepSize;
     const RemeshNodeParams nodeParams = readRemeshNodeParams(node);
     package.display.showRemeshOverlay = nodeParams.preview.showRemeshOverlay;
     package.display.showFaceNormals = nodeParams.preview.showFaceNormals;

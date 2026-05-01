@@ -56,8 +56,6 @@ inline bool operator!=(NodeGraphEdgeId lhs, NodeGraphEdgeId rhs) {
 enum class NodeGraphValueType : uint8_t {
     None,
     Mesh,
-    Emitter,
-    Receiver,
     Volume,
     Field,
     Vector3,

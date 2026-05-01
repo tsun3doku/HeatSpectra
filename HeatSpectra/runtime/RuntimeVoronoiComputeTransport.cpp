@@ -55,8 +55,8 @@ bool RuntimeVoronoiComputeTransport::tryBuildConfig(
 
     outConfig = {};
     outConfig.active = true;
-    outConfig.cellSize = package.authored.params.cellSize;
-    outConfig.voxelResolution = package.authored.params.voxelResolution;
+    outConfig.cellSize = package.authored.cellSize;
+    outConfig.voxelResolution = package.authored.voxelResolution;
     outConfig.receiverRuntimeModelIds.resize(receiverCount, 0);
     outConfig.receiverNodeModelIds.resize(receiverCount, 0);
     outConfig.receiverGeometryPositions.resize(receiverCount);
@@ -98,7 +98,7 @@ bool RuntimeVoronoiComputeTransport::tryBuildConfig(
         outConfig.receiverIntrinsicTriangleIndices[remeshIndex] = product->intrinsicMesh.indices;
         outConfig.receiverSurfaceVertices[remeshIndex].reserve(product->intrinsicMesh.vertices.size());
         for (const SupportingHalfedge::IntrinsicVertex& intrinsicVertex : product->intrinsicMesh.vertices) {
-            VoronoiGeometryRuntime::SurfaceVertex vertex{};
+            VoronoiModelRuntime::SurfaceVertex vertex{};
             vertex.position = intrinsicVertex.position;
             vertex.normal = intrinsicVertex.normal;
             outConfig.receiverSurfaceVertices[remeshIndex].push_back(vertex);

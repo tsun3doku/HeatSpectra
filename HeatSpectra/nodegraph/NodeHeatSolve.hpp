@@ -20,6 +20,7 @@ private:
         const std::vector<HeatMaterialBinding>& materialBindings,
         uint64_t voronoiPayloadHash,
         uint64_t contactPayloadHash,
+        float contactThermalConductance,
         bool active,
         bool paused,
         bool resetRequested);

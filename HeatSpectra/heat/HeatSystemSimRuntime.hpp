@@ -7,7 +7,9 @@
 class MemoryAllocator;
 class VulkanDevice;
 
+namespace heat {
 struct TimeUniform;
+}
 
 class HeatSystemSimRuntime {
 public:
@@ -28,17 +30,9 @@ public:
     VkDeviceSize getTempBufferBOffset() const { return tempBufferBOffset; }
     void* getMappedTempBufferB() const { return mappedTempBufferB; }
 
-    VkBuffer getInjectionKBuffer() const { return injectionKBuffer; }
-    VkDeviceSize getInjectionKBufferOffset() const { return injectionKBufferOffset; }
-    void* getMappedInjectionKBuffer() const { return mappedInjectionKBuffer; }
-
-    VkBuffer getInjectionKTBuffer() const { return injectionKTBuffer; }
-    VkDeviceSize getInjectionKTBufferOffset() const { return injectionKTBufferOffset; }
-    void* getMappedInjectionKTBuffer() const { return mappedInjectionKTBuffer; }
-
     VkBuffer getTimeBuffer() const { return timeBuffer; }
     VkDeviceSize getTimeBufferOffset() const { return timeBufferOffset; }
-    TimeUniform* getMappedTimeData() const;
+    heat::TimeUniform* getMappedTimeData() const;
 
 private:
     static constexpr float AMBIENT_TEMPERATURE = 1.0f;
@@ -52,14 +46,6 @@ private:
     VkBuffer tempBufferB = VK_NULL_HANDLE;
     VkDeviceSize tempBufferBOffset = 0;
     void* mappedTempBufferB = nullptr;
-
-    VkBuffer injectionKBuffer = VK_NULL_HANDLE;
-    VkDeviceSize injectionKBufferOffset = 0;
-    void* mappedInjectionKBuffer = nullptr;
-
-    VkBuffer injectionKTBuffer = VK_NULL_HANDLE;
-    VkDeviceSize injectionKTBufferOffset = 0;
-    void* mappedInjectionKTBuffer = nullptr;
 
     VkBuffer timeBuffer = VK_NULL_HANDLE;
     VkDeviceSize timeBufferOffset = 0;

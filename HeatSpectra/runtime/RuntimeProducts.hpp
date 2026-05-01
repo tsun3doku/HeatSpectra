@@ -13,7 +13,7 @@
 #include "mesh/remesher/SupportingHalfedge.hpp"
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "contact/ContactTypes.hpp"
-#include "util/Structs.hpp"
+#include "voronoi/VoronoiGpuStructs.hpp"
 
 namespace RuntimeProductHash {
 
@@ -80,8 +80,6 @@ struct VoronoiSurfaceProduct {
     uint32_t runtimeModelId = 0;
     uint32_t nodeOffset = 0;
     uint32_t nodeCount = 0;
-    VkBuffer surfaceMappingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize surfaceMappingBufferOffset = 0;
     VkBuffer vertexBuffer = VK_NULL_HANDLE;
     VkDeviceSize vertexBufferOffset = 0;
     VkBuffer indexBuffer = VK_NULL_HANDLE;
@@ -91,6 +89,12 @@ struct VoronoiSurfaceProduct {
     uint32_t intrinsicVertexCount = 0;
     VkBuffer candidateBuffer = VK_NULL_HANDLE;
     VkDeviceSize candidateBufferOffset = 0;
+    VkBuffer gmlsSurfaceStencilBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceStencilBufferOffset = 0;
+    VkBuffer gmlsSurfaceWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceWeightBufferOffset = 0;
+    VkBuffer gmlsSurfaceGradientWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceGradientWeightBufferOffset = 0;
     VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
     VkBufferView supportingAngleView = VK_NULL_HANDLE;
     VkBufferView halfedgeView = VK_NULL_HANDLE;
@@ -101,13 +105,12 @@ struct VoronoiSurfaceProduct {
     VkBufferView inputEdgeView = VK_NULL_HANDLE;
     VkBufferView inputTriangleView = VK_NULL_HANDLE;
     VkBufferView inputLengthView = VK_NULL_HANDLE;
-    std::vector<uint32_t> surfaceCellIndices;
     std::vector<uint32_t> seedFlags;
+    std::vector<glm::vec3> seedPositions;
 
     bool isValid() const {
         return runtimeModelId != 0 &&
             nodeCount != 0 &&
-            surfaceMappingBuffer != VK_NULL_HANDLE &&
             vertexBuffer != VK_NULL_HANDLE &&
             indexBuffer != VK_NULL_HANDLE &&
             indexCount != 0 &&
@@ -174,7 +177,7 @@ struct RemeshProduct {
 
 struct VoronoiProduct {
     uint32_t nodeCount = 0;
-    const VoronoiNode* mappedVoronoiNodes = nullptr;
+    const voronoi::Node* mappedVoronoiNodes = nullptr;
 
     VkBuffer nodeBuffer = VK_NULL_HANDLE;
     VkDeviceSize nodeBufferOffset = 0;
@@ -190,6 +193,8 @@ struct VoronoiProduct {
 
     VkBuffer interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
     VkDeviceSize interfaceNeighborIdsBufferOffset = 0;
+    VkBuffer gmlsInterfaceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsInterfaceBufferOffset = 0;
 
     VkBuffer seedFlagsBuffer = VK_NULL_HANDLE;
     VkDeviceSize seedFlagsBufferOffset = 0;
@@ -286,7 +291,7 @@ inline uint64_t buildProductHash(const VoronoiProduct& product) {
         hash = RuntimeProductHash::mixBytes(
             hash,
             product.mappedVoronoiNodes,
-            sizeof(VoronoiNode) * product.nodeCount);
+            sizeof(voronoi::Node) * product.nodeCount);
     }
 
     hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(product.surfaces.size()));
@@ -294,8 +299,6 @@ inline uint64_t buildProductHash(const VoronoiProduct& product) {
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.runtimeModelId);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.nodeOffset);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.nodeCount);
-        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.surfaceMappingBuffer);
-        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.surfaceMappingBufferOffset);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.vertexBuffer);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.vertexBufferOffset);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.indexBuffer);
@@ -305,6 +308,12 @@ inline uint64_t buildProductHash(const VoronoiProduct& product) {
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.intrinsicVertexCount);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.candidateBuffer);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.candidateBufferOffset);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceStencilBuffer);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceStencilBufferOffset);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceWeightBuffer);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceWeightBufferOffset);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceGradientWeightBuffer);
+        hash = RuntimeProductHash::mixPod(hash, surfaceProduct.gmlsSurfaceGradientWeightBufferOffset);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.supportingHalfedgeView);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.supportingAngleView);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.halfedgeView);
@@ -315,11 +324,13 @@ inline uint64_t buildProductHash(const VoronoiProduct& product) {
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.inputEdgeView);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.inputTriangleView);
         hash = RuntimeProductHash::mixPod(hash, surfaceProduct.inputLengthView);
-        hash = RuntimeProductHash::mixPodVector(hash, surfaceProduct.surfaceCellIndices);
         hash = RuntimeProductHash::mixPodVector(hash, surfaceProduct.seedFlags);
+        hash = RuntimeProductHash::mixPodVector(hash, surfaceProduct.seedPositions);
     }
     hash = RuntimeProductHash::mixPod(hash, product.seedPositionBuffer);
     hash = RuntimeProductHash::mixPod(hash, product.seedPositionBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, product.gmlsInterfaceBuffer);
+    hash = RuntimeProductHash::mixPod(hash, product.gmlsInterfaceBufferOffset);
     hash = RuntimeProductHash::mixPod(hash, product.occupancyPointBuffer);
     hash = RuntimeProductHash::mixPod(hash, product.occupancyPointBufferOffset);
     hash = RuntimeProductHash::mixPod(hash, product.occupancyPointCount);

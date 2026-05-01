@@ -6,6 +6,7 @@
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
+#include "voronoi/VoronoiGpuStructs.hpp"
 
 VoronoiSystemComputeController::VoronoiSystemComputeController(
     VulkanDevice& vulkanDevice,
@@ -52,7 +53,7 @@ void VoronoiSystemComputeController::configure(uint64_t socketKey, const Config&
     configuredConfigs[socketKey] = config;
 
     if (system) {
-        system->setReceiverPayloads(
+        system->setReceiverGeometry(
             config.receiverNodeModelIds,
             config.receiverGeometryPositions,
             config.receiverGeometryTriangleIndices,
@@ -137,8 +138,8 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
 
     outProduct.nodeCount = voronoiSystem->getVoronoiNodeCount();
 
-    const VoronoiResources& resources = voronoiSystem->voronoiResourcesRef();
-    outProduct.mappedVoronoiNodes = static_cast<const VoronoiNode*>(resources.mappedVoronoiNodeData);
+    const VoronoiResources& resources = voronoiSystem->resourcesRef();
+    outProduct.mappedVoronoiNodes = static_cast<const voronoi::Node*>(resources.mappedVoronoiNodeData);
     outProduct.nodeBuffer = resources.voronoiNodeBuffer;
     outProduct.nodeBufferOffset = resources.voronoiNodeBufferOffset;
     outProduct.voronoiNeighborBuffer = resources.voronoiNeighborBuffer;
@@ -149,6 +150,8 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
     outProduct.interfaceAreasBufferOffset = resources.interfaceAreasBufferOffset;
     outProduct.interfaceNeighborIdsBuffer = resources.interfaceNeighborIdsBuffer;
     outProduct.interfaceNeighborIdsBufferOffset = resources.interfaceNeighborIdsBufferOffset;
+    outProduct.gmlsInterfaceBuffer = resources.gmlsInterfaceBuffer;
+    outProduct.gmlsInterfaceBufferOffset = resources.gmlsInterfaceBufferOffset;
     outProduct.seedFlagsBuffer = resources.seedFlagsBuffer;
     outProduct.seedFlagsBufferOffset = resources.seedFlagsBufferOffset;
     outProduct.seedPositionBuffer = resources.seedPositionBuffer;
@@ -166,14 +169,17 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
         surfaceProduct.nodeOffset = domain.nodeOffset;
         surfaceProduct.nodeCount = domain.nodeCount;
         surfaceProduct.seedFlags = domain.seedFlags;
+        const auto& domainSeedPositions = domain.integrator->getSeedPositions();
+        surfaceProduct.seedPositions.reserve(domainSeedPositions.size());
+        for (const glm::vec4& seedPosition : domainSeedPositions) {
+            surfaceProduct.seedPositions.push_back(glm::vec3(seedPosition));
+        }
 
         for (const auto& modelRuntime : modelRuntimes) {
             if (!modelRuntime || modelRuntime->getRuntimeModelId() != domain.receiverModelId) {
                 continue;
             }
 
-            surfaceProduct.surfaceMappingBuffer = modelRuntime->getVoronoiMappingBuffer();
-            surfaceProduct.surfaceMappingBufferOffset = modelRuntime->getVoronoiMappingBufferOffset();
             surfaceProduct.vertexBuffer = modelRuntime->getVertexBuffer();
             surfaceProduct.vertexBufferOffset = modelRuntime->getVertexBufferOffset();
             surfaceProduct.indexBuffer = modelRuntime->getIndexBuffer();
@@ -183,6 +189,12 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
             surfaceProduct.intrinsicVertexCount = static_cast<uint32_t>(modelRuntime->getIntrinsicVertexCount());
             surfaceProduct.candidateBuffer = modelRuntime->getVoronoiCandidateBuffer();
             surfaceProduct.candidateBufferOffset = modelRuntime->getVoronoiCandidateBufferOffset();
+            surfaceProduct.gmlsSurfaceStencilBuffer = modelRuntime->getGMLSSurfaceStencilBuffer();
+            surfaceProduct.gmlsSurfaceStencilBufferOffset = modelRuntime->getGMLSSurfaceStencilBufferOffset();
+            surfaceProduct.gmlsSurfaceWeightBuffer = modelRuntime->getGMLSSurfaceWeightBuffer();
+            surfaceProduct.gmlsSurfaceWeightBufferOffset = modelRuntime->getGMLSSurfaceWeightBufferOffset();
+            surfaceProduct.gmlsSurfaceGradientWeightBuffer = modelRuntime->getGMLSSurfaceGradientWeightBuffer();
+            surfaceProduct.gmlsSurfaceGradientWeightBufferOffset = modelRuntime->getGMLSSurfaceGradientWeightBufferOffset();
             surfaceProduct.supportingHalfedgeView = modelRuntime->getSupportingHalfedgeView();
             surfaceProduct.supportingAngleView = modelRuntime->getSupportingAngleView();
             surfaceProduct.halfedgeView = modelRuntime->getHalfedgeView();
@@ -193,7 +205,6 @@ bool VoronoiSystemComputeController::exportProduct(uint64_t socketKey, VoronoiPr
             surfaceProduct.inputEdgeView = modelRuntime->getInputEdgeView();
             surfaceProduct.inputTriangleView = modelRuntime->getInputTriangleView();
             surfaceProduct.inputLengthView = modelRuntime->getInputLengthView();
-            surfaceProduct.surfaceCellIndices = modelRuntime->getVoronoiSurfaceCellIndices();
             break;
         }
 

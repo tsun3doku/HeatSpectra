@@ -231,8 +231,6 @@ void VoxelGrid::build(
     const std::vector<uint32_t>& indices,
     const TriangleHashGrid& triangleGrid,
     int gridSize) {
-    std::cout << "[VoxelGrid] Building " << gridSize << "^3 voxel grid..." << std::endl;
-
     // Calculate grid parameters from mesh bounding box
     if (positions.empty()) {
         std::cerr << "[VoxelGrid] Error: Empty mesh" << std::endl;
@@ -262,11 +260,6 @@ void VoxelGrid::build(
     float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(gridSize);
     float worldVoxelSize = canonicalVoxelSize / scale;
 
-    std::cout << "  Canonical domain: [0.." << CANONICAL_DOMAIN_SIZE << "]^3" << std::endl;
-    std::cout << "  World->canonical scale: " << scale << std::endl;
-    std::cout << "  Canonical voxel size: " << canonicalVoxelSize << std::endl;
-    std::cout << "  World voxel size (effective): " << worldVoxelSize << std::endl;
-
     // Build triangle lists 
     buildTriangleLists(positions, indices, triangleGrid);
 
@@ -278,8 +271,6 @@ void VoxelGrid::build(
     int dimZ = params.gridDim.z;
 
     const float borderThreshold = worldVoxelSize * 0.1f;
-
-    std::cout << " Detecting border corners (distance < " << borderThreshold << ")..." << std::endl;
 
     int borderCount = 0;
 
@@ -303,9 +294,6 @@ void VoxelGrid::build(
             }
         }
     }
-
-    std::cout << " Complete: " << borderCount << " border corners" << std::endl;
-    std::cout << " Classifying " << (numCorners - borderCount) << " non-border corners..." << std::endl;
 
     const size_t triCount = indices.size() / 3;
     const glm::vec3 rayDir(1.0f, 0.0f, 0.0f);
@@ -453,10 +441,6 @@ void VoxelGrid::build(
         }
     }
 
-    std::cout << "  Classification complete: " << insideCount << " inside, " 
-              << borderCount << " border, " << outsideCount << " outside" << std::endl;
-
-    std::cout << "[VoxelGrid] Build complete" << std::endl;
 }
 
 float VoxelGrid::distanceToNearestTriangle(
@@ -501,8 +485,6 @@ void VoxelGrid::buildTriangleLists(
     const std::vector<glm::vec3>& positions,
     const std::vector<uint32_t>& indices,
     const TriangleHashGrid& triangleGrid) {
-    std::cout << "  Building triangle spatial lists..." << std::endl;
-
     meshPoints.clear();
     meshTriangles.clear();
     trianglesList.clear();
@@ -621,8 +603,6 @@ void VoxelGrid::buildTriangleLists(
     }
     offsets[numVoxels] = currentOffset;
 
-    std::cout << "  Triangle lists: " << trianglesList.size() << " references across " 
-              << numVoxels << " voxels" << std::endl;
 }
 
 uint8_t VoxelGrid::getOccupancy(int x, int y, int z) const {
@@ -720,6 +700,4 @@ void VoxelGrid::exportOccupancyVisualization(const std::string& filename) const 
 
     file.close();
 
-    std::cout << "[VoxelGrid] Exported " << numPoints << " corner points to " << filename << std::endl;
-    std::cout << "  Inside(green): " << insideCount << ", Border(red): " << borderCount << std::endl;
 }

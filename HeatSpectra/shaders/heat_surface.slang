@@ -7,40 +7,37 @@ struct SurfacePoint
     float4 color;
 };
 
-struct VoronoiSurfaceMapping
+struct GMLSSurfaceStencil
 {
-    uint cellIndex;
-    uint _padding0;
-    uint _padding1;
-    uint _padding2;
+    uint valueWeightOffset;
+    uint valueWeightCount;
+    uint gradientWeightOffset;
+    uint gradientWeightCount;
 };
 
-struct PushConstants
+struct GMLSSurfaceWeight
 {
-    float4x4 heatSourceModelMatrix;
-    float4x4 visModelMatrix;
-    float4x4 inverseHeatSourceModelMatrix;
-    uint maxNodeNeighbors;
-    uint substepIndex;
+    uint cellIndex;
+    float weight;
     uint _pad0;
     uint _pad1;
 };
 
+struct GMLSSurfaceGradientWeight
+{
+    uint cellIndex;
+    float dTdxWeight;
+    float dTdyWeight;
+    float dTdzWeight;
+};
+
+
 [[vk::binding(0)]] StructuredBuffer<uint> nodeTemperatureReadBuffer;
 [[vk::binding(1)]] RWStructuredBuffer<SurfacePoint> surfaceBuffer;
 
-[[vk::binding(3)]] cbuffer TimeBuffer
-{
-    float deltaTime;
-    float totalTime;
-};
-
-[[vk::binding(9)]] StructuredBuffer<VoronoiSurfaceMapping> voronoiMappingBuffer;
-
-[[vk::push_constant]] cbuffer PushConstantsBuffer
-{
-    PushConstants pushConstants;
-};
+[[vk::binding(10)]] StructuredBuffer<GMLSSurfaceStencil> gmlsSurfaceStencilBuffer;
+[[vk::binding(11)]] StructuredBuffer<GMLSSurfaceWeight> gmlsSurfaceWeightBuffer;
+[[vk::binding(12)]] StructuredBuffer<GMLSSurfaceGradientWeight> gmlsSurfaceGradientWeightBuffer;
 
 [numthreads(256, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID)
@@ -53,22 +50,52 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
     if (vertexID >= surfaceCount) return;
 
-    // Update display temperature in first substep
-    if (pushConstants.substepIndex != 0u) return;
 
     uint nodeCount = 0;
     uint nodeStride = 0;
     nodeTemperatureReadBuffer.GetDimensions(nodeCount, nodeStride);
 
-    uint cellIndex = voronoiMappingBuffer[vertexID].cellIndex;
-    if (cellIndex == 0xFFFFFFFFu || cellIndex >= nodeCount)
+    float displayTemp = 0.0;
+    float3 gradientT = float3(0.0, 0.0, 0.0);
+
+    uint stencilCount = 0;
+    uint stencilStride = 0;
+    gmlsSurfaceStencilBuffer.GetDimensions(stencilCount, stencilStride);
+    if (vertexID >= stencilCount)
     {
         return;
     }
 
-    float displayTemp = asfloat(nodeTemperatureReadBuffer[cellIndex]);
+    GMLSSurfaceStencil stencil = gmlsSurfaceStencilBuffer[vertexID];
+    if (stencil.valueWeightCount == 0u)
+    {
+        return;
+    }
+    for (uint i = 0; i < stencil.valueWeightCount; ++i)
+    {
+        GMLSSurfaceWeight weight = gmlsSurfaceWeightBuffer[stencil.valueWeightOffset + i];
+        if (weight.cellIndex >= nodeCount)
+        {
+            continue;
+        }
+
+        displayTemp += weight.weight * asfloat(nodeTemperatureReadBuffer[weight.cellIndex]);
+    }
+
+    for (uint i = 0; i < stencil.gradientWeightCount; ++i)
+    {
+        GMLSSurfaceGradientWeight weight = gmlsSurfaceGradientWeightBuffer[stencil.gradientWeightOffset + i];
+        if (weight.cellIndex >= nodeCount)
+        {
+            continue;
+        }
+
+        float cellTemp = asfloat(nodeTemperatureReadBuffer[weight.cellIndex]);
+        gradientT += float3(weight.dTdxWeight, weight.dTdyWeight, weight.dTdzWeight) * cellTemp;
+    }
 
     SurfacePoint p = surfaceBuffer[vertexID];
     p.temperature = displayTemp;
+    p.color = float4(-gradientT, 1.0);
     surfaceBuffer[vertexID] = p;
 }

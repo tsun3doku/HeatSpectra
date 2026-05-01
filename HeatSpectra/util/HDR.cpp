@@ -55,9 +55,6 @@ void HDR::createHDRTextureImage(const std::string& filePath) {
         memcpy(data, pixels, static_cast<size_t>(imageSize));
     vkUnmapMemory(vulkanDevice->getDevice(), stagingBufferMemory);
 
-    std::cout << "Loaded HDR Image: " << filePath << "\n";
-    std::cout << "Width: " << texWidth << ", Height: " << texHeight << ", Channels: " << texChannels << "\n";
-
     stbi_image_free(pixels);
 
     VkImageCreateInfo createInfo = {};

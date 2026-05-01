@@ -24,28 +24,24 @@ void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const 
             config.voronoiNodes,
             config.voronoiNodeBuffer,
             config.voronoiNodeBufferOffset,
-            config.voronoiNeighborBuffer,
-            config.voronoiNeighborBufferOffset,
-            config.neighborIndicesBuffer,
-            config.neighborIndicesBufferOffset,
-            config.interfaceAreasBuffer,
-            config.interfaceAreasBufferOffset,
-            config.interfaceNeighborIdsBuffer,
-            config.interfaceNeighborIdsBufferOffset,
+            config.gmlsInterfaceBuffer,
+            config.gmlsInterfaceBufferOffset,
             config.seedFlagsBuffer,
             config.seedFlagsBufferOffset);
 
         for (const auto& [runtimeModelId, nodeOffset] : config.receiverVoronoiNodeOffsetByModelId) {
             const auto countIt = config.receiverVoronoiNodeCountByModelId.find(runtimeModelId);
-            const auto bufferIt = config.receiverVoronoiSurfaceMappingBufferByModelId.find(runtimeModelId);
-            const auto bufferOffsetIt = config.receiverVoronoiSurfaceMappingBufferOffsetByModelId.find(runtimeModelId);
-            const auto cellIndicesIt = config.receiverVoronoiSurfaceCellIndicesByModelId.find(runtimeModelId);
+            const auto gmlsStencilIt = config.receiverGMLSSurfaceStencilBufferByModelId.find(runtimeModelId);
+            const auto gmlsStencilOffsetIt = config.receiverGMLSSurfaceStencilBufferOffsetByModelId.find(runtimeModelId);
+            const auto gmlsWeightIt = config.receiverGMLSSurfaceWeightBufferByModelId.find(runtimeModelId);
+            const auto gmlsWeightOffsetIt = config.receiverGMLSSurfaceWeightBufferOffsetByModelId.find(runtimeModelId);
+            const auto gmlsGradientIt = config.receiverGMLSSurfaceGradientWeightBufferByModelId.find(runtimeModelId);
+            const auto gmlsGradientOffsetIt = config.receiverGMLSSurfaceGradientWeightBufferOffsetByModelId.find(runtimeModelId);
             const auto seedFlagsIt = config.receiverVoronoiSeedFlagsByModelId.find(runtimeModelId);
+            const auto seedPositionsIt = config.receiverVoronoiSeedPositionsByModelId.find(runtimeModelId);
             if (countIt == config.receiverVoronoiNodeCountByModelId.end() ||
-                bufferIt == config.receiverVoronoiSurfaceMappingBufferByModelId.end() ||
-                bufferOffsetIt == config.receiverVoronoiSurfaceMappingBufferOffsetByModelId.end() ||
-                cellIndicesIt == config.receiverVoronoiSurfaceCellIndicesByModelId.end() ||
-                seedFlagsIt == config.receiverVoronoiSeedFlagsByModelId.end()) {
+                seedFlagsIt == config.receiverVoronoiSeedFlagsByModelId.end() ||
+                seedPositionsIt == config.receiverVoronoiSeedPositionsByModelId.end()) {
                 continue;
             }
 
@@ -53,10 +49,14 @@ void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const 
                 runtimeModelId,
                 nodeOffset,
                 countIt->second,
-                bufferIt->second,
-                bufferOffsetIt->second,
-                cellIndicesIt->second,
-                seedFlagsIt->second);
+                gmlsStencilIt != config.receiverGMLSSurfaceStencilBufferByModelId.end() ? gmlsStencilIt->second : VK_NULL_HANDLE,
+                gmlsStencilOffsetIt != config.receiverGMLSSurfaceStencilBufferOffsetByModelId.end() ? gmlsStencilOffsetIt->second : 0,
+                gmlsWeightIt != config.receiverGMLSSurfaceWeightBufferByModelId.end() ? gmlsWeightIt->second : VK_NULL_HANDLE,
+                gmlsWeightOffsetIt != config.receiverGMLSSurfaceWeightBufferOffsetByModelId.end() ? gmlsWeightOffsetIt->second : 0,
+                gmlsGradientIt != config.receiverGMLSSurfaceGradientWeightBufferByModelId.end() ? gmlsGradientIt->second : VK_NULL_HANDLE,
+                gmlsGradientOffsetIt != config.receiverGMLSSurfaceGradientWeightBufferOffsetByModelId.end() ? gmlsGradientOffsetIt->second : 0,
+                seedFlagsIt->second,
+                seedPositionsIt->second);
         }
     }
     system.setSourcePayloads(
@@ -77,6 +77,7 @@ void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const 
         config.inputTriangleViews,
         config.inputLengthViews);
     system.setThermalMaterials(config.runtimeThermalMaterials);
+    system.setParams(config.contactThermalConductance);
     system.setContactCouplings(config.contactCouplings);
 }
 
@@ -99,9 +100,6 @@ void HeatSystemComputeController::configure(uint64_t socketKey, const Config& co
         }
     }
 
-    // Always flush control-plane flags into the cached config so that
-    // isHeatSystemPaused() and friends never read stale values, even
-    // when the geometry hash hasn't changed.
     const auto configIt = configuredConfigs.find(socketKey);
     if (configIt != configuredConfigs.end()) {
         configIt->second.paused = config.paused;
@@ -267,4 +265,3 @@ void HeatSystemComputeController::destroyHeatSystem(uint64_t socketKey) {
         activeSystems.erase(it);
     }
 }
-

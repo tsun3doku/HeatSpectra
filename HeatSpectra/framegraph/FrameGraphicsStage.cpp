@@ -25,7 +25,7 @@ FrameGraphicsStage::FrameGraphicsStage(
 FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const FrameSyncState& syncState) {
     const auto& commandBuffers = sceneRenderer.getCommandBuffers();
     if (frameState.frameIndex >= commandBuffers.size()) {
-        std::cout << "[FrameGraphicsStage] Missing scene renderer command buffer for frame index" << std::endl;
+        std::cerr << "[FrameGraphicsStage] Missing scene renderer command buffer for frame index" << std::endl;
         return FrameStageResult::Fatal;
     }
 
@@ -50,7 +50,7 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const
         services,
         syncState.insertComputeToGraphicsBarrier,
         syncState.waitDstStageMask)) {
-        std::cout << "[FrameGraphicsStage] Scene command recording failed. Triggering swapchain recreation." << std::endl;
+        std::cerr << "[FrameGraphicsStage] Scene command recording failed. Triggering swapchain recreation." << std::endl;
         return FrameStageResult::RecreateSwapchain;
     }
 
@@ -61,12 +61,12 @@ FrameStageResult FrameGraphicsStage::execute(const FrameState& frameState, const
         syncState.waitDstStageMask);
 
     if (submitResult != VK_SUCCESS) {
-        std::cout << "[FrameGraphicsStage] vkQueueSubmit FAILED with result=" << submitResult;
+        std::cerr << "[FrameGraphicsStage] vkQueueSubmit FAILED with result=" << submitResult;
         if (submitResult == VK_ERROR_DEVICE_LOST) {
-            std::cout << " (VK_ERROR_DEVICE_LOST). Treating as fatal." << std::endl;
+            std::cerr << " (VK_ERROR_DEVICE_LOST). Treating as fatal." << std::endl;
             return FrameStageResult::Fatal;
         }
-        std::cout << " Triggering swapchain recreation" << std::endl;
+        std::cerr << " Triggering swapchain recreation" << std::endl;
         return FrameStageResult::RecreateSwapchain;
     }
 

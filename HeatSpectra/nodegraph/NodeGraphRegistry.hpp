@@ -67,6 +67,7 @@ constexpr uint32_t MaterialBindings = 4;
 constexpr uint32_t CellSize = 6;
 constexpr uint32_t VoxelResolution = 7;
 constexpr uint32_t ShowHeatOverlay = 8;
+constexpr uint32_t ContactThermalConductance = 9;
 }
 
 namespace voronoi {
@@ -99,7 +100,6 @@ private:
 
     static NodeSocketSignature makeOutputSocket(
         const char* name,
-        NodeGraphValueType valueType,
         NodePayloadType producedPayloadType);
 
     static NodeTypeDefinition buildModelNode();

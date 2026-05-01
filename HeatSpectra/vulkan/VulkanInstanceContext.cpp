@@ -244,9 +244,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanInstanceContext::debugCallback(
     (void)messageSeverity;
     (void)userData;
 
-    if (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
-        std::cout << callbackData->pMessage << std::endl;
-    }
     std::cerr << "validation layer: " << callbackData->pMessage << std::endl;
     return VK_FALSE;
 }

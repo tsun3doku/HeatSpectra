@@ -24,25 +24,30 @@ void NodeModel::execute(NodeGraphKernelContext& context) const {
 
     const ModelNodeParams params = readModelNodeParams(context.node);
     const std::string& modelPath = params.path;
+    GeometryData geometry{};
+    bool hasGeometry = false;
+    if (!modelPath.empty()) {
+        geometry.baseModelPath = modelPath;
+        hasGeometry = populateGeometryFromModelPath(modelPath, geometry);
+    }
 
-    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
+    for (std::size_t outputIndex = 0;
+         outputIndex < context.outputs.size() && outputIndex < context.node.outputs.size();
+         ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
-        outputValue.payloadHandle = {};
-        if (modelPath.empty()) {
+        const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+        outputValue = {};
+        outputValue.dataType = outputSocket.contract.producedPayloadType;
+
+        if (!payloadRegistry ||
+            outputValue.dataType != NodePayloadType::Geometry ||
+            !hasGeometry) {
             populateMetadata(outputValue, payloadRegistry);
             continue;
         }
 
-        GeometryData geometry{};
-        geometry.baseModelPath = modelPath;
-        populateGeometryFromModelPath(modelPath, geometry);
-        if (payloadRegistry) {
-            const uint64_t payloadKey = makeSocketKey(
-                context.node.id,
-                context.node.outputs[outputIndex].id);
-            outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(geometry));
-        }
+        const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
+        outputValue.payloadHandle = payloadRegistry->store(payloadKey, geometry);
         populateMetadata(outputValue, payloadRegistry);
     }
 }

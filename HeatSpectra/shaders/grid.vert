@@ -8,10 +8,11 @@ layout(set = 0, binding = 0) uniform ViewUniforms {
     vec3 gridSize;  // Grid size (width, depth, height)
 } viewUniforms;
 
-layout(location = 0) out vec3 worldPos;
+layout(location = 0) out vec3 worldPos;      // World space position
+layout(location = 1) out vec3 cameraPos;     // Camera position
 
 void main() {
-    int vertexInPlane = gl_VertexIndex % 6;
+    int vertexInPlane = gl_VertexIndex;
 
     float halfW = viewUniforms.gridSize.x * 0.5;
     float halfD = viewUniforms.gridSize.y * 0.5;
@@ -22,6 +23,11 @@ void main() {
     );
     vec3 p = positions[vertexInPlane];
 
+    // Floor plane (XZ at y=0)
     worldPos = vec3(p.x * halfW, 0.0, p.y * halfD);
+
+    cameraPos = viewUniforms.pos;
+
+    // Transform to clip space
     gl_Position = viewUniforms.proj * viewUniforms.view * vec4(worldPos, 1.0);
 }

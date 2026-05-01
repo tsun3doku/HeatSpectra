@@ -50,7 +50,10 @@ struct RemeshPackage {
 
     uint64_t packageHash = 0;
     GeometryData sourceGeometry;
-    RemeshParams params{};
+    int iterations = 1;
+    float minAngleDegrees = 20.0f;
+    float maxEdgeLength = 0.1f;
+    float stepSize = 0.25f;
     DisplaySettings display{};
     NodeDataHandle remeshHandle{};
     ProductHandle modelProductHandle{};

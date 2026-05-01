@@ -3,16 +3,18 @@
 #include "NodeGraphEditor.hpp"
 #include "NodeGraphRegistry.hpp"
 #include "nodegraph/ui/widgets/NodePanelUtils.hpp"
-#include "domain/RemeshParams.hpp"
 
 RemeshNodeParams readRemeshNodeParams(const NodeGraphNode& node) {
-    const RemeshParams defaults{};
+    constexpr int iterations = 1;
+    constexpr double minAngleDegrees = 30.0;
+    constexpr double maxEdgeLength = 0.1;
+    constexpr double stepSize = 0.25;
 
     RemeshNodeParams params{};
-    params.iterations = NodePanelUtils::readIntParam(node, nodegraphparams::remesh::Iterations, defaults.iterations);
-    params.minAngleDegrees = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, defaults.minAngleDegrees);
-    params.maxEdgeLength = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, defaults.maxEdgeLength);
-    params.stepSize = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::StepSize, defaults.stepSize);
+    params.iterations = NodePanelUtils::readIntParam(node, nodegraphparams::remesh::Iterations, iterations);
+    params.minAngleDegrees = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MinAngleDegrees, minAngleDegrees);
+    params.maxEdgeLength = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::MaxEdgeLength, maxEdgeLength);
+    params.stepSize = NodePanelUtils::readFloatParam(node, nodegraphparams::remesh::StepSize, stepSize);
     params.preview.showRemeshOverlay = NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowRemeshOverlay, false);
     params.preview.showFaceNormals = NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowFaceNormals, false);
     params.preview.showVertexNormals = NodePanelUtils::readBoolParam(node, nodegraphparams::remesh::ShowVertexNormals, false);

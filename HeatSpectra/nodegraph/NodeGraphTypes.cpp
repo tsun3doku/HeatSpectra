@@ -6,11 +6,9 @@ NodeGraphValueType valueTypeOf(NodePayloadType payloadType) {
     switch (payloadType) {
     case NodePayloadType::Geometry:
     case NodePayloadType::Remesh:
-        return NodeGraphValueType::Mesh;
     case NodePayloadType::HeatSource:
-        return NodeGraphValueType::Emitter;
     case NodePayloadType::HeatReceiver:
-        return NodeGraphValueType::Receiver;
+        return NodeGraphValueType::Mesh;
     case NodePayloadType::Voronoi:
         return NodeGraphValueType::Volume;
     case NodePayloadType::Contact:

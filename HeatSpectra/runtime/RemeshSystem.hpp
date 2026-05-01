@@ -37,7 +37,7 @@ private:
     std::vector<float> pointPositions;
     std::vector<uint32_t> triangleIndices;
     int iterations = 1;
-    float minAngleDegrees = 30.0f;
+    float minAngleDegrees = 20.0f;
     float maxEdgeLength = 0.1f;
     float stepSize = 0.25f;
     uint32_t runtimeModelId = 0;

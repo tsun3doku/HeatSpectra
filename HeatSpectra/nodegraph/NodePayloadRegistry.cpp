@@ -38,10 +38,10 @@ void RemeshData::sealPayload() {
     uint64_t hash = NodeGraphHash::start();
     NodeGraphHash::combine(hash, static_cast<uint64_t>(active ? 1u : 0u));
     NodeGraphHash::combine(hash, sourcePayloadHash);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(params.iterations));
-    NodeGraphHash::combineFloat(hash, params.minAngleDegrees);
-    NodeGraphHash::combineFloat(hash, params.maxEdgeLength);
-    NodeGraphHash::combineFloat(hash, params.stepSize);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(iterations));
+    NodeGraphHash::combineFloat(hash, minAngleDegrees);
+    NodeGraphHash::combineFloat(hash, maxEdgeLength);
+    NodeGraphHash::combineFloat(hash, stepSize);
     payloadHash = hash;
 }
 
@@ -65,6 +65,7 @@ void HeatData::sealPayload() {
     NodeGraphHash::combine(hash, static_cast<uint64_t>(active ? 1u : 0u));
     NodeGraphHash::combine(hash, static_cast<uint64_t>(paused ? 1u : 0u));
     NodeGraphHash::combine(hash, static_cast<uint64_t>(resetRequested ? 1u : 0u));
+    NodeGraphHash::combineFloat(hash, contactThermalConductance);
     NodeGraphHash::combine(hash, static_cast<uint64_t>(materialBindings.size()));
     for (const HeatMaterialBinding& binding : materialBindings) {
         NodeGraphHash::combine(hash, static_cast<uint64_t>(binding.receiverModelNodeId));
@@ -88,8 +89,8 @@ void ContactData::sealPayload() {
 void VoronoiData::sealPayload() {
     uint64_t hash = NodeGraphHash::start();
     NodeGraphHash::combine(hash, static_cast<uint64_t>(active ? 1u : 0u));
-    NodeGraphHash::combineFloat(hash, params.cellSize);
-    NodeGraphHash::combine(hash, static_cast<uint64_t>(params.voxelResolution));
+    NodeGraphHash::combineFloat(hash, cellSize);
+    NodeGraphHash::combine(hash, static_cast<uint64_t>(voxelResolution));
     NodeGraphHash::combine(hash, static_cast<uint64_t>(receiverPayloadHashes.size()));
     for (uint64_t receiverPayloadHash : receiverPayloadHashes) {
         NodeGraphHash::combine(hash, receiverPayloadHash);
@@ -121,44 +122,44 @@ bool NodePayloadRegistry::hasRemeshHandle(const NodeDataHandle& handle) const {
     return get<RemeshData>(handle) != nullptr;
 }
 
-const GeometryData* NodePayloadRegistry::resolveGeometry(NodePayloadType type, const NodeDataHandle& handle) const {
+NodeDataHandle NodePayloadRegistry::resolveMeshHandle(NodePayloadType type, const NodeDataHandle& handle) const {
     if (handle.key == 0) {
-        return nullptr;
+        return {};
     }
 
     switch (type) {
     case NodePayloadType::Geometry:
-        return resolveGeometryHandle(handle);
-    case NodePayloadType::Remesh: {
-        const RemeshData* remesh = get<RemeshData>(handle);
-        if (!remesh) {
-            return nullptr;
-        }
-        return resolveGeometryHandle(remesh->sourceMeshHandle);
-    }
+    case NodePayloadType::Remesh:
+        return handle;
     case NodePayloadType::HeatReceiver: {
         const HeatReceiverData* heatReceiver = get<HeatReceiverData>(handle);
-        if (!heatReceiver) {
-            return nullptr;
-        }
-        const NodePayloadType meshType = get<RemeshData>(heatReceiver->meshHandle) != nullptr
-            ? NodePayloadType::Remesh
-            : NodePayloadType::Geometry;
-        return resolveGeometry(meshType, heatReceiver->meshHandle);
+        return heatReceiver ? heatReceiver->meshHandle : NodeDataHandle{};
     }
     case NodePayloadType::HeatSource: {
         const HeatSourceData* heatSource = get<HeatSourceData>(handle);
-        if (!heatSource) {
-            return nullptr;
-        }
-        const NodePayloadType meshType = get<RemeshData>(heatSource->meshHandle) != nullptr
-            ? NodePayloadType::Remesh
-            : NodePayloadType::Geometry;
-        return resolveGeometry(meshType, heatSource->meshHandle);
+        return heatSource ? heatSource->meshHandle : NodeDataHandle{};
     }
     default:
+        return {};
+    }
+}
+
+const GeometryData* NodePayloadRegistry::resolveGeometry(NodePayloadType type, const NodeDataHandle& handle) const {
+    const NodeDataHandle meshHandle = resolveMeshHandle(type, handle);
+    if (meshHandle.key == 0) {
         return nullptr;
     }
+
+    if (const GeometryData* geometry = resolveGeometryHandle(meshHandle)) {
+        return geometry;
+    }
+
+    const RemeshData* remesh = get<RemeshData>(meshHandle);
+    if (remesh) {
+        return resolveGeometryHandle(remesh->sourceMeshHandle);
+    }
+
+    return nullptr;
 }
 
 uint64_t NodePayloadRegistry::resolvePayloadHash(NodePayloadType type, const NodeDataHandle& handle) const {

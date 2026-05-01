@@ -236,9 +236,6 @@ void Model::createVertexBuffer() {
 
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    std::cout << "[BUFFER] createVertexBuffer(): uploading "
-        << vertices.size() << " verts\n";
-
     auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
         bufferSize, 
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
@@ -270,9 +267,6 @@ void Model::createIndexBuffer() {
     }
 
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-    std::cout << "[BUFFER] createIndexBuffer(): uploading "
-        << indices.size() << " indices\n";
 
     auto [stagingBuffer, stagingOffset] = memoryAllocator.allocate(
         bufferSize,

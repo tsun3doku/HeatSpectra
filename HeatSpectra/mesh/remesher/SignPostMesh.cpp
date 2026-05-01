@@ -702,38 +702,6 @@ double SignpostMesh::getCornerAngle(uint32_t halfEdgeIdx) const {
 }
 
 void SignpostMesh::printMeshStatistics() const {
-    const auto& edges = conn.getEdges();
-    const auto& faces = conn.getFaces();
-    const auto& vertices = conn.getVertices();
-    const auto& halfEdges = conn.getHalfEdges();
-
-    double minLength = FLT_MAX;
-    double maxLength = 0.0f;
-    double totalLength = 0.0f;
-    int validEdgeCount = 0;
-
-    // Compute edge length statistics from edge objects
-    for (uint32_t i = 0; i < edges.size(); i++) {
-        double length = edges[i].intrinsicLength;
-        if (length > 0.0f) {
-            minLength = std::min(minLength, length);
-            maxLength = std::max(maxLength, length);
-            totalLength += length;
-            validEdgeCount++;
-        }
-    }
-
-    double avgLength = validEdgeCount > 0 ? totalLength / validEdgeCount : 0.0f;
-
-#ifndef NDEBUG
-    std::cout << "Mesh Statistics:" << std::endl;
-    std::cout << "  Vertices: " << vertices.size() << std::endl;
-    std::cout << "  Faces: " << faces.size() << std::endl;
-    std::cout << "  Edges: " << edges.size() << std::endl;
-    std::cout << "  Edges with valid length: " << validEdgeCount << std::endl;
-    std::cout << "  Edge lengths - Min: " << minLength << ", Max: " << maxLength
-        << ", Avg: " << avgLength << std::endl;
-#endif
 }
 
 void SignpostMesh::computeVertexAngleScales() {

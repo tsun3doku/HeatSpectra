@@ -1,21 +1,22 @@
 #version 450
-#extension GL_EXT_debug_printf : enable
 
 layout(local_size_x = 256) in;
 
-struct VoronoiNode {
+struct Node {
     float volume;
     uint neighborOffset;
     uint neighborCount;
-    uint interfaceNeighborCount; 
+    uint interfaceNeighborCount;
 };
 
-struct VoronoiNeighbor {
-    uint neighborIndex;
-    float areaOverDistance;
+struct GMLSInterface {
+    uint neighborID;    // neighbor Voronoi cell index
+    float conductance;  // FTPA: area / distance
+    uint _pad0;
+    uint _pad1;
 };
 
-struct VoronoiMaterialNode {
+struct MaterialNode {
     float temperature;
     float conductivityPerMass;
     float thermalMass;
@@ -24,118 +25,94 @@ struct VoronoiMaterialNode {
     float conductivity;
 };
 
-// Binding 0: VoronoiNode metadata (topology and volume)
 layout(binding = 0) buffer VoronoiNodeBuffer {
-    VoronoiNode nodes[];
+    Node nodes[];
 };
 
-// Binding 1: Neighbor connectivity
-layout(binding = 1) buffer VoronoiNeighborBuffer {
-    VoronoiNeighbor neighbors[];
+layout(binding = 1) readonly buffer GMLSInterfaceBuffer {
+    GMLSInterface interfaces[];
 };
 
-// Binding 2: Heat material/state metadata
 layout(binding = 2) buffer VoronoiMaterialNodeBuffer {
-    VoronoiMaterialNode materialNodes[];
+    MaterialNode materialNodes[];
 };
 
-// Binding 3: Time uniform
 layout(binding = 3) uniform TimeBuffer {
     float deltaTime;
     float totalTime;
 } timeBuffer;
 
-// Binding 4: Temperature READ buffer
 layout(binding = 4) buffer TemperatureReadBuffer {
-    uint temperatures[];  // Stored as uint, convert with uintBitsToFloat
+    uint temperatures[];
 } tempRead;
 
-// Binding 5: Temperature WRITE buffer
 layout(binding = 5) buffer TemperatureWriteBuffer {
-    uint temperatures[];  // Stored as uint, convert with floatBitsToUint
+    uint temperatures[];
 } tempWrite;
 
-// Binding 6: Seed flags (bit 0 = isGhost, bit 1 = isSurface)
 layout(binding = 6) readonly buffer SeedFlagsBuffer {
     uint flags[];
 } seedFlags;
 
-layout(binding = 7) buffer InjectionKBuffer {
-    uint values[];
-} injectionKBuffer;
-
-layout(binding = 8) buffer InjectionKTBuffer {
-    uint values[];
-} injectionKTBuffer;
+layout(binding = 7) readonly buffer ContactConductanceBuffer {
+    float contactConductance[];
+};
 
 layout(push_constant) uniform PushConstants {
-    mat4 heatSourceModelMatrix;
-    mat4 visModelMatrix;
-    mat4 inverseHeatSourceModelMatrix;
     uint maxNodeNeighbors;
     uint substepIndex;
+    float heatSourceTemperature;
+    uint hasContact;
 } pushConstants;
-
-
 
 void main() {
     uint nodeID = gl_GlobalInvocationID.x;
-    if (nodeID >= nodes.length()) return;
-        
-    // Skip ghost cells
+    if (nodeID >= nodes.length()) {
+        return;
+    }
+
     if ((seedFlags.flags[nodeID] & 1u) != 0u) {
-        injectionKBuffer.values[nodeID] = 0u;
-        injectionKTBuffer.values[nodeID] = 0u;
         tempWrite.temperatures[nodeID] = tempRead.temperatures[nodeID];
         return;
     }
-    
-    VoronoiNode node = nodes[nodeID];
-    VoronoiMaterialNode materialNode = materialNodes[nodeID];
-    
-    float thermalMass = max(materialNode.thermalMass, 1e-12);   // Minimum thermal mass
-    
-    // Read current temperature from ping pong buffer
-    float currentTemp = uintBitsToFloat(tempRead.temperatures[nodeID]);
 
-    float injK = uintBitsToFloat(injectionKBuffer.values[nodeID]);
-    float injKT = uintBitsToFloat(injectionKTBuffer.values[nodeID]);
-    injectionKBuffer.values[nodeID] = 0u;
-    injectionKTBuffer.values[nodeID] = 0u;
+    Node node = nodes[nodeID];
+    MaterialNode materialNode = materialNodes[nodeID];
+    float thermalMass = max(materialNode.thermalMass, 1e-12);
+    float currentTemp = uintBitsToFloat(tempRead.temperatures[nodeID]);
 
     float totalConductance = 0.0;
     float totalFlux = 0.0;
-    for (uint i = 0; i < node.neighborCount; i++) {
-        VoronoiNeighbor neighbor = neighbors[node.neighborOffset + i];
-
-        // Extract neighbor data
-        float neighborTemp = uintBitsToFloat(tempRead.temperatures[neighbor.neighborIndex]);
-        
-        // Conductance coefficient: (k / thermalMass) * (A / d)
-        float conductance = materialNode.conductivityPerMass * neighbor.areaOverDistance;
-        
-        totalConductance += conductance;
-        totalFlux += conductance * neighborTemp;
-        
-
-    }
-    
-    // Semi-implicit time integration
-    float dt = timeBuffer.deltaTime;
-    float denominator = 1.0 + dt * totalConductance;
-    float numerator = currentTemp + dt * totalFlux;
-    
-    float newTemp = numerator / denominator;
-    newTemp = max(newTemp, 0.0);
-
-    if (injK > 0.0) {
-        float denomInj = thermalMass + dt * injK;
-        if (denomInj > 1e-20) {
-            newTemp = (newTemp * thermalMass + dt * injKT) / denomInj;
-            newTemp = max(newTemp, 0.0);
+    for (uint i = 0; i < node.neighborCount; ++i) {
+        GMLSInterface iface = interfaces[node.neighborOffset + i];
+        float g = iface.conductance;
+        uint neighborID = iface.neighborID;
+        if (neighborID >= nodes.length()) {
+            continue;
         }
+        float neighborTemp = uintBitsToFloat(tempRead.temperatures[neighborID]);
+        totalConductance += g;
+        totalFlux += g * neighborTemp;
     }
-    
-    // Write temp to ping pong buffer
+
+    float dt = timeBuffer.deltaTime;
+    float kappa = materialNode.conductivityPerMass;
+
+    // Contact injection (gather instead of scatter)
+    float injK = 0.0;
+    float injKT = 0.0;
+    if (pushConstants.hasContact != 0u && nodeID < contactConductance.length()) {
+        injK = contactConductance[nodeID];
+        injKT = injK * pushConstants.heatSourceTemperature;
+    }
+
+    // Combined implicit solve:
+    // M·(T_new - T_old)/dt = k·Σg·(T_j - T_new) + Σh·(T_src - T_new)
+    // T_new·(1 + dt·κ·Σg + dt·Σh/M) = T_old + dt·κ·Σ(g·T_j) + dt·Σ(h·T_src)/M
+    float invMass = 1.0 / thermalMass;
+    float denominator = 1.0 + dt * kappa * totalConductance + dt * injK * invMass;
+    float numerator   = currentTemp + dt * kappa * totalFlux + dt * injKT * invMass;
+    float newTemp     = max(numerator / denominator, 0.0);
+
     tempWrite.temperatures[nodeID] = floatBitsToUint(newTemp);
 }

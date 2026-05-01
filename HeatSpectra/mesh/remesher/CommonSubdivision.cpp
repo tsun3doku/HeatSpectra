@@ -1,4 +1,4 @@
-﻿#include "CommonSubdivision.hpp"
+#include "CommonSubdivision.hpp"
 #include "iODT.hpp"
 #include <algorithm>
 #include <map>
@@ -35,8 +35,6 @@ void CommonSubdivision::build() {
             intrinsicTriangles.push_back(tri);
         }
     }
-    
-    std::cout << "[CommonSubdivision] Built " << intrinsicTriangles.size() << " intrinsic triangles" << std::endl;
     
     // Extract all 3D points from intrinsic triangles
     std::vector<glm::vec3> allPoints;
@@ -105,9 +103,6 @@ void CommonSubdivision::build() {
         }
     }
     
-    size_t duplicatesMerged = allPoints.size() - vertices.size();
-    std::cout << "[CommonSubdivision] Merged vertices: " << allPoints.size() << " â†’ " << vertices.size()
-              << " (merged " << duplicatesMerged << " duplicates)" << std::endl;
     
     // Generate colors for visualization
     std::vector<glm::vec3> faceColors = generateFaceColors(intrinsicTriangles.size());
@@ -201,7 +196,6 @@ void CommonSubdivision::build() {
         }
     }
     
-    std::cout << "[CommonSubdivision] Created " << (indices.size() / 3) << " output triangles" << std::endl;
 }
 
 CommonSubdivision::IntrinsicTriangle CommonSubdivision::buildIntrinsicTriangle(uint32_t intrinsicFaceIdx) {
@@ -299,7 +293,7 @@ CommonSubdivision::IntrinsicTriangle CommonSubdivision::buildIntrinsicTriangle(u
     }
 
     if (triangle.vertices.size() < 3) {
-        std::cout << "[CommonSubdivision] Warning: Intrinsic triangle " << intrinsicFaceIdx << " has only " << triangle.vertices.size() << " vertices." << std::endl;
+        std::cerr << "[CommonSubdivision] Warning: Intrinsic triangle " << intrinsicFaceIdx << " has only " << triangle.vertices.size() << " vertices." << std::endl;
     }
     
     return triangle;

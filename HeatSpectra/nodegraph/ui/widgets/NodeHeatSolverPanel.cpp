@@ -60,6 +60,12 @@ NodeHeatSolverPanel::NodeHeatSolverPanel(QWidget* parent)
     heatVoxelResolutionRow->setValue(128.0);
     layout->addWidget(heatVoxelResolutionRow);
 
+    heatContactThermalConductanceRow = new NodeGraphSliderRow("Contact Thermal Conductance", this);
+    heatContactThermalConductanceRow->setRange(0.0, 100000.0);
+    heatContactThermalConductanceRow->setDecimals(0);
+    heatContactThermalConductanceRow->setValue(16000.0);
+    layout->addWidget(heatContactThermalConductanceRow);
+
     heatSolveSettingsApplyButton = new QPushButton("Apply Solver Settings", this);
     layout->addWidget(heatSolveSettingsApplyButton);
 
@@ -208,6 +214,7 @@ void NodeHeatSolverPanel::refreshFromNode() {
     setSyncing(true);
     heatCellSizeRow->setValue(params.cellSize);
     heatVoxelResolutionRow->setValue(static_cast<double>(params.voxelResolution));
+    heatContactThermalConductanceRow->setValue(params.contactThermalConductance);
     heatOverlayCheckBox->setChecked(params.preview.showHeatOverlay);
 
     const std::vector<HeatMaterialBindingRow>& bindingRows = params.materialBindingRows;
@@ -467,6 +474,7 @@ void NodeHeatSolverPanel::applySolveSettings() {
 
     params.cellSize = heatCellSizeRow->value();
     params.voxelResolution = static_cast<int>(heatVoxelResolutionRow->value());
+    params.contactThermalConductance = heatContactThermalConductanceRow->value();
     if (!writeNodeParams(params)) {
         setStatus("Failed to update solver settings.");
         return;

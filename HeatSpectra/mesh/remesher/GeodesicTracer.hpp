@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <glm/glm.hpp>
 #include "SignPostMesh.hpp"
 
@@ -68,6 +68,7 @@ public:
 
     GeodesicTraceResult traceFromVertex(uint32_t vertexIdx, const glm::dvec2& dirInRefVertex, double remaining, GeodesicTraceResult& baseResult, double totalLength) const;
     GeodesicTraceResult traceFromFace(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec2& cartesianDir, double length) const;
+    GeodesicTraceResult traceFromFaceBarycentric(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec3& traceBaryVec) const;
     GeodesicTraceResult traceFromEdge(uint32_t startEdgeIdx, double startSplit, const glm::dvec2& cartesianDir, double length, uint32_t resolutionFace) const;
     FaceStepResult traceInFace(const SurfacePoint& startP, const glm::dvec2& dir2D, double length) const;
 
@@ -77,6 +78,15 @@ public:
     bool solveRayEdge(const glm::dvec2& rayDir, const glm::dvec2& edgeVec, const glm::dvec2& b, double& out_t, double& out_u) const;
 
 private:
+    double cross2d(const glm::dvec2& a, const glm::dvec2& b) const;
+    double barySum(const glm::dvec3& b) const;
+    glm::dvec3 normalizeBarycentricPoint(glm::dvec3 b) const;
+    glm::dvec3 normalizeBarycentricDisplacement(glm::dvec3 b) const;
+    bool isInsideBarycentricTriangle(const glm::dvec3& b) const;
+    glm::dvec3 projectInsideBarycentricTriangle(glm::dvec3 b) const;
+    glm::dvec2 barycentricDisplacementToCartesian(const SignpostMesh::Triangle2D& tri, const glm::dvec3& disp) const;
+    glm::dvec3 cartesianVectorToBarycentricDisplacement(const SignpostMesh::Triangle2D& tri, const glm::dvec2& vec) const;
+
     SignpostMesh& mesh;
     GeodesicTraceOptions options;
 };

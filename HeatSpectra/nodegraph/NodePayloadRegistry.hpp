@@ -50,6 +50,7 @@ public:
     const GeometryData* resolveGeometryHandle(const NodeDataHandle& handle) const;
     bool hasRemeshHandle(const NodeDataHandle& handle) const;
 
+    NodeDataHandle resolveMeshHandle(NodePayloadType type, const NodeDataHandle& handle) const;
     const GeometryData* resolveGeometry(NodePayloadType type, const NodeDataHandle& handle) const;
     uint64_t resolvePayloadHash(NodePayloadType type, const NodeDataHandle& handle) const;
 

@@ -1,17 +1,40 @@
 #include "VoronoiBuilder.hpp"
 
+#include "spatial/VoxelGrid.hpp"
 #include "voronoi/VoronoiModelRuntime.hpp"
 
 #include "renderers/PointRenderer.hpp"
-#include "util/Structs.hpp"
+#include "util/GMLS.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiGeoCompute.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <sstream>
 #include <unordered_set>
+#include <libs/nanoflann/include/nanoflann.hpp>
+
+namespace {
+
+struct SeedPointCloudAdapter {
+    const std::vector<glm::vec3>& pts;
+    inline size_t kdtree_get_point_count() const { return pts.size(); }
+    inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+        return pts[idx][static_cast<int>(dim)];
+    }
+    template <class BBOX> bool kdtree_get_bbox(BBOX&) const { return false; }
+};
+
+using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
+    nanoflann::L2_Simple_Adaptor<float, SeedPointCloudAdapter>,
+    SeedPointCloudAdapter,
+    3>;
+
+} // namespace
 
 VoronoiBuilder::VoronoiBuilder(
     VulkanDevice& vulkanDevice,
@@ -52,7 +75,8 @@ bool VoronoiBuilder::tryCreateStorageBuffer(
 bool VoronoiBuilder::buildDomains(
     const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes,
     std::vector<VoronoiDomain>& receiverVoronoiDomains,
-    const VoronoiParams& params,
+    float cellSize,
+    int voxelResolution,
     uint32_t maxNeighbors) const {
     receiverVoronoiDomains.clear();
 
@@ -86,9 +110,9 @@ bool VoronoiBuilder::buildDomains(
             intrinsicMesh,
             geometryPositions,
             geometryIndices,
-            params.cellSize,
+            cellSize,
             domain.voxelGrid,
-            params.voxelResolution);
+            voxelResolution);
         domain.voxelGridBuilt = (domain.voxelGrid.getGridSize() > 0);
 
         const std::vector<VoronoiSeeder::Seed>& domainSeeds = domain.seeder->getSeeds();
@@ -105,9 +129,6 @@ bool VoronoiBuilder::buildDomains(
         for (const VoronoiSeeder::Seed& seed : domainSeeds) {
             seedPositions.push_back(glm::dvec3(seed.pos));
             uint32_t flags = 0u;
-            if (seed.isGhost) {
-                flags |= 1u;
-            }
             if (seed.isSurface) {
                 flags |= 2u;
             }
@@ -134,14 +155,68 @@ bool VoronoiBuilder::buildDomains(
     return true;
 }
 
+void VoronoiBuilder::setGhost(std::vector<VoronoiDomain>& receiverVoronoiDomains, bool fromVolumes) {
+    if (fromVolumes) {
+        if (resources.voronoiNodeCount == 0 || !resources.mappedVoronoiNodeData || !resources.mappedSeedFlagsData) {
+            return;
+        }
+
+        const voronoi::Node* nodes = static_cast<const voronoi::Node*>(resources.mappedVoronoiNodeData);
+        uint32_t* seedFlags = static_cast<uint32_t*>(resources.mappedSeedFlagsData);
+
+        uint32_t promotedCount = 0;
+        for (uint32_t i = 0; i < resources.voronoiNodeCount; ++i) {
+            if ((seedFlags[i] & 1u) != 0u) {
+                continue;
+            }
+            if (std::abs(nodes[i].volume) <= 1e-12f) {
+                seedFlags[i] |= 1u;
+                ++promotedCount;
+            }
+        }
+
+        const uint32_t* globalFlags = static_cast<const uint32_t*>(resources.mappedSeedFlagsData);
+        for (VoronoiDomain& domain : receiverVoronoiDomains) {
+            if (domain.seedFlags.size() != domain.nodeCount) {
+                continue;
+            }
+            std::copy(globalFlags + domain.nodeOffset,
+                      globalFlags + domain.nodeOffset + domain.nodeCount,
+                      domain.seedFlags.data());
+        }
+    } else {
+        for (VoronoiDomain& domain : receiverVoronoiDomains) {
+            if (!domain.voxelGridBuilt || !domain.seeder) {
+                continue;
+            }
+            const auto& seedPositions = domain.integrator->getSeedPositions();
+            if (seedPositions.size() != domain.seedFlags.size()) {
+                continue;
+            }
+            const float maxDistFromSurface = domain.seeder->getCellSize() * 1.5f;
+            uint32_t ghostCount = 0;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(seedPositions.size()); ++i) {
+                const glm::vec4& seed = seedPositions[i];
+                glm::ivec3 voxel = domain.voxelGrid.worldToVoxel(glm::vec3(seed));
+                uint8_t occ = domain.voxelGrid.getOccupancy(voxel.x, voxel.y, voxel.z);
+                bool isInside = (occ == 2 || occ == 1);
+                float distToSurface = domain.seeder->sampleSDFGrid(glm::vec3(seed));
+                if (!isInside && distToSurface > maxDistFromSurface) {
+                    domain.seedFlags[i] |= 1u;
+                    ++ghostCount;
+                }
+            }
+        }
+    }
+}
+
 bool VoronoiBuilder::createVoronoiGeometryBuffers(
-    const std::vector<VoronoiNode>& initialNodes,
+    const std::vector<voronoi::Node>& initialNodes,
     const std::vector<glm::vec4>& seedPositions,
     const std::vector<uint32_t>& seedFlags,
     const std::vector<uint32_t>& neighborIndices,
     bool debugEnable,
     uint32_t maxNeighbors) {
-    std::cout << "[VoronoiBuilder] Creating Voronoi geometry buffers..." << std::endl;
     if (seedPositions.empty() || seedFlags.empty() || initialNodes.empty()) {
         std::cerr << "[VoronoiBuilder] Failed to create Voronoi buffers: empty node/seed data" << std::endl;
         return false;
@@ -155,7 +230,7 @@ bool VoronoiBuilder::createVoronoiGeometryBuffers(
     resources.voronoiNodeCount = static_cast<uint32_t>(seedPositions.size());
     void* mappedPtr = nullptr;
 
-    VkDeviceSize bufferSize = sizeof(VoronoiNode) * resources.voronoiNodeCount;
+    VkDeviceSize bufferSize = sizeof(voronoi::Node) * resources.voronoiNodeCount;
     if (!tryCreateStorageBuffer(
             "voronoi node",
             initialNodes.data(),
@@ -218,7 +293,7 @@ bool VoronoiBuilder::createVoronoiGeometryBuffers(
     resources.mappedInterfaceNeighborIdsData = mappedInterfaceNeighborIds;
 
     uint32_t numDebugCells = debugEnable ? resources.voronoiNodeCount : 1u;
-    std::vector<DebugCellGeometry> debugCells(numDebugCells);
+    std::vector<voronoi::DebugCellGeometry> debugCells(numDebugCells);
     for (auto& cell : debugCells) {
         cell.cellID = 0;
         cell.vertexCount = 0;
@@ -226,7 +301,7 @@ bool VoronoiBuilder::createVoronoiGeometryBuffers(
         cell.volume = 0.0f;
     }
 
-    bufferSize = sizeof(DebugCellGeometry) * numDebugCells;
+    bufferSize = sizeof(voronoi::DebugCellGeometry) * numDebugCells;
     if (!tryCreateStorageBuffer(
             "debug cell geometry",
             debugCells.data(),
@@ -237,11 +312,11 @@ bool VoronoiBuilder::createVoronoiGeometryBuffers(
         return false;
     }
 
-    uint32_t dumpCount = debugEnable ? DEBUG_DUMP_CELL_COUNT : 1u;
-    std::vector<VoronoiDumpInfo> dumpInfos(dumpCount);
-    std::memset(dumpInfos.data(), 0, sizeof(VoronoiDumpInfo) * dumpCount);
+    uint32_t dumpCount = debugEnable ? voronoi::DEBUG_DUMP_CELL_COUNT : 1u;
+    std::vector<voronoi::DumpInfo> dumpInfos(dumpCount);
+    std::memset(dumpInfos.data(), 0, sizeof(voronoi::DumpInfo) * dumpCount);
 
-    bufferSize = sizeof(VoronoiDumpInfo) * dumpCount;
+    bufferSize = sizeof(voronoi::DumpInfo) * dumpCount;
     if (!tryCreateStorageBuffer(
             "voronoi dump",
             dumpInfos.data(),
@@ -281,9 +356,9 @@ bool VoronoiBuilder::createVoronoiGeometryBuffers(
     return true;
 }
 
-bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
+bool VoronoiBuilder::buildGMLSInterfaceBuffer(uint32_t maxNeighbors) {
     if (resources.voronoiNodeCount == 0) {
-        std::cerr << "[VoronoiBuilder] Error: No Voronoi nodes to build neighbor buffer" << std::endl;
+        std::cerr << "[VoronoiBuilder] Error: No Voronoi nodes to build GMLS interface buffer" << std::endl;
         return false;
     }
 
@@ -294,7 +369,7 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
         return false;
     }
 
-    VoronoiNode* nodes = static_cast<VoronoiNode*>(resources.mappedVoronoiNodeData);
+    voronoi::Node* nodes = static_cast<voronoi::Node*>(resources.mappedVoronoiNodeData);
     if (!nodes) {
         std::cerr << "[VoronoiBuilder] Error: Voronoi node buffer not mapped" << std::endl;
         return false;
@@ -302,11 +377,30 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
 
     const glm::vec4* seedPositions = static_cast<const glm::vec4*>(resources.mappedSeedPositionData);
     const uint32_t* seedFlags = static_cast<const uint32_t*>(resources.mappedSeedFlagsData);
-    std::vector<VoronoiNeighbor> neighbors;
-    neighbors.reserve(static_cast<size_t>(resources.voronoiNodeCount) * static_cast<size_t>(maxNeighbors));
+    if (!seedPositions || !seedFlags) {
+        std::cerr << "[VoronoiBuilder] Error: Seed buffers not mapped" << std::endl;
+        return false;
+    }
+
+    auto freeBuffer = [this](VkBuffer& buffer, VkDeviceSize& offset) {
+        if (buffer != VK_NULL_HANDLE) {
+            memoryAllocator.free(buffer, offset);
+            buffer = VK_NULL_HANDLE;
+            offset = 0;
+        }
+    };
+
+    freeBuffer(resources.gmlsInterfaceBuffer, resources.gmlsInterfaceBufferOffset);
+
+    std::vector<voronoi::GMLSInterface> interfaces;
+    interfaces.reserve(static_cast<size_t>(resources.voronoiNodeCount) * static_cast<size_t>(maxNeighbors));
 
     uint32_t totalNeighbors = 0;
     uint32_t invalidNeighborIndexCount = 0;
+    double minConductance = std::numeric_limits<double>::max();
+    double maxConductance = 0.0;
+    double sumConductance = 0.0;
+
     for (uint32_t cellIdx = 0; cellIdx < resources.voronoiNodeCount; ++cellIdx) {
         uint32_t neighborOffset = totalNeighbors;
         uint32_t validNeighborCount = 0;
@@ -320,6 +414,8 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
         if (interfaceCount > maxNeighbors) {
             interfaceCount = maxNeighbors;
         }
+
+        const glm::vec3 cellPosition(seedPositions[cellIdx]);
 
         for (uint32_t k = 0; k < interfaceCount; ++k) {
             uint32_t idx = cellIdx * maxNeighbors + k;
@@ -336,26 +432,25 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
                 continue;
             }
 
-            float areaOverDistance = 0.0f;
-            if (seedPositions) {
-                const glm::vec4& seedA4 = seedPositions[cellIdx];
-                const glm::vec4& seedB4 = seedPositions[neighborIdx];
-                const glm::vec3 seedA(seedA4.x, seedA4.y, seedA4.z);
-                const glm::vec3 seedB(seedB4.x, seedB4.y, seedB4.z);
-                const float distance = glm::distance(seedA, seedB);
-                if (distance > 1e-12f && area > 1e-8f) {
-                    areaOverDistance = area / distance;
-                }
-            }
-
-            if (areaOverDistance <= 0.0f) {
+            const glm::vec3 seedB(seedPositions[neighborIdx]);
+            const float distance = glm::length(seedB - cellPosition);
+            if (distance <= 1e-12f || area <= 1e-8f) {
                 continue;
             }
 
-            VoronoiNeighbor neighbor{};
-            neighbor.neighborIndex = neighborIdx;
-            neighbor.areaOverDistance = areaOverDistance;
-            neighbors.push_back(neighbor);
+            // FTPA conductance: area/distance is exact for the normal gradient
+            // on Voronoi meshes (perpendicular bisector property).
+            const float conductance = area / distance;
+
+            minConductance = std::min(minConductance, static_cast<double>(conductance));
+            maxConductance = std::max(maxConductance, static_cast<double>(conductance));
+            sumConductance += static_cast<double>(conductance);
+
+            voronoi::GMLSInterface interfaceSample{};
+            interfaceSample.neighborIdx = neighborIdx;
+            interfaceSample.conductance = conductance;
+
+            interfaces.push_back(interfaceSample);
             ++validNeighborCount;
             ++totalNeighbors;
         }
@@ -369,19 +464,24 @@ bool VoronoiBuilder::buildVoronoiNeighborBuffer(uint32_t maxNeighbors) {
                   << " interface neighbors with out-of-range seed indices" << std::endl;
     }
 
-    if (totalNeighbors > 0) {
-        VkDeviceSize bufferSize = sizeof(VoronoiNeighbor) * totalNeighbors;
+    if (interfaces.empty()) {
+        std::cerr << "[VoronoiBuilder] Failed to build any interface samples" << std::endl;
+        return false;
+    }
+
+    {
+        VkDeviceSize bufferSize = sizeof(voronoi::GMLSInterface) * interfaces.size();
         void* mappedPtr = nullptr;
         if (createStorageBuffer(
                 memoryAllocator,
                 vulkanDevice,
-                neighbors.data(),
+                interfaces.data(),
                 bufferSize,
-                resources.voronoiNeighborBuffer,
-                resources.voronoiNeighborBufferOffset,
+                resources.gmlsInterfaceBuffer,
+                resources.gmlsInterfaceBufferOffset,
                 &mappedPtr) != VK_SUCCESS ||
-            resources.voronoiNeighborBuffer == VK_NULL_HANDLE) {
-            std::cerr << "[VoronoiBuilder] Failed to create Voronoi neighbor buffer" << std::endl;
+            resources.gmlsInterfaceBuffer == VK_NULL_HANDLE) {
+            std::cerr << "[VoronoiBuilder] Failed to create GMLS interface buffer" << std::endl;
             return false;
         }
     }
@@ -525,8 +625,8 @@ bool VoronoiBuilder::generateDiagram(
         return false;
     }
 
-    std::vector<VoronoiNode> initialNodes(resources.voronoiNodeCount);
-    for (VoronoiNode& node : initialNodes) {
+    std::vector<voronoi::Node> initialNodes(resources.voronoiNodeCount);
+    for (voronoi::Node& node : initialNodes) {
         node.volume = 0.0f;
         node.neighborOffset = 0u;
         node.neighborCount = 0u;
@@ -570,14 +670,6 @@ bool VoronoiBuilder::generateDiagram(
             }
         }
 
-        for (uint32_t localNodeIndex = 0; localNodeIndex < domain.nodeCount; ++localNodeIndex) {
-            if ((domain.seedFlags[localNodeIndex] & 1u) != 0u) {
-                continue;
-            }
-
-            VoronoiNode& node = initialNodes[domain.nodeOffset + localNodeIndex];
-            (void)node;
-        }
     }
 
     if (globalSeedPositions.size() != resources.voronoiNodeCount ||
@@ -722,7 +814,7 @@ bool VoronoiBuilder::generateDiagram(
             VoronoiGeoCompute::Bindings bindings{};
             bindings.voronoiNodeBuffer = resources.voronoiNodeBuffer;
             bindings.voronoiNodeBufferOffset = resources.voronoiNodeBufferOffset;
-            bindings.voronoiNodeBufferRange = sizeof(VoronoiNode) * resources.voronoiNodeCount;
+            bindings.voronoiNodeBufferRange = sizeof(voronoi::Node) * resources.voronoiNodeCount;
             bindings.meshTriangleBuffer = resources.meshTriangleBuffer;
             bindings.meshTriangleBufferOffset = resources.meshTriangleBufferOffset;
             bindings.seedPositionBuffer = resources.seedPositionBuffer;
@@ -764,6 +856,8 @@ bool VoronoiBuilder::generateDiagram(
     freeBuffer(resources.voxelTrianglesListBuffer, resources.voxelTrianglesListBufferOffset);
     freeBuffer(resources.voxelOffsetsBuffer, resources.voxelOffsetsBufferOffset);
 
+    setGhost(receiverVoronoiDomains, true);
+
     if (debugEnable) {
         std::ofstream seedMapFile("cell_seed_positions.txt");
         seedMapFile << "# Cell Index -> Seed Position\n";
@@ -775,19 +869,17 @@ bool VoronoiBuilder::generateDiagram(
         seedMapFile.close();
     }
 
-    if (!buildVoronoiNeighborBuffer(maxNeighbors)) {
+    if (!buildGMLSInterfaceBuffer(maxNeighbors)) {
         return false;
     }
 
     return rebuildOccupancyPointBuffer(receiverVoronoiDomains);
 }
 
-bool VoronoiBuilder::stageSurfaceMappings(
-    std::vector<VoronoiDomain>& receiverVoronoiDomains,
-    uint32_t maxNeighbors) const {
+bool VoronoiBuilder::stageSurfaceMappings(std::vector<VoronoiDomain>& receiverVoronoiDomains) const {
     for (VoronoiDomain& domain : receiverVoronoiDomains) {
         if (!domain.modelRuntime || !domain.integrator) {
-            std::cout << "[VoronoiBuilder] Skipping surface mapping for runtimeModelId="
+            std::cerr << "[VoronoiBuilder] Skipping surface mapping for runtimeModelId="
                       << domain.receiverModelId
                       << " modelRuntime=" << (domain.modelRuntime ? "present" : "missing")
                       << " integrator=" << (domain.integrator ? "present" : "missing")
@@ -797,36 +889,109 @@ bool VoronoiBuilder::stageSurfaceMappings(
 
         const auto& surfacePoints = domain.modelRuntime->getIntrinsicSurfacePositions();
         if (surfacePoints.empty()) {
-            std::cout << "[VoronoiBuilder] Skipping surface mapping for runtimeModelId="
+            std::cerr << "[VoronoiBuilder] Skipping surface mapping for runtimeModelId="
                       << domain.receiverModelId
                       << " because intrinsic surface point list is empty"
                       << std::endl;
             continue;
         }
 
-        std::cout << "[VoronoiBuilder] Mapping surface points for runtimeModelId="
-                  << domain.receiverModelId
-                  << " surfaceVertices=" << surfacePoints.size()
-                  << " seeds=" << domain.seedFlags.size()
-                  << " nodeOffset=" << domain.nodeOffset
-                  << " nodeCount=" << domain.nodeCount
-                  << std::endl;
-
-        std::vector<uint32_t> cellIndices;
-        domain.integrator->computeSurfacePointMapping(
-            surfacePoints,
-            domain.seedFlags,
-            maxNeighbors,
-            cellIndices);
-
-        for (uint32_t& cellIndex : cellIndices) {
-            if (cellIndex == UINT32_MAX) {
-                continue;
-            }
-            cellIndex += domain.nodeOffset;
+        const auto& domainSeedPositions4 = domain.integrator->getSeedPositions();
+        if (domainSeedPositions4.empty() || domain.seedFlags.size() != domainSeedPositions4.size()) {
+            continue;
         }
 
-        domain.modelRuntime->stageVoronoiSurfaceMapping(cellIndices);
+        std::vector<glm::vec3> regularSeedPositions;
+        std::vector<uint32_t> regularGlobalCellIndices;
+        regularSeedPositions.reserve(domainSeedPositions4.size());
+        regularGlobalCellIndices.reserve(domainSeedPositions4.size());
+        for (uint32_t localCellIndex = 0; localCellIndex < static_cast<uint32_t>(domainSeedPositions4.size()); ++localCellIndex) {
+            if ((domain.seedFlags[localCellIndex] & 1u) != 0u) {
+                continue;
+            }
+
+            const glm::vec4& seed = domainSeedPositions4[localCellIndex];
+            regularSeedPositions.push_back(glm::vec3(seed));
+            regularGlobalCellIndices.push_back(domain.nodeOffset + localCellIndex);
+        }
+        if (regularSeedPositions.size() < 4) {
+            continue;
+        }
+
+        SeedPointCloudAdapter cloud{ regularSeedPositions };
+        KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+        index.buildIndex();
+
+        const size_t supportCount = std::min<size_t>(32, regularSeedPositions.size());
+
+        std::vector<voronoi::GMLSSurfaceStencil> stencils(surfacePoints.size());
+        std::vector<voronoi::GMLSSurfaceWeight> valueWeights;
+        std::vector<voronoi::GMLSSurfaceGradientWeight> gradientWeights;
+        valueWeights.reserve(surfacePoints.size() * supportCount);
+        gradientWeights.reserve(surfacePoints.size() * supportCount);
+
+        std::vector<size_t> retIndices(supportCount, 0);
+        std::vector<float> outDistSq(supportCount, 0.0f);
+        std::vector<glm::dvec3> sourcePositions;
+        std::vector<double> valueWeightDoubles;
+        std::vector<glm::dvec3> gradientWeightTriples;
+        sourcePositions.reserve(supportCount);
+
+        for (size_t vertexIndex = 0; vertexIndex < surfacePoints.size(); ++vertexIndex) {
+            const glm::vec3& point = surfacePoints[vertexIndex];
+            const float query[3] = { point.x, point.y, point.z };
+
+            nanoflann::KNNResultSet<float> resultSet(supportCount);
+            resultSet.init(retIndices.data(), outDistSq.data());
+            index.findNeighbors(resultSet, query);
+
+            sourcePositions.clear();
+            float maxDistSq = 0.0f;
+            for (size_t neighborIndex = 0; neighborIndex < supportCount; ++neighborIndex) {
+                sourcePositions.push_back(glm::dvec3(regularSeedPositions[retIndices[neighborIndex]]));
+                if (outDistSq[neighborIndex] > maxDistSq) maxDistSq = outDistSq[neighborIndex];
+            }
+            const double kernelRadius = std::max<double>(static_cast<double>(std::sqrt(maxDistSq)) * 2.0, 1e-5);
+            const bool validWeights = GMLS::computeWeights(
+                glm::dvec3(point),
+                sourcePositions,
+                kernelRadius,
+                valueWeightDoubles,
+                gradientWeightTriples);
+
+            voronoi::GMLSSurfaceStencil& stencil = stencils[vertexIndex];
+            stencil.valueWeightOffset = static_cast<uint32_t>(valueWeights.size());
+            stencil.gradientWeightOffset = static_cast<uint32_t>(gradientWeights.size());
+            stencil.valueWeightCount = 0;
+            stencil.gradientWeightCount = 0;
+
+            if (!validWeights) {
+                continue;
+            }
+
+            for (size_t neighborIndex = 0; neighborIndex < supportCount; ++neighborIndex) {
+                const uint32_t globalCellIndex = regularGlobalCellIndices[retIndices[neighborIndex]];
+                const float valueWeight = static_cast<float>(valueWeightDoubles[neighborIndex]);
+                const glm::dvec3 gradientWeight = gradientWeightTriples[neighborIndex];
+
+                if (std::abs(valueWeight) > 1e-7f) {
+                    valueWeights.push_back({ globalCellIndex, valueWeight, 0u, 0u });
+                    ++stencil.valueWeightCount;
+                }
+
+                if (glm::dot(gradientWeight, gradientWeight) > 1e-14) {
+                    gradientWeights.push_back({
+                        globalCellIndex,
+                        static_cast<float>(gradientWeight.x),
+                        static_cast<float>(gradientWeight.y),
+                        static_cast<float>(gradientWeight.z)
+                    });
+                    ++stencil.gradientWeightCount;
+                }
+            }
+        }
+
+        domain.modelRuntime->stageGMLSSurfaceData(stencils, valueWeights, gradientWeights);
     }
 
     return true;

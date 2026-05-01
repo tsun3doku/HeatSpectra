@@ -158,7 +158,6 @@ void UniformBufferManager::updateUniformBuffer(uint32_t currentImage, const rend
 
 void UniformBufferManager::setColor(glm::vec3 newColor, UniformBufferObject& ubo) {
     ubo.color = newColor;
-    std::cout << "Color updated to: " << newColor.x << ", " << newColor.y << ", " << newColor.z << std::endl;
     for (size_t i = 0; i < uniformBuffersMapped.size(); i++) {
         UniformBufferObject* mappedUbo = (UniformBufferObject*)uniformBuffersMapped[i];
         mappedUbo->color = newColor;
@@ -183,27 +182,22 @@ void UniformBufferManager::cleanup(uint32_t maxFramesInFlight) {
     for (size_t i = 0; i < maxFramesInFlight; i++) {
         if (uniformBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(uniformBuffers[i], 0);
-            std::cout << "Freed main uniform buffers " << uniformBuffers[i] << std::endl;
         }
 
         if (gridUniformBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(gridUniformBuffers[i], 0);
-            std::cout << "Freed grid uniform buffers " << gridUniformBuffers[i] << std::endl;
         }
 
         if (lightBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(lightBuffers[i], 0);
-            std::cout << "Freed light uniform buffers " << lightBuffers[i] << std::endl;
         }
 
         if (materialBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(materialBuffers[i], 0);
-            std::cout << "Freed material uniform buffers " << materialBuffers[i] << std::endl;
         }
 
         if (SSAOKernelBuffers[i] != VK_NULL_HANDLE) {
             memoryAllocator.free(SSAOKernelBuffers[i], 0);
-            std::cout << "Freed SSAO kernel uniform buffers " << SSAOKernelBuffers[i] << std::endl;
         }
     }
 }

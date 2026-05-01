@@ -35,7 +35,7 @@ public:
     void exportSeedsToOBJ(const std::string& filename) const;
 
     const std::vector<Seed>& getSeeds() const { return seeds; }
-    
+
     void updateSeedPosition(size_t index, const glm::vec3& newPos) {
         if (index < seeds.size()) {
             seeds[index].pos = newPos;
@@ -45,6 +45,7 @@ public:
     float getCellSize() const { return cellSize; }
     glm::vec3 getGridMin() const { return gridMin; }
     glm::vec3 getGridMax() const { return gridMax; }
+    float sampleSDFGrid(const glm::vec3& pos) const;
 
 private:
     TriangleHashGrid triHashGrid;
@@ -59,13 +60,12 @@ private:
     float cellSize;
 
     void generateSurfaceSeeds(const SupportingHalfedge::IntrinsicMesh& intrinsicMesh);
-    void generateBlueNoiseSeeds(float maxDistFromSurface, const VoxelGrid* voxelGrid);
+    void generateBlueNoiseSeeds();
     
     size_t computeSpatialHash(const glm::vec3& pos, float hashCellSize) const;
     bool isTooCloseToExisting(const glm::vec3& candidatePos, float poissonRadius, float hashCellSize, 
                                const std::unordered_map<size_t, std::vector<glm::vec3>>& spatialHash) const; 
 
     void buildSDFGrid(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices, const TriangleHashGrid& triangleGrid);
-    float sampleSDFGrid(const glm::vec3& pos) const;
     float computePointToMeshDistance(const glm::vec3& point, const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices) const;
 };

@@ -78,6 +78,10 @@ void NodeGraphEditor::resetToDefaultGraph() {
     const auto firstOutputSocket = [](const NodeGraphNode& node) {
         return node.outputs.empty() ? NodeGraphSocketId{} : node.outputs.front().id;
     };
+    const auto inputSocketByName = [](const NodeGraphNode& node, const char* name) {
+        const NodeGraphSocket* socket = findInputSocket(node, name);
+        return socket ? socket->id : NodeGraphSocketId{};
+    };
 
     constexpr float leftColumnX = 82.5f;
     constexpr float rightColumnX = 184.8f;
@@ -123,8 +127,8 @@ void NodeGraphEditor::resetToDefaultGraph() {
     const NodeGraphSocketId voronoiGeometryInputId = inputSocketByType(voronoi.node, NodeGraphValueType::Mesh);
     const NodeGraphSocketId heatSolveVoronoiInputId = inputSocketByType(heatSolve.node, NodeGraphValueType::Volume);
     const NodeGraphSocketId heatSolveContactInputId = inputSocketByType(heatSolve.node, NodeGraphValueType::Field);
-    const NodeGraphSocketId contactEmitterInputId = inputSocketByType(contact.node, NodeGraphValueType::Emitter);
-    const NodeGraphSocketId contactReceiverInputId = inputSocketByType(contact.node, NodeGraphValueType::Receiver);
+    const NodeGraphSocketId contactEmitterInputId = inputSocketByName(contact.node, "Emitter");
+    const NodeGraphSocketId contactReceiverInputId = inputSocketByName(contact.node, "Receiver");
     const NodeGraphSocketId heatReceiverOutputId = firstOutputSocket(heatReceiver.node);
     const NodeGraphSocketId heatSourceOutputId = firstOutputSocket(heatSource.node);
     const NodeGraphSocketId contactOutputId = firstOutputSocket(contact.node);

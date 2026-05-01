@@ -3,7 +3,8 @@
 #include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
-#include "util/Structs.hpp"
+
+#include "contact/ContactGpuStructs.hpp"
 
 enum class ContactCouplingType : uint32_t {
     SourceToReceiver = 0,
@@ -11,7 +12,7 @@ enum class ContactCouplingType : uint32_t {
 };
 
 struct ContactPair {
-    ContactSampleGPU samples[7];
+    contact::Sample samples[7];
     float contactArea;
 };
 

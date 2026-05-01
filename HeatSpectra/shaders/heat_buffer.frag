@@ -37,6 +37,7 @@ layout(set = 0, binding = 11) uniform samplerBuffer heatColors;  // SurfacePoint
 const float PI = 3.14159265359;
 const int IMAX = 1024;
 const vec3 errorColor = vec3(1.0, 0.0, 1.0);
+const float TEMPERATURE_SCALE = 50.0;
 
 vec3 temperatureToColor(float t) {
     // t should be normalized between 0 and 1
@@ -299,8 +300,7 @@ int findIntrinsicTriangle(int inputTri, vec2 p, out vec3 baryCoords) {
 
 void main() {
     if (push.sourceParams.y > 0.5) {
-        float temperatureScale = 50.0;
-        float normalized = clamp(push.sourceParams.x / temperatureScale, 0.0, 1.0);
+        float normalized = clamp(push.sourceParams.x / TEMPERATURE_SCALE, 0.0, 1.0);
         vec3 heatColor = temperatureToColor(normalized);
         gAlbedo = vec4(heatColor, 1.0);
         gNormal = vec4(normalize(fragNormal), 0.0);
@@ -369,11 +369,19 @@ void main() {
     // Interpolate temperatures using barycentric coordinates
     float interpolatedTemp = baryCoords.x * temp0 + baryCoords.y * temp1 + baryCoords.z * temp2;
     
+    // Contour bands
+    float contourSpacing = 20.0;
+    float d = mod(interpolatedTemp, contourSpacing);
+    float distToContour = min(d, contourSpacing - d);
+    float tempGrad = max(fwidth(interpolatedTemp), 1e-5);
+    float contourHalfWidth = tempGrad * 1.0;
+    float contourFactor = smoothstep(0.0, contourHalfWidth, distToContour);
+
     // Convert interpolated temperature to color
-    float temperatureScale = 50.0;
-    float normalized = clamp(interpolatedTemp / temperatureScale, 0.0, 1.0);
+    float normalized = clamp(interpolatedTemp / TEMPERATURE_SCALE, 0.0, 1.0);
     vec3 heatColor = temperatureToColor(normalized);
-    
+    heatColor = mix(vec3(0.0), heatColor, contourFactor);
+
     // Write to GBuffer
     gAlbedo = vec4(heatColor, 1.0);
     gNormal = vec4(normalize(fragNormal), 0.0);

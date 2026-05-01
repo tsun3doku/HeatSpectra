@@ -9,7 +9,7 @@
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/CommandBufferManager.hpp"
-#include "util/Structs.hpp"
+#include "heat/HeatGpuStructs.hpp"
 #include "HeatSourceRuntime.hpp"
 #include "util/GeometryUtils.hpp"
 
@@ -41,7 +41,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
     const float initialTemperatureValue = uniformTemperature;
     constexpr float normalEpsilon = 1e-12f;
 
-    std::vector<SurfacePoint> surfacePoints;
+    std::vector<heat::SurfacePoint> surfacePoints;
     std::vector<uint32_t> indices;
     if (intrinsicMesh.vertices.empty() || intrinsicMesh.indices.size() < 3) {
         std::cerr << "[HeatSourceRuntime] Missing intrinsic payload for source model; source buffers left empty" << std::endl;
@@ -73,7 +73,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
 
     surfacePointsCache = surfacePoints;
 
-    const VkDeviceSize bufferSize = sizeof(SurfacePoint) * surfacePoints.size();
+    const VkDeviceSize bufferSize = sizeof(heat::SurfacePoint) * surfacePoints.size();
 
     auto [stagingBufferHandle, stagingBufferOffset] = memoryAllocator.allocate(
         bufferSize,
@@ -146,9 +146,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
         return true;
     }
 
-    std::vector<HeatSourceTriangleGPU> triangleData;
-    std::vector<SurfacePoint> triangleCentroids;
-    triangleData.reserve(trianglePrimitiveCount);
+    std::vector<heat::SurfacePoint> triangleCentroids;
     triangleCentroids.reserve(trianglePrimitiveCount);
 
     for (size_t triangleIndex = 0; triangleIndex < trianglePrimitiveCount; ++triangleIndex) {
@@ -172,13 +170,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
         const float area = 0.5f * crossLen;
         const glm::vec3 normal = (crossLen > normalEpsilon) ? (cross / crossLen) : glm::vec3(0.0f, 1.0f, 0.0f);
 
-        HeatSourceTriangleGPU triGpu{};
-        triGpu.centerArea = glm::vec4(center, area);
-        triGpu.normalPad = glm::vec4(normal, 0.0f);
-        triGpu.indices = glm::uvec4(i0, i1, i2, 0u);
-        triangleData.push_back(triGpu);
-
-        SurfacePoint centroid{};
+        heat::SurfacePoint centroid{};
         centroid.position = center;
         centroid.temperature = initialTemperatureValue;
         centroid.normal = normal;
@@ -187,8 +179,8 @@ bool HeatSourceRuntime::createSourceBuffer() {
         triangleCentroids.push_back(centroid);
     }
 
-    triangleCount_ = static_cast<uint32_t>(triangleData.size());
-    if (triangleData.empty()) {
+    triangleCount_ = static_cast<uint32_t>(triangleCentroids.size());
+    if (triangleCentroids.empty()) {
         std::cerr << "[HeatSourceRuntime] Triangle generation produced no valid triangles; skipping triangle buffers" << std::endl;
         initialized = true;
         return true;
@@ -196,62 +188,7 @@ bool HeatSourceRuntime::createSourceBuffer() {
 
     triangleCentroidsCache = triangleCentroids;
 
-    const VkDeviceSize triBufferSize = sizeof(HeatSourceTriangleGPU) * triangleData.size();
-
-    auto [triStagingHandle, triStagingOffset] = memoryAllocator.allocate(
-        triBufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-    if (triStagingHandle == VK_NULL_HANDLE) {
-        std::cerr << "[HeatSourceRuntime] Failed to allocate triangle staging buffer" << std::endl;
-        initialized = true;
-        return true;
-    }
-
-    void* triMapped = memoryAllocator.getMappedPointer(triStagingHandle, triStagingOffset);
-    if (!triMapped) {
-        std::cerr << "[HeatSourceRuntime] Failed to map triangle staging buffer" << std::endl;
-        memoryAllocator.free(triStagingHandle, triStagingOffset);
-        initialized = true;
-        return true;
-    }
-    std::memcpy(triMapped, triangleData.data(), static_cast<size_t>(triBufferSize));
-
-    auto [triBufferHandle, triBufferOffset] = memoryAllocator.allocate(
-        triBufferSize,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    if (triBufferHandle == VK_NULL_HANDLE) {
-        std::cerr << "[HeatSourceRuntime] Failed to allocate triangle GPU buffer" << std::endl;
-        memoryAllocator.free(triStagingHandle, triStagingOffset);
-        initialized = true;
-        return true;
-    }
-    triangleGeometryBuffer = triBufferHandle;
-    triangleGeometryBufferOffset_ = triBufferOffset;
-
-    VkCommandBuffer triCmd = renderCommandPool.beginCommands();
-    if (triCmd == VK_NULL_HANDLE) {
-        std::cerr << "[HeatSourceRuntime] Failed to allocate command buffer for triangle upload" << std::endl;
-        memoryAllocator.free(triStagingHandle, triStagingOffset);
-        memoryAllocator.free(triangleGeometryBuffer, triangleGeometryBufferOffset_);
-        triangleGeometryBuffer = VK_NULL_HANDLE;
-        triangleGeometryBufferOffset_ = 0;
-        initialized = true;
-        return true;
-    }
-    VkBufferCopy triRegion{};
-    triRegion.srcOffset = triStagingOffset;
-    triRegion.dstOffset = triangleGeometryBufferOffset_;
-    triRegion.size = triBufferSize;
-    vkCmdCopyBuffer(triCmd, triStagingHandle, triangleGeometryBuffer, 1, &triRegion);
-    renderCommandPool.endCommands(triCmd);
-
-    memoryAllocator.free(triStagingHandle, triStagingOffset);
-
-    const VkDeviceSize centroidBufferSize = sizeof(SurfacePoint) * triangleCentroids.size();
+    const VkDeviceSize centroidBufferSize = sizeof(heat::SurfacePoint) * triangleCentroids.size();
 
     auto [centroidStagingHandle, centroidStagingOffset] = memoryAllocator.allocate(
         centroidBufferSize,
@@ -322,12 +259,6 @@ void HeatSourceRuntime::cleanup() {
         sourceBuffer = VK_NULL_HANDLE;
     }
     sourceBufferOffset_ = 0;
-
-    if (triangleGeometryBuffer != VK_NULL_HANDLE) {
-        memoryAllocator.free(triangleGeometryBuffer, triangleGeometryBufferOffset_);
-        triangleGeometryBuffer = VK_NULL_HANDLE;
-    }
-    triangleGeometryBufferOffset_ = 0;
 
     if (triangleCentroidBuffer != VK_NULL_HANDLE) {
         memoryAllocator.free(triangleCentroidBuffer, triangleCentroidBufferOffset_);

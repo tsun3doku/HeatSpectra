@@ -17,7 +17,7 @@ public:
         bool showVoronoi = false;
         bool showPoints = false;
         uint32_t nodeCount = 0;
-        const VoronoiNode* mappedVoronoiNodes = nullptr;
+        const voronoi::Node* mappedVoronoiNodes = nullptr;
         VkBuffer nodeBuffer = VK_NULL_HANDLE;
         VkDeviceSize nodeBufferOffset = 0;
         VkBuffer seedPositionBuffer = VK_NULL_HANDLE;

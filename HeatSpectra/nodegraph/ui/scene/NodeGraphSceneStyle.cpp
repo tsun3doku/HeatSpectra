@@ -11,10 +11,6 @@ QColor valueTypeColor(NodeGraphValueType valueType) {
         return QColor(164, 172, 186);
     case NodeGraphValueType::Mesh:
         return QColor(105, 164, 231);
-    case NodeGraphValueType::Emitter:
-        return QColor(239, 124, 76);
-    case NodeGraphValueType::Receiver:
-        return QColor(246, 177, 92);
     case NodeGraphValueType::Volume:
         return QColor(86, 196, 160);
     case NodeGraphValueType::Field:

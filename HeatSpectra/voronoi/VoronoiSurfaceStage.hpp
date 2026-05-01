@@ -8,7 +8,7 @@
 
 #include "voronoi/VoronoiStageContext.hpp"
 
-class VoronoiGeometryRuntime;
+class VoronoiModelRuntime;
 
 class VoronoiSurfaceStage {
 public:
@@ -20,7 +20,7 @@ public:
     void dispatchSurfaceTemperatureUpdates(
         VkCommandBuffer commandBuffer,
         uint32_t nodeCount,
-        const std::vector<std::unique_ptr<VoronoiGeometryRuntime>>& geometryRuntimes,
+        const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes,
         bool finalWritesBufferB) const;
 
 private:

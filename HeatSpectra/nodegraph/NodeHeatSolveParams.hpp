@@ -18,6 +18,7 @@ struct HeatSolveNodeParams {
     bool resetRequested = false;
     double cellSize = 0.005;
     int voxelResolution = 128;
+    double contactThermalConductance = 16000.0;
     HeatPreviewSettings preview{};
     std::vector<HeatMaterialBindingRow> materialBindingRows;
 };

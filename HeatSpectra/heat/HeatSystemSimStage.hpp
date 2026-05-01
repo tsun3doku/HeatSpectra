@@ -1,10 +1,9 @@
 #pragma once
 
-#include "HeatContactRuntime.hpp"
 #include "HeatSystemSimRuntime.hpp"
-#include "HeatSystemRuntime.hpp"
 #include "HeatSystemStageContext.hpp"
-#include "HeatSystemVoronoiStage.hpp"
+#include "heat/HeatGpuStructs.hpp"
+#include "util/Structs.hpp"
 
 #include <memory>
 #include <vector>
@@ -12,8 +11,8 @@
 #include <vulkan/vulkan.h>
 
 class HeatReceiverRuntime;
-class HeatSystemContactStage;
 class HeatSystemSurfaceStage;
+class HeatSystemVoronoiStage;
 
 class HeatSystemSimStage {
 public:
@@ -23,11 +22,8 @@ public:
         VkCommandBuffer commandBuffer,
         uint32_t currentFrame,
         const HeatSystemSimRuntime& simRuntime,
-        const HeatSourcePushConstant& basePushConstant,
-        const std::vector<HeatContactRuntime::CouplingState>& contactCouplings,
-        const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
+        const heat::SourcePushConstant& basePushConstant,
         const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-        const HeatSystemContactStage& contactStage,
         const HeatSystemVoronoiStage& voronoiStage,
         const HeatSystemSurfaceStage& surfaceStage,
         uint32_t maxNodeNeighbors,

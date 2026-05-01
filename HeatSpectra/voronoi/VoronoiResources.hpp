@@ -37,6 +37,9 @@ public:
     VkDeviceSize interfaceNeighborIdsBufferOffset = 0;
     void* mappedInterfaceNeighborIdsData = nullptr;
 
+    VkBuffer gmlsInterfaceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsInterfaceBufferOffset = 0;
+
     VkBuffer meshTriangleBuffer = VK_NULL_HANDLE;
     VkDeviceSize meshTriangleBufferOffset = 0;
 
@@ -63,4 +66,10 @@ public:
 
     VkBuffer voxelOffsetsBuffer = VK_NULL_HANDLE;
     VkDeviceSize voxelOffsetsBufferOffset = 0;
+
+    VkDescriptorPool surfaceDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout surfaceDescriptorSetLayout = VK_NULL_HANDLE;
+
+    VkPipelineLayout surfacePipelineLayout = VK_NULL_HANDLE;
+    VkPipeline surfacePipeline = VK_NULL_HANDLE;
 };

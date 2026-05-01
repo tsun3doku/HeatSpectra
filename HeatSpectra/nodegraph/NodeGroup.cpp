@@ -33,22 +33,21 @@ void NodeGroup::execute(NodeGraphKernelContext& context) const {
     const std::string targetGroupName = NodePanelUtils::readStringParam(context.node, nodegraphparams::group::TargetName);
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
 
-    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
+    const GeometryData* inputGeometry = nullptr;
+    if (payloadRegistry && inputMeshValue && inputMeshValue->payloadHandle.key != 0 &&
+        valueTypeOf(inputMeshValue->dataType) == NodeGraphValueType::Mesh) {
+        inputGeometry = payloadRegistry->resolveGeometry(inputMeshValue->dataType, inputMeshValue->payloadHandle);
+    }
+
+    const bool hasValidInput = inputGeometry != nullptr;
+
+    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size() && outputIndex < context.node.outputs.size(); ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
-        outputValue.payloadHandle = {};
-        if (!payloadRegistry) {
-            populateMetadata(outputValue, payloadRegistry);
-            continue;
-        }
+        const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+        outputValue = {};
+        outputValue.dataType = outputSocket.contract.producedPayloadType;
 
-        if (!inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
-            populateMetadata(outputValue, payloadRegistry);
-            continue;
-        }
-
-        const GeometryData* inputGeometry = payloadRegistry->resolveGeometry(inputMeshValue->dataType, inputMeshValue->payloadHandle);
-        if (!inputGeometry) {
+        if (!payloadRegistry || outputValue.dataType != NodePayloadType::Geometry || !hasValidInput) {
             populateMetadata(outputValue, payloadRegistry);
             continue;
         }
@@ -62,9 +61,7 @@ void NodeGroup::execute(NodeGraphKernelContext& context) const {
         GeometryData updatedGeometry = *inputGeometry;
         const bool changed = applyAssignment(updatedGeometry, sourceGroupName, targetGroupName);
         if (changed) {
-            const uint64_t payloadKey = makeSocketKey(
-                context.node.id,
-                context.node.outputs[outputIndex].id);
+            const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
             outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(updatedGeometry));
         } else {
             outputValue.payloadHandle = inputMeshValue->payloadHandle;

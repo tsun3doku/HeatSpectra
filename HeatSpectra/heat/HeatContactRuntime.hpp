@@ -1,6 +1,5 @@
 #pragma once
 
-#include "HeatContactParams.hpp"
 #include "HeatSystemRuntime.hpp"
 #include "contact/ContactTypes.hpp"
 
@@ -12,6 +11,7 @@
 
 class MemoryAllocator;
 class VulkanDevice;
+class HeatReceiverRuntime;
 
 class HeatContactRuntime {
 public:
@@ -21,29 +21,14 @@ public:
         uint32_t receiverModelId = 0;
         uint32_t emitterReceiverIndex = std::numeric_limits<uint32_t>::max();
         uint32_t receiverIndex = std::numeric_limits<uint32_t>::max();
-        VkBuffer contactSampleBuffer = VK_NULL_HANDLE;
-        VkDeviceSize contactSampleBufferOffset = 0;
-        uint32_t contactSampleCount = 0;
-        VkBuffer contactCellMapBuffer = VK_NULL_HANDLE;
-        VkDeviceSize contactCellMapBufferOffset = 0;
-        uint32_t contactCellMapCount = 0;
-        VkBuffer contactCellRangeBuffer = VK_NULL_HANDLE;
-        VkDeviceSize contactCellRangeBufferOffset = 0;
-        uint32_t contactCellRangeCount = 0;
-        VkBuffer emitterTriangleIndexBuffer = VK_NULL_HANDLE;
-        VkDeviceSize emitterTriangleIndexBufferOffset = 0;
-        VkBuffer emitterVoronoiMappingBuffer = VK_NULL_HANDLE;
-        VkDeviceSize emitterVoronoiMappingBufferOffset = 0;
-        HeatContactParams params{};
-        VkBuffer paramsBuffer = VK_NULL_HANDLE;
-        VkDeviceSize paramsBufferOffset = 0;
-        VkDescriptorSet contactComputeSetA = VK_NULL_HANDLE;
-        VkDescriptorSet contactComputeSetB = VK_NULL_HANDLE;
-        bool contactDescriptorsReady = false;
+        uint32_t affectedContactNodeCount = 0;
     };
 
     const std::vector<CouplingState>& getCouplings() const { return contactCouplings; }
     std::vector<CouplingState>& getCouplingsMutable() { return contactCouplings; }
+    VkBuffer getContactConductanceBuffer() const { return contactConductanceBuffer; }
+    VkDeviceSize getContactConductanceBufferOffset() const { return contactConductanceBufferOffset; }
+    uint32_t getContactConductanceNodeCount() const { return contactConductanceNodeCount; }
 
     void setContactCouplings(
         const std::vector<uint32_t>& receiverRuntimeModelIds,
@@ -52,9 +37,13 @@ public:
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
         const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
-        const std::unordered_map<uint32_t, std::vector<uint32_t>>& receiverSurfaceCellIndicesByModelId,
-        const std::unordered_map<uint32_t, VkBuffer>& receiverSurfaceMappingBufferByModelId,
-        const std::unordered_map<uint32_t, VkDeviceSize>& receiverSurfaceMappingBufferOffsetByModelId);
+        const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
+        const std::unordered_map<uint32_t, uint32_t>& receiverVoronoiNodeOffsetByModelId,
+        const std::unordered_map<uint32_t, std::vector<uint32_t>>& receiverVoronoiSeedFlagsByModelId,
+        const std::unordered_map<uint32_t, std::vector<glm::vec3>>& receiverVoronoiSeedPositionsByModelId,
+        float contactThermalConductance,
+        bool forceRebuild,
+        uint32_t totalVoronoiNodeCount);
     bool needsRebuild() const { return couplingsDirty; }
     void clearCouplings(MemoryAllocator& memoryAllocator);
 
@@ -73,12 +62,23 @@ private:
         MemoryAllocator& memoryAllocator,
         CouplingState& coupling,
         const ContactCoupling& contactCoupling,
-        const std::vector<uint32_t>& receiverCellIndices,
-        const std::unordered_map<uint32_t, VkBuffer>& receiverSurfaceMappingBufferByModelId,
-        const std::unordered_map<uint32_t, VkDeviceSize>& receiverSurfaceMappingBufferOffsetByModelId) const;
+        const SupportingHalfedge::IntrinsicMesh& receiverMesh,
+        const SupportingHalfedge::IntrinsicMesh* emitterMesh,
+        uint32_t receiverNodeOffset,
+        uint32_t emitterNodeOffset,
+        const std::vector<uint32_t>& receiverSeedFlags,
+        const std::vector<glm::vec3>& receiverSeedPositions,
+        const std::vector<uint32_t>* emitterSeedFlags,
+        const std::vector<glm::vec3>* emitterSeedPositions,
+        float contactThermalConductance,
+        uint32_t totalVoronoiNodeCount,
+        std::vector<float>& contactConductanceSum) const;
 
     std::vector<uint32_t> activeReceiverRuntimeModelIds;
     std::vector<ContactCoupling> activeContactCouplings;
     std::vector<CouplingState> contactCouplings;
+    VkBuffer contactConductanceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize contactConductanceBufferOffset = 0;
+    uint32_t contactConductanceNodeCount = 0;
     bool couplingsDirty = true;
 };

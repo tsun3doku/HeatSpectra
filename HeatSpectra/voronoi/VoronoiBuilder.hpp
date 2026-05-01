@@ -4,8 +4,8 @@
 #include <memory>
 #include <vector>
 
-#include "domain/VoronoiParams.hpp"
 #include "voronoi/VoronoiDomain.hpp"
+#include "voronoi/VoronoiGpuStructs.hpp"
 #include "voronoi/VoronoiResources.hpp"
 
 class MemoryAllocator;
@@ -23,7 +23,8 @@ public:
     bool buildDomains(
         const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes,
         std::vector<VoronoiDomain>& receiverVoronoiDomains,
-        const VoronoiParams& params,
+        float cellSize,
+        int voxelResolution,
         uint32_t maxNeighbors) const;
 
     bool generateDiagram(
@@ -32,8 +33,9 @@ public:
         uint32_t maxNeighbors,
         VoronoiGeoCompute* voronoiGeoCompute);
     bool stageSurfaceMappings(
-        std::vector<VoronoiDomain>& receiverVoronoiDomains,
-        uint32_t maxNeighbors) const;
+        std::vector<VoronoiDomain>& receiverVoronoiDomains) const;
+
+    void setGhost(std::vector<VoronoiDomain>& receiverVoronoiDomains, bool fromVolumes);
 
 private:
     bool tryCreateStorageBuffer(
@@ -45,13 +47,13 @@ private:
         void** mapped,
         bool hostVisible = true) const;
     bool createVoronoiGeometryBuffers(
-        const std::vector<VoronoiNode>& initialNodes,
+        const std::vector<voronoi::Node>& initialNodes,
         const std::vector<glm::vec4>& seedPositions,
         const std::vector<uint32_t>& seedFlags,
         const std::vector<uint32_t>& neighborIndices,
         bool debugEnable,
         uint32_t maxNeighbors);
-    bool buildVoronoiNeighborBuffer(uint32_t maxNeighbors);
+    bool buildGMLSInterfaceBuffer(uint32_t maxNeighbors);
     bool rebuildOccupancyPointBuffer(const std::vector<VoronoiDomain>& domains) const;
 
     VulkanDevice& vulkanDevice;

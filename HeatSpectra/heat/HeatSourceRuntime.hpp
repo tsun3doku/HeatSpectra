@@ -6,8 +6,8 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 
+#include "heat/HeatGpuStructs.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
-#include "util/Structs.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;
@@ -34,7 +34,6 @@ public:
     size_t getVertexCount() const;
     size_t getIntrinsicVertexCount() const { return intrinsicVertexCount; }
     bool hasSurfaceBuffer() const { return sourceBuffer != VK_NULL_HANDLE && getVertexCount() > 0; }
-    bool hasTriangleBuffer() const { return triangleGeometryBuffer != VK_NULL_HANDLE && triangleCount_ > 0; }
 
     VkBuffer getSourceBuffer() const {
         return sourceBuffer;
@@ -44,12 +43,6 @@ public:
     }
     VkBufferView getSourceBufferView() const {
         return sourceBufferView;
-    }
-    VkBuffer getTriangleGeometryBuffer() const {
-        return triangleGeometryBuffer;
-    }
-    VkDeviceSize getTriangleGeometryBufferOffset() const {
-        return triangleGeometryBufferOffset_;
     }
 
     VkBuffer getTriangleCentroidBuffer() const {
@@ -61,12 +54,8 @@ public:
     uint32_t getTriangleCount() const {
         return triangleCount_;
     }
-    const HeatSourcePushConstant getHeatSourcePushConstant() const {
-        return heatSourcePushConstant;
-    }
-
-    void setHeatSourcePushConstant(glm::mat4 modelMatrix) {
-        heatSourcePushConstant.heatSourceModelMatrix = modelMatrix;
+    const SupportingHalfedge::IntrinsicMesh& getIntrinsicMesh() const {
+        return intrinsicMesh;
     }
 
 private:
@@ -76,19 +65,15 @@ private:
     CommandPool& renderCommandPool;
     size_t intrinsicVertexCount = 0;
 
-    HeatSourcePushConstant heatSourcePushConstant;
     VkBuffer sourceBuffer = VK_NULL_HANDLE;
     VkDeviceSize sourceBufferOffset_ = 0;
     VkBufferView sourceBufferView = VK_NULL_HANDLE;
-
-    VkBuffer triangleGeometryBuffer = VK_NULL_HANDLE;
-    VkDeviceSize triangleGeometryBufferOffset_ = 0;
 
     VkBuffer triangleCentroidBuffer = VK_NULL_HANDLE;
     VkDeviceSize triangleCentroidBufferOffset_ = 0;
     uint32_t triangleCount_ = 0;
     bool initialized = false;
     float uniformTemperature = 100.0f;
-    std::vector<SurfacePoint> surfacePointsCache;
-    std::vector<SurfacePoint> triangleCentroidsCache;
+    std::vector<heat::SurfacePoint> surfacePointsCache;
+    std::vector<heat::SurfacePoint> triangleCentroidsCache;
 };

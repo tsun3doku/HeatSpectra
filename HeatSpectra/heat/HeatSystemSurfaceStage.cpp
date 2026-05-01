@@ -2,6 +2,7 @@
 
 #include "HeatReceiverRuntime.hpp"
 #include "HeatSystemResources.hpp"
+#include "heat/HeatGpuStructs.hpp"
 #include "scene/Model.hpp"
 
 #include "util/Structs.hpp"
@@ -28,7 +29,7 @@ bool HeatSystemSurfaceStage::createDescriptorPool(uint32_t maxFramesInFlight) {
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 3;
+    poolSizes[0].descriptorCount = totalSets * 5;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = totalSets * 1;
 
@@ -52,7 +53,9 @@ bool HeatSystemSurfaceStage::createDescriptorSetLayout() {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -97,7 +100,7 @@ bool HeatSystemSurfaceStage::createPipeline() {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(HeatSourcePushConstant);
+    pushConstantRange.size = sizeof(heat::SourcePushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -144,7 +147,7 @@ void HeatSystemSurfaceStage::dispatchSurfaceTemperatureUpdates(
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.surfacePipeline);
 
-    HeatSourcePushConstant surfacePushConstant{};
+    heat::SourcePushConstant surfacePushConstant{};
     surfacePushConstant.substepIndex = 0;
 
     for (const auto& receiver : receivers) {
@@ -168,7 +171,7 @@ void HeatSystemSurfaceStage::dispatchSurfaceTemperatureUpdates(
             context.resources.surfacePipelineLayout,
             VK_SHADER_STAGE_COMPUTE_BIT,
             0,
-            sizeof(HeatSourcePushConstant),
+            sizeof(heat::SourcePushConstant),
             &surfacePushConstant);
         vkCmdBindDescriptorSets(
             commandBuffer,

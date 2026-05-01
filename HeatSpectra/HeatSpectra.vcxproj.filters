@@ -210,9 +210,6 @@
     <ClCompile Include="heat\HeatSystemVoronoiStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemContactStage.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="contact\ContactSystemRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -318,9 +315,6 @@
     <ClCompile Include="heat\HeatReceiverRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="voronoi\VoronoiGeometryRuntime.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="voronoi\VoronoiSurfaceStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -328,9 +322,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="voronoi\VoronoiModelRuntime.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="voronoi\VoronoiSurfaceRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemPresets.cpp">
@@ -722,9 +713,6 @@
     <None Include="shaders\point_cloud.vert">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="shaders\heat_contact_centroid.comp">
-      <Filter>Shaders</Filter>
-    </None>
     <None Include="shaders\heat_surface.slang">
       <Filter>Shaders</Filter>
     </None>
@@ -895,9 +883,6 @@
     <ClInclude Include="heat\HeatSystemVoronoiStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatSystemContactStage.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="contact\ContactSystemRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -914,6 +899,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemComputeController.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatGpuStructs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\VoronoiSystem.hpp">
@@ -1018,16 +1006,10 @@
     <ClInclude Include="heat\HeatReceiverRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiGeometryRuntime.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="voronoi\VoronoiStageContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\VoronoiSurfaceStage.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="voronoi\VoronoiSystemResources.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\VoronoiBuilder.hpp">
@@ -1039,10 +1021,10 @@
     <ClInclude Include="voronoi\VoronoiModelRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiResources.hpp">
+    <ClInclude Include="voronoi\VoronoiGpuStructs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiSurfaceRuntime.hpp">
+    <ClInclude Include="voronoi\VoronoiResources.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemPresets.hpp">
@@ -1267,19 +1249,13 @@
     <ClInclude Include="render\WindowRuntimeState.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatContactParams.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="contact\ContactTypes.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="contact\ContactGpuStructs.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="domain\ContactData.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="domain\RemeshParams.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="domain\VoronoiParams.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nodegraph\NodeGraphPayloadTypes.hpp">

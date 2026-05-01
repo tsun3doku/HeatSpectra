@@ -3,9 +3,8 @@
 #include "HeatSystemPresets.hpp"
 #include "heat/VoronoiSystem.hpp"
 #include "mesh/remesher/SupportingHalfedge.hpp"
-#include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "runtime/RuntimeProducts.hpp"
-#include "voronoi/VoronoiGeometryRuntime.hpp"
+#include "voronoi/VoronoiModelRuntime.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -31,7 +30,7 @@ public:
         std::vector<std::vector<glm::vec3>> receiverGeometryPositions;
         std::vector<std::vector<uint32_t>> receiverGeometryTriangleIndices;
         std::vector<SupportingHalfedge::IntrinsicMesh> receiverIntrinsicMeshes;
-        std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>> receiverSurfaceVertices;
+        std::vector<std::vector<VoronoiModelRuntime::SurfaceVertex>> receiverSurfaceVertices;
         std::vector<std::vector<uint32_t>> receiverIntrinsicTriangleIndices;
         std::vector<uint32_t> receiverRuntimeModelIds;
         std::vector<VkBuffer> meshVertexBuffers;

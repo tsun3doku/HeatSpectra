@@ -70,7 +70,7 @@ void ContactSystemRuntime::clearPairBuffer(MemoryAllocator& memoryAllocator) {
     coupling.mappedContactPairs = nullptr;
 }
 
-bool ContactSystemRuntime::recreateProductBuffer(
+bool ContactSystemRuntime::recreateContactPairBuffer(
     MemoryAllocator& memoryAllocator,
     VulkanDevice& vulkanDevice,
     VkBuffer& buffer,
@@ -212,7 +212,7 @@ bool ContactSystemRuntime::buildCoupling(
     }
 
     void* mappedPairData = nullptr;
-    if (!recreateProductBuffer(
+    if (!recreateContactPairBuffer(
             memoryAllocator,
             vulkanDevice,
             contactPairBuffer,

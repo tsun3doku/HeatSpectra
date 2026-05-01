@@ -62,7 +62,7 @@ const char* NodeTransform::typeId() const {
 }
 
 void NodeTransform::execute(NodeGraphKernelContext& context) const {
-    const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
+    const NodeGraphSocket* meshSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
     const EvaluatedSocketValue* inputMesh =
         meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
     const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);
@@ -72,15 +72,18 @@ void NodeTransform::execute(NodeGraphKernelContext& context) const {
     NodePayloadRegistry* const payloadRegistry = context.executionState.services.payloadRegistry;
     const std::array<float, 16> localTransform = buildLocalTransformArray(context.node);
 
-    for (std::size_t outputIndex = 0; outputIndex < context.outputs.size(); ++outputIndex) {
+    for (std::size_t outputIndex = 0;
+         outputIndex < context.outputs.size() && outputIndex < context.node.outputs.size();
+         ++outputIndex) {
         NodeDataBlock& outputValue = context.outputs[outputIndex];
-        outputValue.dataType = context.node.outputs[outputIndex].contract.producedPayloadType;
-        outputValue.payloadHandle = {};
-        const uint64_t payloadKey = makeSocketKey(
-            context.node.id,
-            context.node.outputs[outputIndex].id);
+        const NodeGraphSocket& outputSocket = context.node.outputs[outputIndex];
+        outputValue = {};
+        outputValue.dataType = outputSocket.contract.producedPayloadType;
 
-        if (!payloadRegistry || !inputMeshValue || inputMeshValue->payloadHandle.key == 0) {
+        if (!payloadRegistry ||
+            outputValue.dataType != NodePayloadType::Geometry ||
+            !inputMeshValue ||
+            inputMeshValue->payloadHandle.key == 0) {
             populateMetadata(outputValue, payloadRegistry);
             continue;
         }
@@ -95,13 +98,14 @@ void NodeTransform::execute(NodeGraphKernelContext& context) const {
         forwardedGeometry.localToWorld = NodeModelTransform::toMatrixArray(
             NodeModelTransform::toMat4(forwardedGeometry.localToWorld) *
             NodeModelTransform::toMat4(localTransform));
+        const uint64_t payloadKey = makeSocketKey(context.node.id, outputSocket.id);
         outputValue.payloadHandle = payloadRegistry->store(payloadKey, std::move(forwardedGeometry));
         populateMetadata(outputValue, payloadRegistry);
     }
 }
 
 bool NodeTransform::computeInputHash(const NodeGraphKernelHashContext& context, uint64_t& outHash) const {
-    const NodeGraphSocket* meshSocket = findInputSocket(context.node, "Mesh");
+    const NodeGraphSocket* meshSocket = findInputSocket(context.node, NodeGraphValueType::Mesh);
     const EvaluatedSocketValue* inputMesh =
         meshSocket ? readEvaluatedInput(context.node, meshSocket->id, context.executionState) : nullptr;
     const NodeDataBlock* inputMeshValue = readInputValue(inputMesh);

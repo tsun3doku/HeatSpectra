@@ -1,6 +1,5 @@
 #pragma once
 
-#include "domain/VoronoiParams.hpp"
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 
 #include <vector>
@@ -13,7 +12,8 @@
 
 struct VoronoiData {
     uint64_t payloadHash = 0;
-    VoronoiParams params{};
+    float cellSize = 0.005f;
+    int voxelResolution = 128;
     std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<uint64_t> receiverPayloadHashes;
     bool active = false;

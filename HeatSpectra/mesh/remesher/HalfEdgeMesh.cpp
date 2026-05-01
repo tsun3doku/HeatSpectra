@@ -649,6 +649,72 @@ bool HalfEdgeMesh::isManifold() const {
 	return true;
 }
 
+bool HalfEdgeMesh::isFlippableEdge(uint32_t edgeIdx) const {
+	if (edgeIdx >= edges.size()) {
+		return false;
+	}
+	
+	uint32_t diagonalHE = edges[edgeIdx].halfEdgeIdx;
+	if (diagonalHE >= halfEdges.size()) {
+		return false;
+	}
+	uint32_t diagonal2HE = halfEdges[diagonalHE].opposite;
+	if (diagonal2HE == INVALID_INDEX) {
+		return false;
+	}
+
+	// Get the HEs of both triangles 
+	uint32_t ha1 = diagonalHE;
+	uint32_t ha2 = halfEdges[ha1].next;
+	uint32_t ha3 = halfEdges[ha2].next;
+	if (ha3 >= halfEdges.size() || halfEdges[ha3].next != ha1) {
+		return false;
+	}
+	uint32_t hb1 = diagonal2HE;
+	uint32_t hb2 = halfEdges[hb1].next;
+	uint32_t hb3 = halfEdges[hb2].next;
+	if (hb3 >= halfEdges.size() || halfEdges[hb3].next != hb1) {
+		return false;
+	}
+
+	// Manifold checks 
+	if (halfEdges[hb1].opposite != ha1) {
+		return false;
+	}
+	if (ha2 == hb1 || hb2 == ha1) {
+		return false;
+	}
+
+	// Vertices and faces
+	uint32_t va = halfEdges[ha1].origin;
+	uint32_t vb = halfEdges[hb1].origin;
+	uint32_t vc = halfEdges[ha3].origin;
+	uint32_t vd = halfEdges[hb3].origin;
+
+	// Prevent trivials
+	if (va == vb || va == vc || va == vd || vb == vc || vb == vd || vc == vd) {
+		return false;
+	}
+
+	uint32_t fa = halfEdges[ha1].face;
+	uint32_t fb = halfEdges[hb1].face;
+	if (fa == INVALID_INDEX || fb == INVALID_INDEX || fa >= faces.size() || fb >= faces.size()) {
+		return false;
+	}
+
+	// Layout the diamond using current intrinsic lengths 
+	auto positions = layoutDiamond(diagonalHE);
+	// Compute new edge length 
+	double newLength = glm::distance(positions[2], positions[3]);
+
+	// Check if new length is valid
+	if (!std::isfinite(newLength) || newLength < 1e-10) {
+		return false;
+	}
+
+	return true;
+}
+
 bool HalfEdgeMesh::flipEdge(uint32_t edgeIdx) {
 	if (edgeIdx >= edges.size()) {
 		return false;
@@ -698,13 +764,14 @@ bool HalfEdgeMesh::flipEdge(uint32_t edgeIdx) {
 
 	uint32_t fa = halfEdges[ha1].face;
 	uint32_t fb = halfEdges[hb1].face;
+	if (fa == INVALID_INDEX || fb == INVALID_INDEX || fa >= faces.size() || fb >= faces.size()) {
+		return false;
+	}
 
 	// Layout the diamond using current intrinsic lengths 
 	auto positions = layoutDiamond(diagonalHE);
 	// Compute new edge length 
 	double newLength = glm::distance(positions[2], positions[3]);
-
-	// Check if new length is valid
 	if (!std::isfinite(newLength) || newLength < 1e-10) {
 		return false;
 	}
@@ -794,49 +861,32 @@ bool HalfEdgeMesh::isDelaunayEdge(uint32_t heIdx) const {
 	if (he.opposite == INVALID_INDEX)
 		return true;
 
-	// Layout the quad around this HE
-	auto quad = layoutDiamond(heIdx);
-	const glm::dvec2& p0 = quad[0], & p1 = quad[1], & p2 = quad[2], & p3 = quad[3];
+	uint32_t heA = heIdx;
+	uint32_t heB = he.opposite;
+	if (heB >= halfEdges.size()) {
+		return true;
+	}
 
-	// Precalculate squared norms
-	double p0_sq = double(p0.x) * p0.x + double(p0.y) * p0.y;
-	double p1_sq = double(p1.x) * p1.x + double(p1.y) * p1.y;
-	double p2_sq = double(p2.x) * p2.x + double(p2.y) * p2.y;
-	double p3_sq = double(p3.x) * p3.x + double(p3.y) * p3.y;
+	uint32_t nextA = halfEdges[heA].next;
+	uint32_t nextB = halfEdges[heB].next;
+	if (nextA >= halfEdges.size() || nextB >= halfEdges.size()) {
+		return true;
+	}
 
-	// Calculate the 4x4 incircle determinant by cofactor expansion
-	double det = 0.0;
-	// Row p0.x
-	det += p0.x * (
-		p1.y * (p2_sq - p3_sq)
-		- p2.y * (p1_sq - p3_sq)
-		+ p3.y * (p1_sq - p2_sq)
-		);
-	// Row p0.y
-	det -= p0.y * (
-		p1.x * (p2_sq - p3_sq)
-		- p2.x * (p1_sq - p3_sq)
-		+ p3.x * (p1_sq - p2_sq)
-		);
-	// Row p0_sq
-	det += p0_sq * (
-		p1.x * (p2.y - p3.y)
-		- p2.x * (p1.y - p3.y)
-		+ p3.x * (p1.y - p2.y)
-		);
-	// Row constant
-	det -= 1.0 * (
-		p1.x * (p2.y * p3_sq - p3.y * p2_sq)
-		- p2.x * (p1.y * p3_sq - p3.y * p1_sq)
-		+ p3.x * (p1.y * p2_sq - p2.y * p1_sq)
-		);
+	uint32_t oppA = halfEdges[nextA].next;
+	uint32_t oppB = halfEdges[nextB].next;
+	if (oppA >= halfEdges.size() || oppB >= halfEdges.size()) {
+		return true;
+	}
 
-	// If det > 0, p3 is inside therefore not delaunay
+	// Intrinsic Delaunay test: the sum of angles opposite the edge should be <= pi.
+	// This matches the GC edge cotan/angle-sum test and avoids unstable incircle determinants on thin diamonds.
+	const double angleSum = halfEdges[oppA].cornerAngle + halfEdges[oppB].cornerAngle;
 	const double EPS = 1e-10;
-	return det <= EPS;
+	return angleSum <= glm::pi<double>() + EPS;
 }
 
-int HalfEdgeMesh::makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges) {
+int HalfEdgeMesh::makeDelaunay(std::vector<uint32_t>* flippedEdges) {
 	std::vector<uint32_t> allEdges;
 	allEdges.reserve(edges.size());
 	for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
@@ -844,87 +894,83 @@ int HalfEdgeMesh::makeDelaunay(int maxIterations, std::vector<uint32_t>* flipped
 			allEdges.push_back(edgeIdx);
 		}
 	}
-	return makeDelaunayLocal(maxIterations, allEdges, flippedEdges);
+	return makeDelaunayLocal(allEdges, flippedEdges);
 }
 
-int HalfEdgeMesh::makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
+int HalfEdgeMesh::makeDelaunayLocal(const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
 	int totalFlips = 0;
+	std::queue<uint32_t> queueEdges;
+	std::unordered_set<uint32_t> inQueueEdges;
 
-	std::unordered_set<std::pair<uint32_t, uint32_t>, pair_hash> flippedAB;
-
-	for (int iter = 0; iter < maxIterations; ++iter) {
-		std::queue<uint32_t> queueEdges;
-		std::unordered_set<uint32_t> inQueueEdges;
-		
-		for (uint32_t edgeIdx : seedEdges) {
-			if (edgeIdx >= edges.size()) {
-				continue;
-			}
-
-			uint32_t he = edges[edgeIdx].halfEdgeIdx;
-			if (he != INVALID_INDEX && !isDelaunayEdge(he) && !inQueueEdges.count(edgeIdx)) {
-				queueEdges.push(edgeIdx);
-				inQueueEdges.insert(edgeIdx);
-			}
+	for (uint32_t edgeIdx : seedEdges) {
+		if (edgeIdx >= edges.size()) {
+			continue;
 		}
 
-		if (queueEdges.empty()) 
-			break;
+		uint32_t he = edges[edgeIdx].halfEdgeIdx;
+		if (he != INVALID_INDEX && !inQueueEdges.count(edgeIdx)) {
+			queueEdges.push(edgeIdx);
+			inQueueEdges.insert(edgeIdx);
+		}
+	}
 
-		// 2) Process 
-		int flipsThisIter = 0;
-		while (!queueEdges.empty()) {
-			uint32_t edgeIdx = queueEdges.front();
-			queueEdges.pop();
-			inQueueEdges.erase(edgeIdx);
+	while (!queueEdges.empty()) {
+		uint32_t edgeIdx = queueEdges.front();
+		queueEdges.pop();
+		inQueueEdges.erase(edgeIdx);
 
-			if (edgeIdx >= edges.size()) 
-				continue;
+		if (edgeIdx >= edges.size()) 
+			continue;
 			
-			uint32_t he = edges[edgeIdx].halfEdgeIdx;
+		uint32_t he = edges[edgeIdx].halfEdgeIdx;
 
-			if (he >= halfEdges.size() || isDelaunayEdge(he))
-				continue;
+		if (he == INVALID_INDEX || he >= halfEdges.size() || isDelaunayEdge(he))
+			continue;
 
-			// Avoid flipping the same undirected edge twice
-			auto vA = halfEdges[he].origin;
-			const uint32_t heNext = halfEdges[he].next;
-			if (heNext == INVALID_INDEX || heNext >= halfEdges.size()) {
+		if (flipEdge(edgeIdx)) { 
+			++totalFlips;
+
+			if (flippedEdges) {
+				flippedEdges->push_back(edgeIdx);
+			}
+
+			he = edges[edgeIdx].halfEdgeIdx;
+			if (he == INVALID_INDEX || he >= halfEdges.size()) {
 				continue;
 			}
-			auto vB = halfEdges[heNext].origin;
-			auto key = std::minmax(vA, vB);
 
-			if (flippedAB.count(key)) 
-				continue;
+			const uint32_t opp = halfEdges[he].opposite;
+			const uint32_t faceA = halfEdges[he].face;
+			const uint32_t faceB = (opp != INVALID_INDEX && opp < halfEdges.size()) ? halfEdges[opp].face : INVALID_INDEX;
+			const uint32_t affectedFaces[2] = { faceA, faceB };
 
-			if (flipEdge(edgeIdx)) { 
-				++flipsThisIter;
-				++totalFlips;
-				flippedAB.insert(key);
-
-				// Track which edge was flipped if requested
-				if (flippedEdges) {
-					flippedEdges->push_back(edgeIdx);
+			for (uint32_t faceIdx : affectedFaces) {
+				if (faceIdx == INVALID_INDEX || faceIdx >= faces.size()) {
+					continue;
 				}
 
-				// Enqueue neighboring edges
-				for (auto nhe : getNeighboringHalfEdges(he)) {
+				uint32_t faceHe = faces[faceIdx].halfEdgeIdx;
+				if (faceHe == INVALID_INDEX || faceHe >= halfEdges.size()) {
+					continue;
+				}
+
+				uint32_t curr = faceHe;
+				for (int i = 0; i < 3; ++i) {
+					if (curr == INVALID_INDEX || curr >= halfEdges.size()) {
+						break;
+					}
+
+					uint32_t nhe = curr;
 					uint32_t neighEdgeIdx = getEdgeFromHalfEdge(nhe);
 					if (neighEdgeIdx != INVALID_INDEX && !inQueueEdges.count(neighEdgeIdx)) {
 						queueEdges.push(neighEdgeIdx);
 						inQueueEdges.insert(neighEdgeIdx);
 					}
+
+					curr = halfEdges[curr].next;
 				}
 			}
 		}
-
-		// 3) Finished if no more flips
-		if (flipsThisIter == 0)
-			break;
-
-		// 4) Prepare for next iteration
-		flippedAB.clear();
 	}
 
 	return totalFlips;
@@ -941,6 +987,11 @@ uint32_t HalfEdgeMesh::addIntrinsicVertex() {
 }
 
 uint32_t HalfEdgeMesh::splitTriangleIntrinsic(uint32_t faceIdx, double r0, double r1, double r2) {
+	if (!(std::isfinite(r0) && std::isfinite(r1) && std::isfinite(r2)) ||
+		r0 <= 1e-12 || r1 <= 1e-12 || r2 <= 1e-12) {
+		return INVALID_INDEX;
+	}
+
 	if (faceIdx >= faces.size() || faces[faceIdx].halfEdgeIdx == INVALID_INDEX)
 		return INVALID_INDEX;
 
@@ -1313,18 +1364,6 @@ double HalfEdgeMesh::lawOfCosinesAngle(double a, double b, double opposite) cons
 	return std::acos(q);
 }
 
-void HalfEdgeMesh::addNeighboringHalfEdgesFromVertex(uint32_t vertexIdx, uint32_t excludedA, uint32_t excludedB, std::vector<uint32_t>& out) const {
-	std::vector<uint32_t> vertexHEs = getVertexHalfEdges(vertexIdx);
-	for (uint32_t h : vertexHEs) {
-		if (h == excludedA || h == excludedB) {
-			continue;
-		}
-		if (std::find(out.begin(), out.end(), h) == out.end()) {
-			out.push_back(h);
-		}
-	}
-}
-
 uint32_t HalfEdgeMesh::getNextAroundVertex(uint32_t halfEdgeIdx) const {
 	// Standardized CCW traversal around a vertex
 	if (halfEdgeIdx == INVALID_INDEX || halfEdgeIdx >= halfEdges.size()) {
@@ -1442,21 +1481,6 @@ std::vector<uint32_t> HalfEdgeMesh::getFaceVertices(uint32_t faceIdx) const {
 	}
 
 	return vertexIndices;
-}
-
-std::vector<uint32_t> HalfEdgeMesh::getNeighboringHalfEdges(uint32_t heIdx) const {
-	std::vector<uint32_t> out;
-	if (heIdx >= halfEdges.size()) return out;
-
-	// The two endpoints of the flipped halfedge
-	uint32_t vA = halfEdges[heIdx].origin;
-	uint32_t vB = halfEdges[halfEdges[heIdx].next].origin;
-	uint32_t opp = halfEdges[heIdx].opposite;
-
-	// Collect HEs from each vertex
-	addNeighboringHalfEdgesFromVertex(vA, heIdx, opp, out);
-	addNeighboringHalfEdgesFromVertex(vB, heIdx, opp, out);
-	return out;
 }
 
 std::pair<uint32_t, uint32_t> HalfEdgeMesh::getEdgeVertices(uint32_t edgeIdx) const {

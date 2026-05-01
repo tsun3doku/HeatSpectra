@@ -41,6 +41,7 @@ struct HeatData {
     std::vector<NodeDataHandle> sourceHandles;
     std::vector<NodeDataHandle> receiverMeshHandles;
     std::vector<HeatMaterialBinding> materialBindings;
+    float contactThermalConductance = 16000.0f;
     bool active = false;
     bool paused = false;
     bool resetRequested = false;

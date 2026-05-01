@@ -1,6 +1,7 @@
 #include "HeatSystemDebugStage.hpp"
 
 #include "HeatSystem.hpp"
+#include "voronoi/VoronoiGpuStructs.hpp"
 
 #include <fstream>
 #include <iomanip>
@@ -26,7 +27,7 @@ void HeatSystemDebugStage::exportDebugCellsToOBJ(bool debugEnable, uint32_t voro
         return;
     }
 
-    DebugCellGeometry* cells = static_cast<DebugCellGeometry*>(mappedDebugCellGeometryData);
+    voronoi::DebugCellGeometry* cells = static_cast<voronoi::DebugCellGeometry*>(mappedDebugCellGeometryData);
 
     std::ofstream obj("voronoi_unrestricted_debug_cells.obj");
     if (!obj) {
@@ -41,8 +42,6 @@ void HeatSystemDebugStage::exportDebugCellsToOBJ(bool debugEnable, uint32_t voro
     obj << "o Voronoi_Cells_Combined\n";
     uint32_t offset = 1;
     uint32_t exportCount = 0;
-
-    std::cout << "[HeatSystem] Writing OBJ file (checking " << voronoiNodeCount << " cells)..." << std::endl;
 
     for (uint32_t i = 0; i < voronoiNodeCount; i++) {
         if (cells[i].vertexCount == 0) {
@@ -62,7 +61,6 @@ void HeatSystemDebugStage::exportDebugCellsToOBJ(bool debugEnable, uint32_t voro
     }
 
     obj.close();
-    std::cout << "Exported " << exportCount << " cells to: voronoi_unrestricted_debug_cells.obj\n";
 }
 
 void HeatSystemDebugStage::exportCellVolumes(bool debugEnable, uint32_t voronoiNodeCount, void* mappedVoronoiNodeData) {
@@ -70,14 +68,12 @@ void HeatSystemDebugStage::exportCellVolumes(bool debugEnable, uint32_t voronoiN
         return;
     }
 
-    std::cout << "[HeatSystem] Exporting cell volumes..." << std::endl;
-
     if (!mappedVoronoiNodeData) {
-        std::cerr << "[HeatSystem] Error: VoronoiNode buffer not mapped" << std::endl;
+        std::cerr << "[HeatSystem] Error: voronoi::Node buffer not mapped" << std::endl;
         return;
     }
 
-    VoronoiNode* nodes = static_cast<VoronoiNode*>(mappedVoronoiNodeData);
+    voronoi::Node* nodes = static_cast<voronoi::Node*>(mappedVoronoiNodeData);
 
     std::ofstream volumeFile("cell_volumes.txt");
     volumeFile << "# Cell Index -> Restricted Volume\n";
@@ -87,8 +83,6 @@ void HeatSystemDebugStage::exportCellVolumes(bool debugEnable, uint32_t voronoiN
     }
 
     volumeFile.close();
-    std::cout << "[HeatSystem] Exported " << voronoiNodeCount
-              << " cell volumes to: cell_volumes.txt" << std::endl;
 }
 
 void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voronoiNodeCount, void* mappedVoronoiNodeData, void* mappedVoronoiDumpData) {
@@ -96,20 +90,18 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
         return;
     }
 
-    std::cout << "[HeatSystem] Exporting Voronoi debug dump..." << std::endl;
-
     if (!mappedVoronoiDumpData) {
-        std::cerr << "[HeatSystem] Error: VoronoiDumpInfo buffer not mapped" << std::endl;
+        std::cerr << "[HeatSystem] Error: voronoi::DumpInfo buffer not mapped" << std::endl;
         return;
     }
 
-    VoronoiDumpInfo* dumpInfos = static_cast<VoronoiDumpInfo*>(mappedVoronoiDumpData);
+    voronoi::DumpInfo* dumpInfos = static_cast<voronoi::DumpInfo*>(mappedVoronoiDumpData);
 
     double totalRestrictedVolumePos = 0.0;
     double totalRestrictedVolumeNegAbs = 0.0;
     uint32_t negativeVolumeCount = 0;
     if (mappedVoronoiNodeData) {
-        const VoronoiNode* nodes = static_cast<const VoronoiNode*>(mappedVoronoiNodeData);
+        const voronoi::Node* nodes = static_cast<const voronoi::Node*>(mappedVoronoiNodeData);
         for (uint32_t i = 0; i < voronoiNodeCount; i++) {
             const double v = (double)nodes[i].volume;
             if (v > 0.0) {
@@ -121,7 +113,7 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
         }
     }
 
-    for (uint32_t slot = 0; slot < DEBUG_DUMP_CELL_COUNT; slot++) {
+    for (uint32_t slot = 0; slot < voronoi::DEBUG_DUMP_CELL_COUNT; slot++) {
         dumpInfos[slot].totalMeshVolume = static_cast<float>(totalRestrictedVolumePos);
         dumpInfos[slot].negativeVolumeCellCount = negativeVolumeCount;
         dumpInfos[slot].negativeVolumeSumAbs = static_cast<float>(totalRestrictedVolumeNegAbs);
@@ -134,8 +126,8 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
     dumpFile << "Negative volume cells: " << negativeVolumeCount << " Sum =" << totalRestrictedVolumeNegAbs << ")\n";
     dumpFile << "\n";
 
-    for (uint32_t slot = 0; slot < DEBUG_DUMP_CELL_COUNT; slot++) {
-        const VoronoiDumpInfo& info = dumpInfos[slot];
+    for (uint32_t slot = 0; slot < voronoi::DEBUG_DUMP_CELL_COUNT; slot++) {
+        const voronoi::DumpInfo& info = dumpInfos[slot];
 
         if (info.cellID == 0) {
             continue;
@@ -147,8 +139,8 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
         dumpFile << "  Unrestricted: " << info.unrestrictedVolume << "\n";
         dumpFile << "  Restricted:   " << info.restrictedVolume << "\n";
         dumpFile << "Plane Areas (" << info.planeAreaCount << "):\n";
-        for (uint32_t i = 0; i < info.planeAreaCount && i < DEBUG_MAX_PLANE_AREAS; ++i) {
-            const DebugPlaneArea& planeArea = info.planeAreas[i];
+        for (uint32_t i = 0; i < info.planeAreaCount && i < voronoi::DEBUG_MAX_PLANE_AREAS; ++i) {
+            const voronoi::DebugPlaneArea& planeArea = info.planeAreas[i];
             dumpFile << "  Plane " << planeArea.planeIndex
                      << " -> Neighbor " << planeArea.neighborCellID
                      << ", Area: " << planeArea.area << "\n";
@@ -157,5 +149,4 @@ void HeatSystemDebugStage::exportVoronoiDumpInfo(bool debugEnable, uint32_t voro
     }
 
     dumpFile.close();
-    std::cout << "[HeatSystem] Exported debug dump to: voronoi_debug_dump.txt" << std::endl;
 }

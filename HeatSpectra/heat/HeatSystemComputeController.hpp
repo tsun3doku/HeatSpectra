@@ -26,6 +26,7 @@ public:
         bool active = false;
         bool paused = false;
         bool resetRequested = false;
+        float contactThermalConductance = 16000.0f;
         std::vector<SupportingHalfedge::IntrinsicMesh> sourceIntrinsicMeshes;
         std::vector<uint32_t> sourceRuntimeModelIds;
         std::vector<SupportingHalfedge::IntrinsicMesh> receiverIntrinsicMeshes;
@@ -43,25 +44,23 @@ public:
         std::vector<RuntimeThermalMaterial> runtimeThermalMaterials;
         std::unordered_map<uint32_t, float> sourceTemperatureByRuntimeId;
         uint32_t voronoiNodeCount = 0;
-        const VoronoiNode* voronoiNodes = nullptr;
+        const voronoi::Node* voronoiNodes = nullptr;
         VkBuffer voronoiNodeBuffer = VK_NULL_HANDLE;
         VkDeviceSize voronoiNodeBufferOffset = 0;
-        VkBuffer voronoiNeighborBuffer = VK_NULL_HANDLE;
-        VkDeviceSize voronoiNeighborBufferOffset = 0;
-        VkBuffer neighborIndicesBuffer = VK_NULL_HANDLE;
-        VkDeviceSize neighborIndicesBufferOffset = 0;
-        VkBuffer interfaceAreasBuffer = VK_NULL_HANDLE;
-        VkDeviceSize interfaceAreasBufferOffset = 0;
-        VkBuffer interfaceNeighborIdsBuffer = VK_NULL_HANDLE;
-        VkDeviceSize interfaceNeighborIdsBufferOffset = 0;
+        VkBuffer gmlsInterfaceBuffer = VK_NULL_HANDLE;
+        VkDeviceSize gmlsInterfaceBufferOffset = 0;
         VkBuffer seedFlagsBuffer = VK_NULL_HANDLE;
         VkDeviceSize seedFlagsBufferOffset = 0;
         std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeOffsetByModelId;
         std::unordered_map<uint32_t, uint32_t> receiverVoronoiNodeCountByModelId;
-        std::unordered_map<uint32_t, VkBuffer> receiverVoronoiSurfaceMappingBufferByModelId;
-        std::unordered_map<uint32_t, VkDeviceSize> receiverVoronoiSurfaceMappingBufferOffsetByModelId;
-        std::unordered_map<uint32_t, std::vector<uint32_t>> receiverVoronoiSurfaceCellIndicesByModelId;
+        std::unordered_map<uint32_t, VkBuffer> receiverGMLSSurfaceStencilBufferByModelId;
+        std::unordered_map<uint32_t, VkDeviceSize> receiverGMLSSurfaceStencilBufferOffsetByModelId;
+        std::unordered_map<uint32_t, VkBuffer> receiverGMLSSurfaceWeightBufferByModelId;
+        std::unordered_map<uint32_t, VkDeviceSize> receiverGMLSSurfaceWeightBufferOffsetByModelId;
+        std::unordered_map<uint32_t, VkBuffer> receiverGMLSSurfaceGradientWeightBufferByModelId;
+        std::unordered_map<uint32_t, VkDeviceSize> receiverGMLSSurfaceGradientWeightBufferOffsetByModelId;
         std::unordered_map<uint32_t, std::vector<uint32_t>> receiverVoronoiSeedFlagsByModelId;
+        std::unordered_map<uint32_t, std::vector<glm::vec3>> receiverVoronoiSeedPositionsByModelId;
         std::vector<ContactCoupling> contactCouplings;
         uint64_t computeHash = 0;
     };
@@ -115,6 +114,7 @@ inline uint64_t buildComputeHash(const HeatSystemComputeController::Config& conf
         hash = RuntimeProductHash::mixPodVector(hash, mesh.triangles);
     }
     hash = RuntimeProductHash::mixPodVector(hash, config.sourceRuntimeModelIds);
+    hash = RuntimeProductHash::mixPod(hash, config.contactThermalConductance);
     hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverIntrinsicMeshes.size()));
     for (const SupportingHalfedge::IntrinsicMesh& mesh : config.receiverIntrinsicMeshes) {
         hash = RuntimeProductHash::mixPodVector(hash, mesh.vertices);
@@ -144,18 +144,12 @@ inline uint64_t buildComputeHash(const HeatSystemComputeController::Config& conf
         hash = RuntimeProductHash::mixBytes(
             hash,
             config.voronoiNodes,
-            sizeof(VoronoiNode) * config.voronoiNodeCount);
+            sizeof(voronoi::Node) * config.voronoiNodeCount);
     }
     hash = RuntimeProductHash::mixPod(hash, config.voronoiNodeBuffer);
     hash = RuntimeProductHash::mixPod(hash, config.voronoiNodeBufferOffset);
-    hash = RuntimeProductHash::mixPod(hash, config.voronoiNeighborBuffer);
-    hash = RuntimeProductHash::mixPod(hash, config.voronoiNeighborBufferOffset);
-    hash = RuntimeProductHash::mixPod(hash, config.neighborIndicesBuffer);
-    hash = RuntimeProductHash::mixPod(hash, config.neighborIndicesBufferOffset);
-    hash = RuntimeProductHash::mixPod(hash, config.interfaceAreasBuffer);
-    hash = RuntimeProductHash::mixPod(hash, config.interfaceAreasBufferOffset);
-    hash = RuntimeProductHash::mixPod(hash, config.interfaceNeighborIdsBuffer);
-    hash = RuntimeProductHash::mixPod(hash, config.interfaceNeighborIdsBufferOffset);
+    hash = RuntimeProductHash::mixPod(hash, config.gmlsInterfaceBuffer);
+    hash = RuntimeProductHash::mixPod(hash, config.gmlsInterfaceBufferOffset);
     hash = RuntimeProductHash::mixPod(hash, config.seedFlagsBuffer);
     hash = RuntimeProductHash::mixPod(hash, config.seedFlagsBufferOffset);
     hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiNodeOffsetByModelId.size()));
@@ -168,25 +162,45 @@ inline uint64_t buildComputeHash(const HeatSystemComputeController::Config& conf
         hash = RuntimeProductHash::mixPod(hash, id);
         hash = RuntimeProductHash::mixPod(hash, count);
     }
-    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceMappingBufferByModelId.size()));
-    for (const auto& [id, buffer] : config.receiverVoronoiSurfaceMappingBufferByModelId) {
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceStencilBufferByModelId.size()));
+    for (const auto& [id, buffer] : config.receiverGMLSSurfaceStencilBufferByModelId) {
         hash = RuntimeProductHash::mixPod(hash, id);
         hash = RuntimeProductHash::mixPod(hash, buffer);
     }
-    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceMappingBufferOffsetByModelId.size()));
-    for (const auto& [id, offset] : config.receiverVoronoiSurfaceMappingBufferOffsetByModelId) {
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceStencilBufferOffsetByModelId.size()));
+    for (const auto& [id, offset] : config.receiverGMLSSurfaceStencilBufferOffsetByModelId) {
         hash = RuntimeProductHash::mixPod(hash, id);
         hash = RuntimeProductHash::mixPod(hash, offset);
     }
-    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSurfaceCellIndicesByModelId.size()));
-    for (const auto& [id, indices] : config.receiverVoronoiSurfaceCellIndicesByModelId) {
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceWeightBufferByModelId.size()));
+    for (const auto& [id, buffer] : config.receiverGMLSSurfaceWeightBufferByModelId) {
         hash = RuntimeProductHash::mixPod(hash, id);
-        hash = RuntimeProductHash::mixPodVector(hash, indices);
+        hash = RuntimeProductHash::mixPod(hash, buffer);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceWeightBufferOffsetByModelId.size()));
+    for (const auto& [id, offset] : config.receiverGMLSSurfaceWeightBufferOffsetByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, offset);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceGradientWeightBufferByModelId.size()));
+    for (const auto& [id, buffer] : config.receiverGMLSSurfaceGradientWeightBufferByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, buffer);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverGMLSSurfaceGradientWeightBufferOffsetByModelId.size()));
+    for (const auto& [id, offset] : config.receiverGMLSSurfaceGradientWeightBufferOffsetByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPod(hash, offset);
     }
     hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSeedFlagsByModelId.size()));
     for (const auto& [id, flags] : config.receiverVoronoiSeedFlagsByModelId) {
         hash = RuntimeProductHash::mixPod(hash, id);
         hash = RuntimeProductHash::mixPodVector(hash, flags);
+    }
+    hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.receiverVoronoiSeedPositionsByModelId.size()));
+    for (const auto& [id, positions] : config.receiverVoronoiSeedPositionsByModelId) {
+        hash = RuntimeProductHash::mixPod(hash, id);
+        hash = RuntimeProductHash::mixPodVector(hash, positions);
     }
     hash = RuntimeProductHash::mix(hash, static_cast<uint64_t>(config.contactCouplings.size()));
     for (const ContactCoupling& coupling : config.contactCouplings) {

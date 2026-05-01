@@ -22,45 +22,10 @@ layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out float outAlpha;
 
 void main() {
-    
-    vec3 right;
-    vec3 up;
+    vec3 right = instanceRightVec;
+    vec3 up = instanceUpVec;
     vec3 currentPos = instancePos;
-    outAlpha = 1.0;  
-    
-    // Billboard condition (Y-Axis labels)
-    if (instanceUpVec.y > 0.9) {
-        up = vec3(0.0, 1.0, 0.0);
-        
-        // Calculate billboard rotation 
-        vec3 dir = vec3(-viewUniforms.view[0][2], 0.0, -viewUniforms.view[2][2]);
-        float dirLen = length(dir);
-        dir = (dirLen < 0.001) ? vec3(0.0, 0.0, -1.0) : normalize(dir);
-        right = normalize(cross(dir, up));
-        right = normalize(cross(dir, up));
-        right = normalize(cross(dir, up));
-        currentPos += right * instanceRightVec.x + up * instanceRightVec.y;
-              
-        // Direction from grid Ccnter to pillar 
-        vec3 pillarDir = normalize(vec3(instancePos.x, 0.0, instancePos.z));
-        
-        // Direction from grid center to camera
-        vec3 camDir = vec3(viewUniforms.cameraPos.x, 0.0, viewUniforms.cameraPos.z);
-        
-        // Safety check for camera being exactly at center (0,0)
-        if (length(camDir) > 0.001) {
-            camDir = normalize(camDir);
-            
-            // Calculate visibility based on pillar direction relative to camera
-            float backFactor = -dot(pillarDir, camDir);
-            outAlpha = smoothstep(0.5, 0.85, backFactor);
-        }
-    } 
-    else {
-        // Floor labels
-        right = instanceRightVec;
-        up = instanceUpVec;
-    }
+    outAlpha = 1.0;
     
     // Build Quad
     // Calculate world height and width based on character aspect ratio

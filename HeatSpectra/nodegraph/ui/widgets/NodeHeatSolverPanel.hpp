@@ -44,6 +44,7 @@ private:
     QPushButton* heatResetButton = nullptr;
     NodeGraphSliderRow* heatCellSizeRow = nullptr;
     NodeGraphSliderRow* heatVoxelResolutionRow = nullptr;
+    NodeGraphSliderRow* heatContactThermalConductanceRow = nullptr;
     QCheckBox* heatOverlayCheckBox = nullptr;
     QPushButton* heatSolveSettingsApplyButton = nullptr;
     QComboBox* heatBindingGroupComboBox = nullptr;

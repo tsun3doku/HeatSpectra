@@ -1,4 +1,4 @@
-﻿#define GLM_ENABLE_EXPERIMENTAL
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/constants.hpp>
 
 #include <iostream>
@@ -7,10 +7,123 @@
 #include <memory>
 #include <algorithm>
 #include <limits>
+#include <string>
 #include <thread>
 #include <future>
+#include <deque>
+#include <iomanip>
 
 #include "iODT.hpp"
+
+namespace {
+
+bool isFixedRefinementEdge(const HalfEdgeMesh& conn, uint32_t edgeIdx) {
+    const auto& edges = conn.getEdges();
+    const auto& halfEdges = conn.getHalfEdges();
+
+    if (edgeIdx == HalfEdgeMesh::INVALID_INDEX || edgeIdx >= edges.size()) {
+        return true;
+    }
+
+    uint32_t he = edges[edgeIdx].halfEdgeIdx;
+    if (he == HalfEdgeMesh::INVALID_INDEX || he >= halfEdges.size()) {
+        return true;
+    }
+
+    return halfEdges[he].opposite == HalfEdgeMesh::INVALID_INDEX ||
+           !conn.isFlippableEdge(edgeIdx);
+}
+
+bool isFixedRefinementHalfedge(const HalfEdgeMesh& conn, uint32_t heIdx) {
+    return isFixedRefinementEdge(conn, conn.getEdgeFromHalfEdge(heIdx));
+}
+
+uint32_t previousAroundVertex(const HalfEdgeMesh& conn, uint32_t heIdx) {
+    const auto& halfEdges = conn.getHalfEdges();
+
+    if (heIdx == HalfEdgeMesh::INVALID_INDEX || heIdx >= halfEdges.size()) {
+        return HalfEdgeMesh::INVALID_INDEX;
+    }
+
+    uint32_t twin = halfEdges[heIdx].opposite;
+    if (twin == HalfEdgeMesh::INVALID_INDEX || twin >= halfEdges.size()) {
+        return HalfEdgeMesh::INVALID_INDEX;
+    }
+
+    uint32_t next = halfEdges[twin].next;
+    if (next == HalfEdgeMesh::INVALID_INDEX || next >= halfEdges.size()) {
+        return HalfEdgeMesh::INVALID_INDEX;
+    }
+
+    return next;
+}
+
+size_t countNeedleCornersGC(SignpostMesh& mesh, uint32_t faceIdx) {
+    auto& conn = mesh.getConnectivity();
+    const auto& halfEdges = conn.getHalfEdges();
+    std::vector<uint32_t> faceHEs = conn.getFaceHalfEdges(faceIdx);
+    size_t needleCorners = 0;
+
+    for (uint32_t he : faceHEs) {
+        if (he == HalfEdgeMesh::INVALID_INDEX || he >= halfEdges.size()) {
+            continue;
+        }
+
+        double angleSum = 0.0;
+        uint32_t curr = he;
+        bool validWalk = true;
+
+        for (size_t step = 0; step < halfEdges.size(); ++step) {
+            if (curr == HalfEdgeMesh::INVALID_INDEX || curr >= halfEdges.size()) {
+                validWalk = false;
+                break;
+            }
+
+            angleSum += mesh.getCornerAngle(curr);
+
+            uint32_t next = conn.getNextAroundVertex(curr);
+            if (next == HalfEdgeMesh::INVALID_INDEX || next >= halfEdges.size()) {
+                validWalk = false;
+                break;
+            }
+
+            curr = next;
+            if (curr == he || isFixedRefinementHalfedge(conn, curr)) {
+                break;
+            }
+        }
+
+        if (!validWalk) {
+            continue;
+        }
+
+        if (curr != he && !isFixedRefinementHalfedge(conn, he)) {
+            curr = he;
+            for (size_t step = 0; step < halfEdges.size(); ++step) {
+                curr = previousAroundVertex(conn, curr);
+                if (curr == HalfEdgeMesh::INVALID_INDEX || curr >= halfEdges.size()) {
+                    validWalk = false;
+                    break;
+                }
+
+                angleSum += mesh.getCornerAngle(curr);
+
+                if (isFixedRefinementHalfedge(conn, curr)) {
+                    break;
+                }
+            }
+        }
+
+        if (validWalk && angleSum < glm::pi<double>() / 3.0) {
+            ++needleCorners;
+        }
+    }
+
+    return needleCorners;
+}
+
+} // namespace
+
 iODT::iODT(const std::vector<float>& pointPositions, const std::vector<uint32_t>& triangleIndices)
     : tracer(intrinsicMesh), tracerInput(inputMesh) {
 
@@ -57,32 +170,27 @@ void iODT::refreshIntrinsicDirectionalData() {
 
 bool iODT::optimalDelaunayTriangulation(int maxIterations, double minAngleDegrees, double maxEdgeLength, double stepSize) {
     auto& conn = intrinsicMesh.getConnectivity();
-    std::cout << "[iODT] optimalDelaunayTriangulation begin" << std::endl;
 
     // Clear tracking 
     insertedVertices.clear();
 
     // Delaunay phase
-    std::cout << "[iODT] Delaunay phase" << std::endl;
     if (supportingHalfedge) {
-        supportingHalfedge->makeDelaunay(maxIterations);
+        supportingHalfedge->makeDelaunay();
     } else {
-        conn.makeDelaunay(maxIterations);
+        conn.makeDelaunay();
     }
     
     refreshIntrinsicDirectionalData();
 
     // Refinement phase
-    std::cout << "[iODT] Refinement phase" << std::endl;
     if (!delaunayRefinement(maxIterations, minAngleDegrees)) {
-        std::cerr << " Delaunay refinement failed" << std::endl;
+        std::cerr << "[iODT] Delaunay refinement failed" << std::endl;
     }
 
-    // Repositioning phae
-    std::cout << "[iODT] Reposition phase" << std::endl;
+    // Repositioning phase
     optimalReposition(maxIterations, 1e-4, maxEdgeLength, stepSize);
 
-    std::cout << "[iODT] optimalDelaunayTriangulation done" << std::endl;
     return true;
 }
 
@@ -139,9 +247,9 @@ int iODT::splitLongEdges(double maxEdgeLength, int maxSplits) {
             std::vector<uint32_t> localEdges = collectLocalDelaunayEdges(conn, newV);
             std::vector<uint32_t> flippedEdges;
             if (supportingHalfedge) {
-                supportingHalfedge->makeDelaunayLocal(2, localEdges, &flippedEdges);
+                supportingHalfedge->makeDelaunayLocal(localEdges, &flippedEdges);
             } else {
-                conn.makeDelaunayLocal(2, localEdges, &flippedEdges);
+                conn.makeDelaunayLocal(localEdges, &flippedEdges);
             }
 
             for (uint32_t edgeIdx : localEdges) {
@@ -152,7 +260,7 @@ int iODT::splitLongEdges(double maxEdgeLength, int maxSplits) {
             }
         }
 
-        refreshIntrinsicDirectionalPatch(conn, std::vector<uint32_t>(patchEdges.begin(), patchEdges.end()));
+        updateLocalEdges(conn, std::vector<uint32_t>(patchEdges.begin(), patchEdges.end()));
     }
 
     return splitCount;
@@ -265,7 +373,7 @@ double iODT::repositionInsertedVertices(double stepSize) {
             }
         }
 
-        refreshIntrinsicDirectionalFaces(conn, ring.faceIndices);
+        updateLocalFaces(conn, ring.faceIndices);
 
         // Update the vertex's surface point correspondence on input mesh
         resolveVertex(vIdx);
@@ -303,7 +411,7 @@ void iODT::optimalReposition(int maxIters, double tol, double maxEdgeLength, dou
         }
     }
     if (!finalFaces.empty()) {
-        refreshIntrinsicDirectionalFaces(conn, std::vector<uint32_t>(finalFaces.begin(), finalFaces.end()));
+        updateLocalFaces(conn, std::vector<uint32_t>(finalFaces.begin(), finalFaces.end()));
     }
     
     // Update signpost angles for all inserted vertices
@@ -336,236 +444,323 @@ void iODT::optimalReposition(int maxIters, double tol, double maxEdgeLength, dou
 bool iODT::delaunayRefinement(int maxIters, float minAngleDegrees) {    
     const float MIN_AREA = 1e-5f;   // Stop refining small triangles
     const float MIN_ANGLE = minAngleDegrees * glm::pi<float>() / 180.0f;
-
     auto& conn = intrinsicMesh.getConnectivity();
-    
-    size_t candidateCount = 0;
+    const auto& halfEdges = conn.getHalfEdges();
 
-    for (int iter = 0; iter < 100; ++iter) {
-        std::cout << "Refinement iteration " << (iter + 1) << std::endl;
-   
-        auto cands = findRefinementCandidates(MIN_ANGLE, MIN_AREA);
-        if (cands.empty()) {
-            std::cout << "Done." << std::endl;
-            return true;
-        }
-        
-        // Check for divergence
-        if (iter == 0) {
-            candidateCount = cands.size();
-        } else if (cands.size() > candidateCount) {
-            return true;
-        }
+    std::priority_queue<FaceCandidate> faceQueue;
+    std::deque<uint32_t> delaunayQueue;
+    std::vector<uint8_t> inDelaunayQueue(conn.getEdges().size(), 0);
+    std::vector<uint32_t> flippedEdges;
 
-        std::sort(cands.begin(), cands.end(), byPriorityDescending);
+    const auto& faces = conn.getFaces();
+    for (uint32_t faceIdx = 0; faceIdx < faces.size(); ++faceIdx) {
+        queueRefineFace(faceIdx, MIN_ANGLE, MIN_AREA, faceQueue);
+    }
 
-        int refinedThisIter = 0;
-        const int MAX_PER_ITER = 500; 
+    const auto& edges = conn.getEdges();
+    for (uint32_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
+        queueDelaunayEdge(edgeIdx, delaunayQueue, inDelaunayQueue);
+    }
 
-        // Skip only for this iteration
-        std::unordered_set<uint32_t> skipFaces;
-        // snapshot of global insertedVertices to detect new inserts added this iteration
-        std::unordered_set<uint32_t> prevInserted = insertedVertices;
-        // Set of inserts in this iteration
-        std::unordered_set<uint32_t> iterNewVerts;
-        std::unordered_set<uint32_t> iterPatchEdges;
+    const int MAX_REFINEMENT_INSERTIONS = std::max(1, maxIters) * static_cast<int>(std::max<size_t>(faces.size(), 1));
+    int insertions = 0;
+    int recheckCount = 0;
+    constexpr int MAX_RECHECK_COUNT = 5;
 
-        for (auto const& C : cands) {
-            
-            // Limit refinements per iteration
-            if (refinedThisIter >= MAX_PER_ITER)
-                break;
-
-            // Mid iteration skipping
-            if (skipFaces.count(C.faceIdx))
-                continue;
-
-            // Revalidate candidate
-            float  areaNow = intrinsicMesh.computeFaceArea(C.faceIdx);
-            double minAngNow = computeMinAngle(C.faceIdx);
-
-            if (areaNow < MIN_AREA)
-                continue;
-
-            bool angleTooSmall = false;
-            if (MIN_ANGLE > 0.f) {
-                angleTooSmall = (minAngNow < MIN_ANGLE);
+    while (insertions < MAX_REFINEMENT_INSERTIONS) {
+        while (!delaunayQueue.empty()) {
+            uint32_t edgeIdx = delaunayQueue.front();
+            delaunayQueue.pop_front();
+            if (edgeIdx < inDelaunayQueue.size()) {
+                inDelaunayQueue[edgeIdx] = 0;
             }
-            
-            if (!angleTooSmall) {
-                // Not a candidate
+
+            if (!isValidEdge(edgeIdx)) {
                 continue;
             }
 
-            // Refine
-            uint32_t newV = UINT32_MAX;
-            bool success = insertCircumcenter(C.faceIdx, newV);
-            if (!success)
+            const auto& edgesNow = conn.getEdges();
+            uint32_t he = edgesNow[edgeIdx].halfEdgeIdx;
+            if (he == INVALID_INDEX || he >= halfEdges.size()) {
                 continue;
+            }
+            if (conn.isDelaunayEdge(he)) {
+                continue;
+            }
 
-            refinedThisIter++;
+            bool flipped = supportingHalfedge ? supportingHalfedge->flipEdge(edgeIdx) : conn.flipEdge(edgeIdx);
+            if (!flipped) {
+                continue;
+            }
 
-            // Collect vertices for current iteration
-            std::vector<uint32_t> createdNow;
-            if (newV != UINT32_MAX && newV < conn.getVertices().size()) {
-                if (!iterNewVerts.count(newV)) {
-                    createdNow.push_back(newV);
-                    iterNewVerts.insert(newV);
+            flippedEdges.push_back(edgeIdx);
+
+            he = edgesNow[edgeIdx].halfEdgeIdx;
+            if (he == INVALID_INDEX || he >= halfEdges.size()) {
+                continue;
+            }
+            uint32_t heT = halfEdges[he].opposite;
+            if (heT == INVALID_INDEX || heT >= halfEdges.size()) {
+                continue;
+            }
+
+            uint32_t heN = halfEdges[he].next;
+            uint32_t heTN = halfEdges[heT].next;
+            uint32_t neighHalfedges[4] = {
+                heN,
+                (heN != INVALID_INDEX && heN < halfEdges.size()) ? halfEdges[heN].next : INVALID_INDEX,
+                heTN,
+                (heTN != INVALID_INDEX && heTN < halfEdges.size()) ? halfEdges[heTN].next : INVALID_INDEX
+            };
+
+            for (uint32_t nhe : neighHalfedges) {
+                if (nhe == INVALID_INDEX || nhe >= halfEdges.size()) {
+                    continue;
+                }
+                queueDelaunayEdge(conn.getEdgeFromHalfEdge(nhe), delaunayQueue, inDelaunayQueue);
+            }
+
+            uint32_t faceA = halfEdges[he].face;
+            uint32_t faceB = halfEdges[heT].face;
+            queueRefineFace(faceA, MIN_ANGLE, MIN_AREA, faceQueue);
+            queueRefineFace(faceB, MIN_ANGLE, MIN_AREA, faceQueue);
+        }
+
+        if (!flippedEdges.empty()) {
+            updateLocalEdges(conn, flippedEdges);
+            flippedEdges.clear();
+        }
+
+        bool inserted = false;
+        while (!faceQueue.empty()) {
+            FaceCandidate candidate = faceQueue.top();
+            faceQueue.pop();
+
+            if (!isValidFace(candidate.faceIdx)) {
+                continue;
+            }
+
+            float currentArea = intrinsicMesh.computeFaceArea(candidate.faceIdx);
+            if (currentArea != candidate.area) {
+                continue;
+            }
+            if (!needsRefinement(candidate.faceIdx, MIN_ANGLE, MIN_AREA)) {
+                continue;
+            }
+
+            uint32_t newV = INVALID_INDEX;
+            if (!insertCircumcenter(candidate.faceIdx, newV)) {
+                continue;
+            }
+            if (newV == INVALID_INDEX || newV >= conn.getVertices().size()) {
+                continue;
+            }
+
+            if (inDelaunayQueue.size() < conn.getEdges().size()) {
+                inDelaunayQueue.resize(conn.getEdges().size(), 0);
+            }
+
+            for (uint32_t faceIdx : conn.getVertexFaces(newV)) {
+                queueRefineFace(faceIdx, MIN_ANGLE, MIN_AREA, faceQueue);
+                for (uint32_t he : conn.getFaceHalfEdges(faceIdx)) {
+                    queueDelaunayEdge(conn.getEdgeFromHalfEdge(he), delaunayQueue, inDelaunayQueue);
                 }
             }
-            else {
-                // Detect new vertices by global set difference
-                for (uint32_t v : insertedVertices) {
-                    if (!prevInserted.count(v) && !iterNewVerts.count(v)) {
-                        createdNow.push_back(v);
-                        iterNewVerts.insert(v);
+
+            ++insertions;
+            inserted = true;
+            break;
+        }
+
+        if (!inserted) {
+            while (!delaunayQueue.empty()) {
+                uint32_t edgeIdx = delaunayQueue.front();
+                delaunayQueue.pop_front();
+                if (edgeIdx < inDelaunayQueue.size()) {
+                    inDelaunayQueue[edgeIdx] = 0;
+                }
+                if (!isValidEdge(edgeIdx)) {
+                    continue;
+                }
+                const auto& edgesNow = conn.getEdges();
+                uint32_t he = edgesNow[edgeIdx].halfEdgeIdx;
+                if (he == INVALID_INDEX || he >= halfEdges.size()) {
+                    continue;
+                }
+                if (conn.isDelaunayEdge(he)) {
+                    continue;
+                }
+                bool flipped = supportingHalfedge ? supportingHalfedge->flipEdge(edgeIdx) : conn.flipEdge(edgeIdx);
+                if (flipped) {
+                    flippedEdges.push_back(edgeIdx);
+                }
+            }
+            if (!flippedEdges.empty()) {
+                updateLocalEdges(conn, flippedEdges);
+                flippedEdges.clear();
+            }
+
+            bool anyFound = false;
+            if (recheckCount < MAX_RECHECK_COUNT) {
+                ++recheckCount;
+
+                for (uint32_t faceIdx = 0; faceIdx < conn.getFaces().size(); ++faceIdx) {
+                    const size_t before = faceQueue.size();
+                    queueRefineFace(faceIdx, MIN_ANGLE, MIN_AREA, faceQueue);
+                    anyFound = anyFound || faceQueue.size() != before;
+                }
+
+                for (uint32_t edgeIdx = 0; edgeIdx < conn.getEdges().size(); ++edgeIdx) {
+                    if (!isValidEdge(edgeIdx)) {
+                        continue;
+                    }
+
+                    uint32_t he = conn.getEdges()[edgeIdx].halfEdgeIdx;
+                    if (he == INVALID_INDEX || he >= conn.getHalfEdges().size()) {
+                        continue;
+                    }
+
+                    if (!conn.isDelaunayEdge(he)) {
+                        queueDelaunayEdge(edgeIdx, delaunayQueue, inDelaunayQueue);
+                        anyFound = true;
                     }
                 }
-            }
 
-            // Local delaunay on all edges around inserted vertex
-            std::unordered_set<uint32_t> patchEdges;
-            if (newV != UINT32_MAX && newV < conn.getVertices().size()) {
-                std::vector<uint32_t> localEdges = collectLocalDelaunayEdges(conn, newV);
-                std::vector<uint32_t> flippedEdges;
-                if (supportingHalfedge) {
-                    supportingHalfedge->makeDelaunayLocal(maxIters, localEdges, &flippedEdges);
-                } else {
-                    conn.makeDelaunayLocal(maxIters, localEdges, &flippedEdges);
-                }
-
-                for (uint32_t edgeIdx : localEdges) {
-                    patchEdges.insert(edgeIdx);
-                }
-                for (uint32_t edgeIdx : flippedEdges) {
-                    patchEdges.insert(edgeIdx);
+                if (anyFound) {
+                    continue;
                 }
             }
-            if (!patchEdges.empty()) {
-                for (uint32_t edgeIdx : patchEdges) {
-                    iterPatchEdges.insert(edgeIdx);
-                }
-                refreshIntrinsicDirectionalPatch(conn, std::vector<uint32_t>(patchEdges.begin(), patchEdges.end()));
-            }
 
-            // skip neighbors of newly created verts for the rest of this iteration
-            for (uint32_t v : createdNow) {
-                markSkipFaces(conn, v, skipFaces);
-            }
-        }
-
-        if (refinedThisIter == 0) {
             return true;
-        }
-        if (!iterPatchEdges.empty()) {
-            refreshIntrinsicDirectionalPatch(conn, std::vector<uint32_t>(iterPatchEdges.begin(), iterPatchEdges.end()));
         }
     }
 
-    std::cout << "[iODT] Reached max iterations" << std::endl;
+    std::cerr << "[iODT] Reached max refinement insertions" << std::endl;
     return true;
 }
 
-std::vector<iODT::RefinementCandidate>iODT::findRefinementCandidates(float minAngleThreshold, float minAreaThreshold) {
-    auto const& faces = intrinsicMesh.getConnectivity().getFaces();
-  
-    // Find parallel candidates
-    const size_t hwThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
-    const size_t numThreads = std::min<size_t>(hwThreads, 8);
+bool iODT::isValidFace(uint32_t faceIdx) const {
+    const auto& conn = intrinsicMesh.getConnectivity();
+    const auto& faces = conn.getFaces();
+    if (faceIdx >= faces.size() || faces[faceIdx].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) {
+        return false;
+    }
 
-    // Launch workers
-    std::vector<std::future<std::vector<RefinementCandidate>>> futures;
-    futures.reserve(numThreads);
-    size_t facesPerThread = (faces.size() + numThreads - 1) / numThreads;
-    
-    for (size_t t = 0; t < numThreads; ++t) {
-        size_t start = t * facesPerThread;
-        size_t end = std::min(start + facesPerThread, faces.size());
-        if (start < end) {
-            futures.push_back(std::async(
-                std::launch::async,
-                &iODT::scanCandidateRange,
-                this,
-                start,
-                end,
-                minAngleThreshold,
-                minAreaThreshold));
+    return conn.getFaceHalfEdges(faceIdx).size() == 3;
+}
+
+bool iODT::isValidEdge(uint32_t edgeIdx) const {
+    const auto& conn = intrinsicMesh.getConnectivity();
+    const auto& edges = conn.getEdges();
+    const auto& halfEdges = conn.getHalfEdges();
+    if (edgeIdx >= edges.size()) {
+        return false;
+    }
+
+    uint32_t he = edges[edgeIdx].halfEdgeIdx;
+    return he != HalfEdgeMesh::INVALID_INDEX && he < halfEdges.size();
+}
+
+bool iODT::needsRefinement(uint32_t faceIdx, float minAngleThreshold, float minAreaThreshold) {
+    (void)minAreaThreshold;
+
+    if (!isValidFace(faceIdx)) {
+        return false;
+    }
+
+    const auto& conn = intrinsicMesh.getConnectivity();
+    const auto& halfEdges = conn.getHalfEdges();
+    std::vector<uint32_t> faceHEs = conn.getFaceHalfEdges(faceIdx);
+    if (faceHEs.size() != 3) {
+        return false;
+    }
+
+    if (minAngleThreshold <= 0.0f) {
+        return false;
+    }
+
+    for (uint32_t he : faceHEs) {
+        uint32_t v = halfEdges[he].origin;
+        if (v != HalfEdgeMesh::INVALID_INDEX &&
+            intrinsicMesh.getVertexAngleSum(v) < 2.0 * static_cast<double>(minAngleThreshold)) {
+            return false;
         }
     }
 
-    // Merge thread results
-    std::vector<RefinementCandidate> out;
-    for (auto& future : futures) {
-        auto tr = future.get();
-        out.insert(out.end(), tr.begin(), tr.end());
-    }
-    return out;
-}
+    size_t needleCorners = countNeedleCornersGC(intrinsicMesh, faceIdx);
 
-std::vector<iODT::RefinementCandidate> iODT::scanCandidateRange(size_t start, size_t end, float minAngleThreshold, float minAreaThreshold) {
-    SignpostMesh& mesh = intrinsicMesh;
-    const auto& faces = mesh.getConnectivity().getFaces();
-    std::vector<RefinementCandidate> localResults;
-    localResults.reserve((end - start) / 2);
-
-    for (size_t f = start; f < end; ++f) {
-        if (faces[f].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) {
-            continue;
-        }
-
-        float area = mesh.computeFaceArea(static_cast<uint32_t>(f));
-        double minAng = computeMinAngle(static_cast<uint32_t>(f));
-
-        if (area < minAreaThreshold) {
-            continue;
-        }
-        if (minAng <= 0.0) {
-            continue;
-        }
-
-        bool angleTooSmall = false;
-        if (minAngleThreshold > 0.f) {
-            angleTooSmall = (minAng < minAngleThreshold);
-        }
-
-        if (!angleTooSmall) {
-            continue;
-        }
-
-        RefinementCandidate rc{};
-        rc.faceIdx = static_cast<uint32_t>(f);
-        rc.minAngle = minAng;
-        rc.area = area;
-        rc.type = RefinementType::CIRCUMCENTER_INSERTION;
-        rc.edgeIdx = HalfEdgeMesh::INVALID_INDEX;
-
-        rc.priority = (minAngleThreshold > 0.f) ? ((minAngleThreshold - float(minAng)) / minAngleThreshold) : 0.f;
-
-        localResults.push_back(rc);
+    if (needleCorners == 1) {
+        return false;
     }
 
-    return localResults;
+    bool hasRefinableSmallAngle = false;
+    for (uint32_t he : faceHEs) {
+        double angle = intrinsicMesh.getCornerAngle(he);
+        if (!(angle > 0.0 && angle < minAngleThreshold)) {
+            continue;
+        }
+
+        uint32_t heNext = halfEdges[he].next;
+        if (heNext == HalfEdgeMesh::INVALID_INDEX || heNext >= halfEdges.size()) {
+            continue;
+        }
+
+        uint32_t hePrev = halfEdges[heNext].next;
+        bool isDegreeOneVertex = (hePrev != HalfEdgeMesh::INVALID_INDEX &&
+                                  hePrev < halfEdges.size() &&
+                                  halfEdges[he].opposite == hePrev);
+        if (isDegreeOneVertex) {
+            continue;
+        }
+
+        if (isFixedRefinementHalfedge(conn, he) &&
+            isFixedRefinementHalfedge(conn, hePrev)) {
+            continue;
+        }
+
+        hasRefinableSmallAngle = true;
+        break;
+    }
+
+    return hasRefinableSmallAngle;
 }
 
-bool iODT::byPriorityDescending(const RefinementCandidate& a, const RefinementCandidate& b) {
-    return a.priority > b.priority;
+float iODT::refinementPriority(uint32_t faceIdx) {
+    auto& conn = intrinsicMesh.getConnectivity();
+    for (uint32_t he : conn.getFaceHalfEdges(faceIdx)) {
+        uint32_t edgeIdx = conn.getEdgeFromHalfEdge(he);
+        if (isFixedRefinementEdge(conn, edgeIdx)) {
+            return std::numeric_limits<float>::infinity();
+        }
+    }
+
+    return intrinsicMesh.computeFaceArea(faceIdx);
 }
 
-void iODT::markSkipFaces(HalfEdgeMesh& conn, uint32_t vertexIdx, std::unordered_set<uint32_t>& skipFaces) {
-    if (vertexIdx >= conn.getVertices().size()) {
+void iODT::queueRefineFace(uint32_t faceIdx, float minAngleThreshold, float minAreaThreshold, std::priority_queue<FaceCandidate>& faceQueue) {
+    if (!needsRefinement(faceIdx, minAngleThreshold, minAreaThreshold)) {
         return;
     }
 
-    const auto& halfEdges = conn.getHalfEdges();
-    for (uint32_t he : conn.getVertexHalfEdges(vertexIdx)) {
-        if (he == HalfEdgeMesh::INVALID_INDEX) {
-            continue;
-        }
-        uint32_t faceIdx = halfEdges[he].face;
-        if (faceIdx != HalfEdgeMesh::INVALID_INDEX) {
-            skipFaces.insert(faceIdx);
-        }
+    FaceCandidate candidate;
+    candidate.faceIdx = faceIdx;
+    candidate.area = intrinsicMesh.computeFaceArea(faceIdx);
+    candidate.priority = refinementPriority(faceIdx);
+    faceQueue.push(candidate);
+}
+
+void iODT::queueDelaunayEdge(uint32_t edgeIdx, std::deque<uint32_t>& edgeQueue, std::vector<uint8_t>& inQueue) {
+    if (!isValidEdge(edgeIdx)) {
+        return;
     }
+    if (edgeIdx >= inQueue.size()) {
+        inQueue.resize(edgeIdx + 1, 0);
+    }
+    if (inQueue[edgeIdx]) {
+        return;
+    }
+    edgeQueue.push_back(edgeIdx);
+    inQueue[edgeIdx] = 1;
 }
 
 std::vector<uint32_t> iODT::collectLocalDelaunayEdges(HalfEdgeMesh& conn, uint32_t vertexIdx) {
@@ -610,7 +805,7 @@ std::vector<uint32_t> iODT::collectLocalDelaunayEdges(HalfEdgeMesh& conn, uint32
     return std::vector<uint32_t>(patchEdges.begin(), patchEdges.end());
 }
 
-void iODT::refreshIntrinsicDirectionalFaces(HalfEdgeMesh& conn, const std::vector<uint32_t>& facePatch) {
+void iODT::updateLocalFaces(HalfEdgeMesh& conn, const std::vector<uint32_t>& facePatch) {
     std::unordered_set<uint32_t> patchFaces;
     std::unordered_set<uint32_t> patchVertices;
     const auto& halfEdges = conn.getHalfEdges();
@@ -638,7 +833,7 @@ void iODT::refreshIntrinsicDirectionalFaces(HalfEdgeMesh& conn, const std::vecto
     intrinsicMesh.updateFaceVectors(affectedFaces);
 }
 
-void iODT::refreshIntrinsicDirectionalPatch(HalfEdgeMesh& conn, const std::vector<uint32_t>& edgePatch) {
+void iODT::updateLocalEdges(HalfEdgeMesh& conn, const std::vector<uint32_t>& edgePatch) {
     std::unordered_set<uint32_t> patchFaces;
     std::unordered_set<uint32_t> patchVertices;
     const auto& edges = conn.getEdges();
@@ -688,7 +883,6 @@ void iODT::refreshIntrinsicDirectionalPatch(HalfEdgeMesh& conn, const std::vecto
 
 bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
     auto& conn = intrinsicMesh.getConnectivity();
-    auto& halfEdges = conn.getHalfEdges();
     const auto& faces = conn.getFaces();
 
     // Validate face index
@@ -699,84 +893,60 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
         return false;
     }
 
-    // Reject tiny faces
-    float area = intrinsicMesh.computeFaceArea(faceIdx);
-    if (area < 1e-8f) {
+    uint32_t he0 = faces[faceIdx].halfEdgeIdx;
+    const auto& halfEdges = conn.getHalfEdges();
+    if (he0 == INVALID_INDEX || he0 >= halfEdges.size()) {
+        return false;
+    }
+    uint32_t he1 = halfEdges[he0].next;
+    if (he1 == INVALID_INDEX || he1 >= halfEdges.size()) {
+        return false;
+    }
+    uint32_t he2 = halfEdges[he1].next;
+    if (he2 == INVALID_INDEX || he2 >= halfEdges.size() || halfEdges[he2].next != he0) {
         return false;
     }
 
-    // Layout original triangle in 2d
-    auto triangle2D = intrinsicMesh.layoutTriangle(faceIdx);
-    glm::dvec2 P0 = triangle2D.vertices[0], P1 = triangle2D.vertices[1], P2 = triangle2D.vertices[2];
-
-    // Calculate 2d circumcenter 
-    glm::dvec2 cc2d = intrinsicMesh.computeCircumcenter2D(P0, P1, P2);
-    if (!std::isfinite(cc2d.x) || !std::isfinite(cc2d.y)) {
+    double a = conn.getIntrinsicLengthFromHalfEdge(he1);
+    double b = conn.getIntrinsicLengthFromHalfEdge(he2);
+    double c = conn.getIntrinsicLengthFromHalfEdge(he0);
+    if (!(std::isfinite(a) && std::isfinite(b) && std::isfinite(c)) ||
+        a <= 1e-12 || b <= 1e-12 || c <= 1e-12) {
         return false;
     }
 
-    // Pick corner furthest the circumcenter (smallest bary)
-    glm::dvec3 circumcenterBary = intrinsicMesh.computeBarycentric2D(cc2d, P0, P1, P2);
-    
-    // Ruppert check
-    bool tooOblique = (circumcenterBary.x < -0.5 || circumcenterBary.x > 1.5 ||
-                       circumcenterBary.y < -0.5 || circumcenterBary.y > 1.5 ||
-                       circumcenterBary.z < -0.5 || circumcenterBary.z > 1.5);
-    
-    if (tooOblique) {
-        // Split longest edge at midpoint
-        uint32_t he0 = faces[faceIdx].halfEdgeIdx;
-        uint32_t he1 = halfEdges[he0].next;
-        uint32_t he2 = halfEdges[he1].next;
-        
-        double len0 = conn.getIntrinsicLengthFromHalfEdge(he0);
-        double len1 = conn.getIntrinsicLengthFromHalfEdge(he1);
-        double len2 = conn.getIntrinsicLengthFromHalfEdge(he2);
-        
-        uint32_t longestHe = he0;
-        if (len1 > len0 && len1 >= len2) longestHe = he1;
-        else if (len2 > len0 && len2 > len1) longestHe = he2;
-        
-        uint32_t edgeIdx = conn.getEdgeFromHalfEdge(longestHe);
-        if (edgeIdx != HalfEdgeMesh::INVALID_INDEX) {
-            uint32_t dummy1, dummy2;
-            splitEdge(edgeIdx, outNewVertex, dummy1, dummy2, longestHe, 0.5);
-            return true;
-        }
-    }
-    
-    int corner = 0;
-
-    if (circumcenterBary.y < circumcenterBary.x)
-        corner = 1;
-    if (circumcenterBary.z < circumcenterBary[corner])
-        corner = 2;
-
-    constexpr double EPS = 1e-4;
-    glm::dvec3 cornerB(EPS);
-    cornerB[corner] = 1.0 - 2.0 * EPS;
-
-    // Calculate the 2d start point inside the triangle
-    glm::dvec2 start2D =
-        P0 * cornerB.x +
-        P1 * cornerB.y +
-        P2 * cornerB.z;
-
-    // Build intrinsic vector 
-    glm::dvec2 dir2D = cc2d - start2D;
-    double length = glm::length(dir2D);
-
-    if (length < 1e-12)
+    double a2 = a * a;
+    double b2 = b * b;
+    double c2 = c * c;
+    glm::dvec3 circumcenterBary(
+        a2 * (b2 + c2 - a2),
+        b2 * (c2 + a2 - b2),
+        c2 * (a2 + b2 - c2)
+    );
+    double barySum = circumcenterBary.x + circumcenterBary.y + circumcenterBary.z;
+    if (std::abs(barySum) <= 1e-30) {
         return false;
+    }
+    circumcenterBary /= barySum;
 
-    dir2D /= length;
+    if (!std::isfinite(circumcenterBary.x) ||
+        !std::isfinite(circumcenterBary.y) ||
+        !std::isfinite(circumcenterBary.z)) {
+        return false;
+    }
 
-    // Trace across face/faces   
-    GeodesicTracer::GeodesicTraceResult intrinsicRes = tracer.traceFromFace(
-        faceIdx,     // start face
-        cornerB,     // start corner bary
-        dir2D,       // 2D direction in chart
-        length       // circumradius
+    glm::dvec3 startBary(1.0 / 3.0);
+    glm::dvec3 traceBaryVec = circumcenterBary - startBary;
+    double traceNorm2 = glm::dot(traceBaryVec, traceBaryVec);
+
+    if (traceNorm2 < 1e-24) {
+        return false;
+    }
+
+    GeodesicTracer::GeodesicTraceResult intrinsicRes = tracer.traceFromFaceBarycentric(
+        faceIdx,
+        startBary,
+        traceBaryVec
     );
 
     if (!intrinsicRes.success) {
@@ -786,128 +956,38 @@ bool iODT::insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex) {
     // Pick insertion type
     GeodesicTracer::SurfacePoint& surfacePoint = intrinsicRes.exitPoint;
 
-    if (surfacePoint.type == GeodesicTracer::SurfacePoint::Type::VERTEX) {
-        return false;
-    }
-
     if (surfacePoint.type == GeodesicTracer::SurfacePoint::Type::EDGE) {
-        // EDGE split
         uint32_t edgeIdx = surfacePoint.elementId;
-        double split = surfacePoint.split;
-
-        // Pick a halfedge on the edge to pass to splitEdge
-        uint32_t heSplit = conn.getEdges()[edgeIdx].halfEdgeIdx;
-        if (heSplit == HalfEdgeMesh::INVALID_INDEX) {
+        if (edgeIdx == INVALID_INDEX || edgeIdx >= conn.getEdges().size()) {
             return false;
         }
 
-        uint32_t dummy1, dummy2; 
-        splitEdge(edgeIdx, outNewVertex, dummy1, dummy2, heSplit, split);
+        uint32_t heSplit = conn.getEdges()[edgeIdx].halfEdgeIdx;
+        uint32_t diagFront = INVALID_INDEX;
+        uint32_t diagBack = INVALID_INDEX;
+        if (!splitEdge(edgeIdx, outNewVertex, diagFront, diagBack, heSplit, 0.5)) {
+            return false;
+        }
 
-        // Track the input mesh location
         if (supportingHalfedge && intrinsicVertexLocations.count(outNewVertex)) {
             supportingHalfedge->trackInsertedVertex(outNewVertex, intrinsicVertexLocations[outNewVertex]);
         }
 
         return true;
     }
-    else {
-        // FACE insert 
-        uint32_t targetFace = surfacePoint.elementId;
-        glm::dvec3 targetBary = surfacePoint.baryCoords;
 
-        // Layout target face and calculate split radii
-        auto triangleTarget = intrinsicMesh.layoutTriangle(targetFace);
-        glm::dvec2 V0 = triangleTarget.vertices[0], V1 = triangleTarget.vertices[1], V2 = triangleTarget.vertices[2];
-        glm::dvec2 s2D = V0 * targetBary.x + V1 * targetBary.y + V2 * targetBary.z;
-        double R0 = glm::length(s2D - V0);
-        double R1 = glm::length(s2D - V1);
-        double R2 = glm::length(s2D - V2);
-
-        // Get the three original halfedges of the face before splitting it
-        auto oldHEs = conn.getFaceHalfEdges(targetFace);
-
-        // Call updateRemoval on boundary halfedges before topology changes
-        if (supportingHalfedge) {
-            for (uint32_t he : oldHEs) {
-                supportingHalfedge->updateRemoval(he);
-            }
-        }
-
-        // Create the vertex topologically
-        uint32_t newV = conn.splitTriangleIntrinsic(targetFace, R0, R1, R2);
-        if (newV == HalfEdgeMesh::INVALID_INDEX)
-            return false;
-
-        uint32_t baseIdx = static_cast<uint32_t>(halfEdges.size()) - 6;
-        uint32_t he_to_v1 = baseIdx + 3;
-        uint32_t he_to_v0 = baseIdx + 5;
-        uint32_t he_to_v2 = baseIdx + 4;
-
-        // Resize halfedge vectors buffer
-        intrinsicMesh.getHalfedgeVectorsInVertex().resize(halfEdges.size(), glm::dvec2(0.0));
-
-        // Get the three new faces surrounding the vertex
-        auto newFaces = conn.getVertexFaces(newV);
-
-        // Update the corner angles for only the new faces
-        for (uint32_t fIdx : newFaces) {
-            if (fIdx != HalfEdgeMesh::INVALID_INDEX) {
-                intrinsicMesh.updateCornerAnglesForFace(fIdx);
-            }
-        }
-
-        // Update supporting halfedges after corner angles are set
-        if (supportingHalfedge) {
-            // Match the Python implementation: update the old->new spoke halfedges directly.
-            if (he_to_v0 < halfEdges.size()) {
-                supportingHalfedge->updateInsertion(he_to_v0);
-            }
-            if (he_to_v1 < halfEdges.size()) {
-                supportingHalfedge->updateInsertion(he_to_v1);
-            }
-            if (he_to_v2 < halfEdges.size()) {
-                supportingHalfedge->updateInsertion(he_to_v2);
-            }
-
-            // Update the original boundary halfedges that were reused
-            for (uint32_t he : oldHEs) {
-                supportingHalfedge->updateInsertion(he);
-            }
-        }
-
-        std::vector<uint32_t> affectedVertices;
-        affectedVertices.reserve(oldHEs.size());
-        for (uint32_t he : oldHEs) {
-            if (he < halfEdges.size()) {
-                affectedVertices.push_back(halfEdges[he].origin);
-            }
-        }
-
-        std::vector<uint32_t> scaleVertices = affectedVertices;
-        scaleVertices.push_back(newV);
-
-        intrinsicMesh.updateVertexSums(scaleVertices);
-        intrinsicMesh.updateCornerScales(scaleVertices);
-        intrinsicMesh.updateVertexScales(scaleVertices);
-        intrinsicMesh.updateVertexVectors(affectedVertices);
-        intrinsicMesh.updateFaceVectors(newFaces);
-
-        // Let resolveVertex handle signpost angle calculations
-        if (!resolveVertex(newV)) {
+    if (surfacePoint.type == GeodesicTracer::SurfacePoint::Type::FACE) {
+        bool wasInserted = false;
+        if (!insertPoint(surfacePoint.elementId, surfacePoint.baryCoords, outNewVertex, &wasInserted)) {
             return false;
         }
+        if (!wasInserted) {
+            return false;
+        }
+        return true;
+    }
 
-        insertedVertices.insert(newV);
-        outNewVertex = newV;
-
-        // Track the input mesh location 
-        if (supportingHalfedge && intrinsicVertexLocations.count(newV)) {
-            supportingHalfedge->trackInsertedVertex(newV, intrinsicVertexLocations[newV]);
-        }    
-
-		return true;
-	}
+    return false;
 }
 
 bool iODT::insertPoint(uint32_t faceIdx, const glm::dvec3& baryCoords, uint32_t& outVertex, bool* outWasInserted) {
@@ -1082,17 +1162,6 @@ bool iODT::insertPoint(uint32_t faceIdx, const glm::dvec3& baryCoords, uint32_t&
         *outWasInserted = true;
     }
 
-    std::vector<uint32_t> localEdges = collectLocalDelaunayEdges(conn, newV);
-    std::vector<uint32_t> flippedEdges;
-    if (supportingHalfedge) {
-        supportingHalfedge->makeDelaunayLocal(2, localEdges, &flippedEdges);
-    }
-    else {
-        conn.makeDelaunayLocal(2, localEdges, &flippedEdges);
-    }
-    localEdges.insert(localEdges.end(), flippedEdges.begin(), flippedEdges.end());
-    refreshIntrinsicDirectionalPatch(conn, localEdges);
-
     return true;
 }
 
@@ -1138,17 +1207,6 @@ bool iODT::splitEdge(uint32_t heEdge, double tParam, uint32_t& outNewV, bool* ou
     if (outWasInserted) {
         *outWasInserted = true;
     }
-
-    std::vector<uint32_t> localEdges = collectLocalDelaunayEdges(conn, newV);
-    std::vector<uint32_t> flippedEdges;
-    if (supportingHalfedge) {
-        supportingHalfedge->makeDelaunayLocal(2, localEdges, &flippedEdges);
-    }
-    else {
-        conn.makeDelaunayLocal(2, localEdges, &flippedEdges);
-    }
-    localEdges.insert(localEdges.end(), flippedEdges.begin(), flippedEdges.end());
-    refreshIntrinsicDirectionalPatch(conn, localEdges);
 
     outNewV = newV;
     return true;
@@ -1200,6 +1258,14 @@ bool iODT::splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiag
     double diagLen2 = 0.0;
     if (face2 != HalfEdgeMesh::INVALID_INDEX) {
         diagLen2 = intrinsicMesh.computeSplitDiagonalLength(face2, originalVA, originalVB, splitFraction);
+    }
+
+    if (!(std::isfinite(diagLen1) && diagLen1 > 1e-12)) {
+        return false;
+    }
+
+    if (face2 != HalfEdgeMesh::INVALID_INDEX && !(std::isfinite(diagLen2) && diagLen2 > 1e-12)) {
+        return false;
     }
 
     precomputedDiagonals = { diagLen1, diagLen2 };
@@ -1733,9 +1799,6 @@ GeodesicTracer::GeodesicTraceResult iODT::traceIntrinsicHalfedgeAlongInput(uint3
         if (it != vertexResolutionFaces.end()) {
             resolutionFace = it->second;
         }
-        else {
-            //std::cout << "[traceIntrinsicHalfedge] WARNING: No resolution face stored for vertex " << startVertex << std::endl;
-        }
 
         result = tracerInput.traceFromEdge(startSP.elementId, startSP.split, traceDir, traceLen, resolutionFace);
     }
@@ -1799,7 +1862,6 @@ void iODT::saveCommonSubdivisionOBJ(const std::string& filename, const Model& ov
     }
 
     file.close();
-    std::cout << "[saveIntrinsicOverlayOBJ] Saved " << vertices.size() << " vertices and " << faceCount << " faces to " << filename << std::endl;
 }
 
 void iODT::createCommonSubdivision(Model& overlayModel, std::vector<CommonSubdivision::IntrinsicTriangle>& outIntrinsicTriangles) {
@@ -1820,3 +1882,6 @@ void iODT::cleanup() {
     supportingHalfedge.reset();
     commonSubdivision.reset();
 }
+
+
+

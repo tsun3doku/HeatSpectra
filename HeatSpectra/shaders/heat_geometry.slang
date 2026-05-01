@@ -9,7 +9,7 @@ static const uint DEBUG_DUMP_CELL_COUNT = 8;
 static const float CANONICAL_DOMAIN_SIZE = 1000.0f;
 static const float VOLUME_EPSILON2 = 1e-30f;
 
-struct VoronoiNode
+struct Node
 {
     float volume;
     uint  neighborOffset;
@@ -40,7 +40,7 @@ struct DebugPlaneArea
     float  _padding;
 };
 
-struct VoronoiDumpInfo
+struct DumpInfo
 {
     uint   cellID;
     uint   planeAreaCount;
@@ -71,7 +71,7 @@ struct DebugCellGeometry
 
 static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 59903, 0, 0, 0, 0, 0, 0, 0 };
 
-[[vk::binding(0)]]  RWStructuredBuffer<VoronoiNode> nodes;
+[[vk::binding(0)]]  RWStructuredBuffer<Node> nodes;
 [[vk::binding(1)]]  StructuredBuffer<MeshTriangle>  meshTriangles;
 [[vk::binding(2)]]  StructuredBuffer<float4>        seedPositions;
 
@@ -88,7 +88,7 @@ static const uint DEBUG_CELL_IDS[DEBUG_DUMP_CELL_COUNT] = { 59903, 0, 0, 0, 0, 0
 [[vk::binding(14)]] RWStructuredBuffer<DebugCellGeometry> debugCells;
 
 [[vk::binding(15)]] StructuredBuffer<uint>          seedFlags;
-[[vk::binding(16)]] RWStructuredBuffer<VoronoiDumpInfo> dumpInfo;
+[[vk::binding(16)]] RWStructuredBuffer<DumpInfo> dumpInfo;
 
 struct GeometryDebugPushConstants
 {

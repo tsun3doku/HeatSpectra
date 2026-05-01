@@ -48,7 +48,13 @@ public:
     void cleanup();
     void cleanupStagingBuffers();
 
-    void setVoronoiMapping(VkBuffer mappingBuffer, VkDeviceSize mappingOffset);
+    void setGMLSSurfaceWeights(
+        VkBuffer stencilBuffer,
+        VkDeviceSize stencilBufferOffset,
+        VkBuffer valueWeightBuffer,
+        VkDeviceSize valueWeightBufferOffset,
+        VkBuffer gradientWeightBuffer,
+        VkDeviceSize gradientWeightBufferOffset);
 
     uint32_t getRuntimeModelId() const { return runtimeModelId; }
 
@@ -71,8 +77,6 @@ public:
 
     VkBuffer getSurfaceVertexBuffer() const { return surfaceVertexBuffer; }
     VkDeviceSize getSurfaceVertexBufferOffset() const { return surfaceVertexBufferOffset; }
-    VkBuffer getVoronoiMappingBuffer() const { return voronoiMappingBuffer; }
-    VkDeviceSize getVoronoiMappingBufferOffset() const { return voronoiMappingBufferOffset; }
 
     VkDescriptorSet getSurfaceComputeSetA() const { return surfaceComputeSetA; }
     VkDescriptorSet getSurfaceComputeSetB() const { return surfaceComputeSetB; }
@@ -95,8 +99,12 @@ private:
 
     static constexpr float AMBIENT_TEMPERATURE = 1.0f;
 
-    VkBuffer voronoiMappingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiMappingBufferOffset = 0;
+    VkBuffer gmlsSurfaceStencilBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceStencilBufferOffset = 0;
+    VkBuffer gmlsSurfaceWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceWeightBufferOffset = 0;
+    VkBuffer gmlsSurfaceGradientWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceGradientWeightBufferOffset = 0;
 
     VkBuffer surfaceBuffer = VK_NULL_HANDLE;
     VkDeviceSize surfaceBufferOffset = 0;

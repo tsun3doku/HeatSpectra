@@ -101,9 +101,9 @@ void populateMetadata(NodeDataBlock& dataBlock, const NodePayloadRegistry* regis
         dataBlock.metadata["voronoi.receiver_count"] =
             std::to_string(voronoiData ? voronoiData->receiverMeshHandles.size() : 0u);
         dataBlock.metadata["voronoi.cell_size"] =
-            voronoiData ? std::to_string(voronoiData->params.cellSize) : std::string();
+            voronoiData ? std::to_string(voronoiData->cellSize) : std::string();
         dataBlock.metadata["voronoi.voxel_resolution"] =
-            voronoiData ? std::to_string(voronoiData->params.voxelResolution) : std::string();
+            voronoiData ? std::to_string(voronoiData->voxelResolution) : std::string();
     } else {
         dataBlock.metadata.erase("voronoi.active");
         dataBlock.metadata.erase("voronoi.receiver_count");

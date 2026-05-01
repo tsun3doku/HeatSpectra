@@ -26,7 +26,7 @@ public:
 
     void createGridPipeline(VkRenderPass renderPass);
 
-    uint32_t vertexCount = 6;
+    uint32_t vertexCount = 6; 
 
     //Getters
     const VkDescriptorPool& getGridDescriptorPool() const {

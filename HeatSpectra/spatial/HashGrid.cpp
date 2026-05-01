@@ -43,11 +43,7 @@ void HashGrid::initialize(const glm::vec3& minBounds, const glm::vec3& maxBounds
     params.gridDimensions = glm::max(params.gridDimensions, glm::ivec3(1));
     
     params.totalCells = params.gridDimensions.x * params.gridDimensions.y * params.gridDimensions.z;
-    
-    std::cout << "[HashGrid] Initialized " << params.gridDimensions.x << "x" 
-              << params.gridDimensions.y << "x" << params.gridDimensions.z 
-              << " (" << params.totalCells << " cells)" << std::endl;
-    
+
     uint32_t maxPointsTotal = params.totalCells * maxPointsPerCell;
     
     if (!createBuffers(maxPointsTotal)) {
@@ -545,6 +541,5 @@ bool HashGrid::createBuildPipeline() {
     }
     
     vkDestroyShaderModule(vulkanDevice.getDevice(), computeShaderModule, nullptr);
-    std::cout << "[HashGrid] Build pipeline created" << std::endl;
     return true;
 }

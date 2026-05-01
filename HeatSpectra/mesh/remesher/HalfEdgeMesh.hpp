@@ -88,9 +88,10 @@ public:
 
 	// Delaunay
 	bool flipEdge(uint32_t edgeIdx);
+	bool isFlippableEdge(uint32_t edgeIdx) const;
 	bool isDelaunayEdge(uint32_t heIdx) const;
-	int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
-	int makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
+	int makeDelaunay(std::vector<uint32_t>* flippedEdges = nullptr);
+	int makeDelaunayLocal(const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
 	
 	// Refinement
 	uint32_t addIntrinsicVertex();
@@ -103,7 +104,6 @@ public:
 	std::vector<uint32_t> getVertexFaces(uint32_t vertexIdx) const;
 	std::vector<uint32_t> getFaceHalfEdges(uint32_t faceIdx) const;
 	std::vector<uint32_t> getFaceVertices(uint32_t faceIdx) const;
-	std::vector<uint32_t> getNeighboringHalfEdges(uint32_t heIdx) const;
 	std::pair<uint32_t, uint32_t> getEdgeVertices(uint32_t edgeIdx) const;
 	uint32_t getEdgeFromHalfEdge(uint32_t heIdx) const;
 	double getIntrinsicLengthFromHalfEdge(uint32_t halfEdgeIdx) const;
@@ -142,7 +142,6 @@ public:
 	
 private:
 	double lawOfCosinesAngle(double a, double b, double opposite) const;
-	void addNeighboringHalfEdgesFromVertex(uint32_t vertexIdx, uint32_t excludedA, uint32_t excludedB, std::vector<uint32_t>& out) const;
 
 	std::vector<HalfEdge> halfEdges;
 	std::vector<Vertex> vertices;

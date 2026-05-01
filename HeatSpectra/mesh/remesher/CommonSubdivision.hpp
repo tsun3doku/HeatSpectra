@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "SignPostMesh.hpp"
 #include "GeodesicTracer.hpp"

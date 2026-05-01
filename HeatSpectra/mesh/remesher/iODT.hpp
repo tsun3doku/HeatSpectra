@@ -1,5 +1,7 @@
-﻿#pragma once
+#pragma once
 #include <glm/glm.hpp>
+#include <queue>
+#include <deque>
 #include "GeodesicTracer.hpp"
 #include "SignPostMesh.hpp"
 #include "util/Structs.hpp"
@@ -12,20 +14,6 @@ public:
     ~iODT();
     
     static const uint32_t INVALID_INDEX = static_cast<uint32_t>(-1);
-
-    enum class RefinementType {
-        CIRCUMCENTER_INSERTION,
-        EDGE_SPLIT
-    };
-
-    struct RefinementCandidate {
-        RefinementType type;
-        uint32_t faceIdx        = 0;
-        uint32_t edgeIdx        = 0;
-        float priority          = 0.0f;
-        float minAngle          = 0.0f;
-        float area              = 0.0f;
-    };
 
     bool optimalDelaunayTriangulation(int iterations, double minAngleDegrees, double maxEdgeLength, double stepSize);
     bool insertPoint(uint32_t faceIdx, const glm::dvec3& baryCoords, uint32_t& outVertex, bool* outWasInserted = nullptr);
@@ -50,14 +38,25 @@ private:
     double repositionInsertedVertices(double stepSize);
     bool delaunayRefinement(int maxIters, float minAngleDegrees);
 
-    std::vector<RefinementCandidate> findRefinementCandidates(float minAngleThreshold, float minAreaThreshold);
-    std::vector<RefinementCandidate> scanCandidateRange(size_t start, size_t end, float minAngleThreshold, float minAreaThreshold);
+    struct FaceCandidate {
+        uint32_t faceIdx = INVALID_INDEX;
+        float area = 0.0f;
+        float priority = 0.0f;
 
-    static bool byPriorityDescending(const RefinementCandidate& a, const RefinementCandidate& b);
-    void markSkipFaces(HalfEdgeMesh& conn, uint32_t vertexIdx, std::unordered_set<uint32_t>& skipFaces);
+        bool operator<(const FaceCandidate& other) const {
+            return priority < other.priority;
+        }
+    };
+
     std::vector<uint32_t> collectLocalDelaunayEdges(HalfEdgeMesh& conn, uint32_t vertexIdx);
-    void refreshIntrinsicDirectionalFaces(HalfEdgeMesh& conn, const std::vector<uint32_t>& facePatch);
-    void refreshIntrinsicDirectionalPatch(HalfEdgeMesh& conn, const std::vector<uint32_t>& edgePatch);
+    void updateLocalFaces(HalfEdgeMesh& conn, const std::vector<uint32_t>& facePatch);
+    void updateLocalEdges(HalfEdgeMesh& conn, const std::vector<uint32_t>& edgePatch);
+    bool isValidFace(uint32_t faceIdx) const;
+    bool isValidEdge(uint32_t edgeIdx) const;
+    bool needsRefinement(uint32_t faceIdx, float minAngleThreshold, float minAreaThreshold);
+    float refinementPriority(uint32_t faceIdx);
+    void queueRefineFace(uint32_t faceIdx, float minAngleThreshold, float minAreaThreshold, std::priority_queue<FaceCandidate>& faceQueue);
+    void queueDelaunayEdge(uint32_t edgeIdx, std::deque<uint32_t>& edgeQueue, std::vector<uint8_t>& inQueue);
 
     bool insertCircumcenter(uint32_t faceIdx, uint32_t& outNewVertex);
     bool splitEdge(uint32_t edgeIdx, uint32_t& outNewVertex, uint32_t& outDiagFront, uint32_t& outDiagBack, uint32_t HESplit, double t = 0.5);
@@ -79,10 +78,12 @@ private:
     
     // Maps every intrinsic vertex to a location on the original mesh surface
     std::unordered_map<uint32_t, GeodesicTracer::SurfacePoint> intrinsicVertexLocations;
-    
+
     // Tracks which input face was used during vertex resolution
     std::unordered_map<uint32_t, uint32_t> vertexResolutionFaces;
 
     std::unique_ptr<CommonSubdivision> commonSubdivision;   
     std::unique_ptr<SupportingHalfedge> supportingHalfedge; 
 };
+
+

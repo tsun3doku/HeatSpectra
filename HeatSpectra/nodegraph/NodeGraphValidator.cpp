@@ -42,11 +42,6 @@ bool NodeGraphValidator::canCreateConnection(
         return false;
     }
 
-    if (srcSocket->valueType != dstSocket->valueType) {
-        errorMessage = "Socket type mismatch in connection.";
-        return false;
-    }
-
     const NodePayloadType producedPayloadType = srcSocket->contract.producedPayloadType;
     if (!acceptsPayload(*dstSocket, producedPayloadType)) {
         errorMessage = "Data contract mismatch: output '" + srcSocket->name + "' provides '" +

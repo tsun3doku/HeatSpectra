@@ -4,7 +4,6 @@
 #include "nodegraph/NodeGraphEditor.hpp"
 #include "NodeGraphSliderRow.hpp"
 #include "nodegraph/NodeVoronoiParams.hpp"
-#include "domain/VoronoiParams.hpp"
 
 #include <QCheckBox>
 #include <QLabel>
@@ -14,18 +13,19 @@ NodeVoronoiPanel::NodeVoronoiPanel(QWidget* parent)
     : NodePanelBase(parent) {
     QVBoxLayout* layout = static_cast<QVBoxLayout*>(this->layout());
 
-    const VoronoiParams defaults{};
+    constexpr double cellSize = 0.005;
+    constexpr int voxelResolution = 128;
 
     cellSizeRow = new NodeGraphSliderRow("Cell Size", this);
     cellSizeRow->setRange(0.0001, 1.0);
     cellSizeRow->setDecimals(6);
-    cellSizeRow->setValue(defaults.cellSize);
+    cellSizeRow->setValue(cellSize);
     layout->addWidget(cellSizeRow);
 
     voxelResolutionRow = new NodeGraphSliderRow("Voxel Resolution", this);
     voxelResolutionRow->setRange(1.0, 1024.0);
     voxelResolutionRow->setDecimals(0);
-    voxelResolutionRow->setValue(static_cast<double>(defaults.voxelResolution));
+    voxelResolutionRow->setValue(static_cast<double>(voxelResolution));
     layout->addWidget(voxelResolutionRow);
 
     QLabel* hintLabel = new QLabel(

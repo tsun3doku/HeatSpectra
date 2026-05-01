@@ -1,9 +1,10 @@
 #include "voronoi/VoronoiSurfaceStage.hpp"
 
+#include "heat/HeatGpuStructs.hpp"
 #include "util/Structs.hpp"
 #include "util/file_utils.h"
-#include "voronoi/VoronoiGeometryRuntime.hpp"
-#include "voronoi/VoronoiSystemResources.hpp"
+#include "voronoi/VoronoiModelRuntime.hpp"
+#include "voronoi/VoronoiResources.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
 
@@ -22,7 +23,7 @@ bool VoronoiSurfaceStage::createDescriptorPool(uint32_t maxFramesInFlight) {
 
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[0].descriptorCount = totalSets * 3;
+    poolSizes[0].descriptorCount = totalSets * 5;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[1].descriptorCount = totalSets * 1;
 
@@ -46,7 +47,9 @@ bool VoronoiSurfaceStage::createDescriptorSetLayout() {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {10, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{};
@@ -91,7 +94,7 @@ bool VoronoiSurfaceStage::createPipeline() {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(HeatSourcePushConstant);
+    pushConstantRange.size = sizeof(heat::SourcePushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -111,7 +114,7 @@ bool VoronoiSurfaceStage::createPipeline() {
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     pipelineInfo.stage = shaderStageInfo;
     pipelineInfo.layout = context.resources.surfacePipelineLayout;
-
+    
     if (vkCreateComputePipelines(context.vulkanDevice.getDevice(), VK_NULL_HANDLE, 1,
         &pipelineInfo, nullptr, &context.resources.surfacePipeline) != VK_SUCCESS) {
         vkDestroyPipelineLayout(context.vulkanDevice.getDevice(), context.resources.surfacePipelineLayout, nullptr);
@@ -128,7 +131,7 @@ bool VoronoiSurfaceStage::createPipeline() {
 void VoronoiSurfaceStage::dispatchSurfaceTemperatureUpdates(
     VkCommandBuffer commandBuffer,
     uint32_t nodeCount,
-    const std::vector<std::unique_ptr<VoronoiGeometryRuntime>>& geometryRuntimes,
+    const std::vector<std::unique_ptr<VoronoiModelRuntime>>& modelRuntimes,
     bool finalWritesBufferB) const {
     if (nodeCount == 0 ||
         context.resources.surfacePipeline == VK_NULL_HANDLE ||
@@ -138,23 +141,23 @@ void VoronoiSurfaceStage::dispatchSurfaceTemperatureUpdates(
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, context.resources.surfacePipeline);
 
-    HeatSourcePushConstant surfacePushConstant{};
+    heat::SourcePushConstant surfacePushConstant{};
     surfacePushConstant.substepIndex = 0;
 
-    for (const auto& geometryRuntime : geometryRuntimes) {
-        if (!geometryRuntime || geometryRuntime->getIntrinsicVertexCount() == 0) {
+    for (const auto& modelRuntime : modelRuntimes) {
+        if (!modelRuntime || modelRuntime->getIntrinsicVertexCount() == 0) {
             continue;
         }
 
         const VkDescriptorSet surfaceSet = finalWritesBufferB
-            ? geometryRuntime->getSurfaceComputeSetB()
-            : geometryRuntime->getSurfaceComputeSetA();
+            ? modelRuntime->getSurfaceComputeSetB()
+            : modelRuntime->getSurfaceComputeSetA();
         if (surfaceSet == VK_NULL_HANDLE) {
             continue;
         }
 
         const uint32_t workGroupSize = 256;
-        const uint32_t vertexCount = static_cast<uint32_t>(geometryRuntime->getIntrinsicVertexCount());
+        const uint32_t vertexCount = static_cast<uint32_t>(modelRuntime->getIntrinsicVertexCount());
         const uint32_t workGroupCount = (vertexCount + workGroupSize - 1) / workGroupSize;
 
         vkCmdPushConstants(
@@ -162,7 +165,7 @@ void VoronoiSurfaceStage::dispatchSurfaceTemperatureUpdates(
             context.resources.surfacePipelineLayout,
             VK_SHADER_STAGE_COMPUTE_BIT,
             0,
-            sizeof(HeatSourcePushConstant),
+            sizeof(heat::SourcePushConstant),
             &surfacePushConstant);
         vkCmdBindDescriptorSets(
             commandBuffer,

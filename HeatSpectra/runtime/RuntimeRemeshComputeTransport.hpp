@@ -92,10 +92,10 @@ private:
         outConfig.socketKey = socketKey;
         outConfig.pointPositions = package.sourceGeometry.pointPositions;
         outConfig.triangleIndices = package.sourceGeometry.triangleIndices;
-        outConfig.iterations = package.params.iterations;
-        outConfig.minAngleDegrees = package.params.minAngleDegrees;
-        outConfig.maxEdgeLength = package.params.maxEdgeLength;
-        outConfig.stepSize = package.params.stepSize;
+        outConfig.iterations = package.iterations;
+        outConfig.minAngleDegrees = package.minAngleDegrees;
+        outConfig.maxEdgeLength = package.maxEdgeLength;
+        outConfig.stepSize = package.stepSize;
 
         const ModelProduct* modelProduct = tryGetProduct<ModelProduct>(*ecsRegistry, package.modelProductHandle.outputSocketKey);
         outConfig.runtimeModelId = modelProduct ? modelProduct->runtimeModelId : 0;

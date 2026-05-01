@@ -1,5 +1,6 @@
 #include "HeatSystemSimRuntime.hpp"
 
+#include "heat/HeatGpuStructs.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanBuffer.hpp"
@@ -56,38 +57,7 @@ bool HeatSystemSimRuntime::initialize(VulkanDevice& vulkanDevice, MemoryAllocato
     }
     mappedTempBufferB = mappedPtr;
 
-    const VkDeviceSize injectionBufferSize = sizeof(uint32_t) * static_cast<VkDeviceSize>(nodeCount);
-    if (createStorageBuffer(
-            memoryAllocator,
-            vulkanDevice,
-            nullptr,
-            injectionBufferSize,
-            injectionKBuffer,
-            injectionKBufferOffset,
-            &mappedPtr) != VK_SUCCESS ||
-        injectionKBuffer == VK_NULL_HANDLE ||
-        mappedPtr == nullptr) {
-        cleanup(memoryAllocator);
-        return false;
-    }
-    mappedInjectionKBuffer = mappedPtr;
-
-    if (createStorageBuffer(
-            memoryAllocator,
-            vulkanDevice,
-            nullptr,
-            injectionBufferSize,
-            injectionKTBuffer,
-            injectionKTBufferOffset,
-            &mappedPtr) != VK_SUCCESS ||
-        injectionKTBuffer == VK_NULL_HANDLE ||
-        mappedPtr == nullptr) {
-        cleanup(memoryAllocator);
-        return false;
-    }
-    mappedInjectionKTBuffer = mappedPtr;
-
-    const VkDeviceSize timeBufferSize = sizeof(TimeUniform);
+    const VkDeviceSize timeBufferSize = sizeof(heat::TimeUniform);
     if (createUniformBuffer(
             memoryAllocator,
             vulkanDevice,
@@ -114,35 +84,24 @@ void HeatSystemSimRuntime::reset() {
         tempsB[index] = AMBIENT_TEMPERATURE;
     }
 
-    if (mappedInjectionKBuffer) {
-        std::memset(mappedInjectionKBuffer, 0, sizeof(uint32_t) * static_cast<size_t>(nodeCount));
-    }
-    if (mappedInjectionKTBuffer) {
-        std::memset(mappedInjectionKTBuffer, 0, sizeof(uint32_t) * static_cast<size_t>(nodeCount));
-    }
     if (mappedTimeData) {
-        auto* timeData = static_cast<TimeUniform*>(mappedTimeData);
+        auto* timeData = static_cast<heat::TimeUniform*>(mappedTimeData);
         timeData->deltaTime = 0.0f;
         timeData->totalTime = 0.0f;
     }
-
 }
 
 void HeatSystemSimRuntime::cleanup(MemoryAllocator& memoryAllocator) {
     freeRuntimeBuffer(memoryAllocator, timeBuffer, timeBufferOffset);
     freeRuntimeBuffer(memoryAllocator, tempBufferA, tempBufferAOffset);
     freeRuntimeBuffer(memoryAllocator, tempBufferB, tempBufferBOffset);
-    freeRuntimeBuffer(memoryAllocator, injectionKBuffer, injectionKBufferOffset);
-    freeRuntimeBuffer(memoryAllocator, injectionKTBuffer, injectionKTBufferOffset);
 
     mappedTimeData = nullptr;
     mappedTempBufferA = nullptr;
     mappedTempBufferB = nullptr;
-    mappedInjectionKBuffer = nullptr;
-    mappedInjectionKTBuffer = nullptr;
     nodeCount = 0;
 }
 
-TimeUniform* HeatSystemSimRuntime::getMappedTimeData() const {
-    return static_cast<TimeUniform*>(mappedTimeData);
+heat::TimeUniform* HeatSystemSimRuntime::getMappedTimeData() const {
+    return static_cast<heat::TimeUniform*>(mappedTimeData);
 }

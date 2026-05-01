@@ -324,7 +324,7 @@ void mapSurfacePoints(
 			float crossLen = std::sqrt(std::max(1e-12f, rTri.area)) * 0.1f;
 
 			for (uint32_t si = 0; si < Quadrature::count; ++si) {
-				const ContactSampleGPU& s = pair.samples[si];
+				const contact::Sample& s = pair.samples[si];
 				if (s.sourceTriangleIndex == iODT::INVALID_INDEX || s.wArea <= 0.0f) {
 					continue;
 				}

@@ -1,4 +1,4 @@
-﻿#include "SupportingHalfedge.hpp"
+#include "SupportingHalfedge.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 #include <iostream>
@@ -282,7 +282,7 @@ bool SupportingHalfedge::flipEdge(uint32_t edgeIdx) {
     return success;
 }
 
-int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges) {
+int SupportingHalfedge::makeDelaunay(std::vector<uint32_t>* flippedEdges) {
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
     const auto& edges = intrinsicConn.getEdges();
     std::vector<uint32_t> allEdges;
@@ -293,70 +293,89 @@ int SupportingHalfedge::makeDelaunay(int maxIterations, std::vector<uint32_t>* f
         }
     }
 
-    return makeDelaunayLocal(maxIterations, allEdges, flippedEdges);
+    return makeDelaunayLocal(allEdges, flippedEdges);
 }
 
-int SupportingHalfedge::makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
+int SupportingHalfedge::makeDelaunayLocal(const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges) {
     auto& intrinsicConn = intrinsicMesh.getConnectivity();
     int totalFlips = 0;
+    std::queue<uint32_t> queueEdges;
+    std::unordered_set<uint32_t> inQueueEdges;
 
-    for (int iter = 0; iter < maxIterations; ++iter) {
-        std::queue<uint32_t> queueEdges;
-        std::unordered_set<uint32_t> inQueueEdges;
+    const auto& edges = intrinsicConn.getEdges();
+    const auto& faces = intrinsicConn.getFaces();
+    const auto& halfEdges = intrinsicConn.getHalfEdges();
 
-        const auto& edges = intrinsicConn.getEdges();
-        for (uint32_t edgeIdx : seedEdges) {
-            if (edgeIdx >= edges.size()) {
-                continue;
-            }
-
-            uint32_t he = edges[edgeIdx].halfEdgeIdx;
-            if (he != INVALID_INDEX && !intrinsicConn.isDelaunayEdge(he) && !inQueueEdges.count(edgeIdx)) {
-                queueEdges.push(edgeIdx);
-                inQueueEdges.insert(edgeIdx);
-            }
+    for (uint32_t edgeIdx : seedEdges) {
+        if (edgeIdx >= edges.size()) {
+            continue;
         }
 
-        if (queueEdges.empty()) {
-            break;
+        uint32_t he = edges[edgeIdx].halfEdgeIdx;
+        if (he != INVALID_INDEX && !inQueueEdges.count(edgeIdx)) {
+            queueEdges.push(edgeIdx);
+            inQueueEdges.insert(edgeIdx);
+        }
+    }
+
+    while (!queueEdges.empty()) {
+        uint32_t edgeIdx = queueEdges.front();
+        queueEdges.pop();
+        inQueueEdges.erase(edgeIdx);
+
+        if (edgeIdx >= edges.size()) {
+            continue;
         }
 
-        int flipsThisIter = 0;
+        uint32_t he = edges[edgeIdx].halfEdgeIdx;
+        if (he == INVALID_INDEX || he >= halfEdges.size() || intrinsicConn.isDelaunayEdge(he)) {
+            continue;
+        }
 
-        while (!queueEdges.empty()) {
-            uint32_t edgeIdx = queueEdges.front();
-            queueEdges.pop();
-            inQueueEdges.erase(edgeIdx);
+        if (flipEdge(edgeIdx)) {
+            totalFlips++;
+            if (flippedEdges) {
+                flippedEdges->push_back(edgeIdx);
+            }
 
-            if (edgeIdx >= edges.size()) {
+            he = edges[edgeIdx].halfEdgeIdx;
+            if (he == INVALID_INDEX || he >= halfEdges.size()) {
                 continue;
             }
 
-            uint32_t he = edges[edgeIdx].halfEdgeIdx;
-            if (he == INVALID_INDEX || intrinsicConn.isDelaunayEdge(he)) {
-                continue;
-            }
+            const uint32_t opp = halfEdges[he].opposite;
+            const uint32_t faceA = halfEdges[he].face;
+            const uint32_t faceB = (opp != INVALID_INDEX && opp < halfEdges.size()) ? halfEdges[opp].face : INVALID_INDEX;
+            const uint32_t affectedFaces[2] = { faceA, faceB };
 
-            if (flipEdge(edgeIdx)) {
-                totalFlips++;
-                flipsThisIter++;
-                if (flippedEdges) {
-                    flippedEdges->push_back(edgeIdx);
+            for (uint32_t faceIdx : affectedFaces) {
+                if (faceIdx == INVALID_INDEX || faceIdx >= faces.size()) {
+                    continue;
                 }
-                for (uint32_t nhe : intrinsicConn.getNeighboringHalfEdges(he)) {
+
+                uint32_t faceHe = faces[faceIdx].halfEdgeIdx;
+                if (faceHe == INVALID_INDEX || faceHe >= halfEdges.size()) {
+                    continue;
+                }
+
+                uint32_t curr = faceHe;
+                for (int i = 0; i < 3; ++i) {
+                    if (curr == INVALID_INDEX || curr >= halfEdges.size()) {
+                        break;
+                    }
+
+                    uint32_t nhe = curr;
                     uint32_t neighEdgeIdx = intrinsicConn.getEdgeFromHalfEdge(nhe);
                     if (neighEdgeIdx != INVALID_INDEX && !inQueueEdges.count(neighEdgeIdx)) {
                         queueEdges.push(neighEdgeIdx);
                         inQueueEdges.insert(neighEdgeIdx);
                     }
+
+                    curr = halfEdges[curr].next;
                 }
             }
-        }  // end while 
-
-        if (flipsThisIter == 0) {
-            break;
         }
-    }  // end for 
+    }
 
     // Count non zero angles after flipping
     int nonZeroCount = 0;

@@ -180,9 +180,6 @@ void TriangleHashGrid::initializeGrid(const glm::vec3& gridMin, const glm::vec3&
     gridMax_ = gridMax;
     cellSize_ = cellSize;
     gridDim_ = computeGridDimensions(gridMin, gridMax, cellSize);
-
-    std::cout << "  Building triangle hash grid: " << gridDim_.x << "x"
-        << gridDim_.y << "x" << gridDim_.z << std::endl;
 }
 
 void TriangleHashGrid::buildTriangles(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) {
@@ -234,7 +231,6 @@ void TriangleHashGrid::buildTriangles(const std::vector<glm::vec3>& vertices, co
         }
     }
 
-    std::cout << "  Triangle hash built: " << grid_.size() << " non-empty cells" << std::endl;
 }
 
 void TriangleHashGrid::addCellTriangles(size_t hash, std::unordered_set<size_t>& seenTriangles, std::vector<size_t>& outTriangles) const {

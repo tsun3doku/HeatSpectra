@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 
 #include "mesh/remesher/SupportingHalfedge.hpp"
+#include "voronoi/VoronoiGpuStructs.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;
@@ -14,12 +15,17 @@ class CommandPool;
 
 class VoronoiModelRuntime {
 public:
+    struct SurfaceVertex {
+        glm::vec3 position{0.0f};
+        glm::vec3 normal{0.0f, 0.0f, 1.0f};
+    };
+
     struct CpuData {
         uint32_t nodeModelId = 0;
         SupportingHalfedge::IntrinsicMesh intrinsicMesh;
         std::vector<glm::vec3> geometryPositions;
         std::vector<uint32_t> geometryTriangleIndices;
-        std::vector<glm::vec3> intrinsicSurfacePositions;
+        std::vector<SurfaceVertex> surfaceVertices;
         std::vector<uint32_t> intrinsicTriangleIndices;
     };
 
@@ -48,8 +54,34 @@ public:
     ~VoronoiModelRuntime();
 
     bool createVoronoiBuffers();
+    bool createSurfaceBuffers();
+    bool initializeSurfaceBuffer();
+    bool resetSurfaceState();
 
-    void stageVoronoiSurfaceMapping(const std::vector<uint32_t>& cellIndices);
+    void stageGMLSSurfaceData(
+        const std::vector<voronoi::GMLSSurfaceStencil>& stencils,
+        const std::vector<voronoi::GMLSSurfaceWeight>& valueWeights,
+        const std::vector<voronoi::GMLSSurfaceGradientWeight>& gradientWeights);
+    void updateSurfaceDescriptors(
+        VkDescriptorSetLayout surfaceLayout,
+        VkDescriptorPool surfacePool,
+        VkBuffer tempBufferA,
+        VkDeviceSize tempBufferAOffset,
+        VkBuffer tempBufferB,
+        VkDeviceSize tempBufferBOffset,
+        VkBuffer timeBuffer,
+        VkDeviceSize timeBufferOffset,
+        uint32_t nodeCount);
+    void recreateSurfaceDescriptors(
+        VkDescriptorSetLayout surfaceLayout,
+        VkDescriptorPool surfacePool,
+        VkBuffer tempBufferA,
+        VkDeviceSize tempBufferAOffset,
+        VkBuffer tempBufferB,
+        VkDeviceSize tempBufferBOffset,
+        VkBuffer timeBuffer,
+        VkDeviceSize timeBufferOffset,
+        uint32_t nodeCount);
     void executeBufferTransfers(VkCommandBuffer commandBuffer);
     void cleanup();
     void cleanupStagingBuffers();
@@ -68,16 +100,25 @@ public:
     const SupportingHalfedge::IntrinsicMesh& getIntrinsicMesh() const { return intrinsicMesh; }
     const std::vector<glm::vec3>& getGeometryPositions() const { return geometryPositions; }
     const std::vector<uint32_t>& getGeometryTriangleIndices() const { return geometryTriangleIndices; }
-    const std::vector<glm::vec3>& getIntrinsicSurfacePositions() const { return intrinsicSurfacePositions; }
+    std::vector<glm::vec3> getIntrinsicSurfacePositions() const;
     const std::vector<uint32_t>& getIntrinsicTriangleIndices() const { return intrinsicTriangleIndices; }
-    const std::vector<uint32_t>& getVoronoiSurfaceCellIndices() const { return voronoiSurfaceCellIndices; }
-
     VkBuffer getTriangleIndicesBuffer() const { return triangleIndicesBuffer; }
     VkDeviceSize getTriangleIndicesBufferOffset() const { return triangleIndicesBufferOffset; }
-    VkBuffer getVoronoiMappingBuffer() const { return voronoiMappingBuffer; }
-    VkDeviceSize getVoronoiMappingBufferOffset() const { return voronoiMappingBufferOffset; }
     VkBuffer getVoronoiCandidateBuffer() const { return voronoiCandidateBuffer; }
     VkDeviceSize getVoronoiCandidateBufferOffset() const { return voronoiCandidateBufferOffset; }
+    VkBuffer getSurfaceBuffer() const { return surfaceBuffer; }
+    VkDeviceSize getSurfaceBufferOffset() const { return surfaceBufferOffset; }
+    VkBufferView getSurfaceBufferView() const { return surfaceBufferView; }
+    VkBuffer getSurfaceVertexBuffer() const { return surfaceVertexBuffer; }
+    VkDeviceSize getSurfaceVertexBufferOffset() const { return surfaceVertexBufferOffset; }
+    VkDescriptorSet getSurfaceComputeSetA() const { return surfaceComputeSetA; }
+    VkDescriptorSet getSurfaceComputeSetB() const { return surfaceComputeSetB; }
+    VkBuffer getGMLSSurfaceStencilBuffer() const { return gmlsSurfaceStencilBuffer; }
+    VkDeviceSize getGMLSSurfaceStencilBufferOffset() const { return gmlsSurfaceStencilBufferOffset; }
+    VkBuffer getGMLSSurfaceWeightBuffer() const { return gmlsSurfaceWeightBuffer; }
+    VkDeviceSize getGMLSSurfaceWeightBufferOffset() const { return gmlsSurfaceWeightBufferOffset; }
+    VkBuffer getGMLSSurfaceGradientWeightBuffer() const { return gmlsSurfaceGradientWeightBuffer; }
+    VkDeviceSize getGMLSSurfaceGradientWeightBufferOffset() const { return gmlsSurfaceGradientWeightBufferOffset; }
     VkBufferView getSupportingHalfedgeView() const;
     VkBufferView getSupportingAngleView() const;
     VkBufferView getHalfedgeView() const;
@@ -103,6 +144,7 @@ private:
     SupportingHalfedge::IntrinsicMesh intrinsicMesh;
     std::vector<glm::vec3> geometryPositions;
     std::vector<uint32_t> geometryTriangleIndices;
+    std::vector<SurfaceVertex> surfaceVertices;
     VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
     VkBufferView supportingAngleView = VK_NULL_HANDLE;
     VkBufferView halfedgeView = VK_NULL_HANDLE;
@@ -117,20 +159,48 @@ private:
 
     size_t intrinsicVertexCount = 0;
     size_t intrinsicTriangleCount = 0;
-    std::vector<glm::vec3> intrinsicSurfacePositions;
     std::vector<uint32_t> intrinsicTriangleIndices;
-    std::vector<uint32_t> voronoiSurfaceCellIndices;
 
     VkBuffer triangleIndicesBuffer = VK_NULL_HANDLE;
     VkDeviceSize triangleIndicesBufferOffset = 0;
 
-    VkBuffer voronoiMappingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiMappingBufferOffset = 0;
-
-    VkBuffer voronoiMappingStagingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize voronoiMappingStagingOffset = 0;
-    VkDeviceSize voronoiMappingBufferSize = 0;
-
     VkBuffer voronoiCandidateBuffer = VK_NULL_HANDLE;
     VkDeviceSize voronoiCandidateBufferOffset = 0;
+
+    VkBuffer gmlsSurfaceStencilBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceStencilBufferOffset = 0;
+
+    VkBuffer gmlsSurfaceWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceWeightBufferOffset = 0;
+
+    VkBuffer gmlsSurfaceGradientWeightBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceGradientWeightBufferOffset = 0;
+
+    VkBuffer gmlsSurfaceStencilStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceStencilStagingOffset = 0;
+    VkDeviceSize gmlsSurfaceStencilBufferSize = 0;
+
+    VkBuffer gmlsSurfaceWeightStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceWeightStagingOffset = 0;
+    VkDeviceSize gmlsSurfaceWeightBufferSize = 0;
+
+    VkBuffer gmlsSurfaceGradientWeightStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsSurfaceGradientWeightStagingOffset = 0;
+    VkDeviceSize gmlsSurfaceGradientWeightBufferSize = 0;
+
+    VkBuffer surfaceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize surfaceBufferOffset = 0;
+    VkBufferView surfaceBufferView = VK_NULL_HANDLE;
+
+    VkBuffer surfaceVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceSize surfaceVertexBufferOffset = 0;
+
+    VkDescriptorSet surfaceComputeSetA = VK_NULL_HANDLE;
+    VkDescriptorSet surfaceComputeSetB = VK_NULL_HANDLE;
+
+    VkBuffer initStagingBuffer = VK_NULL_HANDLE;
+    VkDeviceSize initStagingOffset = 0;
+    VkDeviceSize initBufferSize = 0;
+
+    static constexpr float AMBIENT_TEMPERATURE = 1.0f;
 };

@@ -1,10 +1,10 @@
 #include "HeatSystemSimStage.hpp"
 
-#include "HeatSystemContactStage.hpp"
 #include "HeatReceiverRuntime.hpp"
 #include "HeatSourceRuntime.hpp"
 #include "HeatSystemResources.hpp"
 #include "HeatSystemSurfaceStage.hpp"
+#include "HeatSystemVoronoiStage.hpp"
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <limits>
@@ -17,11 +17,8 @@ void HeatSystemSimStage::recordComputeCommands(
     VkCommandBuffer commandBuffer,
     uint32_t currentFrame,
     const HeatSystemSimRuntime& simRuntime,
-    const HeatSourcePushConstant& basePushConstant,
-    const std::vector<HeatContactRuntime::CouplingState>& contactCouplings,
-    const std::vector<HeatSystemRuntime::SourceBinding>& sourceBindings,
+    const heat::SourcePushConstant& basePushConstant,
     const std::vector<std::unique_ptr<HeatReceiverRuntime>>& receivers,
-    const HeatSystemContactStage& contactStage,
     const HeatSystemVoronoiStage& voronoiStage,
     const HeatSystemSurfaceStage& surfaceStage,
     uint32_t maxNodeNeighbors,
@@ -33,21 +30,13 @@ void HeatSystemSimStage::recordComputeCommands(
         return;
     }
 
-    HeatSourcePushConstant pushConstant = basePushConstant;
+    heat::SourcePushConstant pushConstant = basePushConstant;
     pushConstant.maxNodeNeighbors = maxNodeNeighbors;
 
     const uint32_t workGroupSize = 256;
     const uint32_t workGroupCount = (nodeCount + workGroupSize - 1) / workGroupSize;
     for (uint32_t substepIndex = 0; substepIndex < numSubsteps; ++substepIndex) {
-        const bool evenSubstep = ((substepIndex % 2) == 0);
-        for (const HeatContactRuntime::CouplingState& coupling : contactCouplings) {
-            contactStage.dispatchCoupling(commandBuffer, coupling, sourceBindings, evenSubstep);
-        }
-        if (!contactCouplings.empty()) {
-            contactStage.insertInjectionBarrier(commandBuffer, simRuntime);
-        }
-
-        pushConstant.substepIndex = substepIndex;
+        pushConstant.substepIndex = static_cast<uint32_t>(substepIndex);
         voronoiStage.dispatchDiffusionSubstep(
             commandBuffer,
             currentFrame,

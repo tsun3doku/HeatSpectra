@@ -25,11 +25,9 @@ void VoronoiSeeder::generateSeeds(
     cellSize = targetCellSize;
 
     if (intrinsicMesh.vertices.empty() || intrinsicMesh.triangles.empty() || positions.empty() || indices.empty()) {
-        std::cout << "[VoronoiSeeder] Empty intrinsic mesh" << std::endl;
+        std::cerr << "[VoronoiSeeder] Empty intrinsic mesh" << std::endl;
         return;
     }
-
-    std::cout << "  Cell Size: " << cellSize << std::endl;
 
     // Calculate bounding box
     glm::vec3 minBounds(FLT_MAX);
@@ -60,11 +58,8 @@ void VoronoiSeeder::generateSeeds(
     buildSDFGrid(positions, indices, sharedTriGrid);
 
     voxelGrid.build(positions, indices, sharedTriGrid, voxelResolution);
-    const VoxelGrid* voxelGridRef = (voxelGrid.getGridSize() > 0) ? &voxelGrid : nullptr;
-    
-    // Only generate seeds within this distance
-    float maxDistFromSurface = cellSize * 1.5f;  
-    generateBlueNoiseSeeds(maxDistFromSurface, voxelGridRef);
+
+    generateBlueNoiseSeeds();
 }
 
 
@@ -90,7 +85,6 @@ void VoronoiSeeder::exportSeedsToOBJ(const std::string& filename) const {
     }
     
     file.close();
-    std::cout << "[VoronoiSeeder] Exported seeds to: " << filename << std::endl;
 }
 
 float VoronoiSeeder::computePointToMeshDistance(
@@ -150,7 +144,7 @@ void VoronoiSeeder::buildSDFGrid(
         for (int y = 0; y < sdfGridDim.y; y++) {
             for (int x = 0; x < sdfGridDim.x; x++) {
                 glm::vec3 gridPoint = gridMin + glm::vec3(x, y, z) * sdfCellSize;  
-
+                
                 float unsignedDist = computePointToMeshDistance(gridPoint, positions, indices);
 
                 // Use sdfGridDim for indexing
@@ -242,7 +236,7 @@ bool VoronoiSeeder::isTooCloseToExisting(const glm::vec3& candidatePos, float po
     return false;
 }
 
-void VoronoiSeeder::generateBlueNoiseSeeds(float maxDistFromSurface, const VoxelGrid* voxelGrid) {
+void VoronoiSeeder::generateBlueNoiseSeeds() {
     std::default_random_engine generator(42);
     std::uniform_real_distribution<float> uniform01(0.0f, 1.0f);
     
@@ -273,19 +267,8 @@ void VoronoiSeeder::generateBlueNoiseSeeds(float maxDistFromSurface, const Voxel
                         (uniform01(generator) - 0.5f) * cellSize
                     );
                     
-                    float distToSurface = sampleSDFGrid(candidatePos);
-
-                    bool isInside = false;
-                    if (voxelGrid) {
-                        glm::ivec3 voxel = voxelGrid->worldToVoxel(candidatePos);
-                        uint8_t occ = voxelGrid->getOccupancy(voxel.x, voxel.y, voxel.z);
-                        isInside = (occ == 2 || occ == 1);
-                    }
-
-                    bool isGhost = (!isInside && distToSurface > maxDistFromSurface);
-     
                     if (!isTooCloseToExisting(candidatePos, basePoissonRadius, hashCellSize, spatialHash)) {
-                        seeds.push_back(Seed(candidatePos, false, isGhost));
+                        seeds.push_back(Seed(candidatePos, false));
                         
                         size_t hash = computeSpatialHash(candidatePos, hashCellSize);
                         spatialHash[hash].push_back(candidatePos);

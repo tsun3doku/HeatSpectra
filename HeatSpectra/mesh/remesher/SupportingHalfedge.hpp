@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "HalfEdgeMesh.hpp"
 #include "SignPostMesh.hpp"
@@ -115,8 +115,8 @@ public:
     void updateRemoval(uint32_t intrinsicHE);
     void updateInsertion(uint32_t intrinsicHE);
     bool flipEdge(uint32_t edgeIdx);
-    int makeDelaunay(int maxIterations, std::vector<uint32_t>* flippedEdges = nullptr);
-    int makeDelaunayLocal(int maxIterations, const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
+    int makeDelaunay(std::vector<uint32_t>* flippedEdges = nullptr);
+    int makeDelaunayLocal(const std::vector<uint32_t>& seedEdges, std::vector<uint32_t>* flippedEdges = nullptr);
 
     // Track where inserted vertices are located on the input mesh
     void trackInsertedVertex(uint32_t vertexIdx, const struct GeodesicTracer::SurfacePoint& surfacePoint);

@@ -3,7 +3,22 @@
     "allow": [
       "Bash(git checkout *)",
       "Bash(xxd)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(glslangValidator -V HeatSpectra/shaders/heat_voronoi.comp -o HeatSpectra/shaders/heat_voronoi_comp.spv)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra.sln -p:Configuration=Release -p:Platform=x64 -verbosity:minimal)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra/HeatSpectra.vcxproj /p:Configuration=Debug /p:Platform=x64 /t:Build)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" \"HeatSpectra/HeatSpectra.vcxproj\" -p:Configuration=Debug -p:Platform=x64 -t:Build)",
+      "Bash(glslangValidator -V heat_voronoi.comp -o heat_voronoi_comp.spv)",
+      "Bash(ls build/*.sln)",
+      "Bash(ls *.sln)",
+      "Bash(find . -maxdepth 2 -name \"*.sln\")",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra.sln -p:Configuration=Release -p:Platform=x64 -m -verbosity:minimal)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra.sln -p:Configuration=Release -p:Platform=x64 -m -verbosity:minimal -t:Rebuild)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra.sln -p:Configuration=Release -p:Platform=x64 -m -verbosity:minimal -t:Build)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" HeatSpectra.sln -p:Configuration=Release -p:Platform=x64)",
+      "Bash(C:/VulkanSDK/1.3.283.0/Bin/glslc.exe grid.vert -o grid_vert.spv)",
+      "Bash(C:/VulkanSDK/1.3.283.0/Bin/glslc.exe grid.frag -o grid_frag.spv)",
+      "Bash(C:/VulkanSDK/1.3.283.0/Bin/glslc.exe grid_label.vert -o grid_label_vert.spv)"
     ]
   }
 }

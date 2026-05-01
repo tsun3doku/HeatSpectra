@@ -5,7 +5,6 @@
 #include "nodegraph/NodeGraphBridge.hpp"
 #include "nodegraph/NodeGraphEditor.hpp"
 #include "nodegraph/NodeRemeshParams.hpp"
-#include "domain/RemeshParams.hpp"
 #include "NodeGraphSliderRow.hpp"
 
 #include <QCheckBox>
@@ -16,30 +15,33 @@ NodeRemeshPanel::NodeRemeshPanel(QWidget* parent)
     : NodePanelBase(parent) {
     QVBoxLayout* layout = static_cast<QVBoxLayout*>(this->layout());
 
-    const RemeshParams defaults{};
+    constexpr int iterations = 1;
+    constexpr double minAngleDegrees = 30.0;
+    constexpr double maxEdgeLength = 0.1;
+    constexpr double stepSize = 0.25;
 
     iterationsRow = new NodeGraphSliderRow("Iterations", this);
     iterationsRow->setRange(1.0, 1000.0);
     iterationsRow->setDecimals(0);
-    iterationsRow->setValue(static_cast<double>(defaults.iterations));
+    iterationsRow->setValue(static_cast<double>(iterations));
     layout->addWidget(iterationsRow);
 
     minAngleRow = new NodeGraphSliderRow("Min Angle", this);
     minAngleRow->setRange(0.0, 60.0);
     minAngleRow->setDecimals(1);
-    minAngleRow->setValue(defaults.minAngleDegrees);
+    minAngleRow->setValue(minAngleDegrees);
     layout->addWidget(minAngleRow);
 
     maxEdgeLengthRow = new NodeGraphSliderRow("Max Edge Length", this);
     maxEdgeLengthRow->setRange(0.001, 10.0);
     maxEdgeLengthRow->setDecimals(4);
-    maxEdgeLengthRow->setValue(defaults.maxEdgeLength);
+    maxEdgeLengthRow->setValue(maxEdgeLength);
     layout->addWidget(maxEdgeLengthRow);
 
     stepSizeRow = new NodeGraphSliderRow("Step Size", this);
     stepSizeRow->setRange(0.01, 1.0);
     stepSizeRow->setDecimals(2);
-    stepSizeRow->setValue(defaults.stepSize);
+    stepSizeRow->setValue(stepSize);
     layout->addWidget(stepSizeRow);
 
     remeshOverlayCheckBox = new QCheckBox("Remesh Overlay", this);

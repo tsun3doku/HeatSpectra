@@ -1,8 +1,6 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphParamUtils.hpp"
 
-#include "domain/RemeshParams.hpp"
-
 NodeSocketSignature NodeGraphRegistry::makeInputSocket(
     const char* name,
     NodeGraphValueType valueType) {
@@ -15,12 +13,11 @@ NodeSocketSignature NodeGraphRegistry::makeInputSocket(
 
 NodeSocketSignature NodeGraphRegistry::makeOutputSocket(
     const char* name,
-    NodeGraphValueType valueType,
     NodePayloadType producedPayloadType) {
     NodeSocketSignature signature{};
     signature.name = name;
     signature.direction = NodeGraphSocketDirection::Output;
-    signature.valueType = valueType;
+    signature.valueType = valueTypeOf(producedPayloadType);
     signature.contract.producedPayloadType = producedPayloadType;
     return signature;
 }
@@ -33,7 +30,6 @@ NodeTypeDefinition NodeGraphRegistry::buildModelNode() {
         {
             makeOutputSocket(
                 "Mesh",
-                NodeGraphValueType::Mesh,
                 NodePayloadType::Geometry),
         },
         {
@@ -51,7 +47,6 @@ NodeTypeDefinition NodeGraphRegistry::buildTransformNode() {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
             makeOutputSocket(
                 "Mesh",
-                NodeGraphValueType::Mesh,
                 NodePayloadType::Geometry),
         },
         {
@@ -77,7 +72,6 @@ NodeTypeDefinition NodeGraphRegistry::buildGroupNode() {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
             makeOutputSocket(
                 "Mesh",
-                NodeGraphValueType::Mesh,
                 NodePayloadType::Geometry),
         },
         {
@@ -90,21 +84,19 @@ NodeTypeDefinition NodeGraphRegistry::buildGroupNode() {
 }
 
 NodeTypeDefinition NodeGraphRegistry::buildRemeshNode() {
-    const RemeshParams defaults{};
-
     return {
         nodegraphtypes::Remesh,
         "Remesh",
         NodeGraphNodeCategory::Meshing,
         {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
-            makeOutputSocket("Mesh", NodeGraphValueType::Mesh, NodePayloadType::Remesh),
+            makeOutputSocket("Mesh", NodePayloadType::Remesh),
         },
         {
-            {nodegraphparams::remesh::Iterations, "Iterations", NodeGraphParamType::Int, 0.0, defaults.iterations, false, "", false},
-            {nodegraphparams::remesh::MinAngleDegrees, "Min Angle", NodeGraphParamType::Float, defaults.minAngleDegrees, 0, false, "", false},
-            {nodegraphparams::remesh::MaxEdgeLength, "Max Edge Length", NodeGraphParamType::Float, defaults.maxEdgeLength, 0, false, "", false},
-            {nodegraphparams::remesh::StepSize, "Step Size", NodeGraphParamType::Float, defaults.stepSize, 0, false, "", false},
+            {nodegraphparams::remesh::Iterations, "Iterations", NodeGraphParamType::Int, 0.0, 1, false, "", false},
+            {nodegraphparams::remesh::MinAngleDegrees, "Min Angle", NodeGraphParamType::Float, 20.0, 0, false, "", false},
+            {nodegraphparams::remesh::MaxEdgeLength, "Max Edge Length", NodeGraphParamType::Float, 0.1, 0, false, "", false},
+            {nodegraphparams::remesh::StepSize, "Step Size", NodeGraphParamType::Float, 0.25, 0, false, "", false},
             {nodegraphparams::remesh::RunRequested, "Run Requested", NodeGraphParamType::Bool, 0.0, 0, false, "", true},
             {nodegraphparams::remesh::ShowRemeshOverlay, "Show Remesh Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::remesh::ShowFaceNormals, "Show Face Normals", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
@@ -123,7 +115,6 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatReceiverNode() {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
             makeOutputSocket(
                 "Receiver",
-                NodeGraphValueType::Receiver,
                 NodePayloadType::HeatReceiver),
         },
         {},
@@ -139,7 +130,6 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSourceNode() {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
             makeOutputSocket(
                 "Source",
-                NodeGraphValueType::Emitter,
                 NodePayloadType::HeatSource),
         },
         {
@@ -154,9 +144,9 @@ NodeTypeDefinition NodeGraphRegistry::buildContactNode() {
         "Contact",
         NodeGraphNodeCategory::System,
         {
-            makeInputSocket("Emitter", NodeGraphValueType::Emitter),
-            makeInputSocket("Receiver", NodeGraphValueType::Receiver),
-            makeOutputSocket("Field", NodeGraphValueType::Field, NodePayloadType::Contact),
+            makeInputSocket("Emitter", NodeGraphValueType::Mesh),
+            makeInputSocket("Receiver", NodeGraphValueType::Mesh),
+            makeOutputSocket("Field", NodePayloadType::Contact),
         },
         {
             {nodegraphparams::contact::MinNormalDot, "Min Normal Dot", NodeGraphParamType::Float, -0.65, 0, false, "", false},
@@ -173,7 +163,7 @@ NodeTypeDefinition NodeGraphRegistry::buildVoronoiNode() {
         NodeGraphNodeCategory::System,
         {
             makeInputSocket("Mesh", NodeGraphValueType::Mesh),
-            makeOutputSocket("Volume", NodeGraphValueType::Volume, NodePayloadType::Voronoi),
+            makeOutputSocket("Volume", NodePayloadType::Voronoi),
         },
         {
             {nodegraphparams::voronoi::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
@@ -206,7 +196,7 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSolveNode() {
         {
             makeInputSocket("Volume", NodeGraphValueType::Volume),
             makeInputSocket("Field", NodeGraphValueType::Field),
-            makeOutputSocket("Heat", NodeGraphValueType::None, NodePayloadType::Heat),
+            makeOutputSocket("Heat", NodePayloadType::Heat),
         },
         {
             {nodegraphparams::heatsolve::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
@@ -216,6 +206,7 @@ NodeTypeDefinition NodeGraphRegistry::buildHeatSolveNode() {
             {nodegraphparams::heatsolve::CellSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
             {nodegraphparams::heatsolve::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
             {nodegraphparams::heatsolve::ShowHeatOverlay, "Show Heat Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::heatsolve::ContactThermalConductance, "Contact Thermal Conductance", NodeGraphParamType::Float, 16000.0, 0, false, "", false},
         },
     };
 }
@@ -227,7 +218,7 @@ NodeTypeDefinition NodeGraphRegistry::buildCustomNode() {
         NodeGraphNodeCategory::Custom,
         {
             makeInputSocket("In", NodeGraphValueType::None),
-            makeOutputSocket("Out", NodeGraphValueType::None, NodePayloadType::None),
+            makeOutputSocket("Out", NodePayloadType::None),
         },
         {},
     };

@@ -102,6 +102,7 @@ private:
         outConfig.active = package.authored.active;
         outConfig.paused = package.authored.paused;
         outConfig.resetRequested = package.authored.resetRequested;
+        outConfig.contactThermalConductance = package.authored.contactThermalConductance;
         outConfig.sourceIntrinsicMeshes.reserve(package.sourceRemeshProducts.size());
         outConfig.sourceRuntimeModelIds.reserve(package.sourceRemeshProducts.size());
 
@@ -213,14 +214,8 @@ private:
             outConfig.voronoiNodes = product->mappedVoronoiNodes;
             outConfig.voronoiNodeBuffer = product->nodeBuffer;
             outConfig.voronoiNodeBufferOffset = product->nodeBufferOffset;
-            outConfig.voronoiNeighborBuffer = product->voronoiNeighborBuffer;
-            outConfig.voronoiNeighborBufferOffset = product->voronoiNeighborBufferOffset;
-            outConfig.neighborIndicesBuffer = product->neighborIndicesBuffer;
-            outConfig.neighborIndicesBufferOffset = product->neighborIndicesBufferOffset;
-            outConfig.interfaceAreasBuffer = product->interfaceAreasBuffer;
-            outConfig.interfaceAreasBufferOffset = product->interfaceAreasBufferOffset;
-            outConfig.interfaceNeighborIdsBuffer = product->interfaceNeighborIdsBuffer;
-            outConfig.interfaceNeighborIdsBufferOffset = product->interfaceNeighborIdsBufferOffset;
+            outConfig.gmlsInterfaceBuffer = product->gmlsInterfaceBuffer;
+            outConfig.gmlsInterfaceBufferOffset = product->gmlsInterfaceBufferOffset;
             outConfig.seedFlagsBuffer = product->seedFlagsBuffer;
             outConfig.seedFlagsBufferOffset = product->seedFlagsBufferOffset;
 
@@ -232,10 +227,14 @@ private:
 
                 outConfig.receiverVoronoiNodeOffsetByModelId[runtimeModelId] = surfaceProduct.nodeOffset;
                 outConfig.receiverVoronoiNodeCountByModelId[runtimeModelId] = surfaceProduct.nodeCount;
-                outConfig.receiverVoronoiSurfaceMappingBufferByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBuffer;
-                outConfig.receiverVoronoiSurfaceMappingBufferOffsetByModelId[runtimeModelId] = surfaceProduct.surfaceMappingBufferOffset;
-                outConfig.receiverVoronoiSurfaceCellIndicesByModelId[runtimeModelId] = surfaceProduct.surfaceCellIndices;
+                outConfig.receiverGMLSSurfaceStencilBufferByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceStencilBuffer;
+                outConfig.receiverGMLSSurfaceStencilBufferOffsetByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceStencilBufferOffset;
+                outConfig.receiverGMLSSurfaceWeightBufferByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceWeightBuffer;
+                outConfig.receiverGMLSSurfaceWeightBufferOffsetByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceWeightBufferOffset;
+                outConfig.receiverGMLSSurfaceGradientWeightBufferByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceGradientWeightBuffer;
+                outConfig.receiverGMLSSurfaceGradientWeightBufferOffsetByModelId[runtimeModelId] = surfaceProduct.gmlsSurfaceGradientWeightBufferOffset;
                 outConfig.receiverVoronoiSeedFlagsByModelId[runtimeModelId] = surfaceProduct.seedFlags;
+                outConfig.receiverVoronoiSeedPositionsByModelId[runtimeModelId] = surfaceProduct.seedPositions;
             }
         }
 

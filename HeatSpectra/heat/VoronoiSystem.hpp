@@ -2,8 +2,6 @@
 
 #include "VoronoiSystemRuntime.hpp"
 #include "voronoi/VoronoiBuilder.hpp"
-#include "voronoi/VoronoiSurfaceRuntime.hpp"
-#include "voronoi/VoronoiSystemResources.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -34,12 +32,12 @@ public:
     bool isInitialized() const { return initialized; }
     bool isReady() const { return runtime.isReady(); }
 
-    void setReceiverPayloads(
+    void setReceiverGeometry(
         const std::vector<uint32_t>& receiverNodeModelIds,
         const std::vector<std::vector<glm::vec3>>& receiverGeometryPositions,
         const std::vector<std::vector<uint32_t>>& receiverGeometryTriangleIndices,
         const std::vector<SupportingHalfedge::IntrinsicMesh>& receiverIntrinsicMeshes,
-        const std::vector<std::vector<VoronoiGeometryRuntime::SurfaceVertex>>& receiverSurfaceVertices,
+        const std::vector<std::vector<VoronoiModelRuntime::SurfaceVertex>>& receiverSurfaceVertices,
         const std::vector<std::vector<uint32_t>>& receiverIntrinsicTriangleIndices,
         const std::vector<uint32_t>& receiverModelIds,
         const std::vector<VkBuffer>& meshVertexBuffers,
@@ -58,7 +56,7 @@ public:
         const std::vector<VkBufferView>& inputEdgeViews,
         const std::vector<VkBufferView>& inputTriangleViews,
         const std::vector<VkBufferView>& inputLengthViews);
-    void clearReceiverPayloads();
+    void clearReceiverGeometry();
     void setParams(float cellSize, int voxelResolution);
     bool ensureConfigured();
 
@@ -67,10 +65,8 @@ public:
     const VoronoiDomain* findReceiverDomain(uint32_t receiverModelId) const { return runtime.findReceiverDomain(receiverModelId); }
     uint32_t getVoronoiNodeCount() const { return runtime.getVoronoiNodeCount(); }
 
-    VoronoiSystemResources& resourcesRef() { return runtime.resourcesRef(); }
-    const VoronoiSystemResources& resourcesRef() const { return runtime.resourcesRef(); }
-    VoronoiResources& voronoiResourcesRef() { return runtime.voronoiResourcesRef(); }
-    const VoronoiResources& voronoiResourcesRef() const { return runtime.voronoiResourcesRef(); }
+    VoronoiResources& resourcesRef() { return runtime.resourcesRef(); }
+    const VoronoiResources& resourcesRef() const { return runtime.resourcesRef(); }
     VoronoiSystemRuntime& runtimeRef() { return runtime; }
     const VoronoiSystemRuntime& runtimeRef() const { return runtime; }
 
@@ -84,14 +80,15 @@ private:
     bool createSurfaceDescriptorPool(uint32_t maxFramesInFlight);
     bool createSurfaceDescriptorSetLayout();
     bool createSurfacePipeline();
-    bool prepareVoronoiRuntime();
+    bool rebuildVoronoiRuntime();
+    void executeBufferTransfers();
+    void dispatchVoronoiCandidateUpdates();
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     ModelRegistry& resourceManager;
     CommandPool& renderCommandPool;
     VoronoiSystemRuntime runtime;
-    VoronoiSurfaceRuntime surfaceRuntime;
 
     std::unique_ptr<VoronoiGeoCompute> voronoiGeoCompute;
     std::unique_ptr<VoronoiCandidateCompute> voronoiCandidateCompute;
@@ -103,4 +100,3 @@ private:
     bool debugEnable = false;
     static constexpr int K_NEIGHBORS = 50;
 };
-

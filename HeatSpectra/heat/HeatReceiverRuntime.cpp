@@ -1,5 +1,6 @@
 #include "HeatReceiverRuntime.hpp"
 
+#include "heat/HeatGpuStructs.hpp"
 #include "util/GeometryUtils.hpp"
 #include "util/Structs.hpp"
 #include "vulkan/CommandBufferManager.hpp"
@@ -57,7 +58,7 @@ bool HeatReceiverRuntime::createReceiverBuffers() {
         return false;
     }
 
-    const VkDeviceSize vertexBufferSize = sizeof(SurfacePoint) * vertexCount;
+    const VkDeviceSize vertexBufferSize = sizeof(heat::SurfacePoint) * vertexCount;
     if (createTexelBuffer(
             memoryAllocator,
             vulkanDevice,
@@ -90,7 +91,7 @@ bool HeatReceiverRuntime::createReceiverBuffers() {
     }
     const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMesh.indices);
 
-    std::vector<SurfacePoint> surfacePoints(vertexCount);
+    std::vector<heat::SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
@@ -105,7 +106,7 @@ bool HeatReceiverRuntime::createReceiverBuffers() {
         initStagingOffset = 0;
         initBufferSize = 0;
     }
-    initBufferSize = sizeof(SurfacePoint) * vertexCount;
+    initBufferSize = sizeof(heat::SurfacePoint) * vertexCount;
     void* initStagingData = nullptr;
     if (createStagingBuffer(
             memoryAllocator,
@@ -137,7 +138,7 @@ bool HeatReceiverRuntime::initializeReceiverBuffer() {
         return false;
     }
 
-    const VkDeviceSize bufferSize = sizeof(SurfacePoint) * vertexCount;
+    const VkDeviceSize bufferSize = sizeof(heat::SurfacePoint) * vertexCount;
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VkDeviceSize stagingOffset = 0;
     void* stagingData = nullptr;
@@ -158,7 +159,7 @@ bool HeatReceiverRuntime::initializeReceiverBuffer() {
     }
     const std::vector<float> vertexAreas = computeVertexAreas(positions, intrinsicMesh.indices);
 
-    std::vector<SurfacePoint> surfacePoints(vertexCount);
+    std::vector<heat::SurfacePoint> surfacePoints(vertexCount);
     for (size_t i = 0; i < vertexCount; ++i) {
         surfacePoints[i].position = positions[i];
         surfacePoints[i].temperature = AMBIENT_TEMPERATURE;
@@ -180,9 +181,19 @@ bool HeatReceiverRuntime::resetSurfaceTemp() {
     return initializeReceiverBuffer();
 }
 
-void HeatReceiverRuntime::setVoronoiMapping(VkBuffer mappingBuffer, VkDeviceSize mappingOffset) {
-    voronoiMappingBuffer = mappingBuffer;
-    voronoiMappingBufferOffset = mappingOffset;
+void HeatReceiverRuntime::setGMLSSurfaceWeights(
+    VkBuffer stencilBuffer,
+    VkDeviceSize stencilBufferOffset,
+    VkBuffer valueWeightBuffer,
+    VkDeviceSize valueWeightBufferOffset,
+    VkBuffer gradientWeightBuffer,
+    VkDeviceSize gradientWeightBufferOffset) {
+    gmlsSurfaceStencilBuffer = stencilBuffer;
+    gmlsSurfaceStencilBufferOffset = stencilBufferOffset;
+    gmlsSurfaceWeightBuffer = valueWeightBuffer;
+    gmlsSurfaceWeightBufferOffset = valueWeightBufferOffset;
+    gmlsSurfaceGradientWeightBuffer = gradientWeightBuffer;
+    gmlsSurfaceGradientWeightBufferOffset = gradientWeightBufferOffset;
 }
 
 void HeatReceiverRuntime::updateDescriptors(
@@ -197,9 +208,10 @@ void HeatReceiverRuntime::updateDescriptors(
     uint32_t nodeCount,
     bool forceReallocate) {
     const size_t intrinsicVertexCount = getIntrinsicVertexCount();
-    if (intrinsicVertexCount == 0 || voronoiMappingBuffer == VK_NULL_HANDLE) {
-        surfaceComputeSetA = VK_NULL_HANDLE;
-        surfaceComputeSetB = VK_NULL_HANDLE;
+    if (intrinsicVertexCount == 0 ||
+        gmlsSurfaceStencilBuffer == VK_NULL_HANDLE ||
+        gmlsSurfaceWeightBuffer == VK_NULL_HANDLE ||
+        gmlsSurfaceGradientWeightBuffer == VK_NULL_HANDLE) {
         return;
     }
 
@@ -227,12 +239,22 @@ void HeatReceiverRuntime::updateDescriptors(
         surfaceComputeSetB = sets[1];
     }
 
-    VkDescriptorBufferInfo surfaceInfo{ surfaceBuffer, surfaceBufferOffset, sizeof(SurfacePoint) * intrinsicVertexCount };
-    VkDescriptorBufferInfo timeInfo{ timeBuffer, timeBufferOffset, sizeof(TimeUniform) };
-    VkDescriptorBufferInfo mappingInfo{
-        voronoiMappingBuffer,
-        voronoiMappingBufferOffset,
-        sizeof(VoronoiSurfaceMapping) * intrinsicVertexCount
+    VkDescriptorBufferInfo surfaceInfo{ surfaceBuffer, surfaceBufferOffset, sizeof(heat::SurfacePoint) * intrinsicVertexCount };
+    VkDescriptorBufferInfo timeInfo{ timeBuffer, timeBufferOffset, sizeof(heat::TimeUniform) };
+    VkDescriptorBufferInfo gmlsStencilInfo{
+        gmlsSurfaceStencilBuffer,
+        gmlsSurfaceStencilBufferOffset,
+        VK_WHOLE_SIZE
+    };
+    VkDescriptorBufferInfo gmlsValueWeightInfo{
+        gmlsSurfaceWeightBuffer,
+        gmlsSurfaceWeightBufferOffset,
+        VK_WHOLE_SIZE
+    };
+    VkDescriptorBufferInfo gmlsGradientWeightInfo{
+        gmlsSurfaceGradientWeightBuffer,
+        gmlsSurfaceGradientWeightBufferOffset,
+        VK_WHOLE_SIZE
     };
 
     const VkDescriptorSet sets[2] = { surfaceComputeSetA, surfaceComputeSetB };
@@ -241,15 +263,24 @@ void HeatReceiverRuntime::updateDescriptors(
 
     for (uint32_t pass = 0; pass < 2; ++pass) {
         VkDescriptorBufferInfo nodeTempInfo{ tempBuffers[pass], tempOffsets[pass], sizeof(float) * nodeCount };
-        std::array<VkDescriptorBufferInfo*, 4> infos = { &nodeTempInfo, &surfaceInfo, &timeInfo, &mappingInfo };
-        std::array<uint32_t, 4> bindings = { 0u, 1u, 3u, 9u };
-        std::array<VkDescriptorType, 4> types = {
+        std::array<VkDescriptorBufferInfo*, 6> infos = {
+            &nodeTempInfo,
+            &surfaceInfo,
+            &timeInfo,
+            &gmlsStencilInfo,
+            &gmlsValueWeightInfo,
+            &gmlsGradientWeightInfo
+        };
+        std::array<uint32_t, 6> bindings = { 0u, 1u, 3u, 10u, 11u, 12u };
+        std::array<VkDescriptorType, 6> types = {
             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         };
-        std::array<VkWriteDescriptorSet, 4> writes{};
+        std::array<VkWriteDescriptorSet, 6> writes{};
         for (size_t i = 0; i < writes.size(); ++i) {
             writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet = sets[pass];
@@ -292,8 +323,12 @@ void HeatReceiverRuntime::cleanup() {
         surfaceVertexBufferOffset = 0;
     }
 
-    voronoiMappingBuffer = VK_NULL_HANDLE;
-    voronoiMappingBufferOffset = 0;
+    gmlsSurfaceStencilBuffer = VK_NULL_HANDLE;
+    gmlsSurfaceStencilBufferOffset = 0;
+    gmlsSurfaceWeightBuffer = VK_NULL_HANDLE;
+    gmlsSurfaceWeightBufferOffset = 0;
+    gmlsSurfaceGradientWeightBuffer = VK_NULL_HANDLE;
+    gmlsSurfaceGradientWeightBufferOffset = 0;
 
     cleanupStagingBuffers();
 }

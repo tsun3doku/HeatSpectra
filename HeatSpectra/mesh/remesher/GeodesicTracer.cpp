@@ -1,4 +1,4 @@
-﻿#define GLM_ENABLE_EXPERIMENTAL
+#define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -13,8 +13,55 @@
 GeodesicTracer::GeodesicTracer(SignpostMesh& mesh) : mesh(mesh) {
 }
 
-static inline double cross2d(const glm::dvec2& a, const glm::dvec2& b) {
+double GeodesicTracer::cross2d(const glm::dvec2& a, const glm::dvec2& b) const {
     return a.x * b.y - a.y * b.x;
+}
+
+double GeodesicTracer::barySum(const glm::dvec3& b) const {
+    return b.x + b.y + b.z;
+}
+
+glm::dvec3 GeodesicTracer::normalizeBarycentricPoint(glm::dvec3 b) const {
+    double s = barySum(b);
+    if (std::abs(s) < 1e-30) {
+        return glm::dvec3(1.0 / 3.0);
+    }
+    return b / s;
+}
+
+glm::dvec3 GeodesicTracer::normalizeBarycentricDisplacement(glm::dvec3 b) const {
+    return b - glm::dvec3(barySum(b) / 3.0);
+}
+
+bool GeodesicTracer::isInsideBarycentricTriangle(const glm::dvec3& b) const {
+    constexpr double EPS = 1e-12;
+    return b.x >= -EPS && b.y >= -EPS && b.z >= -EPS &&
+           b.x <= 1.0 + EPS && b.y <= 1.0 + EPS && b.z <= 1.0 + EPS;
+}
+
+glm::dvec3 GeodesicTracer::projectInsideBarycentricTriangle(glm::dvec3 b) const {
+    b.x = std::max(0.0, b.x);
+    b.y = std::max(0.0, b.y);
+    b.z = std::max(0.0, b.z);
+    return normalizeBarycentricPoint(b);
+}
+
+glm::dvec2 GeodesicTracer::barycentricDisplacementToCartesian(const SignpostMesh::Triangle2D& tri, const glm::dvec3& disp) const {
+    return tri.vertices[0] * disp.x + tri.vertices[1] * disp.y + tri.vertices[2] * disp.z;
+}
+
+glm::dvec3 GeodesicTracer::cartesianVectorToBarycentricDisplacement(const SignpostMesh::Triangle2D& tri, const glm::dvec2& vec) const {
+    glm::dvec2 e1 = tri.vertices[1] - tri.vertices[0];
+    glm::dvec2 e2 = tri.vertices[2] - tri.vertices[0];
+    double det = e1.x * e2.y - e1.y * e2.x;
+    if (std::abs(det) < 1e-30) {
+        return glm::dvec3(0.0);
+    }
+
+    double b1 = (vec.x * e2.y - vec.y * e2.x) / det;
+    double b2 = (e1.x * vec.y - e1.y * vec.x) / det;
+    double b0 = -b1 - b2;
+    return normalizeBarycentricDisplacement(glm::dvec3(b0, b1, b2));
 }
 
 GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t vertexIdx, const glm::dvec2& dirInRefVertex,
@@ -174,6 +221,235 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromVertex(uint32_t ver
     return cont;
 }
 
+GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFaceBarycentric(
+    uint32_t startFaceIdx,
+    const glm::dvec3& startBary,
+    const glm::dvec3& traceBaryVec) const
+{
+    GeodesicTraceResult result;
+    result.success = false;
+    result.position3D = glm::vec3(0.0f);
+    result.baryCoords = startBary;
+    result.distance = 0.0;
+    result.finalFaceIdx = HalfEdgeMesh::INVALID_INDEX;
+
+    const auto& conn = mesh.getConnectivity();
+    const auto& faces = conn.getFaces();
+    const auto& halfEdges = conn.getHalfEdges();
+    const auto& edges = conn.getEdges();
+
+    if (startFaceIdx >= faces.size() || faces[startFaceIdx].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) {
+        return result;
+    }
+
+    glm::dvec3 currBary = projectInsideBarycentricTriangle(startBary);
+    glm::dvec3 currVecBary = normalizeBarycentricDisplacement(traceBaryVec);
+    uint32_t currFace = startFaceIdx;
+
+    SurfacePoint startPoint;
+    startPoint.type = SurfacePoint::Type::FACE;
+    startPoint.elementId = currFace;
+    startPoint.baryCoords = currBary;
+    result.pathPoints.clear();
+    result.pathPoints.push_back(startPoint);
+
+    auto startTri = mesh.layoutTriangle(currFace);
+    glm::dvec2 initialVec = barycentricDisplacementToCartesian(startTri, currVecBary);
+    double totalLength = glm::length(initialVec);
+    if (totalLength <= 1e-12) {
+        result.success = true;
+        result.finalFaceIdx = currFace;
+        result.baryCoords = currBary;
+        result.exitPoint = startPoint;
+        result.position3D = glm::vec3(evaluateSurfacePoint(startPoint));
+        result.distance = 0.0;
+        return result;
+    }
+
+    double traveled = 0.0;
+
+    for (int iter = 0; iter < options.maxIters; ++iter) {
+        if (currFace >= faces.size() || faces[currFace].halfEdgeIdx == HalfEdgeMesh::INVALID_INDEX) {
+            return result;
+        }
+
+        auto faceHEs = conn.getFaceHalfEdges(currFace);
+        if (faceHEs.size() != 3) {
+            return result;
+        }
+
+        auto tri = mesh.layoutTriangle(currFace);
+        glm::dvec2 currVecCartesian = barycentricDisplacementToCartesian(tri, currVecBary);
+        double currLen = glm::length(currVecCartesian);
+        if (currLen <= 1e-12) {
+            SurfacePoint facePoint;
+            facePoint.type = SurfacePoint::Type::FACE;
+            facePoint.elementId = currFace;
+            facePoint.baryCoords = projectInsideBarycentricTriangle(currBary);
+
+            result.success = true;
+            result.finalFaceIdx = currFace;
+            result.baryCoords = facePoint.baryCoords;
+            result.exitPoint = facePoint;
+            result.position3D = glm::vec3(evaluateSurfacePoint(facePoint));
+            result.distance = traveled;
+            result.pathPoints.push_back(facePoint);
+            return result;
+        }
+
+        glm::dvec3 endBary = currBary + currVecBary;
+        if (isInsideBarycentricTriangle(endBary)) {
+            SurfacePoint facePoint;
+            facePoint.type = SurfacePoint::Type::FACE;
+            facePoint.elementId = currFace;
+            facePoint.baryCoords = projectInsideBarycentricTriangle(endBary);
+
+            result.success = true;
+            result.finalFaceIdx = currFace;
+            result.baryCoords = facePoint.baryCoords;
+            result.exitPoint = facePoint;
+            result.position3D = glm::vec3(evaluateSurfacePoint(facePoint));
+            result.distance = traveled + currLen;
+            result.pathPoints.push_back(facePoint);
+
+            FaceStepResult step;
+            step.success = true;
+            step.hitEdge = false;
+            step.hitVertex = false;
+            step.finalBary = facePoint.baryCoords;
+            step.distanceTraveled = currLen;
+            step.dir2D = currVecCartesian / currLen;
+            result.steps.push_back(step);
+            return result;
+        }
+
+        double tRay = std::numeric_limits<double>::infinity();
+        int oppVertex = -1;
+        for (int i = 0; i < 3; ++i) {
+            if (currVecBary[i] >= 0.0) {
+                continue;
+            }
+
+            double t = -currBary[i] / currVecBary[i];
+            if (t >= 0.0 && t < tRay) {
+                tRay = t;
+                oppVertex = i;
+            }
+        }
+
+        if (oppVertex < 0 || !std::isfinite(tRay)) {
+            return result;
+        }
+
+        tRay = glm::clamp(tRay, 0.0, 1.0 - 1e-9);
+        glm::dvec3 edgeBary = currBary + tRay * currVecBary;
+        edgeBary[oppVertex] = 0.0;
+        edgeBary = projectInsideBarycentricTriangle(edgeBary);
+
+        uint32_t crossHe = faceHEs[(oppVertex + 1) % 3];
+        if (crossHe == HalfEdgeMesh::INVALID_INDEX || crossHe >= halfEdges.size()) {
+            return result;
+        }
+
+        uint32_t edgeIdx = conn.getEdgeFromHalfEdge(crossHe);
+        if (edgeIdx == HalfEdgeMesh::INVALID_INDEX || edgeIdx >= edges.size()) {
+            return result;
+        }
+
+        int a = (oppVertex + 1) % 3;
+        int b = (oppVertex + 2) % 3;
+        double denom = edgeBary[a] + edgeBary[b];
+        double tCross = (denom > 1e-30) ? edgeBary[b] / denom : 0.5;
+        tCross = glm::clamp(tCross, 0.0, 1.0);
+
+        uint32_t canonicalHe = edges[edgeIdx].halfEdgeIdx;
+        if (canonicalHe == HalfEdgeMesh::INVALID_INDEX || canonicalHe >= halfEdges.size()) {
+            return result;
+        }
+
+        double splitCanon = tCross;
+        if (halfEdges[crossHe].origin != halfEdges[canonicalHe].origin) {
+            splitCanon = 1.0 - tCross;
+        }
+        splitCanon = glm::clamp(splitCanon, 0.0, 1.0);
+
+        SurfacePoint edgePoint;
+        edgePoint.type = SurfacePoint::Type::EDGE;
+        edgePoint.elementId = edgeIdx;
+        edgePoint.split = splitCanon;
+        edgePoint.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
+        result.pathPoints.push_back(edgePoint);
+
+        FaceStepResult step;
+        step.success = true;
+        step.hitEdge = true;
+        step.hitVertex = false;
+        step.halfEdgeIdx = crossHe;
+        step.localEdgeIndex = (oppVertex + 1) % 3;
+        step.edgeParam = tCross;
+        step.finalBary = edgeBary;
+        step.distanceTraveled = currLen * tRay;
+        step.dir2D = currVecCartesian / currLen;
+        result.steps.push_back(step);
+
+        uint32_t oppositeHE = halfEdges[crossHe].opposite;
+        if (oppositeHE == HalfEdgeMesh::INVALID_INDEX || oppositeHE >= halfEdges.size()) {
+            result.success = true;
+            result.finalFaceIdx = currFace;
+            result.baryCoords = edgeBary;
+            result.exitPoint = edgePoint;
+            result.position3D = glm::vec3(evaluateSurfacePoint(edgePoint));
+            result.distance = traveled + currLen * tRay;
+            return result;
+        }
+
+        uint32_t nextFace = halfEdges[oppositeHE].face;
+        if (nextFace == HalfEdgeMesh::INVALID_INDEX || nextFace >= faces.size()) {
+            result.success = true;
+            result.finalFaceIdx = currFace;
+            result.baryCoords = edgeBary;
+            result.exitPoint = edgePoint;
+            result.position3D = glm::vec3(evaluateSurfacePoint(edgePoint));
+            result.distance = traveled + currLen * tRay;
+            return result;
+        }
+
+        glm::dvec2 edgePoint2D =
+            tri.vertices[0] * edgeBary.x +
+            tri.vertices[1] * edgeBary.y +
+            tri.vertices[2] * edgeBary.z;
+        glm::dvec2 nextPoint2D = chartLocal2D(currFace, nextFace, edgePoint2D);
+        auto nextTri = mesh.layoutTriangle(nextFace);
+        glm::dvec3 nextBary = mesh.computeBarycentric2D(
+            nextPoint2D,
+            nextTri.vertices[0],
+            nextTri.vertices[1],
+            nextTri.vertices[2]);
+        nextBary = projectInsideBarycentricTriangle(nextBary);
+
+        glm::dvec2 remainingCartesian = currVecCartesian * (1.0 - tRay);
+        glm::dvec2 nextCartesian = rotateVectorAcrossEdge(crossHe, oppositeHE, remainingCartesian);
+        glm::dvec3 nextVecBary = cartesianVectorToBarycentricDisplacement(nextTri, nextCartesian);
+
+        traveled += currLen * tRay;
+        currFace = nextFace;
+        currBary = nextBary;
+        currVecBary = nextVecBary;
+    }
+
+    SurfacePoint fallback;
+    fallback.type = SurfacePoint::Type::FACE;
+    fallback.elementId = currFace;
+    fallback.baryCoords = projectInsideBarycentricTriangle(currBary);
+    result.success = false;
+    result.finalFaceIdx = currFace;
+    result.baryCoords = fallback.baryCoords;
+    result.exitPoint = fallback;
+    result.position3D = glm::vec3(evaluateSurfacePoint(fallback));
+    result.distance = traveled;
+    return result;
+}
+
 GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t startFaceIdx, const glm::dvec3& startBary, const glm::dvec2& cartesianDir, double length) const
 {
     GeodesicTraceResult result;
@@ -218,8 +494,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
     // Tolerance for remaining distance
     constexpr double EPS_REMAIN = 1e-12;
-    constexpr double VERTEX_SNAP_FRAC = 1e-2;
-
     // Main loop
     for (int iter = 0; iter < options.maxIters && remaining > EPS_REMAIN; ++iter) {
         // Take one step across the current triangle
@@ -326,8 +600,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
 
                 // Thresholds for snapping
                 constexpr double BARY_SNAP_TOL = 1e-9; 
-                constexpr double MIN_EDGE_LEN = 1e-12;
-
                 // Validate bary coords 
                 glm::dvec3 faceB = step.finalBary;
                 bool baryOk = std::isfinite(faceB.x) && std::isfinite(faceB.y) && std::isfinite(faceB.z)
@@ -341,61 +613,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                     double s = faceB.x + faceB.y + faceB.z;
                     if (s <= 0.0) { faceB = glm::dvec3(1.0 / 3.0); }
                     else faceB /= s;
-                }
-
-                // Layout triangle in chart and get 2D point
-                auto tri2D = mesh.layoutTriangle(currFace);
-                glm::dvec2 V0 = tri2D.vertices[0], V1 = tri2D.vertices[1], V2 = tri2D.vertices[2];
-                glm::dvec2 s2D = V0 * faceB.x + V1 * faceB.y + V2 * faceB.z;
-
-                // compute local edge lengths and average for scale aware thresholds
-                double avgEdge = (glm::length(V1 - V0) + glm::length(V2 - V1) + glm::length(V0 - V2)) / 3.0;
-                if (avgEdge < MIN_EDGE_LEN) avgEdge = MIN_EDGE_LEN;
-
-                // 1) Vertex snap
-                double d0 = glm::length(s2D - V0);
-                double d1 = glm::length(s2D - V1);
-                double d2 = glm::length(s2D - V2);
-                double vertexThresh = VERTEX_SNAP_FRAC * avgEdge;
-
-                if (d0 <= vertexThresh || d1 <= vertexThresh || d2 <= vertexThresh) {
-                    uint32_t vIdx = 0;
-                    auto fhe = conn.getFaceHalfEdges(currFace);
-
-                    // Bounds check for face halfedges access
-                    bool validVertex = false;
-                    if (fhe.size() >= 3) {
-                        // Bounds check for halfedges array access
-                        const auto& halfEdgesRef = conn.getHalfEdges();
-                        if (fhe[0] < halfEdgesRef.size() && fhe[1] < halfEdgesRef.size() && fhe[2] < halfEdgesRef.size()) {
-                            if (d0 <= vertexThresh) vIdx = halfEdgesRef[fhe[0]].origin;
-                            else if (d1 <= vertexThresh) vIdx = halfEdgesRef[fhe[1]].origin;
-                            else vIdx = halfEdgesRef[fhe[2]].origin;
-                            validVertex = true;
-                        }
-                    }
-
-                    if (validVertex) {
-                        SurfacePoint vertexExit;
-                        vertexExit.type = SurfacePoint::Type::VERTEX;
-                        vertexExit.elementId = vIdx;
-
-                        // VERTEX exit
-                        result.success = true;
-                        result.finalFaceIdx = currFace;
-                        result.distance = length - remaining;
-                        result.baryCoords = faceB;
-                        result.exitPoint = vertexExit;
-                        result.position3D = glm::vec3(evaluateSurfacePoint(vertexExit));
-                        result.pathPoints.push_back(vertexExit);
-                        
-                        // Add final step
-                        FaceStepResult pathStep = step;
-                        pathStep.distanceTraveled = stepDist;
-                        result.steps.push_back(pathStep);
-                        
-                        return result;
-                    }
                 }
 
                 // Find the minimum barycentric coordinate
@@ -446,22 +663,10 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
                     // Snap to vertex if very close to endpoints 
                     SurfacePoint edgeExit;
                     
-                    if (splitCanon < VERTEX_SNAP_FRAC) {
-                        edgeExit.type = SurfacePoint::Type::VERTEX;
-                        edgeExit.elementId = vA;
-                        edgeExit.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
-                        edgeExit.split = 0.0;
-                    } else if (splitCanon > (1.0 - VERTEX_SNAP_FRAC)) {
-                        edgeExit.type = SurfacePoint::Type::VERTEX;
-                        edgeExit.elementId = vB;
-                        edgeExit.baryCoords = glm::dvec3(0.0, 1.0, 0.0);
-                        edgeExit.split = 1.0;
-                    } else {
-                        edgeExit.type = SurfacePoint::Type::EDGE;
-                        edgeExit.elementId = edgeIdx;
-                        edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
-                        edgeExit.split = splitCanon;
-                    }
+                    edgeExit.type = SurfacePoint::Type::EDGE;
+                    edgeExit.elementId = edgeIdx;
+                    edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
+                    edgeExit.split = splitCanon;
 
                     // Compute 3D position
                     glm::dvec3 pA = glm::dvec3(vertsRef[vA].position);
@@ -539,22 +744,10 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         // Snap to vertex if very close to endpoints 
         SurfacePoint edgeExit;
         
-        if (splitCanon < VERTEX_SNAP_FRAC) {
-            edgeExit.type = SurfacePoint::Type::VERTEX;
-            edgeExit.elementId = vA;
-            edgeExit.baryCoords = glm::dvec3(1.0, 0.0, 0.0);
-            edgeExit.split = 0.0;
-        } else if (splitCanon > (1.0 - VERTEX_SNAP_FRAC)) {
-            edgeExit.type = SurfacePoint::Type::VERTEX;
-            edgeExit.elementId = vB;
-            edgeExit.baryCoords = glm::dvec3(0.0, 1.0, 0.0);
-            edgeExit.split = 1.0;
-        } else {
-            edgeExit.type = SurfacePoint::Type::EDGE;
-            edgeExit.elementId = edgeIdx;
-            edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
-            edgeExit.split = splitCanon;
-        }
+        edgeExit.type = SurfacePoint::Type::EDGE;
+        edgeExit.elementId = edgeIdx;
+        edgeExit.baryCoords = glm::dvec3(1.0 - splitCanon, splitCanon, 0.0);
+        edgeExit.split = splitCanon;
 
         // compute canonical 3D point
         const auto& vertsRef = conn.getVertices();
@@ -678,19 +871,12 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
 
     const double U_EPS = 1e-8;
     const double T_EPS = 1e-8;
-    const double VERT_EPS = 1e-6;
-
-    // Nudge slightly along direction to avoid exact-corner starts
     glm::dvec2 nudgedStart2D = start2D + dir2D * T_EPS;
     glm::dvec3 nudgedBary = mesh.computeBarycentric2D(nudgedStart2D, V[0], V[1], V[2]);
 
     double bestT = std::numeric_limits<double>::infinity();
     double bestU = std::numeric_limits<double>::infinity();
     int bestEdge = -1;
-
-    // Track recent vertex hit (u approx 0 or 1)
-    double bestVertexT = std::numeric_limits<double>::infinity();
-    int bestVertexLocal = -1; // local index 0/1/2 for which vertex is hit
 
     // Test each edge for intersection but skip corner edges
     for (int i = 0; i < 3; ++i) {
@@ -726,15 +912,15 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
             }
         }
         else {
-            // endpoint: candidate vertex hit
             int whichVertexLocal = -1;
             if (u <= U_EPS) whichVertexLocal = a;          // hits P
             else if (u >= 1.0 - U_EPS) whichVertexLocal = b; // hits Q
 
             if (whichVertexLocal != -1) {
-                if (t < bestVertexT) {
-                    bestVertexT = t;
-                    bestVertexLocal = whichVertexLocal;
+                if (t < bestT) {
+                    bestT = t;
+                    bestEdge = i;
+                    bestU = std::clamp(u, 0.0, 1.0);
                 }
             }
         }
@@ -759,39 +945,8 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
             result.halfEdgeIdx = INVALID_INDEX;
         }
 
-        // Also detect vertex in edge endpoints 
-        int maybeVertex = -1;
-        for (int vi = 0; vi < 3; ++vi) {
-            if (result.finalBary[vi] > 1.0 - VERT_EPS) {
-                maybeVertex = vi;
-                break;
-            }
-        }
-        if (maybeVertex != -1) {
-            result.hitVertex = true;
-            result.vertexIdx = triangle2D.indices[maybeVertex];
-        }
-        else {
-            result.hitVertex = false;
-            result.vertexIdx = INVALID_INDEX;
-        }
-
-        result.success = true;
-        result.dir2D = dir2D;
-        return result;
-    }
-
-    // Return vertex hit candidate
-    if (bestVertexLocal != -1 && bestVertexT <= maxLength + T_EPS) {
-        // set barycentric to that vertex exactly
-        glm::dvec3 vb(0.0);
-        vb[bestVertexLocal] = 1.0;
-        result.finalBary = vb;
-        result.distanceTraveled = bestVertexT;
-        result.hitEdge = false;
-        result.hitVertex = true;
-        result.vertexIdx = triangle2D.indices[bestVertexLocal];
-        result.halfEdgeIdx = INVALID_INDEX;
+        result.hitVertex = false;
+        result.vertexIdx = INVALID_INDEX;
 
         result.success = true;
         result.dir2D = dir2D;
@@ -806,51 +961,33 @@ GeodesicTracer::FaceStepResult GeodesicTracer::traceInFace(const SurfacePoint& s
         result.hitEdge = false;
         result.hitVertex = false;
 
-        // detect if the computed final bary is numerically at a vertex
-        // First check if barycentric coordinates are valid (non-negative and sum to ~1)
         double barySum = result.finalBary.x + result.finalBary.y + result.finalBary.z;
         bool validBary = barySum >= 0.99 && barySum <= 1.01 &&
-            result.finalBary.x >= -VERT_EPS &&
-            result.finalBary.y >= -VERT_EPS &&
-            result.finalBary.z >= -VERT_EPS;
+            result.finalBary.x >= -BARY_SNAP_TOL &&
+            result.finalBary.y >= -BARY_SNAP_TOL &&
+            result.finalBary.z >= -BARY_SNAP_TOL;
 
                 if (validBary) {
-                    // First check for vertex hits (higher priority than edge hits)
-                    for (int vi = 0; vi < 3; ++vi) {
-                        if (result.finalBary[vi] > 1.0 - VERT_EPS) {
-                            result.hitVertex = true;
-                            result.vertexIdx = triangle2D.indices[vi];
-                            break;
-                        }
-                    }
+                    double minBary = result.finalBary[0];
+                    int minIdx = 0;
+                    if (result.finalBary[1] < minBary) { minBary = result.finalBary[1]; minIdx = 1; }
+                    if (result.finalBary[2] < minBary) { minBary = result.finalBary[2]; minIdx = 2; }
                     
-                    // If not at a vertex, check for edge proximity using barycentric coordinates
-                    if (!result.hitVertex) {
-                        double minBary = result.finalBary[0];
-                        int minIdx = 0;
-                        if (result.finalBary[1] < minBary) { minBary = result.finalBary[1]; minIdx = 1; }
-                        if (result.finalBary[2] < minBary) { minBary = result.finalBary[2]; minIdx = 2; }
-                        
-                        if (minBary < BARY_SNAP_TOL) {
-                            // Edge is opposite to vertex with minimum barycentric coordinate
-                            int edgeIdx = (minIdx + 1) % 3;
-                            // Calculate split parameter from other two coordinates
-                            int vp = edgeIdx;  // First vertex of edge
-                            int vq = (edgeIdx + 1) % 3;  // Second vertex of edge
-                            double edgeSum = result.finalBary[vp] + result.finalBary[vq];
-                            double t = (edgeSum > 1e-12) ? result.finalBary[vq] / edgeSum : 0.5;
+                    if (minBary < BARY_SNAP_TOL) {
+                        int edgeIdx = (minIdx + 1) % 3;
+                        int vp = edgeIdx;
+                        int vq = (edgeIdx + 1) % 3;
+                        double edgeSum = result.finalBary[vp] + result.finalBary[vq];
+                        double t = (edgeSum > 1e-12) ? result.finalBary[vq] / edgeSum : 0.5;
 
-                            // Set edge hit info
-                            result.hitEdge = true;
-                            result.localEdgeIndex = edgeIdx;
-                            result.edgeParam = t;
+                        result.hitEdge = true;
+                        result.localEdgeIndex = edgeIdx;
+                        result.edgeParam = t;
 
-                            // Map to halfedge
-                            const auto& conn = mesh.getConnectivity();
-                            auto faceHEs = conn.getFaceHalfEdges(start.elementId);
-                            if (result.localEdgeIndex < static_cast<int>(faceHEs.size())) {
-                                result.halfEdgeIdx = faceHEs[result.localEdgeIndex];
-                            }
+                        const auto& conn = mesh.getConnectivity();
+                        auto faceHEs = conn.getFaceHalfEdges(start.elementId);
+                        if (result.localEdgeIndex < static_cast<int>(faceHEs.size())) {
+                            result.halfEdgeIdx = faceHEs[result.localEdgeIndex];
                         }
                     }
                 }        

@@ -18,12 +18,10 @@ CommandPool::CommandPool(VulkanDevice& device, const char* name)
         return;
     }
     
-    std::cout << "[CommandPool] Created: " << debugName << std::endl;
 }
 
 CommandPool::~CommandPool() {
     if (pool != VK_NULL_HANDLE) {
-        std::cout << "[CommandPool] Destroyed: " << debugName << std::endl;
         vkDestroyCommandPool(vulkanDevice.getDevice(), pool, nullptr);
     }
 }

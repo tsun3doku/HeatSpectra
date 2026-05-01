@@ -1,5 +1,6 @@
 #include "HeatReceiverRenderer.hpp"
 
+#include "heat/HeatGpuStructs.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "scene/Model.hpp"
@@ -230,7 +231,7 @@ bool HeatReceiverRenderer::createPipeline(VkRenderPass renderPass) {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(HeatBufferPushConstant);
+    pushConstantRange.size = sizeof(heat::BufferPushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -282,7 +283,7 @@ bool HeatReceiverRenderer::createPipeline(VkRenderPass renderPass) {
 void HeatReceiverRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, const ModelProduct& product) const {
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-    HeatBufferPushConstant pushConstants{};
+    heat::BufferPushConstant pushConstants{};
     pushConstants.modelMatrix = product.modelMatrix;
     pushConstants.sourceParams = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
     vkCmdPushConstants(
@@ -290,7 +291,7 @@ void HeatReceiverRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptor
         pipelineLayout,
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         0,
-        sizeof(HeatBufferPushConstant),
+        sizeof(heat::BufferPushConstant),
         &pushConstants);
 
     VkBuffer modelVertexBuffer = product.renderVertexBuffer;

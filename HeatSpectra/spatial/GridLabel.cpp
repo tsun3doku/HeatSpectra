@@ -514,25 +514,25 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-void GridLabel::addEdgeLabels(const glm::vec3& basePos, int varyingAxis, float start, float end, float interval, float scale, const glm::vec3& textRight, const glm::vec3& textUp, bool includeOrigin, bool isBillboard) {
+void GridLabel::addEdgeLabels(const glm::vec3& basePos, int varyingAxis, float start, float end, float interval, float scale, const glm::vec3& textRight, const glm::vec3& textUp, bool includeOrigin) {
     
     // Label at Origin
     if (includeOrigin && start <= 0.001f && end >= -0.001f) {
-        addTextInstances("0", basePos, scale, 0.6f, textRight, textUp, isBillboard);
+        addTextInstances("0", basePos, scale, 0.6f, textRight, textUp);
     }
     
     // Positive Axis Labels 
     for (float t = interval; t <= end + 0.001f; t += interval) {
         glm::vec3 position = basePos;
         position[varyingAxis] = t;
-        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp, isBillboard);
+        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp);
     }
 
-    // Negative Axis Labels 
+    // Negative Axis Labels
     for (float t = -interval; t >= start - 0.001f; t -= interval) {
         glm::vec3 position = basePos;
         position[varyingAxis] = t;
-        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp, isBillboard);
+        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp);
     }
 }
 
@@ -541,11 +541,10 @@ void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     float interval = 0.5f;
     float halfW = gridSize.x * 0.5f;
     float halfD = gridSize.y * 0.5f;
-    float offset = 0.05f;
     float scale = 0.08f;
 
     // X-Axis Labels (Floor)
-    const glm::vec3 xRight(-1.0f, 0.0f, 0.0f); 
+    const glm::vec3 xRight(-1.0f, 0.0f, 0.0f);
     const glm::vec3 xUp(0.0f, 0.0f, 1.0f);
 
     // Z-Axis Labels (Floor)
@@ -563,7 +562,7 @@ void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     instanceCount = static_cast<uint32_t>(labelInstances.size());
 }
 
-void GridLabel::addTextInstances(const std::string& text, const glm::vec3& position, float scale, float charSpacing, const glm::vec3& textRight, const glm::vec3& textUp, bool isBillboard) {
+void GridLabel::addTextInstances(const std::string& text, const glm::vec3& position, float scale, float charSpacing, const glm::vec3& textRight, const glm::vec3& textUp) {
     if (text.empty()) 
         return;
 
@@ -606,14 +605,8 @@ void GridLabel::addTextInstances(const std::string& text, const glm::vec3& posit
         instance.scale = scale;
         instance.upVec = textUp;
 
-        if (isBillboard) {
-            instance.position = position;
-            // For billboard, apply the offset to the rightVec 
-            instance.rightVec = glm::vec3(charCenterOffset, charVerticalOffset, 0.0f);
-        } else {
-            instance.position = position + charCenterOffset * textRight + charVerticalOffset * textUp;
-            instance.rightVec = textRight;
-        }
+        instance.position = position + charCenterOffset * textRight + charVerticalOffset * textUp;
+        instance.rightVec = textRight;
         
         labelInstances.push_back(instance);
         cursorX += info.xadvance * advanceFactor * metricConversionFactor;

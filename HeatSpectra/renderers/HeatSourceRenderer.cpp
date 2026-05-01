@@ -1,5 +1,6 @@
 #include "HeatSourceRenderer.hpp"
 
+#include "heat/HeatGpuStructs.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "scene/Model.hpp"
@@ -157,7 +158,7 @@ bool HeatSourceRenderer::createPipeline(VkRenderPass renderPass) {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(HeatSourceRenderPushConstant);
+    pushConstantRange.size = sizeof(heat::SourceRenderPushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -204,7 +205,7 @@ bool HeatSourceRenderer::createPipeline(VkRenderPass renderPass) {
 }
 
 void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, const ModelProduct& product, float sourceTemperature, const UniformBufferObject& ubo) const {
-    HeatSourceRenderPushConstant pushConstants{};
+    heat::SourceRenderPushConstant pushConstants{};
     pushConstants.modelMatrix = product.modelMatrix;
     pushConstants.view = ubo.view;
     pushConstants.proj = ubo.proj;
@@ -215,7 +216,7 @@ void HeatSourceRenderer::drawModel(VkCommandBuffer commandBuffer, const ModelPro
         pipelineLayout,
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         0,
-        sizeof(HeatSourceRenderPushConstant),
+        sizeof(heat::SourceRenderPushConstant),
         &pushConstants);
 
     VkBuffer modelVertexBuffer = product.renderVertexBuffer;

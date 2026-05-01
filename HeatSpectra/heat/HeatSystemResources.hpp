@@ -2,16 +2,24 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstdint>
 #include <vector>
-
-#include "voronoi/VoronoiResources.hpp"
 
 class HeatSystemResources {
 public:
     HeatSystemResources() = default;
     ~HeatSystemResources() = default;
 
-    VoronoiResources voronoi;
+    uint32_t voronoiNodeCount = 0;
+    const void* mappedVoronoiNodeData = nullptr;
+    VkBuffer voronoiNodeBuffer = VK_NULL_HANDLE;
+    VkDeviceSize voronoiNodeBufferOffset = 0;
+
+    VkBuffer gmlsInterfaceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize gmlsInterfaceBufferOffset = 0;
+
+    VkBuffer seedFlagsBuffer = VK_NULL_HANDLE;
+    VkDeviceSize seedFlagsBufferOffset = 0;
 
     VkDescriptorPool voronoiDescriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout voronoiDescriptorSetLayout = VK_NULL_HANDLE;
@@ -35,4 +43,9 @@ public:
 
     VkPipelineLayout contactPipelineLayout = VK_NULL_HANDLE;
     VkPipeline contactPipeline = VK_NULL_HANDLE;
+
+    VkBuffer contactConductanceBuffer = VK_NULL_HANDLE;
+    VkDeviceSize contactConductanceBufferOffset = 0;
+    uint32_t contactConductanceNodeCount = 0;
+    bool hasContact = false;
 };

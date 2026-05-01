@@ -1,7 +1,6 @@
 #pragma once
 
 #include "domain/GeometryData.hpp"
-#include "domain/RemeshParams.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -17,7 +16,10 @@ struct RemeshData {
     uint64_t payloadHash = 0;
     NodeDataHandle sourceMeshHandle{};
     uint64_t sourcePayloadHash = 0;
-    RemeshParams params{};
+    int iterations = 1;
+    float minAngleDegrees = 20.0f;
+    float maxEdgeLength = 0.1f;
+    float stepSize = 0.25f;
     bool active = false;
 
     void sealPayload();
