@@ -199,6 +199,9 @@ endif()
 # Copy shaders, models, textures and fonts folders to output dir
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/qml"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/qml"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/shaders"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
