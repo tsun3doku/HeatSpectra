@@ -97,7 +97,13 @@ int App::initializePresentation() {
     if (!QFileInfo::exists(qmlPath)) return 2;
 
     window.setSource(QUrl::fromLocalFile(qmlPath));
-    if (window.status() == QQuickView::Error) return 3;
+    if (window.status() == QQuickView::Error) {
+        const auto errors = window.errors();
+        for (const auto& error : errors) {
+            qCritical().noquote() << error.toString();
+        }
+        return 3;
+    }
 
     ViewportItem* viewport = window.rootObject()->findChild<ViewportItem*>(QStringLiteral("viewportItem"));
     if (!viewport) return 4;

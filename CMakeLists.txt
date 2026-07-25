@@ -189,6 +189,7 @@ if(WIN32)
                 --no-system-d3d-compiler
                 --no-opengl-sw
                 --skip-plugin-types generic,networkinformation,tls
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/qml"
                 "$<TARGET_FILE:${PROJECT_NAME}>"
             COMMENT "Running windeployqt to copy Qt dependencies..."
         )
