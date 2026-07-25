@@ -6,6 +6,8 @@
 #include "runtime/RuntimeInterfaces.hpp"
 #include "runtime/RuntimeSystems.hpp"
 #include "runtime/TimelineController.hpp"
+#include "scene/Camera.hpp"
+#include "scene/CameraController.hpp"
 #include "scene/ModelSelection.hpp"
 
 #include <QtCore/QElapsedTimer>
@@ -82,6 +84,7 @@ protected:
 
     void synchronize(QQuickRhiItem* item) override {
         ViewportItem* viewportItem = static_cast<ViewportItem*>(item);
+        viewportItemForSignals = viewportItem;
         WindowRuntimeState& state = mailbox.runtimeState();
         state.devicePixelRatio.store(
             static_cast<float>(viewportItem->window() ? viewportItem->window()->devicePixelRatio() : 1.0),
@@ -137,6 +140,31 @@ protected:
         if (mailbox.takeHeatPaletteRange(paletteMin, paletteMax, runtimeFresh)) runtime.setHeatPaletteRange(paletteMin, paletteMax);
         int palette = 0;
         if (mailbox.takeHeatPalette(palette, runtimeFresh)) runtime.setHeatPalette(palette);
+        ProjectFile::Viewport viewportProjectState;
+        if (mailbox.takeAppliedViewportProjectState(viewportProjectState)) {
+            if (CameraController* cameraController = runtime.getCameraController()) {
+                cameraController->setCameraState(
+                    viewportProjectState.lookAt,
+                    viewportProjectState.orientation,
+                    viewportProjectState.radius,
+                    viewportProjectState.fov,
+                    viewportProjectState.projectionMode,
+                    viewportProjectState.orthographicHeight);
+            }
+        }
+        if (mailbox.takeCurrentViewportProjectState() && viewportItemForSignals) {
+            if (const CameraController* cameraController = runtime.getCameraController()) {
+                const Camera& camera = cameraController->getCamera();
+                ProjectFile::Viewport viewport{};
+                viewport.lookAt = camera.getLookAt();
+                viewport.orientation = camera.getOrientation();
+                viewport.radius = camera.getRadius();
+                viewport.fov = camera.getFov();
+                viewport.projectionMode = camera.getProjectionMode();
+                viewport.orthographicHeight = camera.getOrthographicHeight();
+                emit viewportItemForSignals->projectViewportStateReady(viewport);
+            }
+        }
         runtimeFresh = false;
     }
 
@@ -226,14 +254,13 @@ private:
             emit notifier.timelineStateChanged(timeline);
         }
 
-        SimulationUiState simulation{query->isSimulationActive(), query->isSimulationPaused()};
-        if (simulation != publishedSimulation) {
-            publishedSimulation = simulation;
-            emit notifier.simulationStateChanged(simulation);
-        }
-        if (!runtimeReadyPublished) {
-            runtimeReadyPublished = true;
-            emit notifier.runtimeReadyChanged(true);
+        const bool simulationActive = query->isSimulationActive();
+        const bool simulationPaused = query->isSimulationPaused();
+        if (simulationActive != publishedSimulationActive ||
+            simulationPaused != publishedSimulationPaused) {
+            publishedSimulationActive = simulationActive;
+            publishedSimulationPaused = simulationPaused;
+            notifier.publishHeatSolveStatus(simulationActive, simulationPaused);
         }
     }
 
@@ -245,10 +272,11 @@ private:
     ViewportUiState publishedViewport{};
     bool publishedHeatPaletteVisible = false;
     TimelineUiState publishedTimeline{};
-    SimulationUiState publishedSimulation{};
+    ViewportItem* viewportItemForSignals = nullptr;
+    bool publishedSimulationActive = false;
+    bool publishedSimulationPaused = false;
     bool initialized = false;
     bool runtimeFresh = false;
-    bool runtimeReadyPublished = false;
 };
 
 ViewportItem::ViewportItem(QQuickItem* parent)
@@ -274,6 +302,15 @@ void ViewportItem::requestTimelineRange(uint32_t frameCount, float fps) { mailbo
 void ViewportItem::requestSelection(int nodeId) { mailbox.requestSelection(nodeId); update(); }
 void ViewportItem::requestHeatPaletteRange(float minimum, float maximum) { mailbox.requestHeatPaletteRange(minimum, maximum); update(); }
 void ViewportItem::requestHeatPalette(int palette) { mailbox.requestHeatPalette(palette); update(); }
+void ViewportItem::applyViewportProjectState(const ProjectFile::Viewport& viewport) {
+    mailbox.applyViewportProjectState(viewport);
+    update();
+}
+
+void ViewportItem::requestCurrentViewportProjectState() {
+    mailbox.requestCurrentViewportProjectState();
+    update();
+}
 
 void ViewportItem::initializeGraph(const NodeGraphState& graphState) {
     mailbox.replaceGraphState(graphState);

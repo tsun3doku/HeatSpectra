@@ -1,4 +1,4 @@
-﻿#include "GlyphText.hpp"
+#include "GlyphText.hpp"
 
 #include <cstdint>
 #include <fstream>

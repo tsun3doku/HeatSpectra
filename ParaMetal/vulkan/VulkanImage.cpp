@@ -1,4 +1,4 @@
-﻿#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.h>
 #include <stb_image.h>
 
 #include "CommandBufferManager.hpp"

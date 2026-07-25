@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cstdint>
@@ -31,9 +31,6 @@ public:
     glm::ivec3 worldToVoxel(const glm::vec3& pos) const;
     glm::vec3 toCanonical(const glm::vec3& worldPos) const;
 
-    // Returns true if the entire segment from a to b stays within occupied (INSIDE or BORDER)
-    // voxels. Uses a 3D DDA walk through the voxel grid. Skips the first and last cells
-    // since they contain the endpoints which may sit in boundary cells.
     bool segmentStaysInside(const glm::vec3& a, const glm::vec3& b, int outsideCornerThreshold = 2) const;
 
     void exportOccupancyVisualization(const std::string& filename) const;

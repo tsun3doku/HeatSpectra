@@ -1,4 +1,4 @@
-#include "NodeGraphModel.hpp"
+#include "NodeGraphUiModel.hpp"
 
 #include "nodegraph/NodeGraphUtils.hpp"
 #include "nodegraph/NodeGraphRegistry.hpp"
@@ -28,16 +28,16 @@ static int nodeCategoryOrder(NodeGraphNodeCategory category) {
     return 3;
 }
 
-NodeGraphModel::NodeGraphModel(QObject* parent)
+NodeGraphUiModel::NodeGraphUiModel(QObject* parent)
     : QAbstractListModel(parent) {
     refreshSerialPorts();
 }
 
-int NodeGraphModel::rowCount(const QModelIndex& parent) const {
+int NodeGraphUiModel::rowCount(const QModelIndex& parent) const {
     return parent.isValid() ? 0 : static_cast<int>(nodes.size());
 }
 
-QVariant NodeGraphModel::data(const QModelIndex& index, int role) const {
+QVariant NodeGraphUiModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= static_cast<int>(nodes.size())) {
         return {};
     }
@@ -59,7 +59,7 @@ QVariant NodeGraphModel::data(const QModelIndex& index, int role) const {
     }
 }
 
-QHash<int, QByteArray> NodeGraphModel::roleNames() const {
+QHash<int, QByteArray> NodeGraphUiModel::roleNames() const {
     return {
         {NodeIdRole, "nodeId"},
         {TitleRole, "title"},
@@ -74,32 +74,32 @@ QHash<int, QByteArray> NodeGraphModel::roleNames() const {
     };
 }
 
-QVariantList NodeGraphModel::edges() const {
+QVariantList NodeGraphUiModel::edges() const {
     return edgeItems;
 }
 
-QVariantList NodeGraphModel::nodeCategories() const {
+QVariantList NodeGraphUiModel::nodeCategories() const {
     return categoryItems;
 }
 
-int NodeGraphModel::selectedNodeId() const {
+int NodeGraphUiModel::selectedNodeId() const {
     return selectedId;
 }
 
-bool NodeGraphModel::isNodeSelected(int nodeId) const {
+bool NodeGraphUiModel::isNodeSelected(int nodeId) const {
     if (nodeId <= 0) return false;
     return std::find(selectedIds.begin(), selectedIds.end(), static_cast<uint32_t>(nodeId)) != selectedIds.end();
 }
 
-QString NodeGraphModel::selectedNodeTitle() const {
+QString NodeGraphUiModel::selectedNodeTitle() const {
     return selectedTitle;
 }
 
-QString NodeGraphModel::selectedNodeType() const {
+QString NodeGraphUiModel::selectedNodeType() const {
     return selectedType;
 }
 
-QString NodeGraphModel::selectedNodeDescription() const {
+QString NodeGraphUiModel::selectedNodeDescription() const {
     if (selectedType == QStringLiteral("model")) return QStringLiteral("Choose a 3D model");
     if (selectedType == QStringLiteral("transform")) return QStringLiteral("Adjust placement, orientation and scale of a 3D model");
     if (selectedType == QStringLiteral("group")) return QStringLiteral("Target source groups and write grouped mesh selections");
@@ -115,15 +115,15 @@ QString NodeGraphModel::selectedNodeDescription() const {
                             QStringLiteral("Select a node in the graph to inspect parameters and dataflow");
 }
 
-QVariantList NodeGraphModel::selectedNodeParameters() const {
+QVariantList NodeGraphUiModel::selectedNodeParameters() const {
     return selectedParameters;
 }
 
-QVariantList NodeGraphModel::serialPorts() const {
+QVariantList NodeGraphUiModel::serialPorts() const {
     return serialPortItems;
 }
 
-void NodeGraphModel::initializeGraph(
+void NodeGraphUiModel::initializeGraph(
     const NodeGraphState& state,
     const std::vector<NodeTypeDefinition>& definitions) {
     typeDefinitions = definitions;
@@ -133,26 +133,26 @@ void NodeGraphModel::initializeGraph(
     refresh();
 }
 
-void NodeGraphModel::replaceGraphState(const NodeGraphState& state) {
+void NodeGraphUiModel::replaceGraphState(const NodeGraphState& state) {
     graphState = state;
     revision = UINT64_MAX;
     refresh();
 }
 
-void NodeGraphModel::applyDelta(const NodeGraphDelta& delta) {
+void NodeGraphUiModel::applyDelta(const NodeGraphDelta& delta) {
     const bool applied = applyNodeGraphDelta(graphState, delta);
     Q_ASSERT(applied);
     if (!applied) return;
     refresh();
 }
 
-void NodeGraphModel::handleNodesPasted(const std::vector<NodeGraphNodeId>& nodeIds) {
+void NodeGraphUiModel::handleNodesPasted(const std::vector<NodeGraphNodeId>& nodeIds) {
     selectedIds.clear();
     for (NodeGraphNodeId id : nodeIds) selectedIds.push_back(id.value);
     notifySelectionChanged(true);
 }
 
-void NodeGraphModel::setRuntimeSelectedNodeId(int nodeId) {
+void NodeGraphUiModel::setRuntimeSelectedNodeId(int nodeId) {
     const uint32_t runtimeNodeId = nodeId > 0 ? static_cast<uint32_t>(nodeId) : 0;
     if ((runtimeNodeId == 0 && selectedIds.empty()) ||
         (runtimeNodeId != 0 && selectedIds.size() == 1 && selectedIds.front() == runtimeNodeId)) {
@@ -165,7 +165,7 @@ void NodeGraphModel::setRuntimeSelectedNodeId(int nodeId) {
     notifySelectionChanged(false);
 }
 
-void NodeGraphModel::refresh() {
+void NodeGraphUiModel::refresh() {
     const NodeGraphState& updatedState = graphState;
     const uint64_t updatedRevision = graphState.revision;
     if (updatedRevision == revision) {
@@ -211,11 +211,11 @@ void NodeGraphModel::refresh() {
     emit edgesChanged();
 }
 
-void NodeGraphModel::moveNode(int nodeId, qreal x, qreal y) {
+void NodeGraphUiModel::moveNode(int nodeId, qreal x, qreal y) {
     if (nodeId > 0) emit moveNodeRequested(NodeGraphNodeId{static_cast<uint32_t>(nodeId)}, static_cast<float>(x), static_cast<float>(y));
 }
 
-void NodeGraphModel::removeNode(int nodeId) {
+void NodeGraphUiModel::removeNode(int nodeId) {
     if (nodeId > 0) {
         selectedIds.erase(std::remove(selectedIds.begin(), selectedIds.end(), static_cast<uint32_t>(nodeId)), selectedIds.end());
         notifySelectionChanged(true);
@@ -223,7 +223,7 @@ void NodeGraphModel::removeNode(int nodeId) {
     }
 }
 
-void NodeGraphModel::removeSelectedNodes() {
+void NodeGraphUiModel::removeSelectedNodes() {
     const std::vector<uint32_t> ids = selectedIds;
     for (uint32_t nodeId : ids) {
         emit removeNodeRequested(NodeGraphNodeId{nodeId});
@@ -232,28 +232,28 @@ void NodeGraphModel::removeSelectedNodes() {
     notifySelectionChanged(true);
 }
 
-void NodeGraphModel::resetToDefaultGraph() {
+void NodeGraphUiModel::resetToDefaultGraph() {
     emit resetRequested();
 }
 
-int NodeGraphModel::addNode(const QString& typeId, qreal x, qreal y) {
+int NodeGraphUiModel::addNode(const QString& typeId, qreal x, qreal y) {
     emit addNodeRequested(typeId, static_cast<float>(x), static_cast<float>(y));
     return 0;
 }
 
-void NodeGraphModel::toggleNodeDisplay(int nodeId) {
+void NodeGraphUiModel::toggleNodeDisplay(int nodeId) {
     if (nodeId > 0) emit toggleNodeDisplayRequested(NodeGraphNodeId{static_cast<uint32_t>(nodeId)});
 }
 
-void NodeGraphModel::toggleNodeFrozen(int nodeId) {
+void NodeGraphUiModel::toggleNodeFrozen(int nodeId) {
     if (nodeId > 0) emit toggleNodeFrozenRequested(NodeGraphNodeId{static_cast<uint32_t>(nodeId)});
 }
 
-void NodeGraphModel::setSelectedNodeId(int nodeId) {
+void NodeGraphUiModel::setSelectedNodeId(int nodeId) {
     setNodeSelected(nodeId, false);
 }
 
-void NodeGraphModel::setNodeSelected(int nodeId, bool additive) {
+void NodeGraphUiModel::setNodeSelected(int nodeId, bool additive) {
     const uint32_t id = nodeId > 0 ? static_cast<uint32_t>(nodeId) : 0;
     if (!additive) {
         selectedIds.clear();
@@ -276,7 +276,7 @@ void NodeGraphModel::setNodeSelected(int nodeId, bool additive) {
     notifySelectionChanged(true);
 }
 
-void NodeGraphModel::copySelectedNodes() {
+void NodeGraphUiModel::copySelectedNodes() {
     copiedNodes.clear();
     copiedEdges.clear();
     if (selectedIds.empty()) {
@@ -313,7 +313,7 @@ void NodeGraphModel::copySelectedNodes() {
     }
 }
 
-void NodeGraphModel::pasteCopiedNodes() {
+void NodeGraphUiModel::pasteCopiedNodes() {
     if (copiedNodes.empty()) return;
     GraphPastePayload payload{};
     payload.nodes = copiedNodes;
@@ -321,7 +321,7 @@ void NodeGraphModel::pasteCopiedNodes() {
     emit pasteRequested(payload);
 }
 
-bool NodeGraphModel::connectSockets(int fromNode, int fromSocket, int toNode, int toSocket) {
+bool NodeGraphUiModel::connectSockets(int fromNode, int fromSocket, int toNode, int toSocket) {
     if (fromNode <= 0 || fromSocket <= 0 || toNode <= 0 || toSocket <= 0) {
         return false;
     }
@@ -333,11 +333,11 @@ bool NodeGraphModel::connectSockets(int fromNode, int fromSocket, int toNode, in
     return true;
 }
 
-void NodeGraphModel::removeConnection(int edgeId) {
+void NodeGraphUiModel::removeConnection(int edgeId) {
     if (edgeId > 0) emit removeConnectionRequested(NodeGraphEdgeId{static_cast<uint32_t>(edgeId)});
 }
 
-void NodeGraphModel::setParameterValue(int parameterId, const QVariant& value) {
+void NodeGraphUiModel::setParameterValue(int parameterId, const QVariant& value) {
     if (selectedId <= 0 || parameterId <= 0) {
         return;
     }
@@ -363,7 +363,7 @@ void NodeGraphModel::setParameterValue(int parameterId, const QVariant& value) {
     }
 }
 
-void NodeGraphModel::setHeatMaterialPreset(const QString& presetName) {
+void NodeGraphUiModel::setHeatMaterialPreset(const QString& presetName) {
     if (selectedType != QStringLiteral("heat_model")) return;
     HeatMaterialPresetId presetId = HeatMaterialPresetId::Custom;
     if (presetName == QStringLiteral("Aluminum")) presetId = HeatMaterialPresetId::Aluminum;
@@ -379,7 +379,7 @@ void NodeGraphModel::setHeatMaterialPreset(const QString& presetName) {
     setParameterValue(nodegraphparams::heatmodel::Conductivity, preset.conductivity);
 }
 
-void NodeGraphModel::refreshSerialPorts() {
+void NodeGraphUiModel::refreshSerialPorts() {
     QVariantList updated;
     for (const SerialPortInfo& port : SerialPort::enumeratePorts()) {
         QVariantMap item;
@@ -393,7 +393,7 @@ void NodeGraphModel::refreshSerialPorts() {
     }
 }
 
-QVariantList NodeGraphModel::socketList(NodeGraphNodeId nodeId, const std::vector<NodeGraphSocket>& sockets) const {
+QVariantList NodeGraphUiModel::socketList(NodeGraphNodeId nodeId, const std::vector<NodeGraphSocket>& sockets) const {
     QVariantList result;
     result.reserve(static_cast<qsizetype>(sockets.size()));
     for (const NodeGraphSocket& socket : sockets) {
@@ -412,7 +412,7 @@ QVariantList NodeGraphModel::socketList(NodeGraphNodeId nodeId, const std::vecto
     return result;
 }
 
-void NodeGraphModel::rebuildNodeCategories() {
+void NodeGraphUiModel::rebuildNodeCategories() {
     categoryItems.clear();
     std::vector<NodeTypeDefinition> definitions = typeDefinitions;
     std::sort(definitions.begin(), definitions.end(), [](const NodeTypeDefinition& lhs, const NodeTypeDefinition& rhs) {
@@ -444,7 +444,7 @@ void NodeGraphModel::rebuildNodeCategories() {
     emit nodeCategoriesChanged();
 }
 
-void NodeGraphModel::notifySelectionChanged(bool requestRuntimeSelection) {
+void NodeGraphUiModel::notifySelectionChanged(bool requestRuntimeSelection) {
     if (std::find(selectedIds.begin(), selectedIds.end(), static_cast<uint32_t>(selectedId)) == selectedIds.end()) {
         selectedId = selectedIds.empty() ? 0 : static_cast<int>(selectedIds.back());
     }
@@ -457,7 +457,7 @@ void NodeGraphModel::notifySelectionChanged(bool requestRuntimeSelection) {
     }
 }
 
-void NodeGraphModel::rebuildSelectedNode() {
+void NodeGraphUiModel::rebuildSelectedNode() {
     selectedTitle.clear();
     selectedType.clear();
     selectedParameters.clear();

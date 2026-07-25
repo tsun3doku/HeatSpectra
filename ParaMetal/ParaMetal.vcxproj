@@ -27,6 +27,7 @@
     <Keyword>QtVS_v304</Keyword>
     <CudaToolkitDir>C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\</CudaToolkitDir>
     <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -76,16 +77,9 @@
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') OR !Exists('$(QtMsBuild)\Qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
   </Target>
-  <ItemGroup>
-    <QmlFiles Include="$(ProjectDir)qml\**\*.qml" />
-    <QmlFiles Include="$(ProjectDir)qml\qmldir" />
-  </ItemGroup>
-  <Target Name="CopyQmlFiles" BeforeTargets="Build"
-          Inputs="@(QmlFiles)"
-          Outputs="$(OutDir)qml\.qml-inputs.stamp">
+  <Target Name="CopyQmlFiles" BeforeTargets="Build">
     <MakeDir Directories="$(OutDir)qml" />
     <Exec Command="xcopy /y /e /i &quot;$(ProjectDir)qml&quot; &quot;$(OutDir)qml&quot;" />
-    <Touch Files="$(OutDir)qml\.qml-inputs.stamp" AlwaysCreate="true" />
   </Target>
   <ImportGroup Label="ExtensionSettings">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.3.props" />
@@ -373,7 +367,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="scene\MaterialSystem.cpp" />
     <ClCompile Include="nodegraph\NodeGraphController.cpp" />
     <ClCompile Include="nodegraph\NodeGraph.cpp" />
-    <ClCompile Include="nodegraph\NodeGraphSave.cpp" />
+    <ClCompile Include="project\ProjectFile.cpp" />
     <ClCompile Include="nodegraph\NodeGraphEditor.cpp" />
     <ClCompile Include="nodegraph\NodeGraphDataTypes.cpp" />
     <ClCompile Include="hash\HashBuilder.cpp" />
@@ -441,10 +435,15 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="vulkan\VulkanBuffer.cpp" />
     <ClCompile Include="vulkan\VulkanExternalBuffer.cpp" />
     <ClCompile Include="app\ViewportTarget.cpp" />
-    <ClCompile Include="app\NodeGraphModel.cpp" />
+    <ClCompile Include="app\ViewportUiModel.cpp" />
+    <ClCompile Include="app\HeatPaletteUiModel.cpp" />
+    <ClCompile Include="app\TimelineUiModel.cpp" />
+    <ClCompile Include="app\ConsoleUiModel.cpp" />
+    <ClCompile Include="app\NodeGraphUiModel.cpp" />
     <ClCompile Include="app\NodeGraphCanvasItem.cpp" />
     <ClCompile Include="app\UiModel.cpp" />
     <ClCompile Include="app\GraphHost.cpp" />
+    <ClCompile Include="project\ProjectController.cpp" />
     <ClCompile Include="app\GraphThread.cpp" />
     <ClCompile Include="render\MainRenderGraph.cpp" />
     <ClCompile Include="app\MainQuick.cpp" />
@@ -550,11 +549,16 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="app\App.h" />
     <ClInclude Include="app\AppTypes.hpp" />
     <ClInclude Include="app\ViewportTarget.hpp" />
-    <QtMoc Include="app\NodeGraphModel.hpp" />
+    <QtMoc Include="app\ViewportUiModel.hpp" />
+    <QtMoc Include="app\HeatPaletteUiModel.hpp" />
+    <QtMoc Include="app\TimelineUiModel.hpp" />
+    <QtMoc Include="app\ConsoleUiModel.hpp" />
+    <QtMoc Include="app\NodeGraphUiModel.hpp" />
     <QtMoc Include="app\NodeGraphCanvasItem.hpp" />
     <QtMoc Include="app\UiModel.hpp" />
     <QtMoc Include="app\RuntimeNotifier.hpp" />
     <QtMoc Include="app\GraphHost.hpp" />
+    <QtMoc Include="project\ProjectController.hpp" />
     <ClInclude Include="app\GraphThread.hpp" />
     <ClInclude Include="app\UiRuntimeTypes.hpp" />
     <ClInclude Include="contact\ContactTypes.hpp" />
@@ -713,7 +717,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="scene\PickId.hpp" />
     <ClInclude Include="nodegraph\NodeGraphController.hpp" />
     <ClInclude Include="nodegraph\NodeGraph.hpp" />
-    <ClInclude Include="nodegraph\NodeGraphSave.hpp" />
+    <ClInclude Include="project\ProjectFile.hpp" />
     <ClInclude Include="nodegraph\NodeGraphEditor.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp" />
     <ClInclude Include="nodegraph\NodeGraphEdges.hpp" />

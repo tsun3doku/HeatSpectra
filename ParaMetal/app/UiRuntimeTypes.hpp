@@ -52,28 +52,6 @@ struct TimelineUiState {
     bool operator!=(const TimelineUiState& other) const { return !(*this == other); }
 };
 
-struct SimulationUiState {
-    bool active = false;
-    bool paused = false;
-
-    bool operator==(const SimulationUiState& other) const {
-        return active == other.active && paused == other.paused;
-    }
-    bool operator!=(const SimulationUiState& other) const { return !(*this == other); }
-};
-
-struct SerialUiState {
-    QString connection = QStringLiteral("Not used by an active Heat Solve");
-    QString temperature = QStringLiteral("--");
-    QString pollingRate = QStringLiteral("--");
-
-    bool operator==(const SerialUiState& other) const {
-        return connection == other.connection && temperature == other.temperature &&
-               pollingRate == other.pollingRate;
-    }
-    bool operator!=(const SerialUiState& other) const { return !(*this == other); }
-};
-
 struct GraphPastePayload {
     std::vector<NodeGraphEditor::CopiedNode> nodes;
     std::vector<NodeGraphEditor::CopiedEdge> edges;
@@ -89,8 +67,6 @@ struct PythonResult {
 Q_DECLARE_METATYPE(ViewportUiState)
 Q_DECLARE_METATYPE(HeatPaletteUiState)
 Q_DECLARE_METATYPE(TimelineUiState)
-Q_DECLARE_METATYPE(SimulationUiState)
-Q_DECLARE_METATYPE(SerialUiState)
 Q_DECLARE_METATYPE(GraphPastePayload)
 Q_DECLARE_METATYPE(PythonResult)
 Q_DECLARE_METATYPE(NodeGraphState)

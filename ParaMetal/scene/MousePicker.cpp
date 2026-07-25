@@ -1,4 +1,4 @@
-﻿#include "MousePicker.hpp"
+#include "MousePicker.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>

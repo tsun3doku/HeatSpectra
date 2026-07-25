@@ -1,4 +1,4 @@
-﻿#include "GridLabel.hpp"
+#include "GridLabel.hpp"
 
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanDevice.hpp"

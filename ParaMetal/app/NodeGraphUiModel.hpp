@@ -2,6 +2,7 @@
 
 #include "UiRuntimeTypes.hpp"
 #include "nodegraph/NodeGraphState.hpp"
+#include "nodegraph/NodeGraphEditor.hpp"
 
 #include <QAbstractListModel>
 #include <QVariantList>
@@ -9,7 +10,7 @@
 #include <cstdint>
 #include <vector>
 
-class NodeGraphModel final : public QAbstractListModel {
+class NodeGraphUiModel final : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QVariantList edges READ edges NOTIFY edgesChanged)
     Q_PROPERTY(QVariantList nodeCategories READ nodeCategories NOTIFY nodeCategoriesChanged)
@@ -35,7 +36,7 @@ public:
     };
     Q_ENUM(Role)
 
-    explicit NodeGraphModel(QObject* parent = nullptr);
+    explicit NodeGraphUiModel(QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role) const override;

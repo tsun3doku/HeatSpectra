@@ -9,6 +9,7 @@ Rectangle {
     id: root
     required property QtObject theme
     required property QtObject graphModel
+    required property QtObject runtimeNotifier
     color: theme.panelBackground
 
     function nodeIconFolder(typeId) {
@@ -134,7 +135,11 @@ Rectangle {
                     Layout.fillHeight: true
                     currentIndex: tabs.currentIndex
 
-                    NodeInspectorPane { theme: root.theme; graphModel: root.graphModel }
+                    NodeInspectorPane {
+                        theme: root.theme
+                        graphModel: root.graphModel
+                        runtimeNotifier: root.runtimeNotifier
+                    }
                     Rectangle {
                         color: theme.panelBackground
                         Text { anchors.centerIn: parent; text: qsTr("Spreadsheet data appears here"); color: theme.mutedText; font.family: theme.fontFamily; font.pixelSize: theme.descriptionFontSize }

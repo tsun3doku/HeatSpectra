@@ -3,6 +3,7 @@
 #include <QtQuick/QQuickRhiItem>
 
 #include "ViewportMailbox.hpp"
+#include "project/ProjectFile.hpp"
 
 class QHoverEvent;
 class RuntimeNotifier;
@@ -26,8 +27,13 @@ public slots:
     void requestSelection(int nodeId);
     void requestHeatPaletteRange(float minimum, float maximum);
     void requestHeatPalette(int palette);
+    void applyViewportProjectState(const ProjectFile::Viewport& viewport);
+    void requestCurrentViewportProjectState();
     void initializeGraph(const NodeGraphState& graphState);
     void queueGraphDelta(const NodeGraphDelta& delta);
+
+signals:
+    void projectViewportStateReady(const ProjectFile::Viewport& state);
 
 protected:
     QQuickRhiItemRenderer* createRenderer() override;

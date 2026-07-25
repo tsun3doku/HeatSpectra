@@ -2,7 +2,9 @@
 
 #include "UiRuntimeTypes.hpp"
 
+#include <QMutex>
 #include <QObject>
+#include <QString>
 
 class RuntimeNotifier final : public QObject {
     Q_OBJECT
@@ -10,13 +12,64 @@ class RuntimeNotifier final : public QObject {
 public:
     explicit RuntimeNotifier(QObject* parent = nullptr) : QObject(parent) {}
 
+    Q_INVOKABLE bool heatSolveActive() const {
+        const QMutexLocker lock(&statusMutex);
+        return heatSolveActiveState;
+    }
+    Q_INVOKABLE bool heatSolvePaused() const {
+        const QMutexLocker lock(&statusMutex);
+        return heatSolvePausedState;
+    }
+    Q_INVOKABLE QString serialConnectionText() const {
+        const QMutexLocker lock(&statusMutex);
+        return serialConnectionState;
+    }
+    Q_INVOKABLE QString serialTemperatureText() const {
+        const QMutexLocker lock(&statusMutex);
+        return serialTemperatureState;
+    }
+    Q_INVOKABLE QString serialPollingRateText() const {
+        const QMutexLocker lock(&statusMutex);
+        return serialPollingRateState;
+    }
+
+    void publishHeatSolveStatus(bool active, bool paused) {
+        {
+            const QMutexLocker lock(&statusMutex);
+            if (heatSolveActiveState == active && heatSolvePausedState == paused) return;
+            heatSolveActiveState = active;
+            heatSolvePausedState = paused;
+        }
+        emit heatSolveStatusChanged(active, paused);
+    }
+
+    void publishSerialStatus(const QString& connection, const QString& temperature, const QString& pollingRate) {
+        {
+            const QMutexLocker lock(&statusMutex);
+            if (serialConnectionState == connection &&
+                serialTemperatureState == temperature &&
+                serialPollingRateState == pollingRate) return;
+            serialConnectionState = connection;
+            serialTemperatureState = temperature;
+            serialPollingRateState = pollingRate;
+        }
+        emit serialStatusChanged(connection, temperature, pollingRate);
+    }
+
 signals:
-    void runtimeReadyChanged(bool ready);
     void viewportStateChanged(const ViewportUiState& state);
     void heatPaletteVisibilityChanged(bool visible);
     void timelineStateChanged(const TimelineUiState& state);
-    void simulationStateChanged(const SimulationUiState& state);
-    void serialStateChanged(const SerialUiState& state);
+    void heatSolveStatusChanged(bool active, bool paused);
+    void serialStatusChanged(const QString& connection, const QString& temperature, const QString& pollingRate);
     void graphSelectionChanged(NodeGraphNodeId nodeId);
     void inputActionRequested(const InputAction& action);
+
+private:
+    mutable QMutex statusMutex;
+    bool heatSolveActiveState = false;
+    bool heatSolvePausedState = false;
+    QString serialConnectionState = QStringLiteral("Not used by an active Heat Solve");
+    QString serialTemperatureState = QStringLiteral("--");
+    QString serialPollingRateState = QStringLiteral("--");
 };

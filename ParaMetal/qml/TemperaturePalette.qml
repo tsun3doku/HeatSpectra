@@ -10,7 +10,7 @@ Rectangle {
     required property QtObject heatPalette
 
     visible: heatPalette.visible
-    width: 208
+    width: 156
     height: 286
     radius: 4
     color: theme.panelBackground
@@ -73,8 +73,8 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true; spacing: 6
             Text { text: qsTr("Palette"); color: theme.text; font: theme.regularFont; Layout.preferredWidth: 48 }
-            ComboBox {
-                id: paletteBox; Layout.fillWidth: true; Layout.preferredHeight: 28
+            UiComboBox {
+                id: paletteBox; theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
                 model: [
                     { text: qsTr("Inferno 2"), value: 0 },
                     { text: qsTr("Parula"), value: 1 },
@@ -89,89 +89,25 @@ Rectangle {
                     }
                     return 0
                 }
-                font: theme.regularFont
                 onActivated: heatPalette.setPaletteId(model[currentIndex].value)
-                contentItem: Text { leftPadding: 7; text: paletteBox.displayText; color: theme.text; font: paletteBox.font; verticalAlignment: Text.AlignVCenter }
-                indicator: Text { x: paletteBox.width - width - 8; y: (paletteBox.height - height) / 2; text: "▾"; color: theme.mutedText; font: theme.regularFont }
-                background: Rectangle { radius: 3; color: theme.cardBackground; border.color: paletteBox.activeFocus ? theme.accent : theme.border }
-                popup: Popup {
-                    y: paletteBox.height
-                    width: paletteBox.width
-                    padding: 1
-                    contentItem: ListView {
-                        clip: true
-                        implicitHeight: contentHeight
-                        model: paletteBox.delegateModel
-                        currentIndex: paletteBox.highlightedIndex
-                        delegate: ItemDelegate {
-                            id: paletteDelegate
-                            required property int index
-                            width: paletteBox.width - 2
-                            height: 24
-                            padding: 0
-                            highlighted: paletteBox.highlightedIndex === index
-                            contentItem: Text {
-                                leftPadding: 10
-                                text: paletteBox.textAt(index)
-                                color: root.theme.text
-                                font: root.theme.regularFont
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            background: Rectangle { color: paletteDelegate.highlighted ? root.theme.hover : "transparent" }
-                        }
-                    }
-                    background: Rectangle { color: root.theme.cardBackground; border.width: 1; border.color: root.theme.border; radius: 3 }
-                }
             }
         }
 
         RowLayout {
             Layout.fillWidth: true; spacing: 6
             Text { text: qsTr("Units"); color: theme.text; font: theme.regularFont; Layout.preferredWidth: 48 }
-            ComboBox {
-                id: unitsBox; Layout.fillWidth: true; Layout.preferredHeight: 28
+            UiComboBox {
+                id: unitsBox; theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
                 model: [qsTr("°C"), qsTr("K"), qsTr("°F")]
                 currentIndex: heatPalette.units
-                font: theme.regularFont
                 onActivated: heatPalette.setUnits(currentIndex)
-                contentItem: Text { leftPadding: 7; text: unitsBox.displayText; color: theme.text; font: unitsBox.font; verticalAlignment: Text.AlignVCenter }
-                indicator: Text { x: unitsBox.width - width - 8; y: (unitsBox.height - height) / 2; text: "▾"; color: theme.mutedText; font: theme.regularFont }
-                background: Rectangle { radius: 3; color: theme.cardBackground; border.color: unitsBox.activeFocus ? theme.accent : theme.border }
-                popup: Popup {
-                    y: unitsBox.height
-                    width: unitsBox.width
-                    padding: 1
-                    contentItem: ListView {
-                        clip: true
-                        implicitHeight: contentHeight
-                        model: unitsBox.delegateModel
-                        currentIndex: unitsBox.highlightedIndex
-                        delegate: ItemDelegate {
-                            id: unitsDelegate
-                            required property int index
-                            width: unitsBox.width - 2
-                            height: 24
-                            padding: 0
-                            highlighted: unitsBox.highlightedIndex === index
-                            contentItem: Text {
-                                leftPadding: 10
-                                text: unitsBox.textAt(index)
-                                color: root.theme.text
-                                font: root.theme.regularFont
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                            background: Rectangle { color: unitsDelegate.highlighted ? root.theme.hover : "transparent" }
-                        }
-                    }
-                    background: Rectangle { color: root.theme.cardBackground; border.width: 1; border.color: root.theme.border; radius: 3 }
-                }
             }
         }
 
         Item {
             Layout.fillWidth: true; Layout.fillHeight: true
             Row {
-                anchors.right: parent.right
+                anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
                 spacing: 7

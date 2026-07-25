@@ -1,6 +1,6 @@
-#include "NodeGraphSave.hpp"
-#include "NodeGraphRegistry.hpp"
-#include "NodeGraphUtils.hpp"
+#include "ProjectFile.hpp"
+#include "nodegraph/NodeGraphRegistry.hpp"
+#include "nodegraph/NodeGraphUtils.hpp"
 
 #include <QFile>
 #include <QFileInfo>
@@ -14,7 +14,7 @@
 constexpr int ProjectVersion = 1;
 constexpr const char* ProjectApp = "ParaMetal";
 
-bool NodeGraphSave::save(const Data& data, const QString& filePath, QString* outError) {
+bool ProjectFile::save(const ProjectState& data, const QString& filePath, QString* outError) {
     const QFileInfo projectInfo(filePath);
     const QDir projectDir = projectInfo.absoluteDir();
 
@@ -23,9 +23,9 @@ bool NodeGraphSave::save(const Data& data, const QString& filePath, QString* out
     root["app"] = ProjectApp;
 
     QJsonObject graph;
-    graph["nextNodeId"] = static_cast<int>(data.nextNodeId);
-    graph["nextSocketId"] = static_cast<int>(data.nextSocketId);
-    graph["nextEdgeId"] = static_cast<int>(data.nextEdgeId);
+    graph["nextNodeId"] = static_cast<int>(data.graph.nextNodeId);
+    graph["nextSocketId"] = static_cast<int>(data.graph.nextSocketId);
+    graph["nextEdgeId"] = static_cast<int>(data.graph.nextEdgeId);
 
     QJsonArray nodes;
     std::vector<uint32_t> nodeIds;
@@ -76,7 +76,7 @@ bool NodeGraphSave::save(const Data& data, const QString& filePath, QString* out
     return true;
 }
 
-bool NodeGraphSave::load(Data& outData, const QString& filePath, QString* outError) {
+bool ProjectFile::load(ProjectState& outData, const QString& filePath, QString* outError) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         setError(outError, "Failed to open project file: " + file.errorString());
@@ -112,10 +112,10 @@ bool NodeGraphSave::load(Data& outData, const QString& filePath, QString* outErr
         return false;
     }
 
-    Data loaded;
-    loaded.nextNodeId = static_cast<uint32_t>(graph["nextNodeId"].toInt());
-    loaded.nextSocketId = static_cast<uint32_t>(graph["nextSocketId"].toInt());
-    loaded.nextEdgeId = static_cast<uint32_t>(graph["nextEdgeId"].toInt());
+    ProjectState loaded;
+    loaded.graph.nextNodeId = static_cast<uint32_t>(graph["nextNodeId"].toInt());
+    loaded.graph.nextSocketId = static_cast<uint32_t>(graph["nextSocketId"].toInt());
+    loaded.graph.nextEdgeId = static_cast<uint32_t>(graph["nextEdgeId"].toInt());
 
     for (const QJsonValue& nodeValue : graph["nodes"].toArray()) {
         NodeGraphNode node;
@@ -149,13 +149,13 @@ bool NodeGraphSave::load(Data& outData, const QString& filePath, QString* outErr
     return true;
 }
 
-void NodeGraphSave::setError(QString* outError, const QString& error) {
+void ProjectFile::setError(QString* outError, const QString& error) {
     if (outError) {
         *outError = error;
     }
 }
 
-QString NodeGraphSave::toRelativePath(const QString& path, const QDir& projectDir) {
+QString ProjectFile::toRelativePath(const QString& path, const QDir& projectDir) {
     if (path.isEmpty()) {
         return path;
     }
@@ -173,18 +173,18 @@ QString NodeGraphSave::toRelativePath(const QString& path, const QDir& projectDi
     return relativePath;
 }
 
-QString NodeGraphSave::toAbsolutePath(const QString& path, const QDir& projectDir) {
+QString ProjectFile::toAbsolutePath(const QString& path, const QDir& projectDir) {
     if (path.isEmpty() || QDir::isAbsolutePath(path)) {
         return path;
     }
     return QDir::cleanPath(projectDir.absoluteFilePath(path));
 }
 
-QString NodeGraphSave::valueTypeToString(NodeGraphValueType value) {
+QString ProjectFile::valueTypeToString(NodeGraphValueType value) {
     return QString::fromStdString(::valueTypeToString(value));
 }
 
-bool NodeGraphSave::valueTypeFromString(const QString& text, NodeGraphValueType& outValue) {
+bool ProjectFile::valueTypeFromString(const QString& text, NodeGraphValueType& outValue) {
     if (text == "None") outValue = NodeGraphValueType::None;
     else if (text == "Mesh") outValue = NodeGraphValueType::Mesh;
     else if (text == "Remesh") outValue = NodeGraphValueType::Remesh;
@@ -200,11 +200,11 @@ bool NodeGraphSave::valueTypeFromString(const QString& text, NodeGraphValueType&
     return true;
 }
 
-QString NodeGraphSave::directionToString(NodeGraphSocketDirection direction) {
+QString ProjectFile::directionToString(NodeGraphSocketDirection direction) {
     return direction == NodeGraphSocketDirection::Input ? "Input" : "Output";
 }
 
-bool NodeGraphSave::directionFromString(const QString& text, NodeGraphSocketDirection& outDirection) {
+bool ProjectFile::directionFromString(const QString& text, NodeGraphSocketDirection& outDirection) {
     if (text == "Input") {
         outDirection = NodeGraphSocketDirection::Input;
         return true;
@@ -216,7 +216,7 @@ bool NodeGraphSave::directionFromString(const QString& text, NodeGraphSocketDire
     return false;
 }
 
-QString NodeGraphSave::paramTypeToString(NodeGraphParamType type) {
+QString ProjectFile::paramTypeToString(NodeGraphParamType type) {
     switch (type) {
     case NodeGraphParamType::Float: return "Float";
     case NodeGraphParamType::Int: return "Int";
@@ -229,7 +229,7 @@ QString NodeGraphSave::paramTypeToString(NodeGraphParamType type) {
     return "Float";
 }
 
-bool NodeGraphSave::paramTypeFromString(const QString& text, NodeGraphParamType& outType) {
+bool ProjectFile::paramTypeFromString(const QString& text, NodeGraphParamType& outType) {
     if (text == "Float") outType = NodeGraphParamType::Float;
     else if (text == "Int") outType = NodeGraphParamType::Int;
     else if (text == "Bool") outType = NodeGraphParamType::Bool;
@@ -241,7 +241,7 @@ bool NodeGraphSave::paramTypeFromString(const QString& text, NodeGraphParamType&
     return true;
 }
 
-QJsonArray NodeGraphSave::vec3ToJson(const glm::vec3& value) {
+QJsonArray ProjectFile::vec3ToJson(const glm::vec3& value) {
     QJsonArray array;
     array.append(value.x);
     array.append(value.y);
@@ -249,7 +249,7 @@ QJsonArray NodeGraphSave::vec3ToJson(const glm::vec3& value) {
     return array;
 }
 
-QJsonArray NodeGraphSave::quatToJson(const glm::quat& value) {
+QJsonArray ProjectFile::quatToJson(const glm::quat& value) {
     QJsonArray array;
     array.append(value.x);
     array.append(value.y);
@@ -258,7 +258,7 @@ QJsonArray NodeGraphSave::quatToJson(const glm::quat& value) {
     return array;
 }
 
-bool NodeGraphSave::vec3FromJson(const QJsonValue& value, glm::vec3& outValue) {
+bool ProjectFile::vec3FromJson(const QJsonValue& value, glm::vec3& outValue) {
     if (!value.isArray()) {
         return false;
     }
@@ -273,7 +273,7 @@ bool NodeGraphSave::vec3FromJson(const QJsonValue& value, glm::vec3& outValue) {
     return true;
 }
 
-bool NodeGraphSave::quatFromJson(const QJsonValue& value, glm::quat& outValue) {
+bool ProjectFile::quatFromJson(const QJsonValue& value, glm::quat& outValue) {
     if (!value.isArray()) {
         return false;
     }
@@ -289,7 +289,7 @@ bool NodeGraphSave::quatFromJson(const QJsonValue& value, glm::quat& outValue) {
     return true;
 }
 
-QJsonObject NodeGraphSave::socketToJson(const NodeGraphSocket& socket) {
+QJsonObject ProjectFile::socketToJson(const NodeGraphSocket& socket) {
     QJsonObject obj;
     obj["id"] = static_cast<int>(socket.id.value);
     obj["name"] = QString::fromStdString(socket.name);
@@ -310,7 +310,7 @@ QJsonObject NodeGraphSave::socketToJson(const NodeGraphSocket& socket) {
     return obj;
 }
 
-QJsonObject NodeGraphSave::paramToJson(const NodeGraphParamValue& parameter, const NodeGraphNode& node, const QDir& projectDir) {
+QJsonObject ProjectFile::paramToJson(const NodeGraphParamValue& parameter, const NodeGraphNode& node, const QDir& projectDir) {
     QJsonObject obj;
     obj["id"] = static_cast<int>(parameter.id);
     obj["type"] = paramTypeToString(parameter.type);
@@ -356,7 +356,7 @@ QJsonObject NodeGraphSave::paramToJson(const NodeGraphParamValue& parameter, con
     return obj;
 }
 
-QJsonObject NodeGraphSave::fieldValueToJson(const NodeGraphParamFieldValue& field, const NodeGraphNode& node, const QDir& projectDir) {
+QJsonObject ProjectFile::fieldValueToJson(const NodeGraphParamFieldValue& field, const NodeGraphNode& node, const QDir& projectDir) {
     QJsonObject obj;
     obj["name"] = QString::fromStdString(field.name);
     if (field.value) {
@@ -365,7 +365,7 @@ QJsonObject NodeGraphSave::fieldValueToJson(const NodeGraphParamFieldValue& fiel
     return obj;
 }
 
-QJsonObject NodeGraphSave::nodeToJson(const NodeGraphNode& node, const QDir& projectDir) {
+QJsonObject ProjectFile::nodeToJson(const NodeGraphNode& node, const QDir& projectDir) {
     QJsonObject obj;
     obj["id"] = static_cast<int>(node.id.value);
     obj["typeId"] = QString::fromStdString(node.typeId);
@@ -399,7 +399,7 @@ QJsonObject NodeGraphSave::nodeToJson(const NodeGraphNode& node, const QDir& pro
     return obj;
 }
 
-QJsonObject NodeGraphSave::edgeToJson(const NodeGraphEdge& edge) {
+QJsonObject ProjectFile::edgeToJson(const NodeGraphEdge& edge) {
     QJsonObject obj;
     obj["id"] = static_cast<int>(edge.id.value);
     obj["fromNode"] = static_cast<int>(edge.fromNode.value);
@@ -409,7 +409,7 @@ QJsonObject NodeGraphSave::edgeToJson(const NodeGraphEdge& edge) {
     return obj;
 }
 
-QJsonObject NodeGraphSave::viewportToJson(const Viewport& viewport) {
+QJsonObject ProjectFile::viewportToJson(const Viewport& viewport) {
     QJsonObject obj;
     obj["lookAt"] = vec3ToJson(viewport.lookAt);
     obj["orientation"] = quatToJson(viewport.orientation);
@@ -422,7 +422,7 @@ QJsonObject NodeGraphSave::viewportToJson(const Viewport& viewport) {
     return obj;
 }
 
-bool NodeGraphSave::socketFromJson(const QJsonValue& value, NodeGraphSocket& outSocket, QString* outError) {
+bool ProjectFile::socketFromJson(const QJsonValue& value, NodeGraphSocket& outSocket, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Socket entry is not an object.");
         return false;
@@ -462,7 +462,7 @@ bool NodeGraphSave::socketFromJson(const QJsonValue& value, NodeGraphSocket& out
     return true;
 }
 
-bool NodeGraphSave::paramFromJson(const QJsonValue& value, NodeGraphParamValue& outParameter, const NodeGraphNode& node, const QDir& projectDir, QString* outError) {
+bool ProjectFile::paramFromJson(const QJsonValue& value, NodeGraphParamValue& outParameter, const NodeGraphNode& node, const QDir& projectDir, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Parameter entry is not an object.");
         return false;
@@ -569,7 +569,7 @@ bool NodeGraphSave::paramFromJson(const QJsonValue& value, NodeGraphParamValue& 
     return true;
 }
 
-bool NodeGraphSave::fieldValueFromJson(const QJsonValue& value, NodeGraphParamFieldValue& outField, const NodeGraphNode& node, const QDir& projectDir, QString* outError) {
+bool ProjectFile::fieldValueFromJson(const QJsonValue& value, NodeGraphParamFieldValue& outField, const NodeGraphNode& node, const QDir& projectDir, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Parameter field entry is not an object.");
         return false;
@@ -585,7 +585,7 @@ bool NodeGraphSave::fieldValueFromJson(const QJsonValue& value, NodeGraphParamFi
     return paramFromJson(obj["value"], *outField.value, node, projectDir, outError);
 }
 
-bool NodeGraphSave::nodeFromJson(const QJsonValue& value, NodeGraphNode& outNode, const QDir& projectDir, QString* outError) {
+bool ProjectFile::nodeFromJson(const QJsonValue& value, NodeGraphNode& outNode, const QDir& projectDir, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Node entry is not an object.");
         return false;
@@ -636,7 +636,7 @@ bool NodeGraphSave::nodeFromJson(const QJsonValue& value, NodeGraphNode& outNode
     return true;
 }
 
-bool NodeGraphSave::edgeFromJson(const QJsonValue& value, NodeGraphEdge& outEdge, QString* outError) {
+bool ProjectFile::edgeFromJson(const QJsonValue& value, NodeGraphEdge& outEdge, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Edge entry is not an object.");
         return false;
@@ -656,7 +656,7 @@ bool NodeGraphSave::edgeFromJson(const QJsonValue& value, NodeGraphEdge& outEdge
     return true;
 }
 
-bool NodeGraphSave::viewportFromJson(const QJsonValue& value, Viewport& outViewport, QString* outError) {
+bool ProjectFile::viewportFromJson(const QJsonValue& value, Viewport& outViewport, QString* outError) {
     if (!value.isObject()) {
         setError(outError, "Viewport entry is not an object.");
         return false;

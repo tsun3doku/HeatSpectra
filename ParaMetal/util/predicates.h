@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 void exactinit();
 double insphere(double* pa, double* pb, double* pc, double* pd, double* pe);

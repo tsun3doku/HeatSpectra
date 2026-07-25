@@ -9,6 +9,33 @@ Item {
     id: root
     required property QtObject theme
     required property QtObject graphModel
+    required property QtObject runtimeNotifier
+    property bool heatSolveActive: false
+    property bool heatSolvePaused: false
+    property string serialConnectionText: "Not used by an active Heat Solve"
+    property string serialTemperatureText: "--"
+    property string serialPollingRateText: "--"
+
+    Connections {
+        target: root.runtimeNotifier
+        function onHeatSolveStatusChanged(active, paused) {
+            root.heatSolveActive = active
+            root.heatSolvePaused = paused
+        }
+        function onSerialStatusChanged(connection, temperature, pollingRate) {
+            root.serialConnectionText = connection
+            root.serialTemperatureText = temperature
+            root.serialPollingRateText = pollingRate
+        }
+    }
+
+    Component.onCompleted: {
+        root.heatSolveActive = root.runtimeNotifier.heatSolveActive()
+        root.heatSolvePaused = root.runtimeNotifier.heatSolvePaused()
+        root.serialConnectionText = root.runtimeNotifier.serialConnectionText()
+        root.serialTemperatureText = root.runtimeNotifier.serialTemperatureText()
+        root.serialPollingRateText = root.runtimeNotifier.serialPollingRateText()
+    }
 
     function parameter(parameterId) {
         const parameters = graphModel.selectedNodeParameters
@@ -236,8 +263,8 @@ Item {
                 Text { text: qsTr("Status:"); color: root.theme.text; font: root.theme.regularFont }
                 Text {
                     Layout.fillWidth: true
-                    text: ui.runtime.simulationActive
-                        ? (ui.runtime.simulationPaused ? qsTr("Paused") : qsTr("Running"))
+                    text: root.heatSolveActive
+                        ? (root.heatSolvePaused ? qsTr("Paused") : qsTr("Running"))
                         : (root.parameter(1) && root.parameter(1).value
                             ? (root.parameter(2) && root.parameter(2).value ? qsTr("Pending Pause") : qsTr("Pending Start"))
                             : qsTr("Stopped"))
@@ -268,17 +295,17 @@ Item {
             RowLayout {
                 width: parent.width
                 Text { text: qsTr("Status:"); color: root.theme.text; font: root.theme.regularFont }
-                Text { Layout.fillWidth: true; text: ui.runtime.serialConnectionText; color: root.theme.text; font: root.theme.regularFont; wrapMode: Text.Wrap }
+                Text { Layout.fillWidth: true; text: root.serialConnectionText; color: root.theme.text; font: root.theme.regularFont; wrapMode: Text.Wrap }
             }
             RowLayout {
                 width: parent.width
                 Text { text: qsTr("Latest Temperature:"); color: root.theme.text; font: root.theme.regularFont }
-                Text { Layout.fillWidth: true; text: ui.runtime.serialTemperatureText; color: root.theme.text; font: root.theme.regularFont }
+                Text { Layout.fillWidth: true; text: root.serialTemperatureText; color: root.theme.text; font: root.theme.regularFont }
             }
             RowLayout {
                 width: parent.width
                 Text { text: qsTr("Polling Rate:"); color: root.theme.text; font: root.theme.regularFont }
-                Text { Layout.fillWidth: true; text: ui.runtime.serialPollingRateText; color: root.theme.text; font: root.theme.regularFont }
+                Text { Layout.fillWidth: true; text: root.serialPollingRateText; color: root.theme.text; font: root.theme.regularFont }
             }
         }
     }

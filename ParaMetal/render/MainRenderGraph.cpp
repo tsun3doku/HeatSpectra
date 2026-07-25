@@ -1,4 +1,4 @@
-﻿#include "MainRenderGraph.hpp"
+#include "MainRenderGraph.hpp"
 
 #include <optional>
 #include <string_view>

@@ -8,6 +8,7 @@
 #include "AppTypes.hpp"
 #include "UiRuntimeTypes.hpp"
 #include "nodegraph/NodeGraphState.hpp"
+#include "project/ProjectFile.hpp"
 #include "render/WindowRuntimeState.hpp"
 
 class ViewportMailbox final {
@@ -31,6 +32,8 @@ public:
     void requestHeatPaletteRange(float minimum, float maximum);
     void requestHeatPalette(int palette);
     void replaceGraphState(const NodeGraphState& graphState);
+    void applyViewportProjectState(const ProjectFile::Viewport& viewport);
+    void requestCurrentViewportProjectState();
     void appendGraphDelta(const NodeGraphDelta& delta);
 
     bool takeWireframeMode(app::WireframeMode& mode, bool force = false);
@@ -43,6 +46,8 @@ public:
     bool takeSelection(int& nodeId, bool force = false);
     bool takeHeatPaletteRange(float& minimum, float& maximum, bool force = false);
     bool takeHeatPalette(int& palette, bool force = false);
+    bool takeAppliedViewportProjectState(ProjectFile::Viewport& viewport);
+    bool takeCurrentViewportProjectState();
 
     const NodeGraphState* graphReplacement(bool force = false) const;
     void graphReplacementApplied();
@@ -74,6 +79,10 @@ private:
     bool heatPaletteRangeDirty = false;
     int requestedHeatPalette = 0;
     bool heatPaletteDirty = false;
+
+    ProjectFile::Viewport appliedViewportProjectState;
+    bool viewportProjectStateDirty = false;
+    bool currentViewportProjectStateRequested = false;
 
     NodeGraphState cachedGraphState;
     std::vector<NodeGraphDelta> pendingGraphDeltas;

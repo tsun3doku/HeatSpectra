@@ -17,6 +17,7 @@ public:
 public slots:
     void initialize();
     void shutdown();
+    void newProject();
     void resetGraph();
     void replaceGraph(const NodeGraphState& state);
     void addNode(const QString& typeId, float x, float y);
@@ -31,6 +32,8 @@ public slots:
     void pasteFragment(const GraphPastePayload& payload);
     void executePython(const QString& source);
     void activateTimeline();
+    void requestGraphState();
+    void loadGraphState(const NodeGraphState& state);
 
 signals:
     void initialized(const NodeGraphState& state,const std::vector<NodeTypeDefinition>& definitions, const QString& pythonVersion);
@@ -39,6 +42,8 @@ signals:
     void nodesPasted(const std::vector<NodeGraphNodeId>& nodeIds);
     void pythonFinished(const PythonResult& result);
     void timelineRangeChanged(uint32_t frameCount, float fps);
+    void graphStateReady(const NodeGraphState& state);
+    void graphStateLoaded(bool success, const QString& error);
 
 private:
     void publishChanges();

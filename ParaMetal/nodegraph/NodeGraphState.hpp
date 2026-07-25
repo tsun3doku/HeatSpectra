@@ -8,6 +8,9 @@
 
 struct NodeGraphState {
     uint64_t revision = 0;
+    uint32_t nextNodeId = 1;
+    uint32_t nextSocketId = 1;
+    uint32_t nextEdgeId = 1;
     std::unordered_map<uint32_t, NodeGraphNode> nodes;
     NodeGraphEdges edges;
 

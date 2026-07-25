@@ -1,6 +1,6 @@
 #include "NodeGraphCanvasItem.hpp"
 
-#include "NodeGraphModel.hpp"
+#include "NodeGraphUiModel.hpp"
 #include "nodegraph/ui/scene/NodeGraphSceneStyle.hpp"
 #include "ui/UiTypography.hpp"
 
@@ -43,9 +43,9 @@ static QString graphIconFolder(const QString& typeId) {
 
 static QImage graphIconImage(const QString& typeId) {
     static QHash<QString, QImage> imageCache;
-    const auto cached = imageCache.constFind(typeId);
-    if (cached != imageCache.cend()) return cached.value();
-
+    if (typeId.isEmpty()) return {};
+    const auto existing = imageCache.find(typeId);
+    if (existing != imageCache.end()) return existing.value();
     const QString folder = graphIconFolder(typeId);
     if (folder.isEmpty()) {
         imageCache.insert(typeId, {});
@@ -112,16 +112,16 @@ NodeGraphCanvasItem::NodeGraphCanvasItem(QQuickItem* parent)
     setFillColor(Qt::transparent);
 }
 
-NodeGraphModel* NodeGraphCanvasItem::model() const { return graphModel; }
+NodeGraphUiModel* NodeGraphCanvasItem::model() const { return graphModel; }
 
-void NodeGraphCanvasItem::setModel(NodeGraphModel* updatedModel) {
+void NodeGraphCanvasItem::setModel(NodeGraphUiModel* updatedModel) {
     if (graphModel == updatedModel) return;
     if (graphModel) disconnect(graphModel, nullptr, this, nullptr);
     graphModel = updatedModel;
     if (graphModel) {
         connect(graphModel, &QAbstractItemModel::modelReset, this, &NodeGraphCanvasItem::refreshModel);
         connect(graphModel, &QAbstractItemModel::dataChanged, this, &NodeGraphCanvasItem::refreshModel);
-        connect(graphModel, &NodeGraphModel::edgesChanged, this, &NodeGraphCanvasItem::refreshModel);
+        connect(graphModel, &NodeGraphUiModel::edgesChanged, this, &NodeGraphCanvasItem::refreshModel);
     }
     refreshModel();
     emit modelChanged();
@@ -135,15 +135,15 @@ void NodeGraphCanvasItem::refreshModel() {
         for (int row = 0; row < graphModel->rowCount(); ++row) {
             const QModelIndex index = graphModel->index(row, 0);
             Node node;
-            node.id = graphModel->data(index, NodeGraphModel::NodeIdRole).toInt();
-            node.title = graphModel->data(index, NodeGraphModel::TitleRole).toString();
-            node.typeId = graphModel->data(index, NodeGraphModel::TypeRole).toString();
+            node.id = graphModel->data(index, NodeGraphUiModel::NodeIdRole).toInt();
+            node.title = graphModel->data(index, NodeGraphUiModel::TitleRole).toString();
+            node.typeId = graphModel->data(index, NodeGraphUiModel::TypeRole).toString();
             node.icon = graphIconImage(node.typeId);
-            node.x = graphModel->data(index, NodeGraphModel::NodeXRole).toReal();
-            node.y = graphModel->data(index, NodeGraphModel::NodeYRole).toReal();
-            node.displayEnabled = graphModel->data(index, NodeGraphModel::DisplayEnabledRole).toBool();
-            node.frozen = graphModel->data(index, NodeGraphModel::FrozenRole).toBool();
-            node.selected = graphModel->data(index, NodeGraphModel::SelectedRole).toBool();
+            node.x = graphModel->data(index, NodeGraphUiModel::NodeXRole).toReal();
+            node.y = graphModel->data(index, NodeGraphUiModel::NodeYRole).toReal();
+            node.displayEnabled = graphModel->data(index, NodeGraphUiModel::DisplayEnabledRole).toBool();
+            node.frozen = graphModel->data(index, NodeGraphUiModel::FrozenRole).toBool();
+            node.selected = graphModel->data(index, NodeGraphUiModel::SelectedRole).toBool();
             const auto readSockets = [](const QVariantList& source, std::vector<Socket>& destination) {
                 destination.reserve(source.size());
                 for (const QVariant& value : source) {
@@ -159,8 +159,8 @@ void NodeGraphCanvasItem::refreshModel() {
                     destination.push_back(socket);
                 }
             };
-            readSockets(graphModel->data(index, NodeGraphModel::InputsRole).toList(), node.inputs);
-            readSockets(graphModel->data(index, NodeGraphModel::OutputsRole).toList(), node.outputs);
+            readSockets(graphModel->data(index, NodeGraphUiModel::InputsRole).toList(), node.inputs);
+            readSockets(graphModel->data(index, NodeGraphUiModel::OutputsRole).toList(), node.outputs);
             nodes.push_back(node);
         }
         for (const QVariant& value : graphModel->edges()) {

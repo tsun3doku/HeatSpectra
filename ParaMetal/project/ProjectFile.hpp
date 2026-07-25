@@ -1,7 +1,7 @@
 #pragma once
 
-#include "NodeGraphState.hpp"
-#include "NodeGraphTypes.hpp"
+#include "nodegraph/NodeGraphState.hpp"
+#include "nodegraph/NodeGraphTypes.hpp"
 #include "scene/Camera.hpp"
 
 #include <glm/glm.hpp>
@@ -12,8 +12,9 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QMetaType>
 
-class NodeGraphSave {
+class ProjectFile {
 public:
     struct Viewport {
         glm::vec3 lookAt{0.0f};
@@ -24,16 +25,13 @@ public:
         float orthographicHeight = 2.0f;
     };
 
-    struct Data {
+    struct ProjectState {
         NodeGraphState graph;
         Viewport viewport;
-        uint32_t nextNodeId = 1;
-        uint32_t nextSocketId = 1;
-        uint32_t nextEdgeId = 1;
     };
 
-    static bool save(const Data& data, const QString& filePath, QString* outError = nullptr);
-    static bool load(Data& outData, const QString& filePath, QString* outError = nullptr);
+    static bool save(const ProjectState& data, const QString& filePath, QString* outError = nullptr);
+    static bool load(ProjectState& outData, const QString& filePath, QString* outError = nullptr);
 
 private:
     static void setError(QString* outError, const QString& error);
@@ -67,3 +65,6 @@ private:
     static bool paramFromJson(const QJsonValue& value, NodeGraphParamValue& outParameter, const NodeGraphNode& node, const QDir& projectDir, QString* outError);
     static bool fieldValueFromJson(const QJsonValue& value, NodeGraphParamFieldValue& outField, const NodeGraphNode& node, const QDir& projectDir, QString* outError);
 };
+
+Q_DECLARE_METATYPE(ProjectFile::Viewport)
+Q_DECLARE_METATYPE(ProjectFile::ProjectState)

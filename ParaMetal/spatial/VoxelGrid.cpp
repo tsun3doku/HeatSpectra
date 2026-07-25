@@ -1,4 +1,4 @@
-﻿#include "VoxelGrid.hpp"
+#include "VoxelGrid.hpp"
 #include "TriangleHashGrid.hpp"
 #include "util/GeometryUtils.hpp"
 #include <iostream>

@@ -65,8 +65,7 @@ int App::initializePresentation() {
     qRegisterMetaType<ViewportUiState>();
     qRegisterMetaType<HeatPaletteUiState>();
     qRegisterMetaType<TimelineUiState>();
-    qRegisterMetaType<SimulationUiState>();
-    qRegisterMetaType<SerialUiState>();
+    qRegisterMetaType<ProjectFile::ProjectState>();
     qRegisterMetaType<GraphPastePayload>();
     qRegisterMetaType<PythonResult>();
     qRegisterMetaType<NodeGraphState>();
@@ -87,7 +86,12 @@ int App::initializePresentation() {
     window.setTitle("ParaMetal");
     window.resize(1600, 900);
     window.setMinimumSize(QSize(700, 400));
+    GraphHost* graphHost = graphThread.host();
+    Q_ASSERT(graphHost);
+    projectController = std::make_unique<ProjectController>(*graphHost, &application);
     window.rootContext()->setContextProperty(QStringLiteral("ui"), &uiModel);
+    window.rootContext()->setContextProperty(QStringLiteral("project"), projectController.get());
+    window.rootContext()->setContextProperty(QStringLiteral("runtimeStatus"), &runtimeNotifier);
 
     const QString qmlPath = QCoreApplication::applicationDirPath() + QStringLiteral("/qml/Main.qml");
     if (!QFileInfo::exists(qmlPath)) return 2;
@@ -99,8 +103,6 @@ int App::initializePresentation() {
     if (!viewport) return 4;
 
     viewport->bindRuntime(runtimeSystems, runtimeNotifier);
-    GraphHost* graphHost = graphThread.host();
-    Q_ASSERT(graphHost);
     connectUi(*viewport, *graphHost);
     connectRuntime(*graphHost);
     connectGraph(*viewport, *graphHost);
@@ -128,48 +130,49 @@ void App::connectUi(ViewportItem& viewport, GraphHost& graphHost) {
                      &viewport, &ViewportItem::requestTimelineScrub);
     QObject::connect(uiModel.timeline(), &TimelineUiModel::stepRequested,
                      &viewport, &ViewportItem::requestTimelineStep);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::selectionRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::selectionRequested,
                      &viewport, &ViewportItem::requestSelection);
 
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::resetRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::resetRequested,
                      &graphHost, &GraphHost::resetGraph, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::addNodeRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::addNodeRequested,
                      &graphHost, &GraphHost::addNode, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::removeNodeRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::removeNodeRequested,
                      &graphHost, &GraphHost::removeNode, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::moveNodeRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::moveNodeRequested,
                      &graphHost, &GraphHost::moveNode, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::toggleNodeDisplayRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::toggleNodeDisplayRequested,
                      &graphHost, &GraphHost::toggleNodeDisplay, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::toggleNodeFrozenRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::toggleNodeFrozenRequested,
                      &graphHost, &GraphHost::toggleNodeFrozen, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::connectSocketsRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::connectSocketsRequested,
                      &graphHost, &GraphHost::connectSockets, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::removeConnectionRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::removeConnectionRequested,
                      &graphHost, &GraphHost::removeConnection, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::setParameterRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::setParameterRequested,
                      &graphHost, &GraphHost::setParameter, Qt::QueuedConnection);
-    QObject::connect(uiModel.nodeGraph(), &NodeGraphModel::pasteRequested,
+    QObject::connect(uiModel.nodeGraph(), &NodeGraphUiModel::pasteRequested,
                      &graphHost, &GraphHost::pasteFragment, Qt::QueuedConnection);
-    QObject::connect(uiModel.console(), &ConsoleModel::executeRequested,
+    QObject::connect(uiModel.console(), &ConsoleUiModel::executeRequested,
                      &graphHost, &GraphHost::executePython, Qt::QueuedConnection);
-    QObject::connect(uiModel.console(), &ConsoleModel::resetGraphRequested,
+    QObject::connect(uiModel.console(), &ConsoleUiModel::resetGraphRequested,
                      &graphHost, &GraphHost::resetGraph, Qt::QueuedConnection);
+    QObject::connect(projectController.get(), &ProjectController::pathChanged,
+                     &window, [this]() {
+                         const QString path = projectController->path();
+                         window.setTitle(path.isEmpty()
+                             ? QStringLiteral("ParaMetal")
+                             : QStringLiteral("%1 - ParaMetal").arg(QFileInfo(path).fileName()));
+                     }, Qt::QueuedConnection);
 }
 
 void App::connectRuntime(GraphHost& graphHost) {
-    QObject::connect(&runtimeNotifier, &RuntimeNotifier::runtimeReadyChanged,
-                     uiModel.runtime(), &RuntimeStatusUiModel::setReady, Qt::QueuedConnection);
     QObject::connect(&runtimeNotifier, &RuntimeNotifier::viewportStateChanged,
                      uiModel.viewport(), &ViewportUiModel::applyState, Qt::QueuedConnection);
     QObject::connect(&runtimeNotifier, &RuntimeNotifier::heatPaletteVisibilityChanged,
                      uiModel.heatPalette(), &HeatPaletteUiModel::applyVisibility, Qt::QueuedConnection);
     QObject::connect(&runtimeNotifier, &RuntimeNotifier::timelineStateChanged,
                      uiModel.timeline(), &TimelineUiModel::applyState, Qt::QueuedConnection);
-    QObject::connect(&runtimeNotifier, &RuntimeNotifier::simulationStateChanged,
-                     uiModel.runtime(), &RuntimeStatusUiModel::applySimulation, Qt::QueuedConnection);
-    QObject::connect(&runtimeNotifier, &RuntimeNotifier::serialStateChanged,
-                     uiModel.runtime(), &RuntimeStatusUiModel::applySerial, Qt::QueuedConnection);
     QObject::connect(&runtimeNotifier, &RuntimeNotifier::graphSelectionChanged,
                      uiModel.nodeGraph(), [model = uiModel.nodeGraph()](NodeGraphNodeId id) {
                          model->setRuntimeSelectedNodeId(static_cast<int>(id.value));
@@ -192,17 +195,26 @@ void App::connectGraph(ViewportItem& viewport, GraphHost& graphHost) {
             viewport.initializeGraph(state);
         }, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::graphChanged,
-                     uiModel.nodeGraph(), &NodeGraphModel::applyDelta, Qt::QueuedConnection);
+                     uiModel.nodeGraph(), &NodeGraphUiModel::applyDelta, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::graphChanged,
                      &viewport, &ViewportItem::queueGraphDelta, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::graphReplaced,
                      &viewport, &ViewportItem::initializeGraph, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::graphReplaced,
-                     uiModel.nodeGraph(), &NodeGraphModel::replaceGraphState, Qt::QueuedConnection);
+                     uiModel.nodeGraph(), &NodeGraphUiModel::replaceGraphState, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::nodesPasted,
-                     uiModel.nodeGraph(), &NodeGraphModel::handleNodesPasted, Qt::QueuedConnection);
+                     uiModel.nodeGraph(), &NodeGraphUiModel::handleNodesPasted, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::pythonFinished,
-                     uiModel.console(), &ConsoleModel::applyResult, Qt::QueuedConnection);
+                     uiModel.console(), &ConsoleUiModel::applyResult, Qt::QueuedConnection);
     QObject::connect(&graphHost, &GraphHost::timelineRangeChanged,
                      &viewport, &ViewportItem::requestTimelineRange, Qt::QueuedConnection);
+    QObject::connect(projectController.get(), &ProjectController::viewportStateRequested,
+                     &viewport, &ViewportItem::requestCurrentViewportProjectState,
+                     Qt::QueuedConnection);
+    QObject::connect(&viewport, &ViewportItem::projectViewportStateReady,
+                     projectController.get(), &ProjectController::onViewportStateReady,
+                     Qt::QueuedConnection);
+    QObject::connect(projectController.get(), &ProjectController::viewportStateApplied,
+                     &viewport, &ViewportItem::applyViewportProjectState,
+                     Qt::QueuedConnection);
 }

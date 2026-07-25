@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import ParaMetal
 
@@ -53,10 +54,16 @@ Rectangle {
             UiMenu {
                 theme: root.theme
                 title: qsTr("File")
-                Action { text: qsTr("New") }
-                Action { text: qsTr("Open…") }
-                Action { text: qsTr("Save") }
-                Action { text: qsTr("Save As…") }
+                Action { text: qsTr("New"); onTriggered: project.newProject() }
+                Action { text: qsTr("Open..."); onTriggered: openProjectDialog.open() }
+                Action {
+                    text: qsTr("Save")
+                    onTriggered: {
+                        if (project.path.length > 0) project.save()
+                        else saveProjectDialog.open()
+                    }
+                }
+                Action { text: qsTr("Save As..."); onTriggered: saveProjectDialog.open() }
                 UiMenuSeparator { theme: root.theme }
                 Action { text: qsTr("Exit"); onTriggered: Qt.quit() }
             }
@@ -111,6 +118,7 @@ Rectangle {
                         SplitView.maximumWidth: 620
                         theme: root.theme
                         graphModel: ui.nodeGraph
+                        runtimeNotifier: runtimeStatus
                     }
 
                     ViewportPane {
@@ -129,6 +137,38 @@ Rectangle {
                     bridge: ui.timeline
                 }
             }
+        }
+    }
+
+    FileDialog {
+        id: openProjectDialog
+        title: qsTr("Open ParaMetal Project")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("ParaMetal projects (*.pm)"), qsTr("All files (*)")]
+        onAccepted: project.open(selectedFile)
+    }
+
+    FileDialog {
+        id: saveProjectDialog
+        title: qsTr("Save ParaMetal Project")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "pm"
+        nameFilters: [qsTr("ParaMetal projects (*.pm)"), qsTr("All files (*)")]
+        onAccepted: project.saveAs(selectedFile)
+    }
+
+    MessageDialog {
+        id: projectErrorDialog
+        title: qsTr("Project Error")
+        buttons: MessageDialog.Ok
+    }
+
+    Connections {
+        target: project
+        function onSaveAsRequired() { saveProjectDialog.open() }
+        function onError(message) {
+            projectErrorDialog.text = message
+            projectErrorDialog.open()
         }
     }
 }

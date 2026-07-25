@@ -1,4 +1,4 @@
-﻿#include "CameraController.hpp"
+#include "CameraController.hpp"
 
 #include "Camera.hpp"
 #include "SceneView.hpp"

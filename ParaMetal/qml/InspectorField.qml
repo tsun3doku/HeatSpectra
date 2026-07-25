@@ -142,12 +142,12 @@ Item {
             }
         }
 
-        ComboBox {
+        UiComboBox {
             id: combo
+            theme: root.theme
             visible: root.editor === "combo"
             Layout.fillWidth: visible
             Layout.preferredHeight: 28
-            implicitHeight: 28
             model: root.choices.length > 0 ? root.choices : (root.parameter ? root.parameter.options : [])
             textRole: model && model.length > 0 && model[0].text !== undefined ? "text" : ""
             valueRole: model && model.length > 0 && model[0].value !== undefined ? "value" : ""
@@ -160,7 +160,6 @@ Item {
                 }
                 return -1
             }
-            font: root.theme.regularFont
             onActivated: {
                 const item = model[currentIndex]
                 root.valueEdited(item.value === undefined ? item : item.value)
@@ -172,49 +171,6 @@ Item {
                 font: combo.font
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
-            }
-            indicator: Text {
-                x: combo.width - width - 8
-                y: (combo.height - height) / 2
-                text: "▼"
-                color: root.theme.mutedText
-                font.family: root.theme.fontFamily
-                font.pixelSize: 9
-            }
-            background: Rectangle { radius: 3; color: "#242429"; border.width: 1; border.color: root.theme.border }
-            popup: Popup {
-                y: combo.height
-                width: combo.width
-                padding: 1
-                contentItem: ListView {
-                    clip: true
-                    implicitHeight: contentHeight
-                    model: combo.delegateModel
-                    currentIndex: combo.highlightedIndex
-                    delegate: ItemDelegate {
-                        required property int index
-                        width: combo.width - 2
-                        height: 24
-                        padding: 0
-                        highlighted: combo.highlightedIndex === index
-                        contentItem: Text {
-                            leftPadding: 10
-                            text: combo.textAt(index)
-                            color: root.theme.text
-                            font: root.theme.regularFont
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: parent.highlighted ? root.theme.hover : "transparent"
-                        }
-                    }
-                }
-                background: Rectangle {
-                    color: root.theme.cardBackground
-                    border.width: 1
-                    border.color: root.theme.border
-                    radius: 3
-                }
             }
         }
     }

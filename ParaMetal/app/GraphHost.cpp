@@ -31,6 +31,30 @@ void GraphHost::shutdown() {
     }
 }
 
+void GraphHost::newProject() {
+    editor.resetToDefaultGraph();
+    publishedRevision = graph.getRevision();
+    emit graphReplaced(graph.state());
+    publishTimelineRange();
+}
+
+void GraphHost::requestGraphState() {
+    emit graphStateReady(graph.state());
+}
+
+void GraphHost::loadGraphState(const NodeGraphState& state) {
+    std::string error;
+    if (!graph.loadSerializedState(state, state.nextNodeId, state.nextSocketId,
+                                  state.nextEdgeId, error)) {
+        emit graphStateLoaded(false, QString::fromStdString(error));
+        return;
+    }
+    publishedRevision = graph.getRevision();
+    emit graphReplaced(graph.state());
+    publishTimelineRange();
+    emit graphStateLoaded(true, {});
+}
+
 void GraphHost::resetGraph() {
     editor.resetToDefaultGraph();
     publishChanges();

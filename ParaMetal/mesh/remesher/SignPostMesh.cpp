@@ -1,4 +1,4 @@
-﻿#include <glm/gtc/constants.hpp>
+#include <glm/gtc/constants.hpp>
 
 #include <iostream>
 #include <algorithm>

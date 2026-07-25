@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NodeGraphModel.hpp"
+#include "NodeGraphUiModel.hpp"
 
 #include <QtQuick/QQuickPaintedItem>
 #include <QtGui/QImage>
@@ -17,13 +17,13 @@ class QWheelEvent;
 
 class NodeGraphCanvasItem : public QQuickPaintedItem {
     Q_OBJECT
-    Q_PROPERTY(NodeGraphModel* model READ model WRITE setModel NOTIFY modelChanged)
+    Q_PROPERTY(NodeGraphUiModel* model READ model WRITE setModel NOTIFY modelChanged)
 
 public:
     explicit NodeGraphCanvasItem(QQuickItem* parent = nullptr);
 
-    NodeGraphModel* model() const;
-    void setModel(NodeGraphModel* model);
+    NodeGraphUiModel* model() const;
+    void setModel(NodeGraphUiModel* model);
 
 signals:
     void modelChanged();
@@ -94,7 +94,7 @@ private:
     int edgeIndexAt(const QPointF& graphPosition) const;
     void finishConnection(const QPointF& itemPosition);
 
-    NodeGraphModel* graphModel = nullptr;
+    NodeGraphUiModel* graphModel = nullptr;
     std::vector<Node> nodes;
     std::vector<Edge> edges;
     qreal zoomValue = 0.54;

@@ -63,6 +63,15 @@ void ViewportMailbox::requestHeatPaletteRange(float minimum, float maximum) {
 }
 void ViewportMailbox::requestHeatPalette(int palette) { requestedHeatPalette = palette; heatPaletteDirty = true; }
 
+void ViewportMailbox::applyViewportProjectState(const ProjectFile::Viewport& viewport) {
+    appliedViewportProjectState = viewport;
+    viewportProjectStateDirty = true;
+}
+
+void ViewportMailbox::requestCurrentViewportProjectState() {
+    currentViewportProjectStateRequested = true;
+}
+
 void ViewportMailbox::replaceGraphState(const NodeGraphState& graphState) {
     cachedGraphState = graphState;
     graphStateInitialized = true;
@@ -138,6 +147,19 @@ bool ViewportMailbox::takeHeatPaletteRange(float& minimum, float& maximum, bool 
 bool ViewportMailbox::takeHeatPalette(int& palette, bool force) {
     if (!heatPaletteDirty && !force) return false;
     palette = requestedHeatPalette; heatPaletteDirty = false; return true;
+}
+
+bool ViewportMailbox::takeAppliedViewportProjectState(ProjectFile::Viewport& viewport) {
+    if (!viewportProjectStateDirty) return false;
+    viewport = appliedViewportProjectState;
+    viewportProjectStateDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeCurrentViewportProjectState() {
+    if (!currentViewportProjectStateRequested) return false;
+    currentViewportProjectStateRequested = false;
+    return true;
 }
 
 const NodeGraphState* ViewportMailbox::graphReplacement(bool force) const {

@@ -35,7 +35,7 @@ The downloadable release includes the required CUDA and AMGX runtime libraries. 
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) 12.0 or higher
 - [Python 3](https://www.python.org/downloads/) (Development headers required)
 
-Eigen, AMGX, Pybind11 and the remaining dependencies are included as Git submodules.
+Eigen, the AMGX headers, Pybind11 and the remaining dependencies are included as Git submodules. A matching prebuilt AMGX shared library is included under `ParaMetal/libs/amgx_prebuilt/windows-x64`; you do not need to compile AMGX yourself.
 
 ### Build From Source
 
@@ -45,16 +45,10 @@ Eigen, AMGX, Pybind11 and the remaining dependencies are included as Git submodu
    cd ParaMetal
    ```
 
-2. Build AMGX:
-   ```powershell
-   cmake -S ParaMetal/libs/amgx -B ParaMetal/libs/amgx/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=75 -DCMAKE_NO_MPI=ON
-   cmake --build ParaMetal/libs/amgx/build --config Release --parallel
-   ```
-
-3. Configure and build ParaMetal, replacing the Qt path with your MSVC Qt kit:
+2. Configure and build ParaMetal, replacing the Qt path with your MSVC Qt kit:
    ```powershell
    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/path/to/Qt/6.x.x/msvc2022_64"
    cmake --build build --config Release --parallel
    ```
 
-4. Run `parametal.exe` from `build/Release` when using a multi-configuration generator, or from `build` when using a single-configuration generator.
+3. Run `parametal.exe` from `build/Release` when using a multi-configuration generator, or from `build` when using a single-configuration generator.

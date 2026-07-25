@@ -1,0 +1,59 @@
+#pragma once
+
+#include "project/ProjectFile.hpp"
+
+#include <QObject>
+#include <QString>
+#include <QUrl>
+
+class GraphHost;
+
+class ProjectController final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QString path READ path NOTIFY pathChanged)
+    Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+public:
+    explicit ProjectController(GraphHost& graphHost, QObject* parent = nullptr);
+
+    QString path() const { return projectPath; }
+    bool modified() const { return projectModified; }
+    bool busy() const { return busyState; }
+
+    Q_INVOKABLE void newProject();
+    Q_INVOKABLE void open(const QUrl& url);
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void saveAs(const QUrl& url);
+
+signals:
+    void pathChanged();
+    void modifiedChanged();
+    void saveAsRequired();
+    void error(const QString& message);
+    void busyChanged();
+    void viewportStateRequested();
+    void viewportStateApplied(const ProjectFile::Viewport& state);
+
+public slots:
+    void onGraphStateReady(const NodeGraphState& state);
+    void onViewportStateReady(const ProjectFile::Viewport& state);
+    void onGraphStateLoaded(bool success, const QString& errorMessage);
+
+private:
+    enum class PendingOperation { None, Save, Open };
+    void setPath(const QString& path);
+    void setModified(bool modified);
+    void requestSave(const QString& path);
+    void finishSaveIfReady();
+
+    GraphHost& host;
+    QString projectPath;
+    bool projectModified = false;
+    PendingOperation pendingOperation = PendingOperation::None;
+    QString pendingPath;
+    NodeGraphState pendingGraphState;
+    ProjectFile::Viewport pendingViewportState;
+    bool graphStatePending = false;
+    bool viewportStatePending = false;
+    bool busyState = false;
+};

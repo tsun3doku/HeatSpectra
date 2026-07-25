@@ -665,6 +665,9 @@ void NodeGraph::rebuildStateLocked() {
     graphState.nodes = nodes;
     graphState.edges = edges;
     graphState.revision = revision;
+    graphState.nextNodeId = nextNodeId;
+    graphState.nextSocketId = nextSocketId;
+    graphState.nextEdgeId = nextEdgeId;
 }
 
 void NodeGraph::pushChangesLocked(const std::vector<NodeGraphChange>& changes) {

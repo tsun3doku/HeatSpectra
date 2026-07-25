@@ -33,16 +33,17 @@ find_package(CUDAToolkit 12.0 REQUIRED)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/libs/pybind11)
 
 set(AMGX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/amgx" CACHE PATH "AMGX source directory")
+set(AMGX_PREBUILT "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/amgx_prebuilt/windows-x64" CACHE PATH "Prebuilt AMGX runtime directory")
 find_library(AMGX_LIBRARY
     NAMES amgxsh
-    HINTS "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
+    HINTS "${AMGX_PREBUILT}" "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
     PATH_SUFFIXES Release lib lib/Release
     REQUIRED)
 
 if(WIN32)
     find_file(AMGX_RUNTIME
         NAMES amgxsh.dll
-        HINTS "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
+        HINTS "${AMGX_PREBUILT}" "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
         PATH_SUFFIXES Release bin bin/Release
         REQUIRED)
 
@@ -105,8 +106,8 @@ file(GLOB UI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/ui
 file(GLOB UI_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/ui/*.hpp")
 file(GLOB MESH_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/mesh/*.cpp")
 file(GLOB MESH_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/mesh/*.hpp")
-file(GLOB APP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/app/*.cpp")
-file(GLOB APP_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/app/*.hpp")
+file(GLOB APP_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/app/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/project/*.cpp")
+file(GLOB APP_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/app/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/project/*.hpp")
 file(GLOB APP_HEADERS_H CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/app/*.h")
 file(GLOB RUNTIME_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/runtime/*.cpp")
 file(GLOB RUNTIME_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/runtime/*.hpp")

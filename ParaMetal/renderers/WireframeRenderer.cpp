@@ -1,4 +1,4 @@
-﻿#include "WireframeRenderer.hpp"
+#include "WireframeRenderer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanImage.hpp"
 #include "util/file_utils.h"

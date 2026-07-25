@@ -6,7 +6,10 @@
 #include "GraphThread.hpp"
 #include "RuntimeNotifier.hpp"
 #include "UiModel.hpp"
+#include "project/ProjectController.hpp"
 #include "runtime/RuntimeSystems.hpp"
+
+#include <memory>
 
 class GraphHost;
 class ViewportItem;
@@ -29,6 +32,7 @@ private:
 
     QGuiApplication application;
     UiModel uiModel;
+    std::unique_ptr<ProjectController> projectController;
     GraphThread graphThread;
     RuntimeNotifier runtimeNotifier;
     RuntimeSystems runtimeSystems;
