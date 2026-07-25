@@ -7,8 +7,7 @@
 #include "hash/HashNodeCache.hpp"
 #include "NodeModelParams.hpp"
 #include "NodePayloadRegistry.hpp"
-
-#include <tiny_obj_loader.h>
+#include "scene/MeshImporter.hpp"
 
 #include <filesystem>
 #include <string>
@@ -69,132 +68,28 @@ HashValues NodeModel::computeOutputHashes(const NodeKernelHash& hash) const {
 bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geometry) {
     geometry = {};
 
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warning;
-    std::string error;
-
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warning, &error, modelPath.c_str())) {
+    MeshImporter::Mesh importedMesh;
+    if (!MeshImporter::loadMesh(modelPath, importedMesh) || !importedMesh.isValid()) {
         return false;
     }
 
-    if (attrib.vertices.empty()) {
-        return false;
+    geometry.pointPositions = importedMesh.positions;
+    geometry.triangleIndices.reserve(importedMesh.triangleCornerIndices.size());
+    for (uint32_t cornerIndex : importedMesh.triangleCornerIndices) {
+        geometry.triangleIndices.push_back(importedMesh.corners[cornerIndex].vertexIndex);
+    }
+    geometry.triangleGroupIds = importedMesh.triangleGroupIds;
+
+    geometry.groups.reserve(importedMesh.groups.size());
+    for (const auto& group : importedMesh.groups) {
+        GeometryGroup g{};
+        g.id = group.id;
+        g.name = group.name;
+        g.source = group.source;
+        geometry.groups.push_back(std::move(g));
     }
 
-    geometry.pointPositions = attrib.vertices;
-    geometry.triangleIndices.clear();
-    geometry.triangleGroupIds.clear();
-    geometry.groups.clear();
-
-    const std::size_t pointCount = geometry.pointPositions.size() / 3;
-    std::unordered_map<std::string, uint32_t> groupIdByKey;
-
-    const auto getGroupIdForFace = [&](const std::string& shapeName, int materialId) -> uint32_t {
-        std::string materialName;
-        if (materialId >= 0 && static_cast<std::size_t>(materialId) < materials.size()) {
-            materialName = materials[static_cast<std::size_t>(materialId)].name;
-        }
-
-        std::string key;
-        std::string name;
-        std::string source;
-        if (!shapeName.empty()) {
-            key = "shape:" + shapeName;
-            name = shapeName;
-            source = "obj.shape";
-        }
-
-        if (!materialName.empty()) {
-            if (key.empty()) {
-                key = "material:" + materialName;
-                name = materialName;
-                source = "obj.material";
-            } else {
-                key += "|material:" + materialName;
-                name += " [" + materialName + "]";
-                source = "obj.shape_material";
-            }
-        }
-
-        if (key.empty()) {
-            key = "default";
-            name = "Default";
-            source = "generated";
-        }
-
-        const auto existingIt = groupIdByKey.find(key);
-        if (existingIt != groupIdByKey.end()) {
-            return existingIt->second;
-        }
-
-        const uint32_t groupId = static_cast<uint32_t>(geometry.groups.size());
-        GeometryGroup group{};
-        group.id = groupId;
-        group.name = name;
-        group.source = source;
-        geometry.groups.push_back(std::move(group));
-        groupIdByKey.emplace(key, groupId);
-        return groupId;
-    };
-
-    for (const tinyobj::shape_t& shape : shapes) {
-        std::size_t indexOffset = 0;
-        std::size_t faceIndex = 0;
-        for (unsigned char faceVertexCount : shape.mesh.num_face_vertices) {
-            const std::size_t faceVertexCountSize = static_cast<std::size_t>(faceVertexCount);
-            if (indexOffset + faceVertexCountSize > shape.mesh.indices.size()) {
-                break;
-            }
-
-            const int materialId =
-                (faceIndex < shape.mesh.material_ids.size()) ? shape.mesh.material_ids[faceIndex] : -1;
-            const uint32_t groupId = getGroupIdForFace(shape.name, materialId);
-
-            if (faceVertexCount < 3) {
-                indexOffset += faceVertexCount;
-                ++faceIndex;
-                continue;
-            }
-
-            const tinyobj::index_t& firstCorner = shape.mesh.indices[indexOffset];
-            if (firstCorner.vertex_index < 0 ||
-                static_cast<std::size_t>(firstCorner.vertex_index) >= pointCount) {
-                indexOffset += faceVertexCount;
-                ++faceIndex;
-                continue;
-            }
-
-            for (unsigned char cornerIndex = 1; cornerIndex + 1 < faceVertexCount; ++cornerIndex) {
-                const tinyobj::index_t& secondCorner = shape.mesh.indices[indexOffset + cornerIndex];
-                const tinyobj::index_t& thirdCorner = shape.mesh.indices[indexOffset + cornerIndex + 1];
-                if (secondCorner.vertex_index < 0 || thirdCorner.vertex_index < 0) {
-                    continue;
-                }
-
-                const std::size_t secondVertexIndex = static_cast<std::size_t>(secondCorner.vertex_index);
-                const std::size_t thirdVertexIndex = static_cast<std::size_t>(thirdCorner.vertex_index);
-                if (secondVertexIndex >= pointCount || thirdVertexIndex >= pointCount) {
-                    continue;
-                }
-
-                geometry.triangleIndices.push_back(static_cast<uint32_t>(firstCorner.vertex_index));
-                geometry.triangleIndices.push_back(static_cast<uint32_t>(secondCorner.vertex_index));
-                geometry.triangleIndices.push_back(static_cast<uint32_t>(thirdCorner.vertex_index));
-                geometry.triangleGroupIds.push_back(groupId);
-            }
-
-            indexOffset += faceVertexCountSize;
-            ++faceIndex;
-        }
-    }
-
-    if (geometry.triangleIndices.empty()) {
-        return false;
-    }
-
-    return true;
+    return !geometry.triangleIndices.empty();
 }
 
 bool NodeModel::loadGeometryFromModelPath(const std::string& modelPath, GeometryData& geometry) {

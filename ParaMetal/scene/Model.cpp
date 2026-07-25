@@ -1,6 +1,3 @@
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
-
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
@@ -18,6 +15,7 @@
 
 #include "Camera.hpp"
 #include "Model.hpp"
+#include "MeshImporter.hpp"
 #include "util/Structs.hpp"
 
 bool Model::init(const std::string modelPath) {
@@ -104,111 +102,98 @@ bool Model::loadModel(const std::string& modelPath) {
     // Reset transform when loading new model
     modelMatrix = glm::mat4(1.0f);
 
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warn, err;
-
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, modelPath.c_str())) {
-        std::cerr << "[Model] Failed to load model: " << modelPath;
-        if (!warn.empty() || !err.empty()) {
-            std::cerr << " (" << warn << err << ")";
-        }
-        std::cerr << std::endl;
-        return false;
-    }
-
     vertices.clear();
     indices.clear();
     renderVertices.clear();
     renderIndices.clear();
     hasSplitRenderMesh = false;
 
-    // Create vertices directly from OBJ vertex list
-    size_t vertexCount = attrib.vertices.size() / 3;
+    MeshImporter::Mesh importedMesh;
+    if (!MeshImporter::loadMesh(modelPath, importedMesh) || !importedMesh.isValid()) {
+        std::cerr << "[Model] Failed to load model: " << modelPath << std::endl;
+        return false;
+    }
+
+    // Build vertices directly from imported vertex position list
+    const size_t vertexCount = importedMesh.positions.size() / 3;
     vertices.resize(vertexCount);
 
     for (size_t i = 0; i < vertexCount; ++i) {
         vertices[i].pos = {
-            attrib.vertices[3 * i + 0],
-            attrib.vertices[3 * i + 1],
-            attrib.vertices[3 * i + 2]
+            importedMesh.positions[3 * i + 0],
+            importedMesh.positions[3 * i + 1],
+            importedMesh.positions[3 * i + 2]
         };
         vertices[i].color = { 1.0f, 1.0f, 1.0f };
-        // Set default normal 
         vertices[i].normal = { 0.0f, 0.0f, 1.0f };
-        vertices[i].texCoord = { 0.0f, 0.0f }; // Default UV
+        vertices[i].texCoord = { 0.0f, 0.0f };
     }
 
     bool hasAnyCornerNormal = false;
     bool hasMissingCornerNormal = false;
     std::unordered_map<ModelCornerKey, uint32_t, ModelCornerKeyHash> renderVertexMap;
-    renderVertexMap.reserve(attrib.vertices.size());
+    renderVertexMap.reserve(importedMesh.corners.size());
 
-    // Process faces and build topology + render indices
-    for (const auto& shape : shapes) {
-        for (const auto& index : shape.mesh.indices) {
-            if (index.vertex_index < 0 || static_cast<size_t>(index.vertex_index) >= vertices.size()) {
-                continue;
+    // Process faces and build topology + render indices from imported corners
+    for (uint32_t cornerIdx : importedMesh.triangleCornerIndices) {
+        const auto& corner = importedMesh.corners[cornerIdx];
+        if (corner.vertexIndex < 0 || static_cast<size_t>(corner.vertexIndex) >= vertices.size()) {
+            continue;
+        }
+
+        indices.push_back(corner.vertexIndex);
+
+        if (corner.texcoordIndex >= 0 && static_cast<size_t>(corner.texcoordIndex * 2 + 1) < importedMesh.texcoords.size()) {
+            vertices[corner.vertexIndex].texCoord = {
+                importedMesh.texcoords[2 * corner.texcoordIndex + 0],
+                1.0f - importedMesh.texcoords[2 * corner.texcoordIndex + 1]
+            };
+        }
+
+        ModelCornerKey key{};
+        key.vertexIndex = corner.vertexIndex;
+        key.texcoordIndex = corner.texcoordIndex;
+        key.normalIndex = corner.normalIndex;
+
+        auto it = renderVertexMap.find(key);
+        if (it == renderVertexMap.end()) {
+            Vertex renderVertex{};
+            renderVertex.pos = vertices[corner.vertexIndex].pos;
+            renderVertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
+            renderVertex.texCoord = vertices[corner.vertexIndex].texCoord;
+
+            if (corner.texcoordIndex >= 0 && static_cast<size_t>(corner.texcoordIndex * 2 + 1) < importedMesh.texcoords.size()) {
+                renderVertex.texCoord = glm::vec2(
+                    importedMesh.texcoords[2 * corner.texcoordIndex + 0],
+                    1.0f - importedMesh.texcoords[2 * corner.texcoordIndex + 1]
+                );
             }
 
-            // Use the original vertex index directly
-            indices.push_back(index.vertex_index);
+            renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+            if (corner.normalIndex >= 0 && static_cast<size_t>(corner.normalIndex * 3 + 2) < importedMesh.normals.size()) {
+                hasAnyCornerNormal = true;
+                renderVertex.normal = glm::vec3(
+                    importedMesh.normals[3 * corner.normalIndex + 0],
+                    importedMesh.normals[3 * corner.normalIndex + 1],
+                    importedMesh.normals[3 * corner.normalIndex + 2]
+                );
 
-            // Update texture coordinates if available
-            if (index.texcoord_index >= 0 && index.texcoord_index < attrib.texcoords.size() / 2) {
-                vertices[index.vertex_index].texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-            }
-
-            // Build render mesh keyed by OBJ corner indices (v/vt/vn)
-            ModelCornerKey key{};
-            key.vertexIndex = index.vertex_index;
-            key.texcoordIndex = index.texcoord_index;
-            key.normalIndex = index.normal_index;
-
-            auto it = renderVertexMap.find(key);
-            if (it == renderVertexMap.end()) {
-                Vertex renderVertex{};
-                renderVertex.pos = vertices[index.vertex_index].pos;
-                renderVertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
-                renderVertex.texCoord = vertices[index.vertex_index].texCoord;
-
-                if (index.texcoord_index >= 0 && index.texcoord_index < attrib.texcoords.size() / 2) {
-                    renderVertex.texCoord = glm::vec2(
-                        attrib.texcoords[2 * index.texcoord_index + 0],
-                        1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                    );
-                }
-
-                renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
-                if (index.normal_index >= 0 && index.normal_index < attrib.normals.size() / 3) {
-                    hasAnyCornerNormal = true;
-                    renderVertex.normal = glm::vec3(
-                        attrib.normals[3 * index.normal_index + 0],
-                        attrib.normals[3 * index.normal_index + 1],
-                        attrib.normals[3 * index.normal_index + 2]
-                    );
-
-                    const float n2 = glm::dot(renderVertex.normal, renderVertex.normal);
-                    if (n2 > 1e-12f) {
-                        renderVertex.normal *= (1.0f / std::sqrt(n2));
-                    } else {
-                        renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
-                    }
+                const float n2 = glm::dot(renderVertex.normal, renderVertex.normal);
+                if (n2 > 1e-12f) {
+                    renderVertex.normal *= (1.0f / std::sqrt(n2));
                 } else {
-                    hasMissingCornerNormal = true;
+                    renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
                 }
-
-                const uint32_t newRenderIndex = static_cast<uint32_t>(renderVertices.size());
-                renderVertices.push_back(renderVertex);
-                renderIndices.push_back(newRenderIndex);
-                renderVertexMap.emplace(key, newRenderIndex);
             } else {
-                renderIndices.push_back(it->second);
+                hasMissingCornerNormal = true;
             }
+
+            const uint32_t newRenderIndex = static_cast<uint32_t>(renderVertices.size());
+            renderVertices.push_back(renderVertex);
+            renderIndices.push_back(newRenderIndex);
+            renderVertexMap.emplace(key, newRenderIndex);
+        } else {
+            renderIndices.push_back(it->second);
         }
     }
 

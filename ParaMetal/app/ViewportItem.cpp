@@ -174,10 +174,15 @@ protected:
         }
 
         float deltaSeconds = 1.0f / 60.0f;
-        qint64 wallMs = 0;
         if (frameTimer.isValid()) {
-            wallMs = frameTimer.restart();
-            deltaSeconds = std::clamp(static_cast<float>(wallMs) / 1000.0f, 0.0f, 0.1f);
+            const qint64 elapsedNanoseconds = frameTimer.nsecsElapsed();
+            frameTimer.restart();
+            deltaSeconds = std::clamp(
+                static_cast<float>(elapsedNanoseconds) * 1.0e-9f,
+                0.0f,
+                0.1f);
+        } else {
+            frameTimer.start();
         }
 
         const uint32_t scrubFrame = mailbox.takeTimelineScrub();

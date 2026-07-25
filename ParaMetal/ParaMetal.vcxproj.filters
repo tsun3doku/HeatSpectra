@@ -48,6 +48,9 @@
     <ClCompile Include="scene\Model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="scene\MeshImporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="scene\ModelUploader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -949,6 +952,9 @@
     <ClInclude Include="scene\Model.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="scene\MeshImporter.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="scene\ModelUploader.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -974,15 +980,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="render\RenderRuntime.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\VulkanCoreContext.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\SceneContext.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="runtime\RenderContext.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimePackageCompiler.hpp">

@@ -457,6 +457,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="py\PyRegistryBindings.cpp" />
     <ClCompile Include="vulkan\MemoryAllocator.cpp" />
     <ClCompile Include="scene\Model.cpp" />
+    <ClCompile Include="scene\MeshImporter.cpp" />
     <ClCompile Include="scene\ModelUploader.cpp" />
     <ClCompile Include="vulkan\ModelRegistry.cpp" />
     <ClCompile Include="mesh\\remesher\\Remesher.cpp" />
@@ -781,6 +782,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="app\ViewportMailbox.hpp" />
     <ClInclude Include="vulkan\MemoryAllocator.hpp" />
     <ClInclude Include="scene\Model.hpp" />
+    <ClInclude Include="scene\MeshImporter.hpp" />
     <ClInclude Include="scene\ModelUploader.hpp" />
     <ClInclude Include="scene\ModelSelection.hpp" />
     <ClInclude Include="vulkan\ModelRegistry.hpp" />

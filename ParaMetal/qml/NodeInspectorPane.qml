@@ -150,7 +150,7 @@ Item {
             FileDialog {
                 id: modelDialog
                 title: qsTr("Select Model File")
-                nameFilters: [qsTr("OBJ files (*.obj)"), qsTr("All files (*)")]
+                nameFilters: [qsTr("3D Models (*.obj *.stl)"), qsTr("OBJ files (*.obj)"), qsTr("STL files (*.stl)"), qsTr("All files (*)")]
                 onAccepted: {
                     let path = selectedFile.toString()
                     if (path.indexOf("file:///") === 0) path = path.substring(8)

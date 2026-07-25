@@ -357,9 +357,31 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         // Canonical endpoints for the hit edge
         double face_t = step.edgeParam;
         uint32_t canonicalHe = edgesRef[edgeIdx].halfEdgeIdx;
+        if (canonicalHe == HalfEdgeMesh::INVALID_INDEX || canonicalHe >= halfEdges.size()) {
+            result.success = false;
+            result.baryCoords = currPoint.baryCoords;
+            result.position3D = glm::vec3(evaluateSurfacePoint(currPoint));
+            result.distance = length - remaining;
+            return result;
+        }
         uint32_t oppCanon = halfEdges[canonicalHe].opposite;
+        if (oppCanon == HalfEdgeMesh::INVALID_INDEX || oppCanon >= halfEdges.size()) {
+            result.success = false;
+            result.baryCoords = currPoint.baryCoords;
+            result.position3D = glm::vec3(evaluateSurfacePoint(currPoint));
+            result.distance = length - remaining;
+            return result;
+        }
+        const auto& vertsRef = conn.getVertices();
         uint32_t vA = halfEdges[canonicalHe].origin;
         uint32_t vB = halfEdges[oppCanon].origin;
+        if (vA >= vertsRef.size() || vB >= vertsRef.size()) {
+            result.success = false;
+            result.baryCoords = currPoint.baryCoords;
+            result.position3D = glm::vec3(evaluateSurfacePoint(currPoint));
+            result.distance = length - remaining;
+            return result;
+        }
 
         // Canonical split
         double splitCanon = face_t;
@@ -373,7 +395,6 @@ GeodesicTracer::GeodesicTraceResult GeodesicTracer::traceFromFace(uint32_t start
         edgeExit.split = splitCanon;
 
         // compute canonical 3D point
-        const auto& vertsRef = conn.getVertices();
         glm::dvec3 pA = glm::dvec3(vertsRef[vA].position);
         glm::dvec3 pB = glm::dvec3(vertsRef[vB].position);
         glm::dvec3 pEdge;
