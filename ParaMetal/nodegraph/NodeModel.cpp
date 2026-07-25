@@ -28,7 +28,7 @@ void NodeModel::execute(NodeKernelEval& eval) const {
     const std::string& modelPath = params.path;
     GeometryData geometry{};
     bool hasGeometry = false;
-    if (!modelPath.empty()) {
+    if (!modelPath.empty() && std::filesystem::exists(modelPath)) {
         hasGeometry = loadGeometryFromModelPath(modelPath, geometry);
         geometry.baseModelPath = modelPath;
     }

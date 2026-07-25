@@ -25,7 +25,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 # Find required packages
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick GuiPrivate)
 find_package(Vulkan REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
@@ -137,7 +137,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
-    Qt6::Widgets
+    Qt6::Quick
+    Qt6::GuiPrivate
     Vulkan::Vulkan
     OpenMP::OpenMP_CXX
     pybind11::embed
