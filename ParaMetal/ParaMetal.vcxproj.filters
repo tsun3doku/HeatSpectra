@@ -687,6 +687,15 @@
     <ClCompile Include="app\ViewportMailbox.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="serial\SerialPortWindows.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="serial\SerialTemperatureParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="serial\SerialTemperatureRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\grid.vert">

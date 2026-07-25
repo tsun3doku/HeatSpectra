@@ -449,6 +449,9 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="app\MainQuick.cpp" />
     <ClCompile Include="app\ViewportItem.cpp" />
     <ClCompile Include="app\ViewportMailbox.cpp" />
+    <ClCompile Include="serial\SerialPortWindows.cpp" />
+    <ClCompile Include="serial\SerialTemperatureParser.cpp" />
+    <ClCompile Include="serial\SerialTemperatureRuntime.cpp" />
     <ClCompile Include="py\PyGraphBindings.cpp" />
     <ClCompile Include="py\PyIdBindings.cpp" />
     <ClCompile Include="py\PyInterpreter.cpp" />
