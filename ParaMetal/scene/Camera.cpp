@@ -142,25 +142,49 @@ void Camera::pan(float dx, float dy) {
 }
 
 void Camera::resetRadius() {
-    radius = 2.0f;
+    radius = 2.0f * units::canonicalToWorldScale(worldUnit);
     radiusVelocity = 0.0f;
 }
 
+void Camera::setWorldUnit(units::LengthUnit unit) {
+    if (unit == worldUnit) return;
+    const float factor = units::scaleBetween(worldUnit, unit);
+    if (!(factor > 0.0f) || !std::isfinite(factor)) return;
+    lookAt *= factor;
+    position *= factor;
+    radius *= factor;
+    orthographicHeight *= factor;
+    worldUnit = unit;
+
+    const float metersToWorld = units::canonicalToWorldScale(worldUnit);
+    nearPlane = 0.01f * metersToWorld;
+    farPlane = 100.0f * metersToWorld;
+    minRadius = 0.1f * metersToWorld;
+    maxRadius = 200.0f * metersToWorld;
+    minOrthographicHeight = 0.001f * metersToWorld;
+    maxOrthographicHeight = 1000.0f * metersToWorld;
+    maxRadiusVelocity = 300.0f * metersToWorld;
+    maxOrthographicZoomVelocity = 7.2f * metersToWorld;
+}
+
 void Camera::processMouseScroll(double yOffset) {
+    const float metersToWorld = units::canonicalToWorldScale(worldUnit);
     if (projectionMode == CameraProjectionMode::Orthographic) {
-        orthographicZoomVelocity += static_cast<float>(-yOffset) * 0.72f;
+        orthographicZoomVelocity += static_cast<float>(-yOffset) * 0.72f * metersToWorld;
         orthographicZoomVelocity = glm::clamp(
             orthographicZoomVelocity,
             -maxOrthographicZoomVelocity,
             maxOrthographicZoomVelocity);
         return;
     }
-    const float baseZoomSpeed = 0.6f;
+    const float baseZoomSpeed = 0.6f * metersToWorld;
     float zoomSpeed = baseZoomSpeed;
 
     // Slow down zoom at close range
-    if (radius < 1.0f) {
-        zoomSpeed = baseZoomSpeed * std::max(0.1f, radius);
+    const float closeRange = 1.0f * metersToWorld;
+    if (radius < closeRange) {
+        const float normalizedRadius = radius / closeRange;
+        zoomSpeed = baseZoomSpeed * std::max(0.1f, normalizedRadius);
     }
 
     radiusVelocity += (float)(-yOffset) * zoomSpeed;

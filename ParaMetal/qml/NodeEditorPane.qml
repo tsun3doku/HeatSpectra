@@ -237,9 +237,9 @@ Rectangle {
                     Row {
                         required property var modelData
 
-                        spacing: 6
+                        spacing: 14
                         Image {
-                            width: 28; height: 28
+                            width: 20; height: 20
                             source: "../textures/icons/NodeGraph_nav/" + modelData.icon + "/32w/Artboard 1.png"
                             fillMode: Image.PreserveAspectFit
                         }

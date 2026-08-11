@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hash/HashBuilder.hpp"
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 #include <cstdint>

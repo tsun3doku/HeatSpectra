@@ -1,7 +1,8 @@
 #version 450
 
-layout(location = 2) in vec3 vModelPos;
+layout(location = 2) in vec3 vModelPosition;
 layout(location = 3) in vec2 vIntrinsicCoord;
+layout(location = 5) in vec3 vWorldPosition;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outMaterial;
@@ -9,9 +10,9 @@ layout(location = 1) out vec4 outMaterial;
 layout(push_constant) uniform PushConstants {
     mat4 modelMatrix;
     float alpha;
-    int _pad0;
-    int _pad1;
-    int _pad2;
+    float canonicalToWorldScale;
+    float _pad0;
+    float _pad1;
 } pc;
 
 layout(binding = 0) uniform UniformBufferObject {
@@ -119,9 +120,9 @@ vec3 safeNormalize(vec3 v, vec3 fallback) {
     return v * inversesqrt(len2);
 }
 
-vec3 modelSpaceViewRay(vec3 modelSpacePos, mat3 invModelMatrix) {
+vec3 modelSpaceViewRay(vec3 worldPosition, mat3 invModelMatrix) {
     vec3 cameraPos = inverse(ubo.view)[3].xyz;
-    vec3 viewRayWorld = (pc.modelMatrix * vec4(modelSpacePos, 1.0)).xyz - cameraPos;
+    vec3 viewRayWorld = worldPosition - cameraPos;
     return normalize(invModelMatrix * viewRayWorld);
 }
 
@@ -174,7 +175,7 @@ float interiorWallEdgeMask(uint cellID, uint exitNeighborID, vec3 cellPos, vec3 
         vec3 lineNormalOnWall = safeNormalize(cross(lineDir, exitNormal), planeNormal);
         float lineDist = abs(dot(hitPos - linePoint, lineNormalOnWall));
 
-        float invInteriorWidth = 1.0 / max(INTERIOR_EDGE_WIDTH, 1e-6);
+        float invInteriorWidth = 1.0 / max(INTERIOR_EDGE_WIDTH * pc.canonicalToWorldScale, 1e-6);
         float dx = abs(dot(dHitPosDx, lineNormalOnWall));
         float dy = abs(dot(dHitPosDy, lineNormalOnWall));
         vec2 texDx = vec2(dx * invInteriorWidth, 0.0);
@@ -342,7 +343,7 @@ int findIntrinsicTriangle(int inputTri, vec2 p) {
 }
 
 void main() {
-    vec3 modelSpacePos = vModelPos;
+    vec3 modelSpacePos = vModelPosition;
     int inputTri = gl_PrimitiveID;
     int intrinsicTri = findIntrinsicTriangle(inputTri, vIntrinsicCoord);
     if (intrinsicTri < 0) {
@@ -409,7 +410,7 @@ void main() {
     vec3 dPosDy = dFdy(modelSpacePos);
     mat3 invModelMatrix = inverse(mat3(pc.modelMatrix));
     mat3 normalMatrix = transpose(invModelMatrix);
-    vec3 viewRayModel = modelSpaceViewRay(modelSpacePos, invModelMatrix);
+    vec3 viewRayModel = modelSpaceViewRay(vWorldPosition, invModelMatrix);
 
     float minBoundaryDist = 3.402823466e+38;
     float exitPlaneDepth = 3.402823466e+38;
@@ -467,7 +468,7 @@ void main() {
     vec3 cellColor = paletteColor(bestCellID);
     vec3 depthShadedColor = applyExitPlaneShading(cellColor, exitPlaneDepth, exitPlaneNormal, hintSeedDist, normalMatrix, viewRayModel);
 
-    float invW = 1.0 / max(WIRE_DIST_WIDTH, 1e-6);
+    float invW = 1.0 / max(WIRE_DIST_WIDTH * pc.canonicalToWorldScale, 1e-6);
     vec3 competitorPos = seeds[bestCompetitorID].xyz;
     vec3 boundaryNormal = safeNormalize(bestPos - competitorPos, vec3(0.0, 0.0, 1.0));
 

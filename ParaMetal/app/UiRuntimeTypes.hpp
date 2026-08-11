@@ -4,7 +4,6 @@
 #include "nodegraph/NodeGraphEditor.hpp"
 #include "nodegraph/NodeGraphState.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
-#include "scene/InputActions.hpp"
 
 #include <QMetaType>
 #include <QString>
@@ -75,6 +74,6 @@ Q_DECLARE_METATYPE(NodeGraphNodeId)
 Q_DECLARE_METATYPE(NodeGraphSocketId)
 Q_DECLARE_METATYPE(NodeGraphEdgeId)
 Q_DECLARE_METATYPE(NodeGraphParamValue)
-Q_DECLARE_METATYPE(InputAction)
+Q_DECLARE_METATYPE(std::vector<NodeGraphParamValue>)
 Q_DECLARE_METATYPE(std::vector<NodeTypeDefinition>)
 Q_DECLARE_METATYPE(std::vector<NodeGraphNodeId>)

@@ -49,7 +49,7 @@ public:
         std::atomic<bool>& isShuttingDown);
     ~RenderRuntime();
 
-    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& resourceManager, UniformBufferManager& ubo, IBLSystem& iblSystem);
+    bool initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& modelRegistry, UniformBufferManager& ubo, IBLSystem& iblSystem);
     bool initializeFrameController(const FrameControllerServices& services);
 
     bool renderFrame(

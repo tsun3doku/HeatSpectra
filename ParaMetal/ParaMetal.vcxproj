@@ -270,7 +270,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="runtime\VulkanCoreContext.cpp" />
     <ClCompile Include="runtime\SceneContext.cpp" />
     <ClCompile Include="runtime\RenderContext.cpp" />
-    <ClCompile Include="runtime\ModelComputeRuntime.cpp" />
+    <ClCompile Include="runtime\ModelComputeController.cpp" />
     <ClCompile Include="runtime\ModelDisplayController.cpp" />
     <ClCompile Include="runtime\ContactDisplayController.cpp" />
     <ClCompile Include="runtime\HeatDisplayController.cpp" />
@@ -278,7 +278,10 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="runtime\RemeshController.cpp" />
     <ClCompile Include="runtime\RemeshSystem.cpp" />
     <ClCompile Include="runtime\RuntimeProductManager.cpp" />
-    <ClCompile Include="runtime\RuntimePackageCompiler.cpp" />
+    <ClCompile Include="runtime\package\RuntimePackageCompiler.cpp" />
+    <ClCompile Include="runtime\package\RuntimePackageController.cpp" />
+    <ClCompile Include="runtime\package\passes\ValidationPass.cpp" />
+    <ClCompile Include="runtime\package\passes\CoordinatePass.cpp" />
     <ClCompile Include="runtime\RuntimeModelComputeTransport.cpp" />
     <ClCompile Include="runtime\RuntimeModelDisplayTransport.cpp" />
     <ClCompile Include="runtime\RuntimePointComputeTransport.cpp" />
@@ -295,7 +298,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="runtime\RuntimeController.cpp" />
     <ClCompile Include="runtime\TimelineController.cpp" />
     <ClCompile Include="runtime\TimelineRuntime.cpp" />
-    <ClCompile Include="runtime\RuntimeInputController.cpp" />
+    <ClCompile Include="runtime\RuntimeInput.cpp" />
     <ClCompile Include="runtime\RuntimeRenderController.cpp" />
     <ClCompile Include="runtime\RuntimeSystems.cpp" />
     <ClCompile Include="scene\SceneController.cpp" />
@@ -305,6 +308,21 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="contact\ContactMapping.cpp" />
     <CudaCompile Include="heat\HeatContactSolver.cu" />
     <CudaCompile Include="cuda\CudaExternalBuffer.cu" />
+    <CudaCompile Include="cuda\CudaVulkanDevice.cu" />
+    <CudaCompile Include="voronoi\cuda\RVD.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\SDF.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\RVDGeometry.cu" />
+    <CudaCompile Include="voronoi\cuda\RVDWorkQueue.cu" />
+    <CudaCompile Include="voronoi\cuda\KNNNeighbors.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\KNNNeighborsKernels.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
     <ClCompile Include="contact\ContactSystemComputeController.cpp" />
     <ClCompile Include="contact\ContactSystem.cpp" />
     <ClCompile Include="renderers\ContactLineRenderer.cpp" />
@@ -351,16 +369,15 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="heat\HeatSystemComputeController.cpp" />
     <ClCompile Include="heat\HeatSystem.cpp" />
     <ClCompile Include="voronoi\VoronoiSystem.cpp" />
-    <ClCompile Include="voronoi\VoronoiSystemRuntime.cpp" />
+    <ClCompile Include="voronoi\VoronoiRuntime.cpp" />
     <ClCompile Include="voronoi\VoronoiSystemComputeController.cpp" />
-    <ClCompile Include="heat\HeatSystemRuntime.cpp" />
-    <ClCompile Include="heat\HeatSystemSimRuntime.cpp" />
+    <ClCompile Include="heat\HeatDomainRuntime.cpp" />
+    <ClCompile Include="heat\HeatPlaybackRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemPlayback.cpp" />
     <ClCompile Include="heat\HeatSystemDiffusionStage.cpp" />
-    <ClCompile Include="contact\ContactSystemRuntime.cpp" />
+    <ClCompile Include="contact\ContactCouplingRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemSimStage.cpp" />
     <ClCompile Include="heat\HeatSystemSurfaceStage.cpp" />
-    <ClCompile Include="heat\HeatSystemDebugStage.cpp" />
     <ClCompile Include="scene\tinyexr_impl.cpp" />
     <ClCompile Include="scene\IBLSystem.cpp" />
     <ClCompile Include="scene\LightingSystem.cpp" />
@@ -414,7 +431,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="nodegraph\NodeGraphValidator.cpp" />
     <ClCompile Include="voronoi\LloydCompute.cpp" />
     <ClCompile Include="voronoi\VoronoiCandidateCompute.cpp" />
-    <ClCompile Include="voronoi\VoronoiGeoCompute.cpp" />
     <ClCompile Include="scene\InputController.cpp" />
     <ClCompile Include="mesh\\remesher\\iODT.cpp" />
     <ClCompile Include="app\App.cpp">
@@ -426,11 +442,9 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="mesh\\remesher\\SupportingHalfedge.cpp" />
     <ClCompile Include="renderers\SurfelRenderer.cpp" />
     <ClCompile Include="spatial\TriangleHashGrid.cpp" />
-    <ClCompile Include="voronoi\VoronoiIntegrator.cpp" />
     <ClCompile Include="renderers\VoronoiRenderer.cpp" />
     <ClCompile Include="renderers\IntrinsicRenderer.cpp" />
     <ClCompile Include="renderers\OutlineRenderer.cpp" />
-    <ClCompile Include="voronoi\VoronoiMeshGrid.cpp" />
     <ClCompile Include="spatial\VoxelGrid.cpp" />
     <ClCompile Include="vulkan\VulkanBuffer.cpp" />
     <ClCompile Include="vulkan\VulkanExternalBuffer.cpp" />
@@ -509,7 +523,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <None Include="shaders\heat_buffer.frag" />
     <None Include="shaders\heat_source.frag" />
     <None Include="shaders\heat_source.vert" />
-    <None Include="shaders\voronoi_geometry.slang" />
     <None Include="shaders\heat_surface_gradient.slang" />
     <None Include="shaders\heat_surface_temp.slang" />
     <None Include="shaders\heat_tetra.comp" />
@@ -572,6 +585,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="domain\HeatModelData.hpp" />
     <ClInclude Include="domain\PointData.hpp" />
     <ClInclude Include="domain\RemeshData.hpp" />
+    <ClInclude Include="domain\TransformData.hpp" />
     <ClInclude Include="domain\VoronoiData.hpp" />
     <ClInclude Include="contact\ContactMapping.hpp" />
     <ClInclude Include="heat\HeatContactRuntime.hpp" />
@@ -599,7 +613,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="runtime\RuntimeHeatDisplayTransport.hpp" />
     <ClInclude Include="runtime\RemeshController.hpp" />
     <ClInclude Include="runtime\RemeshSystem.hpp" />
-    <ClInclude Include="runtime\ModelComputeRuntime.hpp" />
+    <ClInclude Include="runtime\ModelComputeController.hpp" />
     <ClInclude Include="runtime\ModelDisplayController.hpp" />
     <ClInclude Include="runtime\RemeshDisplayController.hpp" />
     <ClInclude Include="render\ContactOverlayRenderer.hpp" />
@@ -634,15 +648,19 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="runtime\VulkanCoreContext.hpp" />
     <ClInclude Include="runtime\SceneContext.hpp" />
     <ClInclude Include="runtime\RenderContext.hpp" />
-    <ClInclude Include="runtime\RuntimePackageCompiler.hpp" />
-    <ClInclude Include="runtime\RuntimePackageManager.hpp" />
-    <ClInclude Include="runtime\RuntimePackages.hpp" />
+    <ClInclude Include="runtime\RuntimeConnections.hpp" />
+    <ClInclude Include="runtime\package\RuntimePackageCompiler.hpp" />
+    <ClInclude Include="runtime\package\RuntimePackageController.hpp" />
+    <ClInclude Include="runtime\package\passes\ValidationPass.hpp" />
+    <ClInclude Include="runtime\package\passes\CoordinatePass.hpp" />
+    <ClInclude Include="runtime\package\RuntimePackageManager.hpp" />
+    <ClInclude Include="runtime\package\RuntimePackages.hpp" />
     <ClInclude Include="runtime\RuntimeProductManager.hpp" />
     <ClInclude Include="runtime\RuntimeController.hpp" />
     <ClInclude Include="runtime\TimelineController.hpp" />
     <ClInclude Include="runtime\TimelinePlaybackTarget.hpp" />
     <ClInclude Include="runtime\TimelineRuntime.hpp" />
-    <ClInclude Include="runtime\RuntimeInputController.hpp" />
+    <ClInclude Include="runtime\RuntimeInput.hpp" />
     <ClInclude Include="runtime\RuntimeRenderController.hpp" />
     <ClInclude Include="runtime\RuntimeSystems.hpp" />
     <ClInclude Include="runtime\RuntimeInterfaces.hpp" />
@@ -691,7 +709,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="voronoi\VoronoiSystemBuildStage.hpp" />
     <ClInclude Include="voronoi\VoronoiNodeIndex.hpp" />
     <ClInclude Include="voronoi\VoronoiNodeDomain.hpp" />
-    <ClInclude Include="voronoi\VoronoiDomain.hpp" />
     <ClInclude Include="voronoi\VoronoiDomainRuntime.hpp" />
     <ClInclude Include="voronoi\VoronoiModelRuntime.hpp" />
     <ClInclude Include="voronoi\VoronoiPointRuntime.hpp" />
@@ -703,14 +720,14 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="heat\HeatGpuStructs.hpp" />
     <ClInclude Include="heat\HeatSystem.hpp" />
     <ClInclude Include="voronoi\VoronoiSystem.hpp" />
-    <ClInclude Include="voronoi\VoronoiSystemRuntime.hpp" />
+    <ClInclude Include="voronoi\VoronoiRuntime.hpp" />
     <ClInclude Include="voronoi\VoronoiSystemComputeController.hpp" />
-    <ClInclude Include="heat\HeatSystemRuntime.hpp" />
+    <ClInclude Include="heat\HeatDomainRuntime.hpp" />
+    <ClInclude Include="heat\HeatPlaybackRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemDiffusionStage.hpp" />
-    <ClInclude Include="contact\ContactSystemRuntime.hpp" />
+    <ClInclude Include="contact\ContactCouplingRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemSimStage.hpp" />
     <ClInclude Include="heat\HeatSystemSurfaceStage.hpp" />
-    <ClInclude Include="heat\HeatSystemDebugStage.hpp" />
     <ClInclude Include="libs\tinyexr\tinyexr.h" />
     <ClInclude Include="scene\IBLSystem.hpp" />
     <ClInclude Include="scene\LightingSystem.hpp" />
@@ -722,7 +739,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeGraphEditor.hpp" />
     <ClInclude Include="nodegraph\NodeGraphDataTypes.hpp" />
     <ClInclude Include="nodegraph\NodeGraphEdges.hpp" />
-    <ClInclude Include="nodegraph\NodeGraphEvaluatedTypes.hpp" />
+    <ClInclude Include="nodegraph\NodeGraphEvaluation.hpp" />
     <ClInclude Include="hash\HashBuilder.hpp" />
     <ClInclude Include="hash\HashNodeCache.hpp" />
     <ClInclude Include="hash\HashPackage.hpp" />
@@ -764,18 +781,29 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeGraphValidator.hpp" />
     <ClInclude Include="voronoi\LloydCompute.hpp" />
     <ClInclude Include="voronoi\VoronoiCandidateCompute.hpp" />
-    <ClInclude Include="voronoi\VoronoiGeoCompute.hpp" />
+    <ClInclude Include="cuda\CudaVulkanDevice.hpp" />
+    <ClInclude Include="cuda\CudaCheck.cuh" />
+    <ClInclude Include="cuda\CudaBuffer.cuh" />
+    <ClInclude Include="cuda\CudaEvent.cuh" />
+    <ClInclude Include="voronoi\cuda\RVD.hpp" />
+    <ClInclude Include="voronoi\cuda\SDF.cuh" />
+    <ClInclude Include="voronoi\cuda\RVDGeometry.cuh" />
+    <ClInclude Include="voronoi\cuda\RVDStatus.cuh" />
+    <ClInclude Include="voronoi\cuda\ConvexCell.cuh" />
+    <ClInclude Include="voronoi\cuda\RVDWorkQueue.cuh" />
+    <ClInclude Include="voronoi\cuda\KNNNeighbors.hpp" />
+    <ClInclude Include="voronoi\cuda\KNNBatch.cuh" />
+    <ClInclude Include="voronoi\cuda\KNNNeighbors.cuh" />
+    <ClInclude Include="voronoi\cuda\KNNNeighborsKernels.cuh" />
     <ClInclude Include="scene\InputController.hpp" />
     <ClInclude Include="mesh\\remesher\\iODT.hpp" />
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp" />
     <ClInclude Include="renderers\PointRenderer.hpp" />
     <ClInclude Include="util\predicates.h" />
     <ClInclude Include="spatial\TriangleHashGrid.hpp" />
-    <ClInclude Include="voronoi\VoronoiIntegrator.hpp" />
     <ClInclude Include="renderers\VoronoiRenderer.hpp" />
     <ClInclude Include="renderers\IntrinsicRenderer.hpp" />
     <ClInclude Include="renderers\OutlineRenderer.hpp" />
-    <ClInclude Include="voronoi\VoronoiMeshGrid.hpp" />
     <ClInclude Include="spatial\VoxelGrid.hpp" />
     <ClInclude Include="renderers\WireframeRenderer.hpp" />
     <QtMoc Include="app\ViewportItem.hpp" />
@@ -798,6 +826,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="scene\MousePicker.hpp" />
     <ClInclude Include="util\file_utils.h" />
     <ClInclude Include="util\Structs.hpp" />
+    <ClInclude Include="util\Units.hpp" />
     <ClInclude Include="ui\UiIconRegistry.hpp" />
     <ClInclude Include="ui\UiFontRegistry.hpp" />
     <ClInclude Include="ui\UiTypography.hpp" />

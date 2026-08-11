@@ -63,7 +63,7 @@ public:
     ModelSelection(
         VulkanDevice& device,
         VkFrameGraphRuntime& frameGraphRuntime,
-        ModelRegistry& resourceManager,
+        ModelRegistry& modelRegistry,
         framegraph::ResourceId pickResourceId);
     ~ModelSelection();
     bool isInitialized() const { return initialized; }
@@ -106,7 +106,7 @@ public:
 private:   
     VulkanDevice& vulkanDevice;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     framegraph::ResourceId pickResourceId{};
     VkCommandPool pickingCommandPool;
     

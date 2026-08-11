@@ -52,7 +52,9 @@ bool HeatSystemSimStage::recordSim(
         for (const auto& [modelId, modelPtr] : activeModels) {
             if (!modelPtr || modelPtr->getSimNodeCount() == 0) continue;
 
-            heat::HeatModelPushConstant pushConstant{modelPtr->getSimNodeCount()};
+            heat::HeatModelPushConstant pushConstant{
+                modelPtr->getSimNodeCount(),
+                modelPtr->getMetersPerWorldUnit()};
             VkDescriptorSet modelSet =
                 readBufferA ? modelPtr->getVoronoiDescriptorSetA() : modelPtr->getVoronoiDescriptorSetB();
 

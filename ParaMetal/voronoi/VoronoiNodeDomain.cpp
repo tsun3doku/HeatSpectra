@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 void VoronoiNodeDomain::rebuild(
     const std::vector<uint32_t>& nodeFlags,
@@ -99,6 +98,7 @@ bool VoronoiNodeDomain::buildSurfaceMappings(
     }
 
     constexpr uint32_t maximumSupportCount = 32;
+
     for (uint32_t vertexId = 0; vertexId < static_cast<uint32_t>(surfacePoints.size()); ++vertexId) {
         std::vector<uint32_t> nearestNodeIds;
         std::vector<float> distanceSquared;
@@ -123,23 +123,28 @@ bool VoronoiNodeDomain::buildSurfaceMappings(
             maximumDistanceSquared = std::max(maximumDistanceSquared, distanceSquared[index]);
         }
         const double kernelRadius = std::max<double>(std::sqrt(maximumDistanceSquared) * 2.0, 1e-12);
-        if (!GMLS::computeSurfaceWeights(
+
+        voronoi::GMLSSurfaceStencil& stencil = surfaceStencils[vertexId];
+        if (sourceNodeIds.empty() ||
+            !GMLS::computeSurfaceWeights(
                 glm::dvec3(surfacePoints[vertexId]),
                 glm::dvec3(surfaceNormals[vertexId]),
                 sourcePositions,
                 kernelRadius,
                 valueWeights,
                 gradientWeights)) {
-            std::cerr << "[VoronoiNodeDomain] Failed to build surface GMLS stencil for vertex "
-                      << vertexId << std::endl;
-            return false;
+            stencil.valueWeightOffset = 0;
+            stencil.gradientWeightOffset = 0;
+            stencil.valueWeightCount = 0;
+            stencil.gradientWeightCount = 0;
+            continue;
         }
 
-        voronoi::GMLSSurfaceStencil& stencil = surfaceStencils[vertexId];
+        const uint32_t supportCount = static_cast<uint32_t>(sourceNodeIds.size());
         stencil.valueWeightOffset = static_cast<uint32_t>(surfaceValueWeights.size());
         stencil.gradientWeightOffset = static_cast<uint32_t>(surfaceGradientWeights.size());
-        stencil.valueWeightCount = static_cast<uint32_t>(sourceNodeIds.size());
-        stencil.gradientWeightCount = static_cast<uint32_t>(sourceNodeIds.size());
+        stencil.valueWeightCount = supportCount;
+        stencil.gradientWeightCount = supportCount;
         for (uint32_t i = 0; i < static_cast<uint32_t>(sourceNodeIds.size()); ++i) {
             const float valueWeight = static_cast<float>(valueWeights[i]);
             const glm::dvec3 gradient = gradientWeights[i];
@@ -148,5 +153,6 @@ bool VoronoiNodeDomain::buildSurfaceMappings(
             surfaceGradientWeights.push_back({sourceNodeIds[i], floatGradient.x, floatGradient.y, floatGradient.z});
         }
     }
+
     return true;
 }

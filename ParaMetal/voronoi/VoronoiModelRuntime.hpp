@@ -13,6 +13,8 @@
 class VulkanDevice;
 class MemoryAllocator;
 class CommandPool;
+class VoronoiNodeDomain;
+class VoxelGrid;
 
 class VoronoiModelRuntime : public VoronoiDomainRuntime {
 public:
@@ -32,11 +34,8 @@ public:
     bool createVoronoiBuffers() override;
     bool createSurfaceBuffers();
     bool resetSurfaceState();
+    bool buildAndStageSurfaceMappings(VoronoiNodeDomain& nodeDomain, const VoxelGrid& voxelGrid);
 
-    void stageGMLSSurfaceData(
-        const std::vector<voronoi::GMLSSurfaceStencil>& stencils,
-        const std::vector<voronoi::GMLSSurfaceWeight>& valueWeights,
-        const std::vector<voronoi::GMLSSurfaceGradientWeight>& gradientWeights);
     void cleanup() override;
 
     uint32_t getRuntimeModelId() const override { return runtimeModelId; }
@@ -48,7 +47,6 @@ public:
     const std::vector<uint32_t>& getGeometryTriangleIndices() const { return geometryTriangleIndices; }
     const std::vector<voronoi::SurfaceVertex>& getSurfaceVertices() const { return surfaceVertices; }
     const std::vector<uint32_t>& getSurfaceTriangleIndices() const { return surfaceTriangleIndices; }
-    std::vector<glm::vec3> getSurfacePositions() const;
     VkBuffer getTriangleIndicesBuffer() const override { return triangleIndicesBuffer; }
     VkDeviceSize getTriangleIndicesBufferOffset() const override { return triangleIndicesBufferOffset; }
     VkBuffer getCandidateBuffer() const override { return voronoiCandidateBuffer; }
@@ -65,6 +63,11 @@ public:
     size_t getGMLSSurfaceGradientWeightCount() const override { return gradientWeightCount; }
 
 private:
+    bool stageGMLSSurfaceData(
+        const std::vector<voronoi::GMLSSurfaceStencil>& stencils,
+        const std::vector<voronoi::GMLSSurfaceWeight>& valueWeights,
+        const std::vector<voronoi::GMLSSurfaceGradientWeight>& gradientWeights);
+
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     uint32_t runtimeModelId = 0;

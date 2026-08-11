@@ -157,6 +157,7 @@ Item {
                     root.setValue(1, decodeURIComponent(path))
                 }
             }
+            InspectorField { width: parent.width; theme: root.theme; editor: "combo"; label: qsTr("Import Units"); parameter: root.parameter(2); onValueEdited: value => root.setValue(2, value) }
         }
     }
 

@@ -8,19 +8,17 @@
 #include "runtime/RuntimeProducts.hpp"
 #include "util/GeometryUtils.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 #include <unordered_set>
 
-HeatSystemComputeController::HeatSystemComputeController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager,
+HeatSystemComputeController::HeatSystemComputeController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator,
     CommandPool& renderCommandPool,
     CommandPool& transferCommandPool,
     uint32_t maxFramesInFlight)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      resourceManager(resourceManager),
       renderCommandPool(renderCommandPool),
       transferCommandPool(transferCommandPool),
       maxFramesInFlight(maxFramesInFlight) {
@@ -98,7 +96,8 @@ void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const 
         config.modelVolumetricPowerDensitiesByRuntimeId,
         config.modelDensity,
         config.modelSpecificHeat,
-        config.modelConductivity);
+        config.modelConductivity,
+        config.worldUnit);
     system.setParams(config.contactThermalConductance, config.simulationDuration);
     system.setContactCouplings(config.contactCouplings);
 }
@@ -340,7 +339,6 @@ std::unique_ptr<HeatSystem> HeatSystemComputeController::buildHeatSystem() {
     std::unique_ptr<HeatSystem> system = std::make_unique<HeatSystem>(
         vulkanDevice,
         memoryAllocator,
-        resourceManager,
         maxFramesInFlight,
         renderCommandPool,
         transferCommandPool);

@@ -4,7 +4,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 
 class ModelDisplayController;

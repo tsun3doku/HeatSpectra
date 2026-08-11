@@ -40,8 +40,6 @@ public:
     const VoxelGridParams& getParams() const { return params; }
     int getGridSize() const { return params.gridDim.x; }
         
-    const std::vector<glm::vec3>& getMeshPoints() const { return meshPoints; }
-    const std::vector<int32_t>& getMeshTriangles() const { return meshTriangles; }
     const std::vector<int32_t>& getTrianglesList() const { return trianglesList; }
     const std::vector<int32_t>& getOffsets() const { return offsets; }
 
@@ -57,7 +55,8 @@ private:
         const glm::vec3& point,
         const std::vector<glm::vec3>& positions,
         const std::vector<uint32_t>& indices,
-        const TriangleHashGrid& triangleGrid) const;
+        const TriangleHashGrid& triangleGrid,
+        std::vector<size_t>& nearbyTriangles) const;
 
     size_t getCornerIndex(int x, int y, int z) const;
 
@@ -69,8 +68,6 @@ private:
     VoxelGridParams params;  
     std::vector<uint8_t> occupancy;
     
-    std::vector<glm::vec3> meshPoints;
-    std::vector<int32_t> meshTriangles;
     std::vector<int32_t> trianglesList;
     std::vector<int32_t> offsets;
 };

@@ -10,32 +10,16 @@
 #include <utility>
 #include <vector>
 
-NodeGraphRuntime::NodeGraphRuntime(const NodeRuntimeServices& services)
-    : runtimeServices(services) {
+NodeGraphRuntime::NodeGraphRuntime(NodePayloadRegistry* registry)
+    : payloadRegistry(registry) {
 }
 
 NodeGraphRuntime::~NodeGraphRuntime() = default;
 
-void NodeGraphRuntime::setOutputProductHandle(
-    uint64_t socketKey,
-    const ProductHandle& productHandle) {
-    if (socketKey == 0) {
-        return;
-    }
-
-    if (productHandle.isValid()) {
-        productBySocket[socketKey] = productHandle;
-        currentEvaluationState.productBySocket[socketKey] = productHandle;
-    } else {
-        productBySocket.erase(socketKey);
-        currentEvaluationState.productBySocket.erase(socketKey);
-    }
-}
-
 void NodeGraphRuntime::publishOutputs(
     const NodeGraphNode& node,
     const std::vector<NodeDataBlock>& outputs,
-    NodeGraphEvaluationState& state,
+    NodeGraphEvaluation& state,
     bool frozen) const {
     const std::size_t count = std::min(outputs.size(), node.outputs.size());
     for (std::size_t i = 0; i < count; ++i) {
@@ -43,13 +27,13 @@ void NodeGraphRuntime::publishOutputs(
         value.status = EvaluatedSocketStatus::Value;
         value.data = outputs[i];
         value.data.isFrozen = frozen;
-        state.outputBySocket[NodeSocketKey(node.id, node.outputs[i].id).value] = value;
+        state.outputsBySocket[NodeSocketKey(node.id, node.outputs[i].id).value] = value;
     }
 }
 
 bool NodeGraphRuntime::publishCachedOutputs(
     const NodeGraphNode& node,
-    NodeGraphEvaluationState& state) const {
+    NodeGraphEvaluation& state) const {
     const auto it = cachedOutputsByNodeId.find(node.id.value);
     if (it == cachedOutputsByNodeId.end() ||
         it->second.outputs.size() != node.outputs.size()) {
@@ -64,21 +48,21 @@ void NodeGraphRuntime::publishBlockedOutputs(
     const NodeGraphNode& node,
     EvaluatedSocketStatus status,
     const std::string& error,
-    NodeGraphEvaluationState& state) const {
+    NodeGraphEvaluation& state) const {
     EvaluatedSocketValue blockedValue{};
     blockedValue.status = status;
     if (status == EvaluatedSocketStatus::Error) {
         blockedValue.error = error;
     }
     for (const NodeGraphSocket& outputSocket : node.outputs) {
-        state.outputBySocket[NodeSocketKey(node.id, outputSocket.id).value] = blockedValue;
+        state.outputsBySocket[NodeSocketKey(node.id, outputSocket.id).value] = blockedValue;
     }
 }
 
 NodeGraphRuntime::EvaluatedNodeInputs NodeGraphRuntime::evaluateNodeInputs(
     const NodeGraphNode& node,
     const NodeGraphState& graphState,
-    const NodeGraphEvaluationState& state) const {
+    const NodeGraphEvaluation& state) const {
 
     EvaluatedNodeInputs result;
     result.values.assign(node.inputs.size(), {});
@@ -101,8 +85,8 @@ NodeGraphRuntime::EvaluatedNodeInputs NodeGraphRuntime::evaluateNodeInputs(
                 continue;
             }
             const NodeGraphEdge& edge = *edgePtr;
-            const auto outputIt = state.outputBySocket.find(NodeSocketKey(edge.fromNode, edge.fromSocket).value);
-            if (outputIt == state.outputBySocket.end()) {
+            const auto outputIt = state.outputsBySocket.find(NodeSocketKey(edge.fromNode, edge.fromSocket).value);
+            if (outputIt == state.outputsBySocket.end()) {
                 if (!inputSocket.required) {
                     continue;
                 }
@@ -141,8 +125,8 @@ void NodeGraphRuntime::applyDelta(const NodeGraphDelta& delta) {
                     it = cachedOutputsByNodeId.erase(it);
                 }
             }
-            if (runtimeServices.payloadRegistry && cachedOutputsByNodeId.empty()) {
-                runtimeServices.payloadRegistry->clear();
+            if (payloadRegistry && cachedOutputsByNodeId.empty()) {
+                payloadRegistry->clear();
             }
         }
     }
@@ -184,16 +168,14 @@ void NodeGraphRuntime::applyChange(const NodeGraphChange& change) {
 
 void NodeGraphRuntime::execute(const NodeGraphCompiled& compiled) {
     if (graphState.nodes.size() > 0 && compiled.executionOrder.size() != graphState.nodes.size()) {
-        currentEvaluationState.outputBySocket.clear();
-        currentEvaluationState.productBySocket.clear();
+        currentEvaluation.outputsBySocket.clear();
         return;
     }
 
     const std::vector<NodeGraphNodeId>& executionOrder = compiled.executionOrder;
-    currentEvaluationState.outputBySocket.clear();
-    currentEvaluationState.productBySocket = productBySocket;
-    currentEvaluationState.outputBySocket.reserve(graphState.edges.size() * 2);
-    NodeGraphEvaluationState& state = currentEvaluationState;
+    currentEvaluation.outputsBySocket.clear();
+    currentEvaluation.outputsBySocket.reserve(graphState.edges.size() * 2);
+    NodeGraphEvaluation& state = currentEvaluation;
 
     for (NodeGraphNodeId nodeId : executionOrder) {
         auto it = graphState.nodes.find(nodeId.value);
@@ -250,12 +232,11 @@ void NodeGraphRuntime::execute(const NodeGraphCompiled& compiled) {
 void NodeGraphRuntime::evaluateLiveNode(
     const NodeGraphNode& node,
     const EvaluatedNodeInputs& inputs,
-    NodeGraphEvaluationState& state) {
+    NodeGraphEvaluation& state) {
 
     const NodeKernelRuntime kernelRuntime{
         graphState,
-        runtimeServices.payloadRegistry,
-        runtimeServices};
+        payloadRegistry};
 
     HashValues outputHashes = kernels.computeOutputHashes(node, kernelRuntime, inputs.values);
     uint64_t cacheHash = outputHashes.full;

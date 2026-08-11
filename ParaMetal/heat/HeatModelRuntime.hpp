@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util/Units.hpp"
+
 #include "heat/HeatGpuStructs.hpp"
 #include "heat/HeatBoundaryRuntime.hpp"
 #include "vulkan/VulkanExternalBuffer.hpp"
@@ -33,6 +35,8 @@ public:
     ~HeatModelRuntime();
 
     void setMaterialProperties(float density, float specificHeat, float conductivity);
+    void setWorldUnit(units::LengthUnit unit) { worldUnit = unit; }
+    float getMetersPerWorldUnit() const { return units::physics::metersPerWorldUnit(worldUnit); }
     void setInitialTemperatureC(float temperatureC) { initialTemperatureC = temperatureC; }
     void setBoundaryInputs(uint32_t conditionType, float temperatureC, float heatFlux,
         float heatTransferCoefficient, float volumetricPowerDensity) {
@@ -175,6 +179,7 @@ private:
     float density = HeatSimDefaults::density;
     float specificHeat = HeatSimDefaults::specificHeat;
     float conductivity = HeatSimDefaults::conductivity;
+    units::LengthUnit worldUnit = units::defaultLengthUnit();
     float initialTemperatureC = HeatSimDefaults::ambientTemperatureC;
     uint32_t boundaryConditionType = 0;
     float boundaryTemperatureC = HeatSimDefaults::ambientTemperatureC;

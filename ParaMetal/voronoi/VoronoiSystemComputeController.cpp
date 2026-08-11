@@ -1,11 +1,9 @@
 #include "VoronoiSystemComputeController.hpp"
 
-#include <iostream>
 #include "voronoi/VoronoiSystem.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "hash/HashProduct.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiDomainRuntime.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
@@ -14,40 +12,21 @@
 VoronoiSystemComputeController::VoronoiSystemComputeController(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ModelRegistry& resourceManager,
-    CommandPool& commandPool,
-    uint32_t maxFramesInFlight)
+    CommandPool& commandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      resourceManager(resourceManager),
-      commandPool(commandPool),
-      maxFramesInFlight(maxFramesInFlight) {
-}
-
-std::unique_ptr<VoronoiSystem> VoronoiSystemComputeController::buildVoronoiSystem() {
-    auto system = std::make_unique<VoronoiSystem>(
-        vulkanDevice,
-        memoryAllocator,
-        resourceManager,
-        maxFramesInFlight,
-        commandPool);
-    if (!system || !system->isInitialized()) {
-        std::cerr << "[VoronoiSystemComputeController] VoronoiSystem initialization failed" << std::endl;
-        return nullptr;
-    }
-
-    return system;
+      commandPool(commandPool) {
 }
 
 void VoronoiSystemComputeController::apply(uint64_t socketKey, const Config& config) {
     if (socketKey == 0) {
         return;
     }
-
     auto it = systemsBySocket.find(socketKey);
     if (it == systemsBySocket.end()) {
-        auto system = buildVoronoiSystem();
-        it = systemsBySocket.emplace(socketKey, std::move(system)).first;
+        it = systemsBySocket.emplace(
+            socketKey,
+            std::make_unique<VoronoiSystem>(vulkanDevice, memoryAllocator, commandPool)).first;
     }
 
     auto& system = it->second;
@@ -59,10 +38,16 @@ void VoronoiSystemComputeController::apply(uint64_t socketKey, const Config& con
     if (configIt != configuredConfigs.end() && configIt->second.computeHash == config.computeHash) {
         return;
     }
+    const auto failedIt = failedComputeHashes.find(socketKey);
+    if (failedIt != failedComputeHashes.end() && failedIt->second == config.computeHash) {
+        return;
+    }
+    failedComputeHashes.erase(socketKey);
 
+    system->setParams(config.cellSize, config.voxelResolution);
     if (config.isPointDomain) {
         system->clearGeometry();
-        system->setPointGeometry(config.pointPositions);
+        system->setPointGeometry(config.pointPositions, config.pointDomainCorners);
     } else {
         system->setMeshGeometry(
             config.geometryPositions,
@@ -71,15 +56,16 @@ void VoronoiSystemComputeController::apply(uint64_t socketKey, const Config& con
             config.surfaceTriangleIndices,
             config.runtimeModelId,
             config.meshModelMatrix);
-        system->setSeedPositions(config.pointPositions);
+        system->setSeedPositions(config.pointPositions, config.pointDomainCorners);
     }
-    system->setParams(config.cellSize, config.voxelResolution);
     const bool configured = system->ensureConfigured();
 
     if (configured) {
         configuredConfigs[socketKey] = config;
+        failedComputeHashes.erase(socketKey);
     } else {
         configuredConfigs.erase(socketKey);
+        failedComputeHashes[socketKey] = config.computeHash;
     }
 }
 
@@ -89,6 +75,7 @@ void VoronoiSystemComputeController::remove(uint64_t socketKey) {
     }
 
     configuredConfigs.erase(socketKey);
+    failedComputeHashes.erase(socketKey);
     auto it = systemsBySocket.find(socketKey);
     if (it != systemsBySocket.end()) {
         if (it->second) {
@@ -102,6 +89,7 @@ void VoronoiSystemComputeController::remove(uint64_t socketKey) {
 
 void VoronoiSystemComputeController::disableAll() {
     configuredConfigs.clear();
+    failedComputeHashes.clear();
     if (!systemsBySocket.empty()) {
         vkDeviceWaitIdle(vulkanDevice.getDevice());
     }
@@ -204,5 +192,6 @@ bool VoronoiSystemComputeController::buildProduct(uint64_t socketKey, VoronoiPro
 
 const VoronoiSystemComputeController::Config* VoronoiSystemComputeController::getConfig(uint64_t socketKey) const {
     const auto it = configuredConfigs.find(socketKey);
-    return it != configuredConfigs.end() ? &it->second : nullptr;
+    if (it == configuredConfigs.end()) return nullptr;
+    return &it->second;
 }

@@ -2,6 +2,7 @@
 
 #include "runtime/PointComputeRuntime.hpp"
 #include "util/GeometryUtils.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 
 ProductHandle RuntimePointComputeTransport::apply(uint64_t socketKey, const PointPackage& package) {
     if (!runtime || !products || socketKey == 0) {

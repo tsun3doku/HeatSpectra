@@ -5,24 +5,25 @@
 
 #include <cstdint>
 
-#include "runtime/RuntimeProducts.hpp"
-
 class VulkanDevice;
 class UniformBufferManager;
 
 class WireframeRenderer {
 public:
-    struct DrawItem {
-        ModelProduct product{};
-    };
-
     WireframeRenderer(VulkanDevice& device, VkDescriptorSetLayout geometryDescriptorSetLayout,
                      VkRenderPass renderPass, uint32_t subpass);
     ~WireframeRenderer();
     
     void bindPipeline(VkCommandBuffer cmdBuffer);
-    void renderModels(VkCommandBuffer cmdBuffer, VkDescriptorSet geometryDescriptorSet, const DrawItem* items, uint32_t itemCount);
-    void renderModel(VkCommandBuffer cmdBuffer, const ModelProduct& product, VkDescriptorSet geometryDescriptorSet);
+    void renderModel(
+        VkCommandBuffer cmdBuffer,
+        VkDescriptorSet geometryDescriptorSet,
+        const glm::mat4& modelMatrix,
+        VkBuffer vertexBuffer,
+        VkDeviceSize vertexBufferOffset,
+        VkBuffer indexBuffer,
+        VkDeviceSize indexBufferOffset,
+        uint32_t indexCount);
     
     VkPipelineLayout getPipelineLayout() const { return pipelineLayout; }
     

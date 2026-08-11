@@ -88,14 +88,12 @@ void HeatOverlayRenderer::rebuildBindings() {
         }
 
         if (config.showHeatOverlay) {
-            surfaceBindings.reserve(surfaceBindings.size() + config.models.size());
-            for (size_t index = 0; index < config.models.size(); ++index) {
-                const auto& modelProduct = config.models[index];
-                if (!modelProduct.isValid() ||
-                    modelProduct.runtimeModelId == 0 ||
-                    modelProduct.renderVertexBuffer == VK_NULL_HANDLE ||
-                    modelProduct.renderIndexBuffer == VK_NULL_HANDLE ||
-                    modelProduct.renderIndexCount == 0) {
+            surfaceBindings.reserve(surfaceBindings.size() + config.modelRuntimeIds.size());
+            for (size_t index = 0; index < config.modelRuntimeIds.size(); ++index) {
+                if (config.modelRuntimeIds[index] == 0 ||
+                    config.modelRenderVertexBuffers[index] == VK_NULL_HANDLE ||
+                    config.modelRenderIndexBuffers[index] == VK_NULL_HANDLE ||
+                    config.modelRenderIndexCounts[index] == 0) {
                     continue;
                 }
 
@@ -117,13 +115,13 @@ void HeatOverlayRenderer::rebuildBindings() {
                 }
 
                 HeatSurfaceRenderer::SurfaceRenderBinding binding{};
-                binding.runtimeModelId = modelProduct.runtimeModelId;
-                binding.vertexBuffer = modelProduct.renderVertexBuffer;
-                binding.vertexBufferOffset = modelProduct.renderVertexBufferOffset;
-                binding.indexBuffer = modelProduct.renderIndexBuffer;
-                binding.indexBufferOffset = modelProduct.renderIndexBufferOffset;
-                binding.indexCount = modelProduct.renderIndexCount;
-                binding.modelMatrix = modelProduct.modelMatrix;
+                binding.runtimeModelId = config.modelRuntimeIds[index];
+                binding.vertexBuffer = config.modelRenderVertexBuffers[index];
+                binding.vertexBufferOffset = config.modelRenderVertexBufferOffsets[index];
+                binding.indexBuffer = config.modelRenderIndexBuffers[index];
+                binding.indexBufferOffset = config.modelRenderIndexBufferOffsets[index];
+                binding.indexCount = config.modelRenderIndexCounts[index];
+                binding.modelMatrix = config.modelMatrices[index];
                 binding.bufferViews = config.modelBufferViews[index];
                 binding.surfaceBuffer = config.modelSurfaceBuffers[index];
                 binding.surfaceBufferOffset = config.modelSurfaceBufferOffsets[index];
@@ -133,8 +131,8 @@ void HeatOverlayRenderer::rebuildBindings() {
         }
 
         if (config.showFluxVectors) {
-            for (size_t index = 0; index < config.models.size(); ++index) {
-                if (config.models[index].isValid() &&
+            for (size_t index = 0; index < config.modelRuntimeIds.size(); ++index) {
+                if (config.modelRuntimeIds[index] != 0 &&
                     index < config.modelSurfaceBuffers.size() &&
                     config.modelSurfaceBuffers[index] != VK_NULL_HANDLE &&
                     index < config.modelSurfaceBufferOffsets.size() &&
@@ -144,14 +142,15 @@ void HeatOverlayRenderer::rebuildBindings() {
                     config.modelSurfaceGradientBuffers[index] != VK_NULL_HANDLE &&
                     config.modelSurfacePointCounts[index] != 0) {
                     VectorArrowRenderer::VectorRenderBinding vectorBinding{};
-                    vectorBinding.bindingKey = config.models[index].runtimeModelId;
+                    vectorBinding.bindingKey = config.modelRuntimeIds[index];
                     vectorBinding.surfaceBuffer = config.modelSurfaceBuffers[index];
                     vectorBinding.surfaceBufferOffset = config.modelSurfaceBufferOffsets[index];
                     vectorBinding.gradientBuffer = config.modelSurfaceGradientBuffers[index];
                     vectorBinding.gradientBufferOffset = config.modelSurfaceGradientBufferOffsets[index];
                     vectorBinding.sampleCount = config.modelSurfacePointCounts[index];
-                    vectorBinding.modelMatrix = config.models[index].modelMatrix;
+                    vectorBinding.modelMatrix = config.modelMatrices[index];
                     vectorBinding.scale = config.fluxVectorScale;
+                    vectorBinding.canonicalToWorldScale = config.canonicalToWorldScale;
 
                     fluxVectorBindings.push_back(vectorBinding);
                 }

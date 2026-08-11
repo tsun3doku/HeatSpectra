@@ -90,10 +90,13 @@
     <ClCompile Include="runtime\RuntimeProductManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\RuntimePackageCompiler.cpp">
+    <ClCompile Include="runtime\package\RuntimePackageCompiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\ModelComputeRuntime.cpp">
+    <ClCompile Include="runtime\package\RuntimePackageController.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="runtime\package\passes\ValidationPass.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="runtime\package\passes\CoordinatePass.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="runtime\ModelComputeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\ModelDisplayController.cpp">
@@ -117,7 +120,7 @@
     <ClCompile Include="runtime\HeatDisplayController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClInclude Include="runtime\ModelComputeRuntime.hpp">
+    <ClInclude Include="runtime\ModelComputeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\ModelDisplayController.hpp">
@@ -153,7 +156,7 @@
     <ClCompile Include="runtime\TimelineRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="runtime\RuntimeInputController.cpp">
+    <ClCompile Include="runtime\RuntimeInput.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="runtime\RuntimeRenderController.cpp">
@@ -210,10 +213,10 @@
     <ClCompile Include="heat\HeatSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemRuntime.cpp">
+    <ClCompile Include="heat\HeatDomainRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemSimRuntime.cpp">
+    <ClCompile Include="heat\HeatPlaybackRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemPlayback.cpp">
@@ -222,7 +225,7 @@
     <ClCompile Include="heat\HeatSystemDiffusionStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="contact\ContactSystemRuntime.cpp">
+    <ClCompile Include="contact\ContactCouplingRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="heat\HeatSystemSimStage.cpp">
@@ -231,16 +234,13 @@
     <ClCompile Include="heat\HeatSystemSurfaceStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="heat\HeatSystemDebugStage.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="heat\HeatSystemComputeController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="voronoi\VoronoiSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="voronoi\VoronoiSystemRuntime.cpp">
+    <ClCompile Include="voronoi\VoronoiRuntime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="voronoi\VoronoiSystemComputeController.cpp">
@@ -345,13 +345,7 @@
     <ClCompile Include="scene\InputController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="voronoi\VoronoiMeshGrid.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="spatial\TriangleHashGrid.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="voronoi\VoronoiIntegrator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="spatial\VoxelGrid.cpp">
@@ -372,9 +366,6 @@
     <ClCompile Include="voronoi\LloydCompute.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="voronoi\VoronoiGeoCompute.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="contact\ContactMapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -382,6 +373,27 @@
       <Filter>Source Files</Filter>
     </CudaCompile>
     <CudaCompile Include="cuda\CudaExternalBuffer.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="cuda\CudaVulkanDevice.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\RVD.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\SDF.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\RVDGeometry.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\RVDWorkQueue.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\KNNNeighbors.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\KNNNeighborsKernels.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
     <ClCompile Include="contact\ContactSystemComputeController.cpp">
@@ -848,9 +860,6 @@
     <None Include="shaders\voronoi_surface.vert">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="shaders\voronoi_geometry.slang">
-      <Filter>Shaders</Filter>
-    </None>
     <None Include="shaders\point_cloud.frag">
       <Filter>Shaders</Filter>
     </None>
@@ -934,6 +943,9 @@
     <ClInclude Include="util\Structs.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="util\Units.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="ui\UiIconRegistry.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -982,13 +994,17 @@
     <ClInclude Include="render\RenderRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimePackageCompiler.hpp">
+    <ClInclude Include="runtime\RuntimeConnections.hpp"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="runtime\package\RuntimePackageCompiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimePackages.hpp">
+    <ClInclude Include="runtime\package\RuntimePackageController.hpp"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="runtime\package\passes\ValidationPass.hpp"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="runtime\package\passes\CoordinatePass.hpp"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="runtime\package\RuntimePackages.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimePackageManager.hpp">
+    <ClInclude Include="runtime\package\RuntimePackageManager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeProductManager.hpp">
@@ -1006,7 +1022,7 @@
     <ClInclude Include="runtime\TimelineRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="runtime\RuntimeInputController.hpp">
+    <ClInclude Include="runtime\RuntimeInput.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="runtime\RuntimeRenderController.hpp">
@@ -1072,22 +1088,22 @@
     <ClInclude Include="heat\HeatSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="heat\HeatSystemRuntime.hpp">
+    <ClInclude Include="heat\HeatDomainRuntime.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="heat\HeatPlaybackRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemDiffusionStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="contact\ContactSystemRuntime.hpp">
+    <ClInclude Include="contact\ContactCouplingRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemSimStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemSurfaceStage.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="heat\HeatSystemDebugStage.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="heat\HeatSystemComputeController.hpp">
@@ -1114,16 +1130,13 @@
     <ClInclude Include="voronoi\VoronoiSystem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiSystemRuntime.hpp">
+    <ClInclude Include="voronoi\VoronoiRuntime.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\VoronoiSystemComputeController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="voronoi\LloydCompute.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="voronoi\VoronoiGeoCompute.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\MemoryAllocator.hpp">
@@ -1243,9 +1256,6 @@
     <ClInclude Include="scene\InputController.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiMeshGrid.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="spatial\TriangleHashGrid.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1255,7 +1265,40 @@
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp">
       <Filter>Libs</Filter>
     </ClInclude>
-    <ClInclude Include="voronoi\VoronoiIntegrator.hpp">
+    <ClInclude Include="voronoi\cuda\KNNNeighbors.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\KNNBatch.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\KNNNeighbors.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\KNNNeighborsKernels.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\RVD.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\SDF.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\RVDGeometry.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\RVDStatus.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cuda\CudaBuffer.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cuda\CudaCheck.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cuda\CudaEvent.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="voronoi\cuda\RVDWorkQueue.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="spatial\VoxelGrid.hpp">
@@ -1330,7 +1373,7 @@
     <ClInclude Include="nodegraph\NodeGraphEdges.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nodegraph\NodeGraphEvaluatedTypes.hpp">
+    <ClInclude Include="nodegraph\NodeGraphEvaluation.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hash\HashBuilder.hpp">
@@ -1697,6 +1740,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="domain\GeometryData.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="domain\TransformData.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="domain\HeatData.hpp">

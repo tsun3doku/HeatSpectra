@@ -1,7 +1,6 @@
 #pragma once
 
 #include "NodeGraphTypes.hpp"
-
 #include <cstdint>
 
 class NodeGraphEditor;

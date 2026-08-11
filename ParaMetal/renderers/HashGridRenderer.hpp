@@ -30,7 +30,7 @@ public:
         uint32_t runtimeModelId,
         HashGrid* hashGrid,
         uint32_t frameIndex,
-        ModelRegistry& resourceManager,
+        ModelRegistry& modelRegistry,
         const glm::vec3& color);
     
     void cleanup();

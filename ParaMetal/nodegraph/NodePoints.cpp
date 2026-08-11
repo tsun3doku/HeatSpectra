@@ -50,6 +50,9 @@ void NodePoints::execute(NodeKernelEval& eval) const {
         const float stepY = dimY / static_cast<float>(ny);
         const float stepZ = dimZ / static_cast<float>(nz);
 
+        payload.domainMinimum = glm::vec3(-dimX, -dimY, -dimZ) * 0.5f;
+        payload.domainMaximum = glm::vec3( dimX,  dimY,  dimZ) * 0.5f;
+
         uint32_t generated = 0;
         for (uint32_t ix = 0; ix < nx && generated < count; ++ix) {
             for (uint32_t iy = 0; iy < ny && generated < count; ++iy) {

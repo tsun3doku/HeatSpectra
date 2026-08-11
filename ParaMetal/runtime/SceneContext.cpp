@@ -36,16 +36,15 @@ bool SceneContext::initialize(VulkanCoreContext& core) {
         return false;
     }
     modelUploaderState = std::make_unique<ModelUploader>(core.device(), *allocator, cameraControllerState.getCamera(), *transferCommandPool);
-    resourceManagerState = std::make_unique<ModelRegistry>(*allocator);
+    modelRegistryState = std::make_unique<ModelRegistry>(*allocator);
 
-    modelUploaderState->uploadInitialModels(*resourceManagerState);
     initialized = true;
     return true;
 }
 
 void SceneContext::shutdown() {
-    if (resourceManagerState) {
-        resourceManagerState->cleanup();
+    if (modelRegistryState) {
+        modelRegistryState->cleanup();
     }
     if (uniformBufferManagerState) {
         uniformBufferManagerState->cleanup(renderconfig::MaxFramesInFlight);
@@ -58,7 +57,7 @@ void SceneContext::shutdown() {
     iblSystemState.reset();
     materialSystemState.reset();
     modelUploaderState.reset();
-    resourceManagerState.reset();
+    modelRegistryState.reset();
     uniformBufferManagerState.reset();
     initialized = false;
 }
@@ -83,12 +82,12 @@ const UniformBufferManager* SceneContext::uniformBufferManager() const {
     return uniformBufferManagerState.get();
 }
 
-ModelRegistry* SceneContext::resourceManager() {
-    return resourceManagerState.get();
+ModelRegistry* SceneContext::modelRegistry() {
+    return modelRegistryState.get();
 }
 
-const ModelRegistry* SceneContext::resourceManager() const {
-    return resourceManagerState.get();
+const ModelRegistry* SceneContext::modelRegistry() const {
+    return modelRegistryState.get();
 }
 
 ModelUploader* SceneContext::modelUploader() {

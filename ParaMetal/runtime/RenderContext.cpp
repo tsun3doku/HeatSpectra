@@ -12,7 +12,7 @@
 #include "nodegraph/NodeGraphController.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
 #include "runtime/RuntimeProductManager.hpp"
-#include "runtime/ModelComputeRuntime.hpp"
+#include "runtime/ModelComputeController.hpp"
 #include "runtime/ContactDisplayController.hpp"
 #include "runtime/PointComputeRuntime.hpp"
 #include "runtime/PointDisplayController.hpp"
@@ -46,11 +46,11 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     auto* allocator = core.allocator();
     auto* commandPool = core.getRenderCommandPool();
     auto* transferCommandPool = core.getTransferCommandPool();
-    auto* resourceManager = scene.resourceManager();
+    auto* modelRegistry = scene.modelRegistry();
     auto* modelUploader = scene.modelUploader();
     auto* uniformBufferManager = scene.uniformBufferManager();
     auto* iblSystem = scene.iblSystem();
-    if (!allocator || !commandPool || !transferCommandPool || !resourceManager || !modelUploader || !uniformBufferManager || !iblSystem) {
+    if (!allocator || !commandPool || !transferCommandPool || !modelRegistry || !modelUploader || !uniformBufferManager || !iblSystem) {
         return false;
     }
 
@@ -82,7 +82,7 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         viewportImageFormat,
         viewportExtent,
         *allocator,
-        *resourceManager,
+        *modelRegistry,
         *uniformBufferManager,
         *iblSystem)) {
         shutdown();
@@ -102,9 +102,9 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         *allocator,
         *commandPool);
     modelDisplayControllerState = std::make_unique<ModelDisplayController>();
-    modelComputeRuntimeState = std::make_unique<ModelComputeRuntime>(
+    modelComputeControllerState = std::make_unique<ModelComputeController>(
         core.device(),
-        *resourceManager,
+        *modelRegistry,
         *modelUploader,
         frameSync,
         runtimeBusy);
@@ -112,16 +112,16 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     runtimeRemeshTransportState = std::make_unique<RuntimeRemeshComputeTransport>();
     sceneControllerState = std::make_unique<SceneController>(
         core.device(),
-        *resourceManager,
+        *modelRegistry,
         *modelUploader,
         frameSync,
         scene.cameraController(),
         runtimeBusy);
-    sceneControllerState->setModelComputeRuntime(modelComputeRuntimeState.get());
+    sceneControllerState->setModelComputeController(modelComputeControllerState.get());
     remeshControllerState = std::make_unique<RemeshController>(
         core.device(),
         *allocator,
-        *resourceManager,
+        *modelRegistry,
         runtimeBusy);
     remeshDisplayControllerState = std::make_unique<RemeshDisplayController>();
     contactDisplayControllerState = std::make_unique<ContactDisplayController>();
@@ -141,9 +141,7 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     voronoiSystemComputeControllerState = std::make_unique<VoronoiSystemComputeController>(
         core.device(),
         *allocator,
-        *resourceManager,
-        *transferCommandPool,
-        renderconfig::MaxFramesInFlight);
+        *transferCommandPool);
     runtimeVoronoiComputeTransportState->setController(voronoiSystemComputeControllerState.get());
     voronoiDisplayControllerState->setOverlayRenderer(renderRuntime->getSceneRenderer().getVoronoiOverlayRenderer());
     runtimeVoronoiDisplayTransportState->setController(voronoiDisplayControllerState.get());
@@ -154,7 +152,6 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     heatSystemComputeControllerState = std::make_unique<HeatSystemComputeController>(
         core.device(),
         *allocator,
-        *resourceManager,
         *commandPool,
         *transferCommandPool,
         renderconfig::MaxFramesInFlight);
@@ -164,8 +161,8 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     runtimePointComputeTransportState->setRuntime(pointComputeRuntimeState.get());
     pointDisplayControllerState->setOverlayRenderer(renderRuntime->getSceneRenderer().getPointOverlayRenderer());
     runtimePointDisplayTransportState->setController(pointDisplayControllerState.get());
-    runtimeModelComputeTransportState->setRuntime(modelComputeRuntimeState.get());
-    modelDisplayControllerState->setModelRegistry(resourceManager);
+    runtimeModelComputeTransportState->setController(modelComputeControllerState.get());
+    modelDisplayControllerState->setModelRegistry(modelRegistry);
     runtimeModelDisplayTransportState->setController(modelDisplayControllerState.get());
     runtimeRemeshTransportState->setController(remeshControllerState.get());
     remeshDisplayControllerState->setIntrinsicRenderer(renderRuntime->getSceneRenderer().getIntrinsicRenderer());
@@ -173,27 +170,21 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
 
     sceneControllerState->focusOnVisibleModel();
 
-    NodeRuntimeServices nodeRuntimeServices{};
-    nodeRuntimeServices.sceneController = sceneControllerState.get();
-    nodeRuntimeServices.modelComputeTransport = runtimeModelComputeTransportState.get();
-    nodeRuntimeServices.remeshComputeTransport = runtimeRemeshTransportState.get();
-    nodeRuntimeServices.voronoiComputeTransport = runtimeVoronoiComputeTransportState.get();
-    nodeRuntimeServices.contactComputeTransport = runtimeContactComputeTransportState.get();
-    nodeRuntimeServices.heatComputeTransport = runtimeHeatComputeTransportState.get();
-    nodeRuntimeServices.modelDisplayTransport = runtimeModelDisplayTransportState.get();
-    nodeRuntimeServices.pointDisplayTransport = runtimePointDisplayTransportState.get();
-    nodeRuntimeServices.remeshDisplayTransport = runtimeRemeshDisplayTransportState.get();
-    nodeRuntimeServices.voronoiDisplayTransport = runtimeVoronoiDisplayTransportState.get();
-    nodeRuntimeServices.contactDisplayTransport = runtimeContactDisplayTransportState.get();
-    nodeRuntimeServices.heatDisplayTransport = runtimeHeatDisplayTransportState.get();
-    nodeRuntimeServices.pointComputeTransport = runtimePointComputeTransportState.get();
-    nodeRuntimeServices.heatSystemController = heatSystemComputeControllerState.get();
-    nodeRuntimeServices.payloadRegistry = payloadRegistryState.get();
-    nodeRuntimeServices.resourceManager = resourceManager;
-    nodeRuntimeServices.vulkanDevice = &core.device();
-    nodeRuntimeServices.memoryAllocator = allocator;
-
-    nodeGraphControllerState = std::make_unique<NodeGraphController>(nodeRuntimeServices);
+    RuntimeConnections runtimeConnections{};
+    runtimeConnections.modelComputeTransport = runtimeModelComputeTransportState.get();
+    runtimeConnections.pointComputeTransport = runtimePointComputeTransportState.get();
+    runtimeConnections.remeshComputeTransport = runtimeRemeshTransportState.get();
+    runtimeConnections.voronoiComputeTransport = runtimeVoronoiComputeTransportState.get();
+    runtimeConnections.contactComputeTransport = runtimeContactComputeTransportState.get();
+    runtimeConnections.heatComputeTransport = runtimeHeatComputeTransportState.get();
+    runtimeConnections.modelDisplayTransport = runtimeModelDisplayTransportState.get();
+    runtimeConnections.pointDisplayTransport = runtimePointDisplayTransportState.get();
+    runtimeConnections.remeshDisplayTransport = runtimeRemeshDisplayTransportState.get();
+    runtimeConnections.voronoiDisplayTransport = runtimeVoronoiDisplayTransportState.get();
+    runtimeConnections.contactDisplayTransport = runtimeContactDisplayTransportState.get();
+    runtimeConnections.heatDisplayTransport = runtimeHeatDisplayTransportState.get();
+    nodeGraphControllerState = std::make_unique<NodeGraphController>(
+        *payloadRegistryState, runtimeConnections, core.device(), *allocator);
 
     initialized = true;
     return true;
@@ -207,11 +198,11 @@ bool RenderContext::initializeInputPipeline(SceneContext& scene) {
         return true;
     }
 
-    auto* resourceManager = scene.resourceManager();
+    auto* modelRegistry = scene.modelRegistry();
     auto* uniformBufferManager = scene.uniformBufferManager();
     auto* lightingSystem = scene.lightingSystem();
     auto* materialSystem = scene.materialSystem();
-    if (!resourceManager || !uniformBufferManager || !lightingSystem || !materialSystem) {
+    if (!modelRegistry || !uniformBufferManager || !lightingSystem || !materialSystem) {
         return false;
     }
 
@@ -220,13 +211,11 @@ bool RenderContext::initializeInputPipeline(SceneContext& scene) {
         renderRuntime->getGizmoController(),
         renderRuntime->getNavigationGizmoController(),
         renderRuntime->getModelSelection(),
-        *resourceManager,
-        *sceneControllerState,
-        *nodeGraphControllerState,
+        *modelRegistry,
         *windowState);
 
     FrameControllerServices frameControllerServices{
-        *resourceManager,
+        *modelRegistry,
         *uniformBufferManager,
         renderRuntime->getModelSelection(),
         renderRuntime->getGizmoController(),
@@ -272,7 +261,7 @@ void RenderContext::shutdown() {
     runtimeVoronoiDisplayTransportState.reset();
     runtimeVoronoiComputeTransportState.reset();
     runtimeModelComputeTransportState.reset();
-    modelComputeRuntimeState.reset();
+    modelComputeControllerState.reset();
     voronoiDisplayControllerState.reset();
     voronoiSystemComputeControllerState.reset();
     heatSystemComputeControllerState.reset();
@@ -321,12 +310,12 @@ ContactSystemComputeController* RenderContext::contactSystemComputeController() 
     return contactSystemComputeControllerState.get();
 }
 
-ModelComputeRuntime* RenderContext::modelComputeRuntime() {
-    return modelComputeRuntimeState.get();
+ModelComputeController* RenderContext::modelComputeController() {
+    return modelComputeControllerState.get();
 }
 
-const ModelComputeRuntime* RenderContext::modelComputeRuntime() const {
-    return modelComputeRuntimeState.get();
+const ModelComputeController* RenderContext::modelComputeController() const {
+    return modelComputeControllerState.get();
 }
 
 SceneController* RenderContext::sceneController() {

@@ -1,13 +1,14 @@
 #pragma once
 
 #include "hash/HashBuilder.hpp"
-#include "runtime/RuntimePackages.hpp"
-#include "runtime/RuntimeProducts.hpp"
-#include "domain/HeatModelData.hpp"
 
+#include <array>
 #include <cstdint>
+#include <glm/mat4x4.hpp>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 namespace render {
 class HeatOverlayRenderer;
@@ -22,7 +23,14 @@ public:
         float fluxVectorScale = 1.0f;
         bool authoredActive = false;
         bool active = false;
-        std::vector<ModelProduct> models;
+        std::vector<uint32_t> modelRuntimeIds;
+        std::vector<VkBuffer> modelRenderVertexBuffers;
+        std::vector<VkDeviceSize> modelRenderVertexBufferOffsets;
+        std::vector<VkBuffer> modelRenderIndexBuffers;
+        std::vector<VkDeviceSize> modelRenderIndexBufferOffsets;
+        std::vector<uint32_t> modelRenderIndexCounts;
+        std::vector<glm::mat4> modelMatrices;
+        float canonicalToWorldScale = 1.0f;
         std::vector<float> modelInitialTemperaturesC;
         std::vector<float> modelBoundaryTemperaturesC;
         std::vector<uint32_t> modelBoundaryConditionTypes;
@@ -39,16 +47,23 @@ public:
         }
 
         bool isValid() const {
-            return !models.empty() &&
-                models.size() == modelInitialTemperaturesC.size() &&
-                models.size() == modelBoundaryTemperaturesC.size() &&
-                models.size() == modelBoundaryConditionTypes.size() &&
-                models.size() == modelSurfaceBuffers.size() &&
-                models.size() == modelSurfaceBufferOffsets.size() &&
-                models.size() == modelSurfacePointCounts.size() &&
-                models.size() == modelBufferViews.size() &&
-                models.size() == modelSurfaceGradientBuffers.size() &&
-                models.size() == modelSurfaceGradientBufferOffsets.size();
+            const size_t modelCount = modelRuntimeIds.size();
+            return modelCount != 0 &&
+                modelCount == modelRenderVertexBuffers.size() &&
+                modelCount == modelRenderVertexBufferOffsets.size() &&
+                modelCount == modelRenderIndexBuffers.size() &&
+                modelCount == modelRenderIndexBufferOffsets.size() &&
+                modelCount == modelRenderIndexCounts.size() &&
+                modelCount == modelMatrices.size() &&
+                modelCount == modelInitialTemperaturesC.size() &&
+                modelCount == modelBoundaryTemperaturesC.size() &&
+                modelCount == modelBoundaryConditionTypes.size() &&
+                modelCount == modelSurfaceBuffers.size() &&
+                modelCount == modelSurfaceBufferOffsets.size() &&
+                modelCount == modelSurfacePointCounts.size() &&
+                modelCount == modelBufferViews.size() &&
+                modelCount == modelSurfaceGradientBuffers.size() &&
+                modelCount == modelSurfaceGradientBufferOffsets.size();
         }
 
     };
@@ -72,6 +87,7 @@ inline uint64_t buildDisplayHash(const HeatDisplayController::Config& config, ui
     HashBuilder::combinePod(hash, config.fluxVectorScale);
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.authoredActive ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.active ? 1u : 0u));
+    HashBuilder::combinePod(hash, config.canonicalToWorldScale);
     HashBuilder::combine(hash, productDisplayHash);
     return hash;
 }

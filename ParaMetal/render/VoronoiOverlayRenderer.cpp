@@ -113,6 +113,7 @@ void VoronoiOverlayRenderer::rebuildBindings() {
         binding.indexOffset = config.indexBufferOffset;
         binding.indexCount = config.indexCount;
         binding.modelMatrix = config.modelMatrix;
+        binding.canonicalToWorldScale = config.canonicalToWorldScale;
         voronoiBindings.push_back(binding);
     }
 }

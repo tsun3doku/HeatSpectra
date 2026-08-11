@@ -3,6 +3,7 @@
 #include "render/WindowRuntimeState.hpp"
 #include "render/SceneRenderer.hpp"
 #include "render/HeatOverlayRenderer.hpp"
+#include "scene/InputController.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -91,7 +92,7 @@ void RuntimeSystems::tickFrame(float deltaTime, VkCommandBuffer commandBuffer, u
         commandBuffer,
         frameIndex,
         renderSettingsState);
-    dispatchInputActions();
+    dispatchViewportCommands();
 }
 
 bool RuntimeSystems::updateViewportTarget(VkImage image, VkFormat format, VkExtent2D extent) {
@@ -110,31 +111,28 @@ bool RuntimeSystems::applyGraphDelta(const NodeGraphDelta& delta) {
     return controller && controller->applyGraphDelta(delta);
 }
 
-void RuntimeSystems::dispatchInputActions() {
-    InputController* input = render.inputController();
-    if (!input) {
-        return;
-    }
-
-    for (InputAction& action : input->takePendingActions()) {
-        if (std::holds_alternative<ToggleWireframeAction>(action)) {
+void RuntimeSystems::dispatchViewportCommands() {
+    for (ViewportCommand command : runtimeController.takePendingViewportCommands()) {
+        switch (command) {
+        case ViewportCommand::ToggleWireframe:
             renderSettingsState.wireframeMode = static_cast<app::WireframeMode>(
                 (static_cast<int>(renderSettingsState.wireframeMode) + 1) % 3);
-        } else if (std::holds_alternative<ToggleTimingOverlayAction>(action)) {
+            break;
+        case ViewportCommand::ToggleTimingOverlay:
             renderSettingsState.gpuTimingOverlayEnabled =
                 !renderSettingsState.gpuTimingOverlayEnabled;
-        } else if (std::holds_alternative<ToggleGridAction>(action)) {
+            break;
+        case ViewportCommand::ToggleGrid:
             renderSettingsState.gridEnabled = !renderSettingsState.gridEnabled;
-        } else {
-            pendingAuthoringActions.push_back(std::move(action));
+            break;
         }
     }
 }
 
-std::vector<InputAction> RuntimeSystems::takePendingAuthoringActions() {
-    std::vector<InputAction> actions;
-    actions.swap(pendingAuthoringActions);
-    return actions;
+bool RuntimeSystems::takePendingNodeParameters(
+    NodeGraphNodeId& outNodeId,
+    std::vector<NodeGraphParamValue>& outParameters) {
+    return runtimeController.takePendingNodeParameters(outNodeId, outParameters);
 }
 
 void RuntimeSystems::shutdown() {
@@ -171,14 +169,6 @@ const TimelineController* RuntimeSystems::timelineController() const {
     return &timelineControllerInstance;
 }
 
-uint32_t RuntimeSystems::loadModel(const std::string& modelPath, uint32_t preferredModelId) {
-    SceneController* sceneController = render.sceneController();
-    if (!sceneController) {
-        return 0;
-    }
-    return sceneController->loadModel(modelPath, preferredModelId);
-}
-
 void RuntimeSystems::setPanSensitivity(float sensitivity) {
     scene.cameraController().setPanSensitivity(sensitivity);
 }
@@ -189,6 +179,21 @@ void RuntimeSystems::setWireframeMode(app::WireframeMode mode) {
 
 void RuntimeSystems::setGridEnabled(bool enabled) {
     renderSettingsState.gridEnabled = enabled;
+}
+
+void RuntimeSystems::setWorldUnit(int unit) {
+    if (unit < static_cast<int>(units::LengthUnit::Millimeter) ||
+        unit > static_cast<int>(units::LengthUnit::Meter)) return;
+    const units::LengthUnit next = static_cast<units::LengthUnit>(unit);
+    if (next == worldUnitState) return;
+    worldUnitState = next;
+    if (NodeGraphController* controller = getNodeGraphController()) {
+        controller->setWorldUnit(next);
+    }
+    scene.cameraController().setWorldUnit(next);
+    if (render.runtime()) {
+        render.runtime()->getSceneRenderer().setWorldUnit(next);
+    }
 }
 
 void RuntimeSystems::setHeatPaletteRange(float minimum, float maximum) {
@@ -248,7 +253,6 @@ const NodeGraphController* RuntimeSystems::getNodeGraphController() const {
 }
 
 void RuntimeSystems::cleanup() {
-    pendingAuthoringActions.clear();
     timelineControllerInstance.bindPlaybackTarget(nullptr);
     runtimeController.shutdown();
     render.shutdown();

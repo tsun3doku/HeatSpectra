@@ -18,21 +18,20 @@ layout(binding = 0) uniform UniformBufferObject {
 layout(push_constant) uniform PushConstants {
     mat4 modelMatrix;
     float alpha;
-    int _pad0;
-    int _pad1;
-    int _pad2;
+    float canonicalToWorldScale;
+    float _pad0;
+    float _pad1;
 } pc;
 
 // Output to geometry shader
-layout(location = 2) out vec3 vModelPos;
+layout(location = 2) out vec3 vModelPosition;
 layout(location = 4) out vec3 vModelNormal;
+layout(location = 5) out vec3 vWorldPosition;
 
 void main() {
-    // Use push constant model matrix (same as gbuffer.vert)
-    vec4 worldPos = pc.modelMatrix * vec4(inPosition, 1.0);
-    gl_Position = ubo.proj * ubo.view * worldPos;
-    
-    // Pass model-space position for Voronoi distance computations
-    vModelPos = inPosition;
+    vec3 sourcePosition = inPosition;
+    vModelPosition = sourcePosition;
+    vWorldPosition = (pc.modelMatrix * vec4(sourcePosition, 1.0)).xyz;
+    gl_Position = ubo.proj * ubo.view * vec4(vWorldPosition, 1.0);
     vModelNormal = inNormal;
 }

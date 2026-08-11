@@ -3,6 +3,7 @@
 #include "heat/HeatContactSolver.hpp"
 #include "contact/ContactTypes.hpp"
 #include "framegraph/ComputePass.hpp"
+#include "util/Units.hpp"
 
 #include <cstdint>
 #include <memory>

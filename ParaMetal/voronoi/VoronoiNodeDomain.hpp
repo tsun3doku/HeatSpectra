@@ -39,7 +39,6 @@ public:
 private:
     static constexpr uint32_t InvalidNodeId = std::numeric_limits<uint32_t>::max();
     static constexpr float MinimumNodeVolume = 1e-12f;
-
     std::vector<voronoi::Node> nodes;
     std::vector<voronoi::NodeCoupling> couplings;
     std::vector<float> surfacePatchAreas;

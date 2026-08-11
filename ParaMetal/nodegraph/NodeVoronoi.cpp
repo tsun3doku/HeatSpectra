@@ -28,7 +28,7 @@ void NodeVoronoi::execute(NodeKernelEval& eval) const {
         (pointsSocketIndex < eval.inputs.size() && !eval.inputs[pointsSocketIndex].empty())
             ? eval.inputs[pointsSocketIndex].front() : nullptr;
     if (pointsData && pointsData->dataType == payloadtypes::Points && pointsData->payloadHandle.key != 0) {
-        const PointData* pointData = payloadRegistry ? payloadRegistry->get<PointData>(pointsData->payloadHandle) : nullptr;
+        const PointData* pointData = payloadRegistry ? payloadRegistry->resolvePoints(pointsData->payloadHandle) : nullptr;
         if (pointData && !pointData->positions.empty()) {
             pointsPayloadHandle = pointsData->payloadHandle;
             active = true;
@@ -41,8 +41,9 @@ void NodeVoronoi::execute(NodeKernelEval& eval) const {
             (meshSocketIndex < eval.inputs.size() && !eval.inputs[meshSocketIndex].empty())
                 ? eval.inputs[meshSocketIndex].front() : nullptr;
         if (meshData && meshData->payloadHandle.key != 0) {
-            const NodeDataHandle meshHandle = payloadRegistry ? payloadRegistry->resolveMeshHandle(meshData->dataType, meshData->payloadHandle) : NodeDataHandle{};
-            if (meshHandle.key != 0) {
+            NodeDataHandle meshHandle{};
+            if (payloadRegistry && payloadRegistry->resolveRemesh(
+                    meshData->payloadHandle, &meshHandle)) {
                 modelMeshHandle = meshHandle;
                 domainType = DomainType::Mesh;
             }

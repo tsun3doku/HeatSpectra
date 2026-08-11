@@ -17,10 +17,10 @@ RemeshController::OperatingScope::~OperatingScope() {
 RemeshController::RemeshController(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ModelRegistry& resourceManager,
+    ModelRegistry& modelRegistry,
     std::atomic<bool>& isOperating)
     : vulkanDevice(vulkanDevice),
-      resourceManager(resourceManager),
+      modelRegistry(modelRegistry),
       isOperating(isOperating),
       remesher(vulkanDevice, memoryAllocator) {
 }
@@ -32,7 +32,7 @@ void RemeshController::apply(uint64_t socketKey, const Config& config) {
 
     auto& system = activeSystems[socketKey];
     if (!system) {
-        system = std::make_unique<RemeshSystem>(remesher, vulkanDevice, resourceManager);
+        system = std::make_unique<RemeshSystem>(remesher, vulkanDevice, modelRegistry);
     }
 
     system->setSourceGeometry(config.pointPositions, config.triangleIndices);

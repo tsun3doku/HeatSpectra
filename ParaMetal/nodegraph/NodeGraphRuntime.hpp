@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NodeGraphDataTypes.hpp"
-#include "NodeGraphEvaluatedTypes.hpp"
+#include "NodeGraphEvaluation.hpp"
 #include "NodeGraphNodeState.hpp"
 #include "NodeGraphState.hpp"
 #include "NodeGraphKernels.hpp"
@@ -14,19 +14,18 @@
 
 class NodeGraphRuntime {
 public:
-    explicit NodeGraphRuntime(const NodeRuntimeServices& services = {});
+    explicit NodeGraphRuntime(NodePayloadRegistry* payloadRegistry = nullptr);
     ~NodeGraphRuntime();
 
     void applyDelta(const NodeGraphDelta& delta);
     void execute(const NodeGraphCompiled& compiled);
-    void setOutputProductHandle(uint64_t socketKey, const ProductHandle& productHandle);
 
     const NodeGraphState& state() const {
         return graphState;
     }
 
-    const NodeGraphEvaluationState& evaluationState() const {
-        return currentEvaluationState;
+    const NodeGraphEvaluation& evaluation() const {
+        return currentEvaluation;
     }
 
 private:
@@ -51,31 +50,30 @@ private:
     EvaluatedNodeInputs evaluateNodeInputs(
         const NodeGraphNode& node,
         const NodeGraphState& graphState,
-        const NodeGraphEvaluationState& state) const;
+        const NodeGraphEvaluation& state) const;
 
     void publishOutputs(
         const NodeGraphNode& node,
         const std::vector<NodeDataBlock>& outputs,
-        NodeGraphEvaluationState& state,
+        NodeGraphEvaluation& state,
         bool frozen) const;
     bool publishCachedOutputs(
         const NodeGraphNode& node,
-        NodeGraphEvaluationState& state) const;
+        NodeGraphEvaluation& state) const;
     void publishBlockedOutputs(
         const NodeGraphNode& node,
         EvaluatedSocketStatus status,
         const std::string& error,
-        NodeGraphEvaluationState& state) const;
+        NodeGraphEvaluation& state) const;
 
     void evaluateLiveNode(
         const NodeGraphNode& node,
         const EvaluatedNodeInputs& inputs,
-        NodeGraphEvaluationState& state);
+        NodeGraphEvaluation& state);
 
-    NodeRuntimeServices runtimeServices{};
+    NodePayloadRegistry* payloadRegistry = nullptr;
     NodeGraphKernels kernels;
     NodeGraphState graphState{};
-    NodeGraphEvaluationState currentEvaluationState{};
+    NodeGraphEvaluation currentEvaluation{};
     std::unordered_map<uint32_t, CachedNodeOutputs> cachedOutputsByNodeId{};
-    std::unordered_map<uint64_t, ProductHandle> productBySocket{};
 };

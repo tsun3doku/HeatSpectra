@@ -12,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <cstdint>
+#include "util/Units.hpp"
 
 enum class CameraProjectionMode : uint8_t {
     Perspective = 0,
@@ -32,6 +33,7 @@ public:
     void pan(float dx, float dy);
     void orbit(float dx, float dy);
     void resetRadius();
+    void setWorldUnit(units::LengthUnit unit);
     glm::vec3 screenToWorldRayOrigin(double mouseX, double mouseY, int screenWidth, int screenHeight) const;
     glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight);
 
@@ -103,4 +105,5 @@ private:
     float orthographicZoomVelocity = 0.0f;
     float minOrthographicHeight = 0.001f;
     float maxOrthographicHeight = 1000.0f;
+    units::LengthUnit worldUnit = units::defaultLengthUnit();
 };

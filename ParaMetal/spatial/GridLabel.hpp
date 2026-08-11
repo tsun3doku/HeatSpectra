@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include "util/GlyphText.hpp"
+#include "util/Units.hpp"
 
 class MemoryAllocator;
 class VulkanDevice;
@@ -20,6 +21,7 @@ public:
         float scale;              // Size of character
         glm::vec3 rightVec;       // Orientation vector for the quad's "right"
         glm::vec3 upVec;          // Orientation vector for the quad's "up"
+        glm::vec4 color;           // Axis label color
     };
 
     struct QuadVertex {
@@ -27,10 +29,19 @@ public:
         glm::vec2 texCoord;
     };
 
-    GridLabel(VulkanDevice& vulkanDevice, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight, VkRenderPass renderPass, uint32_t subpass, CommandPool& commandPool);
+    GridLabel(
+        VulkanDevice& vulkanDevice, 
+        MemoryAllocator& allocator, 
+        UniformBufferManager& uniformBufferManager, 
+        uint32_t maxFramesInFlight, 
+        VkRenderPass renderPass, 
+        uint32_t subpass, 
+        CommandPool& commandPool
+    );
     ~GridLabel();
 
     void updateLabels(const glm::vec3& gridSize);
+    void setWorldUnit(units::LengthUnit unit);
     void render(VkCommandBuffer commandBuffer, uint32_t currentFrame);
     void cleanup(VulkanDevice& vulkanDevice);
 
@@ -43,9 +54,25 @@ private:
     void createDescriptorSets(VulkanDevice& vulkanDevice, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
     void createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPass, uint32_t subpass);
     void generateLabelInstances(const glm::vec3& gridSize);
-    void addEdgeLabels(const glm::vec3& basePos, int varyingAxis, float start, float end, float interval, float scale, const glm::vec3& textRight, const glm::vec3& textUp, bool includeOrigin = true);
-    void addTextInstances(const std::string& text, const glm::vec3& position, float scale, float charSpacing, const glm::vec3& textRight, const glm::vec3& textUp);
+    void addEdgeLabels(
+        const glm::vec3& basePos, 
+        int varyingAxis, 
+        float halfExtent,
+        float interval, 
+        float scale, 
+        const glm::vec3& textRight, 
+        const glm::vec3& textUp
+    );
+    void addTextInstances(
+        const std::string& text, 
+        const glm::vec3& position, 
+        float scale, 
+        const glm::vec4& color,
+        const glm::vec3& textRight, 
+        const glm::vec3& textUp
+    );
     std::string floatToString(float value, int precision = 1);
+    static float calculateInterval(const glm::vec3& gridSize);
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& allocator;
@@ -74,6 +101,8 @@ private:
     std::vector<LabelInstance> labelInstances;
     uint32_t instanceCount = 0;
     glm::vec3 cachedGridSize = glm::vec3(0.0f);
+    units::LengthUnit worldUnit = units::defaultLengthUnit();
+    bool labelsDirty = true;
 
     GlyphText glyphText;
 };

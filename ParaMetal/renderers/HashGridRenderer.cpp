@@ -337,7 +337,7 @@ void HashGridRenderer::render(
     uint32_t runtimeModelId,
     HashGrid* hashGrid,
     uint32_t frameIndex,
-    ModelRegistry& resourceManager,
+    ModelRegistry& modelRegistry,
     const glm::vec3& color) {
     if (!initialized || runtimeModelId == 0 || !hashGrid)
         return;
@@ -349,7 +349,7 @@ void HashGridRenderer::render(
     }
 
     glm::mat4 modelMatrix(1.0f);
-    if (!resourceManager.tryGetModelMatrix(runtimeModelId, modelMatrix)) {
+    if (!modelRegistry.tryGetModelMatrix(runtimeModelId, modelMatrix)) {
         return;
     }
     

@@ -207,24 +207,17 @@ void WireframeRenderer::bindPipeline(VkCommandBuffer cmdBuffer) {
     vkCmdSetLineWidth(cmdBuffer, 1.5f);
 }
 
-void WireframeRenderer::renderModels(VkCommandBuffer cmdBuffer, VkDescriptorSet geometryDescriptorSet, const DrawItem* items, uint32_t itemCount) {
-    if (!initialized || geometryDescriptorSet == VK_NULL_HANDLE || items == nullptr || itemCount == 0) {
-        return;
-    }
-
-    bindPipeline(cmdBuffer);
-
-    for (uint32_t i = 0; i < itemCount; ++i) {
-        if (!items[i].product.isValid()) {
-            continue;
-        }
-
-        renderModel(cmdBuffer, items[i].product, geometryDescriptorSet);
-    }
-}
-
-void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const ModelProduct& product, VkDescriptorSet geometryDescriptorSet) {
-    if (!initialized) 
+void WireframeRenderer::renderModel(
+    VkCommandBuffer cmdBuffer,
+    VkDescriptorSet geometryDescriptorSet,
+    const glm::mat4& modelMatrix,
+    VkBuffer vertexBuffer,
+    VkDeviceSize vertexBufferOffset,
+    VkBuffer indexBuffer,
+    VkDeviceSize indexBufferOffset,
+    uint32_t indexCount) {
+    if (!initialized || geometryDescriptorSet == VK_NULL_HANDLE ||
+        vertexBuffer == VK_NULL_HANDLE || indexBuffer == VK_NULL_HANDLE || indexCount == 0)
         return;
     
     // Bind descriptor set
@@ -233,19 +226,16 @@ void WireframeRenderer::renderModel(VkCommandBuffer cmdBuffer, const ModelProduc
     
     // Push model matrix
     GeometryPushConstant pushConstant{};
-    pushConstant.modelMatrix = product.modelMatrix;
+    pushConstant.modelMatrix = modelMatrix;
     vkCmdPushConstants(cmdBuffer, pipelineLayout,
                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &pushConstant);
     
     // Bind vertex and index buffers with proper offsets
-    VkBuffer vertexBuffer = product.renderVertexBuffer;
-    VkDeviceSize vertexOffset = product.renderVertexBufferOffset;
-    vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer, &vertexOffset);
-    vkCmdBindIndexBuffer(cmdBuffer, product.renderIndexBuffer,
-                        product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer, &vertexBufferOffset);
+    vkCmdBindIndexBuffer(cmdBuffer, indexBuffer, indexBufferOffset, VK_INDEX_TYPE_UINT32);
     
     // Draw
-    vkCmdDrawIndexed(cmdBuffer, product.renderIndexCount, 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
 }
 
 void WireframeRenderer::cleanup() {

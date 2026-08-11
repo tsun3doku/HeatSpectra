@@ -13,6 +13,10 @@ void CameraController::setPanSensitivity(float sensitivity) {
     camera.panSensitivity = sensitivity;
 }
 
+void CameraController::setWorldUnit(units::LengthUnit unit) {
+    camera.setWorldUnit(unit);
+}
+
 void CameraController::focusOn(const glm::vec3& target) {
     camera.setLookAt(target);
 }

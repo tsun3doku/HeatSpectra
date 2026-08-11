@@ -28,8 +28,7 @@ VoronoiPointRuntime::VoronoiPointRuntime(
     computeAabb();
 }
 
-VoronoiPointRuntime::~VoronoiPointRuntime() {
-}
+VoronoiPointRuntime::~VoronoiPointRuntime() = default;
 
 void VoronoiPointRuntime::computeAabb() {
     if (positions.empty()) {
@@ -107,7 +106,6 @@ bool VoronoiPointRuntime::createVoronoiBuffers() {
 }
 
 void VoronoiPointRuntime::cleanup() {
-    // candidateBuffer owned by published VoronoiProduct / RuntimeProducts.
     candidateBuffer = VK_NULL_HANDLE;
     candidateBufferOffset = 0;
 }

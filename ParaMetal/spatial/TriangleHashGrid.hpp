@@ -1,17 +1,13 @@
 #pragma once
 #include <glm/glm.hpp>
-#include <vector>
 #include <unordered_map>
-#include <unordered_set>
-
-class Model;
+#include <vector>
 
 class TriangleHashGrid {
 public:
-    TriangleHashGrid();
+    TriangleHashGrid() = default;
     ~TriangleHashGrid() = default;
 
-    void build(const Model& model, const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize);
     void build(
         const std::vector<glm::vec3>& vertices,
         const std::vector<uint32_t>& indices,
@@ -23,17 +19,15 @@ public:
     void getTrianglesAlongRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance, std::vector<size_t>& outTriangles) const;
 
 private:
-    void clear();
-    void initializeGrid(const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize);
     void buildTriangles(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
-    void addCellTriangles(size_t hash, std::unordered_set<size_t>& seenTriangles, std::vector<size_t>& outTriangles) const;
-    size_t hashCell(int x, int y, int z) const;
-    glm::ivec3 worldToCell(const glm::vec3& pos) const;
+    void appendCellTriangles(size_t cell, std::vector<size_t>& outTriangles) const;
+    static void deduplicate(std::vector<size_t>& triangles);
+    size_t cellIndex(int x, int y, int z) const;
+    glm::ivec3 worldToCell(const glm::vec3& position) const;
 
-    std::unordered_map<size_t, std::vector<size_t>> grid_;  
-    glm::vec3 gridMin_;
-    glm::vec3 gridMax_;
-    float cellSize_;
-    glm::ivec3 gridDim_;
-
+    std::unordered_map<size_t, std::vector<size_t>> grid;
+    glm::vec3 gridMin{0.0f};
+    glm::vec3 gridMax{1.0f};
+    float cellSize = 1.0f;
+    glm::ivec3 gridDim{1};
 };

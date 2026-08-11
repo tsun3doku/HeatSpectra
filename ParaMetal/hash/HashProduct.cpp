@@ -16,24 +16,23 @@ static void combineVkDeviceSize(uint64_t& hash, VkDeviceSize handle) {
 }
 
 void HashProduct::seal(ModelProduct& p) {
-    uint64_t hash = HashBuilder::start();
-    HashBuilder::combine(hash, p.runtimeModelId);
-    combineVkBuffer(hash, p.vertexBuffer);
-    HashBuilder::combine(hash, p.vertexBufferOffset);
-    combineVkBuffer(hash, p.indexBuffer);
-    HashBuilder::combine(hash, p.indexBufferOffset);
-    HashBuilder::combine(hash, p.indexCount);
-    combineVkBuffer(hash, p.renderVertexBuffer);
-    HashBuilder::combine(hash, p.renderVertexBufferOffset);
-    combineVkBuffer(hash, p.renderIndexBuffer);
-    HashBuilder::combine(hash, p.renderIndexBufferOffset);
-    HashBuilder::combine(hash, p.renderIndexCount);
-    HashBuilder::combinePod(hash, p.modelMatrix);
+    uint64_t geometryHash = HashBuilder::start();
+    HashBuilder::combine(geometryHash, p.runtimeModelId);
+    combineVkBuffer(geometryHash, p.vertexBuffer);
+    HashBuilder::combine(geometryHash, p.vertexBufferOffset);
+    combineVkBuffer(geometryHash, p.indexBuffer);
+    HashBuilder::combine(geometryHash, p.indexBufferOffset);
+    HashBuilder::combine(geometryHash, p.indexCount);
+    combineVkBuffer(geometryHash, p.renderVertexBuffer);
+    HashBuilder::combine(geometryHash, p.renderVertexBufferOffset);
+    combineVkBuffer(geometryHash, p.renderIndexBuffer);
+    HashBuilder::combine(geometryHash, p.renderIndexBufferOffset);
+    HashBuilder::combine(geometryHash, p.renderIndexCount);
 
-    p.hashes.full = hash;
-    p.hashes.geometry = hash;
-    p.hashes.simulation = hash;
-    p.hashes.display = hash;
+    p.hashes.full = geometryHash;
+    p.hashes.geometry = geometryHash;
+    p.hashes.simulation = geometryHash;
+    p.hashes.display = geometryHash;
     p.hashes.thermal = 0;
 }
 

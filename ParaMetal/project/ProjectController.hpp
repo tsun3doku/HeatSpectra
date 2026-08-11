@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include "util/Units.hpp"
 
 class GraphHost;
 
@@ -13,17 +14,20 @@ class ProjectController final : public QObject {
     Q_PROPERTY(QString path READ path NOTIFY pathChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(int worldUnit READ worldUnit WRITE setWorldUnit NOTIFY worldUnitChanged)
 public:
     explicit ProjectController(GraphHost& graphHost, QObject* parent = nullptr);
 
     QString path() const { return projectPath; }
     bool modified() const { return projectModified; }
     bool busy() const { return busyState; }
+    int worldUnit() const { return static_cast<int>(projectWorldUnit); }
 
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void open(const QUrl& url);
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs(const QUrl& url);
+    Q_INVOKABLE void setWorldUnit(int unit);
 
 signals:
     void pathChanged();
@@ -31,6 +35,8 @@ signals:
     void saveAsRequired();
     void error(const QString& message);
     void busyChanged();
+    void worldUnitChanged();
+    void worldUnitRequested(int unit);
     void viewportStateRequested();
     void viewportStateApplied(const ProjectFile::Viewport& state);
 
@@ -56,4 +62,5 @@ private:
     bool graphStatePending = false;
     bool viewportStatePending = false;
     bool busyState = false;
+    units::LengthUnit projectWorldUnit = units::defaultLengthUnit();
 };

@@ -12,9 +12,9 @@
 ModelSelection::ModelSelection(
     VulkanDevice& device,
     VkFrameGraphRuntime& runtime,
-    ModelRegistry& resourceManager,
+    ModelRegistry& modelRegistry,
     framegraph::ResourceId pickResourceId)
-    : vulkanDevice(device), frameGraphRuntime(runtime), resourceManager(resourceManager), pickResourceId(pickResourceId), pickingCommandPool(VK_NULL_HANDLE),
+    : vulkanDevice(device), frameGraphRuntime(runtime), modelRegistry(modelRegistry), pickResourceId(pickResourceId), pickingCommandPool(VK_NULL_HANDLE),
       stagingBuffer(VK_NULL_HANDLE), stagingBufferMemory(VK_NULL_HANDLE), stagingBufferMapped(nullptr) {
     if (!createPickingCommandPool() || !createStagingBuffer()) {
         std::cerr << "[ModelSelection] Initialization failed" << std::endl;
@@ -347,7 +347,7 @@ PickedResult ModelSelection::pickAtPosition(int x, int y, uint32_t currentFrame)
         }
     } else if (pickid::typeOf(pickId) == pickid::ModelType) {
         const uint32_t modelId = pickid::payloadOf(pickId);
-        if (!resourceManager.hasModel(modelId)) {
+        if (!modelRegistry.hasModel(modelId)) {
             result.type = PickedType::None;
             return result;
         }

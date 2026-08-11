@@ -4,7 +4,6 @@
 #include <iostream>
 #include <vector>
 
-#include "runtime/RuntimeProducts.hpp"
 #include "util/file_utils.h"
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
@@ -25,7 +24,7 @@ GeometryPass::GeometryPass(
     framegraph::PassId passId)
     : vulkanDevice(device),
       frameGraphRuntime(runtime),
-      resourceManager(resources),
+      modelRegistry(resources),
       uniformBufferManager(ubo),
       maxFramesInFlight(framesInFlight),
       passId(passId) {
@@ -46,7 +45,7 @@ void GeometryPass::create() {
         destroy();
         return;
     }
-    if (!createGeometryDescriptorSets(resourceManager, uniformBufferManager, maxFramesInFlight)) {
+    if (!createGeometryDescriptorSets(modelRegistry, uniformBufferManager, maxFramesInFlight)) {
         destroy();
         return;
     }
@@ -79,29 +78,28 @@ void GeometryPass::record(const FrameContext& context, const SceneView& view, co
     }
 
     VkCommandBuffer commandBuffer = context.commandBuffer;
-    ModelRegistry& rm = resourceManager;
+    ModelRegistry& rm = modelRegistry;
     const uint32_t frameIndex = context.currentFrame;
 
     VkPipeline currentPipeline = (flags.wireframeMode == 1) ? stencilOnlyPipeline : geometryPipeline;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currentPipeline);
 
     for (uint32_t modelId : rm.getRenderableModelIds()) {
-        ModelProduct product{};
-        if (!rm.exportProduct(modelId, product)) {
-            continue;
-        }
-
-        const VkBuffer indexBuffer = product.renderIndexBuffer;
-        const VkBuffer vertexBuffer = product.renderVertexBuffer;
-        const VkDeviceSize vertexOffset = product.renderVertexBufferOffset;
-        const VkDeviceSize indexOffset = product.renderIndexBufferOffset;
-        const uint32_t indexCount = product.renderIndexCount;
-        if (vertexBuffer == VK_NULL_HANDLE || indexBuffer == VK_NULL_HANDLE || indexCount == 0) {
+        VkBuffer vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceSize vertexOffset = 0;
+        VkBuffer indexBuffer = VK_NULL_HANDLE;
+        VkDeviceSize indexOffset = 0;
+        uint32_t indexCount = 0;
+        glm::mat4 modelMatrix{1.0f};
+        if (!rm.tryGetRenderGeometry(
+                modelId, vertexBuffer, vertexOffset,
+                indexBuffer, indexOffset, indexCount) ||
+            !rm.tryGetModelMatrix(modelId, modelMatrix)) {
             continue;
         }
 
         GeometryPushConstant pushConstant{};
-        pushConstant.modelMatrix = product.modelMatrix;
+        pushConstant.modelMatrix = modelMatrix;
         pushConstant.alpha = 1.0f;
         vkCmdPushConstants(commandBuffer, geometryPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstant), &pushConstant);
 
@@ -200,8 +198,8 @@ bool GeometryPass::createGeometryDescriptorSetLayout() {
     return true;
 }
 
-bool GeometryPass::createGeometryDescriptorSets(ModelRegistry& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
-    (void)resourceManager;
+bool GeometryPass::createGeometryDescriptorSets(ModelRegistry& modelRegistry, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight) {
+    (void)modelRegistry;
 
     std::vector<VkDescriptorSetLayout> layouts(maxFramesInFlight, geometryDescriptorSetLayout);
 

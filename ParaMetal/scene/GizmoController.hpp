@@ -49,7 +49,7 @@ public:
     glm::vec3 calculateTranslationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
     float calculateRotationDelta(const glm::vec3& rayOrigin, const glm::vec3& rayDir, const glm::vec3& gizmoPosition, GizmoAxis axis);
 
-    glm::vec3 calculateGizmoPosition(ModelRegistry& resourceManager, const ModelSelection& modelSelection);
+    glm::vec3 calculateGizmoPosition(ModelRegistry& modelRegistry, const ModelSelection& modelSelection);
 
 private:
     GizmoMode currentMode = GizmoMode::Translate;

@@ -63,7 +63,9 @@ signals:
     void heatSolveStatusChanged(bool active, bool paused);
     void serialStatusChanged(const QString& connection, const QString& temperature, const QString& pollingRate);
     void graphSelectionChanged(NodeGraphNodeId nodeId);
-    void inputActionRequested(const InputAction& action);
+    void nodeParametersRequested(
+        NodeGraphNodeId nodeId,
+        const std::vector<NodeGraphParamValue>& parameters);
 
 private:
     mutable QMutex statusMutex;

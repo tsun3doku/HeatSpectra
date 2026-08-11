@@ -26,6 +26,7 @@ inline constexpr const char* SerialTemperature = "serial_temperature";
 namespace nodegraphparams {
 namespace model {
 constexpr uint32_t Path = 1;
+constexpr uint32_t SourceUnit = 2;
 }
 
 namespace transform {

@@ -8,6 +8,7 @@
 #include "NodePayloadRegistry.hpp"
 #include "NodeTransformParams.hpp"
 #include "domain/PointData.hpp"
+#include "domain/TransformData.hpp"
 #include "../util/GeometryUtils.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -26,28 +27,23 @@ void NodeTransform::execute(NodeKernelEval& eval) const {
 
     NodePayloadRegistry* const payloadRegistry = eval.runtime.payloadRegistry;
     const std::array<float, 16> localTransform = buildLocalTransformArray(eval.node);
-    const glm::mat4 transformMat = toMat4(localTransform);
 
     NodeDataBlock& outputValue = eval.outputs[0];
     outputValue = {};
 
     if (payloadRegistry && inputData && inputData->payloadHandle.key != 0) {
-        if (const GeometryData* inputGeometry = payloadRegistry->resolveGeometry(inputData->payloadHandle)) {
-            GeometryData forwardedGeometry = *inputGeometry;
-            forwardedGeometry.localToWorld = toMatrixArray(
-                toMat4(forwardedGeometry.localToWorld) * transformMat);
+        std::array<float, 16> sourceLocalToWorld{};
+        const bool hasGeometry = payloadRegistry->resolveGeometry(inputData->payloadHandle) != nullptr;
+        const bool hasPoints = payloadRegistry->resolvePoints(inputData->payloadHandle) != nullptr;
+        if ((hasGeometry || hasPoints) &&
+            payloadRegistry->resolveLocalToWorld(inputData->payloadHandle, sourceLocalToWorld)) {
+            TransformData transform{};
+            transform.sourceHandle = inputData->payloadHandle;
+            transform.localToWorld = toMatrixArray(
+                toMat4(sourceLocalToWorld) * toMat4(localTransform));
             const uint64_t payloadKey = NodeSocketKey(eval.node.id, eval.node.outputs[0].id);
-            outputValue.dataType = payloadtypes::Geometry;
-            outputValue.payloadHandle = payloadRegistry->store(payloadKey, forwardedGeometry, eval.outputHashes);
-        } else if (const PointData* inputPointData = payloadRegistry->resolvePoints(inputData->payloadHandle)) {
-            if (!inputPointData->positions.empty()) {
-                PointData forwardedPoints = *inputPointData;
-                forwardedPoints.localToWorld = toMatrixArray(
-                    toMat4(forwardedPoints.localToWorld) * transformMat);
-                const uint64_t payloadKey = NodeSocketKey(eval.node.id, eval.node.outputs[0].id);
-                outputValue.dataType = payloadtypes::Points;
-                outputValue.payloadHandle = payloadRegistry->store(payloadKey, forwardedPoints, eval.outputHashes);
-            }
+            outputValue.dataType = inputData->dataType;
+            outputValue.payloadHandle = payloadRegistry->store(payloadKey, transform, eval.outputHashes);
         }
     }
 
@@ -68,7 +64,10 @@ HashValues NodeTransform::computeOutputHashes(const NodeKernelHash& hash) const 
 }
 
 glm::mat4 NodeTransform::buildLocalTransform(const NodeGraphNode& node) {
-    const TransformNodeParams params = readTransformNodeParams(node);
+    return buildLocalTransform(readTransformNodeParams(node));
+}
+
+glm::mat4 NodeTransform::buildLocalTransform(const TransformNodeParams& params) {
     const float translateX = static_cast<float>(params.translateX);
     const float translateY = static_cast<float>(params.translateY);
     const float translateZ = static_cast<float>(params.translateZ);

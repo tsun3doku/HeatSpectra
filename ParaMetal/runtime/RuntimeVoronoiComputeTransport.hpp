@@ -1,7 +1,7 @@
 #pragma once
 
 #include "voronoi/VoronoiSystemComputeController.hpp"
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 
 class RuntimeVoronoiComputeTransport {

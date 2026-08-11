@@ -443,8 +443,17 @@ bool HeatModelRuntime::ensureSimulationBuffers(uint32_t nodeCount) {
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
         VK_BUFFER_USAGE_TRANSFER_DST_BIT |
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    return tempBufferA.initialize(vulkanDevice, byteSize, usage) &&
-        tempBufferB.initialize(vulkanDevice, byteSize, usage);
+    if (!tempBufferA.initialize(vulkanDevice, byteSize, usage)) {
+        std::cerr << "[HeatSystem-Diag] ensureSimulationBuffers FAILED: tempBufferA.initialize"
+                  << " nodeCount=" << nodeCount << " byteSize=" << byteSize << std::endl;
+        return false;
+    }
+    if (!tempBufferB.initialize(vulkanDevice, byteSize, usage)) {
+        std::cerr << "[HeatSystem-Diag] ensureSimulationBuffers FAILED: tempBufferB.initialize"
+                  << " nodeCount=" << nodeCount << " byteSize=" << byteSize << std::endl;
+        return false;
+    }
+    return true;
 }
 
 void HeatModelRuntime::cleanupSimulationBuffers() {

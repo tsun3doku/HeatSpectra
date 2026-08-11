@@ -392,7 +392,9 @@ void VectorArrowRenderer::render(
 
         PushConstants pushConstants{};
         pushConstants.modelMatrix = vector.modelMatrix;
-        pushConstants.scale = vector.scale;
+        pushConstants.scale = vector.scale * vector.canonicalToWorldScale;
+        pushConstants.normalOffset *= vector.canonicalToWorldScale;
+        pushConstants.minLength *= vector.canonicalToWorldScale;
         vkCmdPushConstants(
             commandBuffer,
             pipelineLayout,

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hash/HashBuilder.hpp"
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 #include <cstdint>
@@ -52,6 +52,7 @@ public:
         VkDeviceSize indexBufferOffset = 0;
         uint32_t indexCount = 0;
         glm::mat4 modelMatrix{1.0f};
+        float canonicalToWorldScale = 1.0f;
 
         uint64_t displayHash = 0;
 
@@ -84,6 +85,8 @@ inline uint64_t buildDisplayHash(const VoronoiDisplayController::Config& config,
     uint64_t hash = HashBuilder::start();
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showVoronoi ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showPoints ? 1u : 0u));
+    HashBuilder::combinePod(hash, config.modelMatrix);
+    HashBuilder::combineFloat(hash, config.canonicalToWorldScale);
     HashBuilder::combine(hash, productDisplayHash);
     return hash;
 }

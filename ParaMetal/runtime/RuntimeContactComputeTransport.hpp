@@ -3,7 +3,7 @@
 
 #include "contact/ContactSystem.hpp"
 #include "contact/ContactSystemComputeController.hpp"
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 
 class RuntimeContactComputeTransport {

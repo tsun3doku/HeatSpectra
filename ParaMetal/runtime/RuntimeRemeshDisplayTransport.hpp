@@ -1,9 +1,10 @@
 #pragma once
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 #include "runtime/RemeshDisplayController.hpp"
+#include "util/GeometryUtils.hpp"
 
 #include <unordered_set>
 #include <vector>
@@ -24,27 +25,28 @@ public:
         }
 
         std::unordered_set<uint64_t> nextSocketKeys;
-        registry.forEach<RemeshPackage>([&](uint64_t socketKey, const RemeshPackage& package) {
+        for (const auto& [socketKey, package] : registry.remeshes()) {
+            if (!registry.isCurrent(socketKey)) continue;
             if (visibleKeys.find(socketKey) == visibleKeys.end()) {
-                return;
+                continue;
             }
 
             RemeshDisplayController::Config config{};
             if (!tryBuildConfig(socketKey, package, config)) {
                 controller->remove(socketKey);
-                return;
+                continue;
             }
 
             controller->apply(socketKey, config);
             nextSocketKeys.insert(socketKey);
-        });
+        }
 
         for (uint64_t socketKey : activeSocketKeys) {
             if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
                 controller->remove(socketKey);
             }
         }
-        activeSocketKeys = std::move(nextSocketKeys);
+        activeSocketKeys = nextSocketKeys;
     }
 
     void finalizeSync() {
@@ -95,7 +97,7 @@ private:
         outConfig.renderIndexBuffer = modelProduct->renderIndexBuffer;
         outConfig.renderIndexBufferOffset = modelProduct->renderIndexBufferOffset;
         outConfig.renderIndexCount = modelProduct->renderIndexCount;
-        outConfig.modelMatrix = modelProduct->modelMatrix;
+        outConfig.modelMatrix = toMat4(package.localToWorld);
         outConfig.intrinsicTriangleBuffer = computeProduct->intrinsicTriangleBuffer;
         outConfig.intrinsicTriangleBufferOffset = computeProduct->intrinsicTriangleBufferOffset;
         outConfig.intrinsicVertexBuffer = computeProduct->intrinsicVertexBuffer;

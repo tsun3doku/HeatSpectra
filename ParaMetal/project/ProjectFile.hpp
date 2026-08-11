@@ -3,6 +3,7 @@
 #include "nodegraph/NodeGraphState.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
 #include "scene/Camera.hpp"
+#include "util/Units.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -28,6 +29,7 @@ public:
     struct ProjectState {
         NodeGraphState graph;
         Viewport viewport;
+        units::LengthUnit worldUnit = units::defaultLengthUnit();
     };
 
     static bool save(const ProjectState& data, const QString& filePath, QString* outError = nullptr);

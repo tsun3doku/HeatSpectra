@@ -2,7 +2,7 @@
 
 #include "framegraph/FramePass.hpp"
 #include "framegraph/FrameGraphTypes.hpp"
-#include "runtime/RuntimeProducts.hpp"
+#include "util/Units.hpp"
 
 #include <glm/glm.hpp>
 
@@ -69,7 +69,8 @@ public:
     PointOverlayRenderer* getPointOverlayRenderer() const;
     VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
     void setTimingOverlayLines(const std::vector<std::string>& lines);
-    void updateGridLabels(const glm::vec3& gridSize);
+    void updateGrid(uint32_t frameIndex, const SceneView& sceneView, const glm::vec3& sceneExtent);
+    void setWorldUnit(units::LengthUnit unit);
 
 private:
 
@@ -83,7 +84,7 @@ private:
     ::VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     uint32_t maxFramesInFlight = 0;

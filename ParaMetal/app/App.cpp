@@ -74,7 +74,7 @@ int App::initializePresentation() {
     qRegisterMetaType<NodeGraphSocketId>();
     qRegisterMetaType<NodeGraphEdgeId>();
     qRegisterMetaType<NodeGraphParamValue>();
-    qRegisterMetaType<InputAction>();
+    qRegisterMetaType<std::vector<NodeGraphParamValue>>();
     qRegisterMetaType<std::vector<NodeTypeDefinition>>();
     qRegisterMetaType<std::vector<NodeGraphNodeId>>();
 
@@ -183,11 +183,10 @@ void App::connectRuntime(GraphHost& graphHost) {
                      uiModel.nodeGraph(), [model = uiModel.nodeGraph()](NodeGraphNodeId id) {
                          model->setRuntimeSelectedNodeId(static_cast<int>(id.value));
                      }, Qt::QueuedConnection);
-    QObject::connect(&runtimeNotifier, &RuntimeNotifier::inputActionRequested,
-                     &graphHost, [&graphHost](const InputAction& action) {
-                         if (const auto* edit = std::get_if<SetNodeParametersAction>(&action)) {
-                             graphHost.setParameters(edit->nodeId, edit->parameters);
-                         }
+    QObject::connect(&runtimeNotifier, &RuntimeNotifier::nodeParametersRequested,
+                     &graphHost, [&graphHost](NodeGraphNodeId nodeId,
+                                              const std::vector<NodeGraphParamValue>& parameters) {
+                         graphHost.setParameters(nodeId, parameters);
                      }, Qt::QueuedConnection);
 }
 
@@ -222,5 +221,8 @@ void App::connectGraph(ViewportItem& viewport, GraphHost& graphHost) {
                      Qt::QueuedConnection);
     QObject::connect(projectController.get(), &ProjectController::viewportStateApplied,
                      &viewport, &ViewportItem::applyViewportProjectState,
+                     Qt::QueuedConnection);
+    QObject::connect(projectController.get(), &ProjectController::worldUnitRequested,
+                     &viewport, &ViewportItem::requestWorldUnit,
                      Qt::QueuedConnection);
 }

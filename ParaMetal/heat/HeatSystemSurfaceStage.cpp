@@ -273,6 +273,7 @@ void HeatSystemSurfaceStage::dispatchSurfacePass(
             const uint32_t workGroupCount = (vertexCount + 255) / 256;
 
             surfacePushConstant.elementCount = vertexCount;
+            surfacePushConstant.metersPerUnit = heatModel->getMetersPerWorldUnit();
             vkCmdPushConstants(commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(heat::HeatModelPushConstant), &surfacePushConstant);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);
             vkCmdDispatch(commandBuffer, workGroupCount, 1, 1);

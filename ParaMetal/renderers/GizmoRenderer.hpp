@@ -69,7 +69,7 @@ public:
     bool createPickPipeline(VkRenderPass renderPass, uint32_t subpassIndex);
     void destroyPickPipeline();
 
-    float calculateGizmoScale(ModelRegistry& resourceManager, const ModelSelection& modelSelection) const;
+    float calculateGizmoScale(ModelRegistry& modelRegistry, const ModelSelection& modelSelection) const;
 
     void render(
         VkCommandBuffer commandBuffer,

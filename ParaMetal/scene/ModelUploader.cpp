@@ -16,17 +16,6 @@ ModelUploader::ModelUploader(VulkanDevice& vulkanDevice, MemoryAllocator& memory
       commandPool(commandPool) {
 }
 
-void ModelUploader::uploadInitialModels(ModelRegistry& resourceManager) {
-}
-
-uint32_t ModelUploader::addModel(ModelRegistry& resourceManager, const std::string& modelPath, uint32_t preferredModelId) {
-    return resourceManager.addModel(createModel(modelPath), preferredModelId);
-}
-
-std::unique_ptr<Model> ModelUploader::createModel(const std::string& modelPath) const {
-    auto model = std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, commandPool);
-    if (!model->init(modelPath)) {
-        return nullptr;
-    }
-    return model;
+std::unique_ptr<Model> ModelUploader::createModel() const {
+    return std::make_unique<Model>(vulkanDevice, memoryAllocator, camera, commandPool);
 }

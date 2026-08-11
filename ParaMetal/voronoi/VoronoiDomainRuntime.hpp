@@ -11,11 +11,9 @@ public:
     virtual bool createVoronoiBuffers() = 0;
     virtual void cleanup() = 0;
 
-    // Common GPU resources every domain must provide
     virtual VkBuffer getCandidateBuffer() const = 0;
     virtual VkDeviceSize getCandidateBufferOffset() const = 0;
 
-    // Mesh-only resources (points return VK_NULL_HANDLE / 0)
     virtual VkBuffer getSurfaceBuffer() const { return VK_NULL_HANDLE; }
     virtual VkDeviceSize getSurfaceBufferOffset() const { return 0; }
     virtual VkBuffer getTriangleIndicesBuffer() const { return VK_NULL_HANDLE; }

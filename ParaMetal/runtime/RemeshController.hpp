@@ -8,6 +8,7 @@
 
 #include "mesh/remesher/Remesher.hpp"
 #include "runtime/RemeshSystem.hpp"
+#include "util/Units.hpp"
 
 class MemoryAllocator;
 class ModelRegistry;
@@ -28,7 +29,7 @@ public:
         uint64_t computeHash = 0;
     };
 
-    RemeshController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager, std::atomic<bool>& isOperating);
+    RemeshController(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& modelRegistry, std::atomic<bool>& isOperating);
 
     void apply(uint64_t socketKey, const Config& config);
     bool buildProduct(uint64_t socketKey, RemeshProduct& product);
@@ -47,7 +48,7 @@ private:
     };
 
     VulkanDevice& vulkanDevice;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     std::atomic<bool>& isOperating;
     Remesher remesher;
     std::unordered_map<uint64_t, std::unique_ptr<RemeshSystem>> activeSystems;

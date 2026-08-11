@@ -19,6 +19,9 @@ ProjectController::ProjectController(GraphHost& graphHost, QObject* parent)
 void ProjectController::newProject() {
     if (busyState) { emit error(QStringLiteral("A project operation is already in progress.")); return; }
     QMetaObject::invokeMethod(&host, "newProject", Qt::QueuedConnection);
+    projectWorldUnit = units::defaultLengthUnit();
+    emit worldUnitChanged();
+    emit worldUnitRequested(worldUnit());
     emit viewportStateApplied(ProjectFile::Viewport{});
     setPath({});
     setModified(false);
@@ -45,6 +48,9 @@ void ProjectController::open(const QUrl& url) {
     busyState = true;
     emit busyChanged();
     pendingPath = absolutePath;
+    projectWorldUnit = state.worldUnit;
+    emit worldUnitChanged();
+    emit worldUnitRequested(worldUnit());
     emit viewportStateApplied(state.viewport);
     QMetaObject::invokeMethod(&host, "loadGraphState", Qt::QueuedConnection,
                               Q_ARG(NodeGraphState, state.graph));
@@ -100,6 +106,7 @@ void ProjectController::finishSaveIfReady() {
     ProjectFile::ProjectState projectState{};
     projectState.graph = pendingGraphState;
     projectState.viewport = pendingViewportState;
+    projectState.worldUnit = projectWorldUnit;
     QString saveError;
     if (!ProjectFile::save(projectState, pendingPath, &saveError) ||
         !QFileInfo(pendingPath).isFile() || QFileInfo(pendingPath).size() == 0) {
@@ -115,6 +122,17 @@ void ProjectController::finishSaveIfReady() {
     pendingOperation = PendingOperation::None;
     busyState = false;
     emit busyChanged();
+}
+
+void ProjectController::setWorldUnit(int unit) {
+    if (unit < static_cast<int>(units::LengthUnit::Millimeter) ||
+        unit > static_cast<int>(units::LengthUnit::Meter)) return;
+    const auto next = static_cast<units::LengthUnit>(unit);
+    if (next == projectWorldUnit) return;
+    projectWorldUnit = next;
+    setModified(true);
+    emit worldUnitChanged();
+    emit worldUnitRequested(unit);
 }
 
 void ProjectController::onGraphStateLoaded(bool success, const QString& errorMessage) {

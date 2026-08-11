@@ -1,18 +1,18 @@
 #include "NodeGraphDisplay.hpp"
 
 #include "NodeGraphDataTypes.hpp"
-#include "NodeGraphEvaluatedTypes.hpp"
+#include "NodeGraphEvaluation.hpp"
 #include "NodeGraphPayloadTypes.hpp"
 #include "NodeGraphProductTypes.hpp"
 #include "NodeGraphUtils.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 
 #include <unordered_set>
 
 std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplayKeys(
     const NodeGraphState& graphState,
-    const NodeGraphEvaluationState& evaluationState,
+    const NodeGraphEvaluation& evaluation,
     const RuntimePackageManager& packages,
     const NodePayloadRegistry* payloadRegistry) const {
 
@@ -25,7 +25,7 @@ std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplayKeys(
 
         for (const NodeGraphSocket& output : node.outputs) {
             const uint64_t socketKey = NodeSocketKey(node.id, output.id);
-            const EvaluatedSocketValue* value = evaluationState.valueFor(socketKey);
+            const EvaluatedSocketValue* value = evaluation.outputFor(socketKey);
             const NodeDataBlock* block = (value && value->status == EvaluatedSocketStatus::Value) ? &value->data : nullptr;
 
 
@@ -61,9 +61,13 @@ void NodeGraphDisplay::addDisplayKeys(
     }
 
     if (block && block->dataType == payloadtypes::HeatModel && payloadRegistry) {
-        NodeDataHandle sourceModelHandle{};
-        payloadRegistry->resolveGeometry(block->payloadHandle, &sourceModelHandle);
-        const NodeDataHandle currentMeshHandle = payloadRegistry->resolveMeshHandle(block->dataType, block->payloadHandle);
+        NodeDataHandle currentMeshHandle{};
+        payloadRegistry->resolveRemesh(block->payloadHandle, &currentMeshHandle);
+        const RemeshPackage* remeshPackage =
+            packages.findAny<RemeshPackage>(currentMeshHandle.key);
+        const NodeDataHandle sourceModelHandle = remeshPackage
+            ? remeshPackage->sourceMeshHandle
+            : currentMeshHandle;
         if (sourceModelHandle.key != 0) {
             selectedKeys.insert(sourceModelHandle.key);
         }
@@ -103,14 +107,10 @@ void NodeGraphDisplay::addDisplayKeys(
 
     if (const HeatPackage* heatPkg = packages.findAny<HeatPackage>(socketKey)) {
         selectedKeys.insert(socketKey);
-        for (const ProductHandle& handle : heatPkg->modelProducts) {
-            selectedKeys.insert(handle.outputSocketKey);
-        }
-        for (const ProductHandle& handle : heatPkg->remeshProducts) {
-            selectedKeys.insert(handle.outputSocketKey);
-        }
-        for (const ProductHandle& handle : heatPkg->voronoiProducts) {
-            selectedKeys.insert(handle.outputSocketKey);
+        for (const HeatModelPackage& model : heatPkg->models) {
+            selectedKeys.insert(model.modelProduct.outputSocketKey);
+            selectedKeys.insert(model.remeshProduct.outputSocketKey);
+            selectedKeys.insert(model.voronoiProduct.outputSocketKey);
         }
         for (const ProductHandle& handle : heatPkg->contactProducts) {
             selectedKeys.insert(handle.outputSocketKey);

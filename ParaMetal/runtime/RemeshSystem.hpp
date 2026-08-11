@@ -19,7 +19,7 @@ public:
     RemeshSystem(
         Remesher& remesher,
         VulkanDevice& vulkanDevice,
-        ModelRegistry& resourceManager);
+        ModelRegistry& modelRegistry);
     ~RemeshSystem();
 
     void setSourceGeometry(const std::vector<float>& pointPositions, const std::vector<uint32_t>& triangleIndices);
@@ -47,7 +47,7 @@ private:
     void releaseOwnedGpuResources();
 
     VulkanDevice& vulkanDevice;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     Remesher& remesher;
 
     std::vector<float> pointPositions;

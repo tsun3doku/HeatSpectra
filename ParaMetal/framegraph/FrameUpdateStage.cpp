@@ -12,14 +12,14 @@
 FrameUpdateStage::FrameUpdateStage(
     InputController& inputController,
     UniformBufferManager& uniformBufferManager,
-    ModelRegistry& resourceManager,
+    ModelRegistry& modelRegistry,
     LightingSystem& lightingSystem,
     MaterialSystem& materialSystem,
     SceneRenderer& sceneRenderer,
     ModelSelection& modelSelection)
     : inputController(inputController),
       uniformBufferManager(uniformBufferManager),
-      resourceManager(resourceManager),
+      modelRegistry(modelRegistry),
       lightingSystem(lightingSystem),
       materialSystem(materialSystem),
       sceneRenderer(sceneRenderer),
@@ -36,10 +36,7 @@ void FrameUpdateStage::updateFrameState(uint32_t frameIndex, const render::Scene
     UniformBufferObject ubo{};
     uniformBufferManager.updateUniformBuffer(frameIndex, sceneView, ubo);
 
-    GridUniformBufferObject gridUbo{};
-    const glm::vec3 gridSize = resourceManager.calculateMaxBoundingBoxSize();
-    uniformBufferManager.updateGridUniformBuffer(frameIndex, sceneView, gridUbo, gridSize);
-    sceneRenderer.updateGridLabels(gridSize);
+    sceneRenderer.updateGrid(frameIndex, sceneView, modelRegistry.sceneWorldExtent());
 
     lightingSystem.update(frameIndex);
     materialSystem.update(frameIndex);

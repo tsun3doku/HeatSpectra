@@ -8,7 +8,7 @@
 #include "util/Structs.hpp"
 
 class PointRenderer;
-class HeatSystemSimRuntime;
+class HeatPlaybackRuntime;
 class VulkanDevice;
 
 class HeatSystemDiffusionStage {

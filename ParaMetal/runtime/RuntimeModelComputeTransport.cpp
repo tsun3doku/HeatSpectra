@@ -1,33 +1,25 @@
 #include "RuntimeModelComputeTransport.hpp"
 
 #include "util/GeometryUtils.hpp"
-#include "runtime/ModelComputeRuntime.hpp"
-
-#include <iostream>
+#include "runtime/ModelComputeController.hpp"
 
 ProductHandle RuntimeModelComputeTransport::apply(uint64_t socketKey, const ModelPackage& package) {
-    if (!modelRuntime || !products || socketKey == 0) {
+    if (!controller || !products || socketKey == 0) {
         return {};
     }
 
-    if (package.geometry.baseModelPath.empty()) {
-        return {};
-    }
-
-    modelRuntime->queueAcquireSocket(socketKey, package.geometry.baseModelPath);
-    modelRuntime->flush();
-
-    uint32_t runtimeModelId = 0;
-    if (!modelRuntime->tryGetRuntimeModelId(socketKey, runtimeModelId) || runtimeModelId == 0) {
-        std::cerr << "[ModelCompute] No runtime model ID for socketKey=" << socketKey
-                  << ", baseModelPath='" << package.geometry.baseModelPath << "'" << std::endl;
-        return {};
-    }
-
-    modelRuntime->setModelMatrix(runtimeModelId, toMat4(package.geometry.localToWorld));
+    ModelComputeController::Config config{};
+    config.pointPositions = package.sourceGeometry.pointPositions;
+    config.triangleIndices = package.sourceGeometry.triangleIndices;
+    config.renderPositions = package.sourceGeometry.renderPositions;
+    config.renderNormals = package.sourceGeometry.renderNormals;
+    config.renderTexcoords = package.sourceGeometry.renderTexcoords;
+    config.renderIndices = package.sourceGeometry.renderIndices;
+    config.computeHash = package.hashes.geometry;
+    controller->apply(socketKey, config);
 
     ModelProduct product{};
-    if (!modelRuntime->exportProduct(runtimeModelId, product)) {
+    if (!controller->buildProduct(socketKey, product)) {
         return {};
     }
 
@@ -37,15 +29,8 @@ ProductHandle RuntimeModelComputeTransport::apply(uint64_t socketKey, const Mode
 
 
 void RuntimeModelComputeTransport::remove(uint64_t socketKey) {
-    if (!modelRuntime || socketKey == 0) {
+    if (!controller || socketKey == 0) {
         return;
     }
-    modelRuntime->queueReleaseSocket(socketKey);
-    modelRuntime->flush();
-}
-
-void RuntimeModelComputeTransport::flush() {
-    if (modelRuntime) {
-        modelRuntime->flush();
-    }
+    controller->remove(socketKey);
 }

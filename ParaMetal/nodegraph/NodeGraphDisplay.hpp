@@ -2,20 +2,20 @@
 
 #include "NodeGraphState.hpp"
 #include "NodeGraphTypes.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 
 #include <unordered_set>
 #include <vector>
 
 class NodePayloadRegistry;
 struct NodeDataBlock;
-struct NodeGraphEvaluationState;
+struct NodeGraphEvaluation;
 
 class NodeGraphDisplay {
 public:
     std::unordered_set<uint64_t> computeDisplayKeys(
         const NodeGraphState& graphState,
-        const NodeGraphEvaluationState& evaluationState,
+        const NodeGraphEvaluation& evaluation,
         const RuntimePackageManager& packages,
         const NodePayloadRegistry* payloadRegistry) const;
 private:

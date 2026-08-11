@@ -27,7 +27,7 @@ void NodeHeatModel::execute(NodeKernelEval& eval) const {
     NodeDataHandle meshHandle{};
     const bool hasValidInput = payloadRegistry && inputMeshValue && inputMeshValue->payloadHandle.key != 0;
     if (hasValidInput) {
-        meshHandle = payloadRegistry->resolveMeshHandle(inputMeshValue->dataType, inputMeshValue->payloadHandle);
+        payloadRegistry->resolveRemesh(inputMeshValue->payloadHandle, &meshHandle);
     }
 
     for (std::size_t outputIndex = 0;

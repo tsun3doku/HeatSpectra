@@ -54,7 +54,7 @@ layout(set = 0, binding = 14) uniform sampler2D inferno2Lut;
 layout(set = 0, binding = 15) uniform sampler2D parulaLut;
 
 const float PI = 3.14159265359;
-const float WALK_AREA_EPSILON = 1e-10;
+const float WALK_RELATIVE_AREA_EPSILON = 1e-8;
 const int WALK_MAX_STEPS = 256;
 const int WALK_SUCCESS = 0;
 const int WALK_NO_SEED = -1;
@@ -168,6 +168,11 @@ bool validLength(float lengthValue) {
     return lengthValue > 0.0 && !isnan(lengthValue) && !isinf(lengthValue);
 }
 
+float triangleAreaEpsilon(float a, float b, float c) {
+    float longestEdge = max(a, max(b, c));
+    return longestEdge * longestEdge * WALK_RELATIVE_AREA_EPSILON;
+}
+
 bool ccw(vec2 p, vec2 q, vec2 r) {
     float det = (p.x - r.x) * (q.y - r.y) - (p.y - r.y) * (q.x - r.x);
     return det >= 0.0;
@@ -233,7 +238,7 @@ bool loadInputTriangleChart(int inputTri, out ivec3 faceHEs, out vec2 triCoords[
     triCoords[1] = vec2(a, 0.0);
     float x = (a * a + c * c - b * b) / (2.0 * a);
     float y2 = c * c - x * x;
-    if (!(y2 > WALK_AREA_EPSILON) || isnan(y2) || isinf(y2)) return false;
+    if (!(y2 > triangleAreaEpsilon(a, b, c)) || isnan(y2) || isinf(y2)) return false;
     triCoords[2] = vec2(x, sqrt(y2));
     return true;
 }
@@ -307,7 +312,8 @@ WalkResult walkFromSeed(vec2 p, vec2 px, vec2 py, int inputHe, vec2 seedOrigin, 
         float phi1 = phi0 + PI - alpha;
         vec2 v2 = v1 + l1 * vec2(cos(phi1), sin(phi1));
         float triangleArea = area(v0, v1, v2);
-        if (isnan(triangleArea) || isinf(triangleArea) || abs(triangleArea) <= WALK_AREA_EPSILON) {
+        if (isnan(triangleArea) || isinf(triangleArea) ||
+            abs(triangleArea) <= triangleAreaEpsilon(l0, l1, l2)) {
             result.status = WALK_DEGENERATE;
             return result;
         }

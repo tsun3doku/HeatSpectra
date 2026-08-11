@@ -1,6 +1,6 @@
 #include "RuntimeContactComputeTransport.hpp"
-#include "hash/HashProduct.hpp"
 #include "runtime/RuntimeProducts.hpp"
+#include "util/GeometryUtils.hpp"
 
 ProductHandle RuntimeContactComputeTransport::apply(uint64_t socketKey, const ContactPackage& package) {
     if (!controller || !products || socketKey == 0) {
@@ -20,7 +20,6 @@ ProductHandle RuntimeContactComputeTransport::apply(uint64_t socketKey, const Co
     }
 
     const uint64_t computeHash = package.hashes.simulation;
-
     ContactSystemComputeController::Config config{};
     config.minNormalDot = package.authored.pair.minNormalDot;
     config.contactRadius = package.authored.pair.contactRadius;
@@ -37,7 +36,6 @@ ProductHandle RuntimeContactComputeTransport::apply(uint64_t socketKey, const Co
     config.modelARuntimeModelId = modelARemeshProduct->runtimeModelId;
     config.modelBRuntimeModelId = modelBRemeshProduct->runtimeModelId;
     config.computeHash = computeHash;
-
     if (!config.isValid()) {
         controller->remove(socketKey);
         return {};

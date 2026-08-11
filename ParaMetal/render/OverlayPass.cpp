@@ -6,7 +6,6 @@
 #include <iostream>
 #include <vector>
 
-#include "runtime/RuntimeProducts.hpp"
 #include "framegraph/FrameGraphPasses.hpp"
 #include "util/file_utils.h"
 #include "GeometryPass.hpp"
@@ -63,7 +62,7 @@ OverlayPass::OverlayPass(
       vulkanDevice(device),
       memoryAllocator(allocator),
       frameGraphRuntime(runtime),
-      resourceManager(resources),
+      modelRegistry(resources),
       uniformBufferManager(ubo),
       renderCommandPool(pool),
       maxFramesInFlight(framesInFlight),
@@ -158,10 +157,15 @@ void OverlayPass::setTimingOverlayLines(const std::vector<std::string>& lines) {
     }
 }
 
-void OverlayPass::updateGridLabels(const glm::vec3& gridSize) {
-    if (gridRenderer) {
-        gridRenderer->updateLabels(gridSize);
-    }
+void OverlayPass::updateGrid(
+    uint32_t frameIndex,
+    const SceneView& sceneView,
+    const glm::vec3& sceneExtent) {
+    if (gridRenderer) gridRenderer->update(frameIndex, sceneView, sceneExtent);
+}
+
+void OverlayPass::setWorldUnit(units::LengthUnit unit) {
+    if (gridRenderer) gridRenderer->setWorldUnit(unit);
 }
 
 IntrinsicRenderer* OverlayPass::getIntrinsicRenderer() const {
@@ -232,22 +236,24 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
     if (flags.wireframeMode > 0) {
         VkDescriptorSet geometryDescriptorSet = geometryPass.getDescriptorSet(currentFrame);
         if (geometryDescriptorSet != VK_NULL_HANDLE) {
-            std::vector<WireframeRenderer::DrawItem> wireframeItems;
-            for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
-                ModelProduct product{};
-                if (!resourceManager.exportProduct(modelId, product)) {
+            wireframeRenderer.bindPipeline(commandBuffer);
+            for (uint32_t modelId : modelRegistry.getRenderableModelIds()) {
+                VkBuffer vertexBuffer = VK_NULL_HANDLE;
+                VkDeviceSize vertexBufferOffset = 0;
+                VkBuffer indexBuffer = VK_NULL_HANDLE;
+                VkDeviceSize indexBufferOffset = 0;
+                uint32_t indexCount = 0;
+                glm::mat4 modelMatrix{1.0f};
+                if (!modelRegistry.tryGetRenderGeometry(
+                        modelId, vertexBuffer, vertexBufferOffset,
+                        indexBuffer, indexBufferOffset, indexCount) ||
+                    !modelRegistry.tryGetModelMatrix(modelId, modelMatrix)) {
                     continue;
                 }
-
-                wireframeItems.push_back({ product });
-            }
-
-            if (!wireframeItems.empty()) {
-                wireframeRenderer.renderModels(
-                    commandBuffer,
-                    geometryDescriptorSet,
-                    wireframeItems.data(),
-                    static_cast<uint32_t>(wireframeItems.size()));
+                wireframeRenderer.renderModel(
+                    commandBuffer, geometryDescriptorSet, modelMatrix,
+                    vertexBuffer, vertexBufferOffset,
+                    indexBuffer, indexBufferOffset, indexCount);
             }
         }
     }
@@ -269,8 +275,8 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
 
         vkCmdClearAttachments(commandBuffer, 1, &clearAttachment, 1, &clearRect);
 
-        const glm::vec3 gizmoPosition = gizmoController.calculateGizmoPosition(resourceManager, modelSelection);
-        const float gizmoScale = gizmoRenderer.calculateGizmoScale(resourceManager, modelSelection);
+        const glm::vec3 gizmoPosition = gizmoController.calculateGizmoPosition(modelRegistry, modelSelection);
+        const float gizmoScale = gizmoRenderer.calculateGizmoScale(modelRegistry, modelSelection);
         gizmoRenderer.render(commandBuffer, gizmoPosition, extent, gizmoScale, view, gizmoController);
     }
 

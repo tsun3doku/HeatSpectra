@@ -740,7 +740,7 @@ void GizmoRenderer::renderRotationRing(const RenderState& state, const glm::vec3
     vkCmdDrawIndexed(state.commandBuffer, ringIndexCount, 1, 0, 0, 0);
 }
 
-float GizmoRenderer::calculateGizmoScale(ModelRegistry& resourceManager, const ModelSelection& modelSelection) const {
+float GizmoRenderer::calculateGizmoScale(ModelRegistry& modelRegistry, const ModelSelection& modelSelection) const {
     const auto& selectedModelIDs = modelSelection.getSelectedModelIDsRenderThread();
 
     float maxBBoxSize = 0.0f;
@@ -748,17 +748,17 @@ float GizmoRenderer::calculateGizmoScale(ModelRegistry& resourceManager, const M
     for (uint32_t id : selectedModelIDs) {
         glm::vec3 bboxMin(0.0f);
         glm::vec3 bboxMax(0.0f);
-        if (resourceManager.tryGetBoundingBoxMinMax(id, bboxMin, bboxMax)) {
+        if (modelRegistry.tryGetWorldBounds(id, bboxMin, bboxMax)) {
             const glm::vec3 bboxSize = bboxMax - bboxMin;
             maxBBoxSize = std::max(maxBBoxSize, std::max(bboxSize.x, std::max(bboxSize.y, bboxSize.z)));
         }
     }
 
     if (maxBBoxSize == 0.0f) {
-        for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
+        for (uint32_t modelId : modelRegistry.getRenderableModelIds()) {
             glm::vec3 bboxMin(0.0f);
             glm::vec3 bboxMax(0.0f);
-            if (!resourceManager.tryGetBoundingBoxMinMax(modelId, bboxMin, bboxMax)) {
+            if (!modelRegistry.tryGetWorldBounds(modelId, bboxMin, bboxMax)) {
                 continue;
             }
 

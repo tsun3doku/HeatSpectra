@@ -5,6 +5,7 @@
 #include "NodeGraphTypes.hpp"
 
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <typeindex>
@@ -12,6 +13,7 @@
 
 struct GeometryData;
 struct PointData;
+struct RemeshData;
 
 class NodePayloadRegistry {
 public:
@@ -46,9 +48,11 @@ public:
 
     void erase(uint64_t key);
     void clear();
-    NodeDataHandle resolveMeshHandle(uint8_t type, const NodeDataHandle& handle) const;
-    const GeometryData* resolveGeometry(const NodeDataHandle& handle, NodeDataHandle* outSourceHandle = nullptr) const;
-    const PointData* resolvePoints(const NodeDataHandle& handle) const;
+    const GeometryData* resolveGeometry(const NodeDataHandle& handle, NodeDataHandle* outGeometryHandle = nullptr) const;
+    const RemeshData* resolveRemesh(const NodeDataHandle& handle, NodeDataHandle* outRemeshHandle = nullptr) const;
+    const PointData* resolvePoints(const NodeDataHandle& handle, NodeDataHandle* outPointHandle = nullptr) const;
+    bool resolveLocalToWorld(const NodeDataHandle& handle, std::array<float, 16>& outLocalToWorld) const;
+    const HashValues* findHashes(const NodeDataHandle& handle) const;
     uint64_t resolveHash(const NodeDataHandle& handle, HashDomain domain) const;
 
 private:

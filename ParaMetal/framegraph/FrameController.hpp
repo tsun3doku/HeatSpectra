@@ -34,7 +34,7 @@ class LightingSystem;
 class MaterialSystem;
 
 struct FrameControllerServices {
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     UniformBufferManager& uniformBufferManager;
     ModelSelection& modelSelection;
     GizmoController& gizmoController;

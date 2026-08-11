@@ -11,11 +11,11 @@
 #include "RuntimeInterfaces.hpp"
 #include "nodegraph/NodeGraphState.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
-#include "scene/InputActions.hpp"
 #include "SceneContext.hpp"
 #include "TimelineController.hpp"
 #include "TimelineRuntime.hpp"
 #include "VulkanCoreContext.hpp"
+#include "util/Units.hpp"
 
 class NodeGraph;
 class CameraController;
@@ -35,19 +35,22 @@ public:
     bool updateViewportTarget(VkImage image, VkFormat format, VkExtent2D extent);
     void replaceGraphState(const NodeGraphState& state);
     bool applyGraphDelta(const NodeGraphDelta& delta);
-    std::vector<InputAction> takePendingAuthoringActions();
+    bool takePendingNodeParameters(
+        NodeGraphNodeId& outNodeId,
+        std::vector<NodeGraphParamValue>& outParameters);
     void shutdown();
     bool isInitialized() const;
 
     const RuntimeQuery* runtimeQuery() const;
     TimelineController* timelineController();
     const TimelineController* timelineController() const;
-    uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
     void setPanSensitivity(float sensitivity);
     void setWireframeMode(app::WireframeMode mode);
     void setGridEnabled(bool enabled);
     void setHeatPaletteRange(float minimum, float maximum);
     void setHeatPalette(int palette);
+    void setWorldUnit(int unit);
+    units::LengthUnit worldUnit() const { return worldUnitState; }
     bool isHeatPaletteVisible() const;
     const app::RenderSettings& renderSettings() const;
     CameraController* getCameraController();
@@ -61,7 +64,7 @@ public:
 
 private:
     void cleanup();
-    void dispatchInputActions();
+    void dispatchViewportCommands();
     bool isSimulationActive() const override;
     bool isSimulationPaused() const override;
     float getSimulationTotalTime() const override;
@@ -92,7 +95,7 @@ private:
     RuntimeController runtimeController;
 
     app::RenderSettings renderSettingsState;
+    units::LengthUnit worldUnitState = units::defaultLengthUnit();
     TimelineRuntime timelineRuntime;
     TimelineController timelineControllerInstance{&timelineRuntime};
-    std::vector<InputAction> pendingAuthoringActions;
 };

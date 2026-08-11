@@ -56,6 +56,7 @@ struct SimPlayback
 struct HeatModelPushConstant
 {
     uint elementCount;
+    float metersPerUnit;
 };
 
 [[vk::binding(0)]] StructuredBuffer<Node> simNodeBuffer;
@@ -89,6 +90,9 @@ void main(uint3 dtid : SV_DispatchThreadID)
     }
 
     MaterialNode materialNode = materialNodeBuffer[localNodeID];
+    const float metersPerUnit = pushConstants.metersPerUnit;
+    const float areaScale = metersPerUnit * metersPerUnit;
+    const float volumeScale = areaScale * metersPerUnit;
 
     Node node = simNodeBuffer[localNodeID];
     float thermalMass = max(materialNode.thermalMass, 1e-12);
@@ -99,7 +103,7 @@ void main(uint3 dtid : SV_DispatchThreadID)
 
     for (uint i = 0; i < node.neighborCount; ++i) {
         NodeCoupling coupling = nodeCouplingBuffer[node.neighborOffset + i];
-        float g = coupling.conductance;
+        float g = coupling.conductance * metersPerUnit;
         uint neighborLocalID = coupling.neighborNodeId;
         float neighborTemp = tempRead[neighborLocalID];
         totalConductance += g;
@@ -116,7 +120,7 @@ void main(uint3 dtid : SV_DispatchThreadID)
     numerator += dt * kappa * totalFlux;
     denominator += dt * kappa * totalConductance;
 
-    float volumetricPower = volumetricPowerDensityBuffer[localNodeID] * node.volume;
+    float volumetricPower = volumetricPowerDensityBuffer[localNodeID] * node.volume * volumeScale;
     numerator += dt * volumetricPower * invMass;
 
     for (uint contributionIndex = 0; contributionIndex < boundaryNode.contributionCount; ++contributionIndex) {
@@ -124,11 +128,11 @@ void main(uint3 dtid : SV_DispatchThreadID)
             boundaryNode.contributionOffset + contributionIndex];
         BoundaryState boundary = boundaryStateBuffer[contribution.stateIndex];
         if (boundary.conditionType == 2u) {
-            float boundaryPower = boundary.heatFlux * contribution.area;
+            float boundaryPower = boundary.heatFlux * contribution.area * areaScale;
             numerator += dt * boundaryPower * invMass;
         }
         if (boundary.conditionType == 3u) {
-            float boundaryConductance = boundary.heatTransferCoefficient * contribution.area;
+            float boundaryConductance = boundary.heatTransferCoefficient * contribution.area * areaScale;
             numerator += dt * boundaryConductance * boundary.temperatureC * invMass;
             denominator += dt * boundaryConductance * invMass;
         }

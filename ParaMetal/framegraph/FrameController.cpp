@@ -41,7 +41,7 @@ FrameController::FrameController(
       frameUpdateStage(
           services.inputController,
           services.uniformBufferManager,
-          services.resourceManager,
+          services.modelRegistry,
           services.lightingSystem,
           services.materialSystem,
           sceneRenderer,

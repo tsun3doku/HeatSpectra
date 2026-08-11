@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <numeric>
+#include <unordered_set>
 
 #include "heat/HeatModelRuntime.hpp"
 #include "heat/HeatSystemPlayback.hpp"
@@ -16,7 +17,6 @@
 #include "heat/HeatContactRuntime.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
@@ -24,16 +24,13 @@
 HeatSystem::HeatSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ModelRegistry& resourceManager,
     uint32_t maxFramesInFlight,
     CommandPool& renderCommandPool,
     CommandPool& transferCommandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      resourceManager(resourceManager),
       renderCommandPool(renderCommandPool),
       transferCommandPool(transferCommandPool),
-      runtime(),
       maxFramesInFlight(maxFramesInFlight) {
 
     simStage = std::make_unique<HeatSystemSimStage>();
@@ -81,22 +78,137 @@ void HeatSystem::setHeatModels(
     const std::unordered_map<uint32_t, float>& modelVolumetricPowerDensitiesByRuntimeId,
     const std::unordered_map<uint32_t, float>& modelDensity,
     const std::unordered_map<uint32_t, float>& modelSpecificHeat,
-    const std::unordered_map<uint32_t, float>& modelConductivity) {
-    runtime.setHeatModels(
-        modelSurfacePositions,
-        modelSurfaceNormals,
-        modelSurfaceTriangleIndices,
-        modelRuntimeModelIds,
-        modelInitialTemperaturesCByRuntimeId,
-        modelBoundaryConditionTypesByRuntimeId,
-        modelBoundaryTemperaturesCByRuntimeId,
-        modelBoundaryHeatFluxesByRuntimeId,
-        modelBoundaryHeatTransferCoefficientsByRuntimeId,
-        modelVolumetricPowerDensitiesByRuntimeId,
-        modelDensity,
-        modelSpecificHeat,
-        modelConductivity);
+    const std::unordered_map<uint32_t, float>& modelConductivity,
+    units::LengthUnit worldUnit) {
+    this->modelSurfacePositions = modelSurfacePositions;
+    this->modelSurfaceNormals = modelSurfaceNormals;
+    this->modelSurfaceTriangleIndices = modelSurfaceTriangleIndices;
     this->modelRuntimeModelIds = modelRuntimeModelIds;
+    this->modelInitialTemperaturesCByRuntimeId = modelInitialTemperaturesCByRuntimeId;
+    this->modelBoundaryConditionTypesByRuntimeId = modelBoundaryConditionTypesByRuntimeId;
+    this->modelBoundaryTemperaturesCByRuntimeId = modelBoundaryTemperaturesCByRuntimeId;
+    this->modelBoundaryHeatFluxesByRuntimeId = modelBoundaryHeatFluxesByRuntimeId;
+    this->modelBoundaryHeatTransferCoefficientsByRuntimeId = modelBoundaryHeatTransferCoefficientsByRuntimeId;
+    this->modelVolumetricPowerDensitiesByRuntimeId = modelVolumetricPowerDensitiesByRuntimeId;
+    this->modelDensity = modelDensity;
+    this->modelSpecificHeat = modelSpecificHeat;
+    this->modelConductivity = modelConductivity;
+    this->worldUnit = worldUnit;
+    domainDirty = true;
+}
+
+float HeatSystem::getInitialTemperatureC(uint32_t runtimeModelId) const {
+    const auto it = modelInitialTemperaturesCByRuntimeId.find(runtimeModelId);
+    return it != modelInitialTemperaturesCByRuntimeId.end()
+        ? it->second
+        : HeatSimDefaults::ambientTemperatureC;
+}
+
+void HeatSystem::configureModelProperties(
+    HeatModelRuntime& model,
+    uint32_t runtimeModelId) const {
+    const auto densityIt = modelDensity.find(runtimeModelId);
+    const float density = densityIt != modelDensity.end()
+        ? densityIt->second
+        : HeatSimDefaults::density;
+    const auto specificHeatIt = modelSpecificHeat.find(runtimeModelId);
+    const float specificHeat = specificHeatIt != modelSpecificHeat.end()
+        ? specificHeatIt->second
+        : HeatSimDefaults::specificHeat;
+    const auto conductivityIt = modelConductivity.find(runtimeModelId);
+    const float conductivity = conductivityIt != modelConductivity.end()
+        ? conductivityIt->second
+        : HeatSimDefaults::conductivity;
+    const auto boundaryTypeIt = modelBoundaryConditionTypesByRuntimeId.find(runtimeModelId);
+    const uint32_t boundaryConditionType = boundaryTypeIt != modelBoundaryConditionTypesByRuntimeId.end()
+        ? boundaryTypeIt->second
+        : 0u;
+    const auto boundaryTemperatureIt = modelBoundaryTemperaturesCByRuntimeId.find(runtimeModelId);
+    const float boundaryTemperatureC = boundaryTemperatureIt != modelBoundaryTemperaturesCByRuntimeId.end()
+        ? boundaryTemperatureIt->second
+        : HeatSimDefaults::ambientTemperatureC;
+    const auto heatFluxIt = modelBoundaryHeatFluxesByRuntimeId.find(runtimeModelId);
+    const float heatFlux = heatFluxIt != modelBoundaryHeatFluxesByRuntimeId.end()
+        ? heatFluxIt->second
+        : 0.0f;
+    const auto coefficientIt = modelBoundaryHeatTransferCoefficientsByRuntimeId.find(runtimeModelId);
+    const float heatTransferCoefficient = coefficientIt != modelBoundaryHeatTransferCoefficientsByRuntimeId.end()
+        ? coefficientIt->second
+        : 0.0f;
+    const auto powerDensityIt = modelVolumetricPowerDensitiesByRuntimeId.find(runtimeModelId);
+    const float volumetricPowerDensity = powerDensityIt != modelVolumetricPowerDensitiesByRuntimeId.end()
+        ? powerDensityIt->second
+        : 0.0f;
+
+    model.setMaterialProperties(density, specificHeat, conductivity);
+    model.setWorldUnit(worldUnit);
+    model.setInitialTemperatureC(getInitialTemperatureC(runtimeModelId));
+    model.setBoundaryInputs(
+        boundaryConditionType,
+        boundaryTemperatureC,
+        heatFlux,
+        heatTransferCoefficient,
+        volumetricPowerDensity);
+}
+
+bool HeatSystem::rebuildDomainRuntime() {
+    if (!domainDirty) {
+        return true;
+    }
+
+    const std::size_t modelCount = std::min({
+        modelRuntimeModelIds.size(),
+        modelSurfacePositions.size(),
+        modelSurfaceNormals.size(),
+        modelSurfaceTriangleIndices.size()});
+    std::unordered_set<uint32_t> incomingModelIds;
+    for (std::size_t index = 0; index < modelCount; ++index) {
+        if (modelRuntimeModelIds[index] != 0) {
+            incomingModelIds.insert(modelRuntimeModelIds[index]);
+        }
+    }
+    domainRuntime.removeModelsNotIn(incomingModelIds);
+
+    std::unordered_set<uint32_t> configuredModelIds;
+    for (std::size_t index = 0; index < modelCount; ++index) {
+        const uint32_t runtimeModelId = modelRuntimeModelIds[index];
+        if (runtimeModelId == 0 || !configuredModelIds.insert(runtimeModelId).second) {
+            continue;
+        }
+
+        const auto& positions = modelSurfacePositions[index];
+        const auto& normals = modelSurfaceNormals[index];
+        const auto& triangleIndices = modelSurfaceTriangleIndices[index];
+        HeatModelRuntime* model = domainRuntime.getModelByRuntimeId(runtimeModelId);
+        const bool geometryChanged = model &&
+            (model->getSurfacePositions() != positions ||
+             model->getSurfaceNormals() != normals ||
+             model->getSurfaceTriangleIndices() != triangleIndices);
+
+        if (!model || geometryChanged) {
+            auto replacement = std::make_unique<HeatModelRuntime>(
+                vulkanDevice,
+                memoryAllocator,
+                positions,
+                normals,
+                triangleIndices,
+                transferCommandPool,
+                getInitialTemperatureC(runtimeModelId));
+            configureModelProperties(*replacement, runtimeModelId);
+            if (replacement->isInitialized()) {
+                domainRuntime.setModel(runtimeModelId, std::move(replacement));
+            } else {
+                std::cerr << "[HeatSystem] Failed to initialize heat model for model "
+                          << runtimeModelId << std::endl;
+                domainRuntime.removeModel(runtimeModelId);
+            }
+        } else {
+            configureModelProperties(*model, runtimeModelId);
+        }
+    }
+
+    domainDirty = false;
+    return true;
 }
 
 
@@ -207,14 +319,15 @@ void HeatSystem::update() {
 
     if (syntheticDirichletTestEnabled) {
         const float syntheticTemperatureC = 20.0f + 30.0f * (0.5f + 0.5f * std::sin(simulatedTime * 0.5f));
-        for (const auto& [runtimeModelId, _] : runtime.getActiveModels()) {
+        for (const auto& [runtimeModelId, _] : domainRuntime.getActiveModels()) {
             setRuntimeDirichletTemperatureC(runtimeModelId, 0u, syntheticTemperatureC);
         }
     }
 
-    if (contactRuntime) {
-        contactRuntime->clearSynchronization();
-        if (shouldStepPhysics && !contactRuntime->solve(temperatureBufferAIsCurrent)) {
+    HeatContactRuntime& contactRuntime = domainRuntime.getContactRuntime();
+    contactRuntime.clearSynchronization();
+    if (contactRuntime.hasGraph()) {
+        if (shouldStepPhysics && !contactRuntime.solve(temperatureBufferAIsCurrent)) {
             std::cerr << "[HeatSystem] AmgX contact solve failed" << std::endl;
             shouldStepPhysics = false;
         }
@@ -222,11 +335,14 @@ void HeatSystem::update() {
 }
 
 ComputePass::Synchronization HeatSystem::getSynchronization() const {
-    return contactRuntime ? contactRuntime->getSynchronization() : ComputePass::Synchronization{};
+    const HeatContactRuntime& contactRuntime = domainRuntime.getContactRuntime();
+    return contactRuntime.hasGraph()
+        ? contactRuntime.getSynchronization()
+        : ComputePass::Synchronization{};
 }
 
 bool HeatSystem::setRuntimeDirichletTemperatureC(uint32_t runtimeModelId, uint32_t regionId, float temperatureC) {
-    HeatModelRuntime* heatModel = runtime.getModelByRuntimeId(runtimeModelId);
+    HeatModelRuntime* heatModel = domainRuntime.getModelByRuntimeId(runtimeModelId);
     if (!heatModel) {
         return false;
     }
@@ -234,23 +350,23 @@ bool HeatSystem::setRuntimeDirichletTemperatureC(uint32_t runtimeModelId, uint32
 }
 
 bool HeatSystem::setRuntimeNeumannHeatFlux(uint32_t runtimeModelId, uint32_t regionId, float heatFlux) {
-    HeatModelRuntime* model = runtime.getModelByRuntimeId(runtimeModelId);
+    HeatModelRuntime* model = domainRuntime.getModelByRuntimeId(runtimeModelId);
     return model && model->setNeumannHeatFlux(regionId, heatFlux);
 }
 
 bool HeatSystem::setRuntimeRobinState(uint32_t runtimeModelId, uint32_t regionId,
     float ambientTemperatureC, float heatTransferCoefficient) {
-    HeatModelRuntime* model = runtime.getModelByRuntimeId(runtimeModelId);
+    HeatModelRuntime* model = domainRuntime.getModelByRuntimeId(runtimeModelId);
     return model && model->setRobinState(regionId, ambientTemperatureC, heatTransferCoefficient);
 }
 
 bool HeatSystem::setRuntimeRobinTemperatureC(uint32_t runtimeModelId, uint32_t regionId, float ambientTemperatureC) {
-    HeatModelRuntime* model = runtime.getModelByRuntimeId(runtimeModelId);
+    HeatModelRuntime* model = domainRuntime.getModelByRuntimeId(runtimeModelId);
     return model && model->setRuntimeRobinTemperatureC(regionId, ambientTemperatureC);
 }
 
 bool HeatSystem::setRuntimeVolumetricPowerDensity(uint32_t runtimeModelId, float powerDensity) {
-    HeatModelRuntime* model = runtime.getModelByRuntimeId(runtimeModelId);
+    HeatModelRuntime* model = domainRuntime.getModelByRuntimeId(runtimeModelId);
     return model && model->setVolumetricPowerDensity(powerDensity);
 }
 
@@ -262,7 +378,7 @@ void HeatSystem::processResetTrigger() {
 }
 
 void HeatSystem::forwardSim(float deltaTime) {
-    auto* playbackData = simRuntime.getMappedPlaybackData();
+    auto* playbackData = playbackRuntime.getMappedPlaybackData();
     if (!playbackData) {
         timeline.setPosition(0.0f);
         shouldStepPhysics = false;
@@ -308,48 +424,71 @@ void HeatSystem::forwardSim(float deltaTime) {
 }
 
 bool HeatSystem::ensureConfigured() {
-    const bool needsHardRebuild = runtime.needsRebuild() || contactCouplingsDirty || voronoiConfigDirty || heatParamsDirty;
+    const bool needsHardRebuild = domainDirty || contactCouplingsDirty || voronoiConfigDirty || heatParamsDirty;
     if (!needsHardRebuild) return true;
 
 
-    if (vkDeviceWaitIdle(vulkanDevice.getDevice()) != VK_SUCCESS) return false;
-
-    if (contactRuntime) {
-        contactRuntime->cleanup();
-        contactRuntime.reset();
+    if (vkDeviceWaitIdle(vulkanDevice.getDevice()) != VK_SUCCESS) {
+        std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: vkDeviceWaitIdle" << std::endl;
+        return false;
     }
 
-    const bool modelsReady = runtime.ensureModelBindings(vulkanDevice, memoryAllocator, transferCommandPool);
+    domainRuntime.getContactRuntime().cleanup();
+
+    const bool modelsReady = rebuildDomainRuntime();
     if (!modelsReady) {
+        std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: rebuildDomainRuntime"
+                  << " domainDirty=" << domainDirty
+                  << " activeModels=" << domainRuntime.getActiveModels().size() << std::endl;
         return false;
     }
 
     configureModelSimResources();
+
+    for (const auto& [runtimeModelId, heatModel] : domainRuntime.getActiveModels()) {
+        if (!heatModel) continue;
+        const auto countIt = simNodeCounts.find(runtimeModelId);
+        const uint32_t nodeCount = (countIt != simNodeCounts.end()) ? countIt->second : 0;
+        if (!heatModel->ensureSimulationBuffers(nodeCount)) {
+            std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: ensureSimulationBuffers"
+                      << " runtimeModelId=" << runtimeModelId
+                      << " nodeCount=" << nodeCount << std::endl;
+            return false;
+        }
+    }
 
     const bool heatVoronoiReady = rebuildVoronoiRuntime();
 
     configureGMLSSurfaceWeights(heatVoronoiReady);
 
     if (!heatVoronoiReady) {
-        if (contactRuntime) {
-            contactRuntime->cleanup();
-            contactRuntime.reset();
-        }
-        simRuntime.cleanup(memoryAllocator);
+        std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: rebuildVoronoiRuntime"
+                  << " modelRuntimeModelIds=" << modelRuntimeModelIds.size()
+                  << " modelSimNodeBufferByModelId=" << modelSimNodeBufferByModelId.size()
+                  << " modelNodesByModelId=" << modelNodesByModelId.size()
+                  << " activeModels=" << domainRuntime.getActiveModels().size() << std::endl;
+        domainRuntime.getContactRuntime().cleanup();
+        playbackRuntime.cleanup(memoryAllocator);
         return false;
     }
 
-    // Initialize simulation buffers and playback on each model
+    // Initialize playback after the rebuilt simulation resources are valid
     const uint32_t frameCapacity = computeHistoryFrameCapacity();
-    for (const auto& [runtimeModelId, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [runtimeModelId, heatModel] : domainRuntime.getActiveModels()) {
+        (void)runtimeModelId;
         if (!heatModel) continue;
-        auto countIt = simNodeCounts.find(runtimeModelId);
-        uint32_t nodeCount = (countIt != simNodeCounts.end()) ? countIt->second : 0;
-        if (!heatModel->ensureSimulationBuffers(nodeCount)) return false;
         heatModel->initializePlayback(vulkanDevice, memoryAllocator, frameCapacity);
     }
 
-    if (!rebuildContactRuntimes() || !resolveModelBoundaryAreas()) {
+    if (!rebuildContactRuntime()) {
+        std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: rebuildContactRuntime"
+                  << " contactCouplings=" << contactCouplings.size() << std::endl;
+        return false;
+    }
+    if (!resolveModelBoundaryAreas()) {
+        std::cerr << "[HeatSystem-Diag] ensureConfigured FAILED: resolveModelBoundaryAreas"
+                  << " activeModels=" << domainRuntime.getActiveModels().size()
+                  << " hasContactRuntime=" << domainRuntime.getContactRuntime().hasGraph() << std::endl;
         return false;
     }
     resetSimulationState();
@@ -368,12 +507,12 @@ bool HeatSystem::setupDescriptors(
         return false;
     }
 
-    const bool simReady = simRuntime.initialize(vulkanDevice, memoryAllocator) && diffusionStage;
+    const bool simReady = playbackRuntime.initialize(vulkanDevice, memoryAllocator) && diffusionStage;
     if (!simReady) return false;
 
     for (size_t i = 0; i < modelRuntimeModelIds.size() && i < surfaceBuffers.size(); ++i) {
         const uint32_t runtimeModelId = modelRuntimeModelIds[i];
-        HeatModelRuntime* heatModel = runtime.getModelByRuntimeId(runtimeModelId);
+        HeatModelRuntime* heatModel = domainRuntime.getModelByRuntimeId(runtimeModelId);
         if (!heatModel) continue;
 
         auto itCount = simNodeCounts.find(runtimeModelId);
@@ -400,8 +539,8 @@ bool HeatSystem::setupDescriptors(
             surfaceStage->getDescriptorPool(),
             diffusionStage->getDescriptorSetLayout(),
             diffusionStage->getDescriptorPool(),
-            simRuntime.getPlaybackBuffer(),
-            simRuntime.getPlaybackBufferOffset(),
+            playbackRuntime.getPlaybackBuffer(),
+            playbackRuntime.getPlaybackBufferOffset(),
             true)) {
             return false;
         }
@@ -411,7 +550,7 @@ bool HeatSystem::setupDescriptors(
 }
 
 void HeatSystem::configureGMLSSurfaceWeights(bool heatVoronoiReady) {
-    for (const auto& [runtimeModelId, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [runtimeModelId, heatModel] : domainRuntime.getActiveModels()) {
         if (!heatModel) continue;
 
         if (!heatVoronoiReady) {
@@ -455,7 +594,7 @@ bool HeatSystem::recreateDescriptorPools() {
 }
 
 void HeatSystem::configureModelSimResources() {
-    for (const auto& [runtimeModelId, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [runtimeModelId, heatModel] : domainRuntime.getActiveModels()) {
         if (!heatModel) continue;
 
         const auto countIt = simNodeCounts.find(runtimeModelId);
@@ -497,23 +636,20 @@ void HeatSystem::configureModelSimResources() {
     }
 }
 
-bool HeatSystem::rebuildContactRuntimes() {
-    if (contactRuntime) {
-        contactRuntime->cleanup();
-        contactRuntime.reset();
-    }
+bool HeatSystem::rebuildContactRuntime() {
+    HeatContactRuntime& contactRuntime = domainRuntime.getContactRuntime();
+    contactRuntime.cleanup();
     if (contactCouplings.empty()) {
         contactCouplingsDirty = false;
         return true;
     }
 
-    auto runtimePtr = std::make_unique<HeatContactRuntime>();
-    if (runtimePtr->build(
-            vulkanDevice, runtime.getActiveModels(),
+    if (!contactRuntime.build(
+            vulkanDevice, domainRuntime.getActiveModels(),
             contactCouplings, contactThermalConductance)) {
-        contactRuntime = std::move(runtimePtr);
-    } else {
-        runtimePtr->cleanup();
+        std::cerr << "[HeatSystem-Diag] rebuildContactRuntime FAILED: HeatContactRuntime::build"
+                  << " contactCouplings=" << contactCouplings.size()
+                  << " activeModels=" << domainRuntime.getActiveModels().size() << std::endl;
         return false;
     }
 
@@ -522,15 +658,20 @@ bool HeatSystem::rebuildContactRuntimes() {
 }
 
 bool HeatSystem::resolveModelBoundaryAreas() {
-    for (const auto& [runtimeModelId, model] : runtime.getActiveModels()) {
+    const HeatContactRuntime& contactRuntime = domainRuntime.getContactRuntime();
+    for (const auto& [runtimeModelId, model] : domainRuntime.getActiveModels()) {
         if (!model) {
+            std::cerr << "[HeatSystem-Diag] resolveModelBoundaryAreas FAILED: null model id=" << runtimeModelId << std::endl;
             return false;
         }
-        const std::vector<float>* coveredAreas = contactRuntime
-            ? contactRuntime->findCoveredAreas(runtimeModelId)
+        const std::vector<float>* coveredAreas = contactRuntime.hasGraph()
+            ? contactRuntime.findCoveredAreas(runtimeModelId)
             : nullptr;
         if (!model->resolveBoundaryContactAreas(
                 coveredAreas ? *coveredAreas : std::vector<float>{})) {
+            std::cerr << "[HeatSystem-Diag] resolveModelBoundaryAreas FAILED: resolveBoundaryContactAreas id=" << runtimeModelId
+                      << " hasCoveredAreas=" << (coveredAreas != nullptr)
+                      << " coveredAreaCount=" << (coveredAreas ? coveredAreas->size() : 0) << std::endl;
             return false;
         }
     }
@@ -560,7 +701,7 @@ uint32_t HeatSystem::getRewindFrame() const {
 
 uint32_t HeatSystem::getRecordedTimelineFrames() const {
     uint32_t maxRecorded = 0;
-    for (const auto& [id, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [id, heatModel] : domainRuntime.getActiveModels()) {
         if (heatModel) {
             auto* pb = heatModel->getPlayback();
             if (pb) maxRecorded = std::max(maxRecorded, pb->getRecordedFrameCount());
@@ -581,10 +722,10 @@ void HeatSystem::resetSimulationState() {
     needsInitialCapture = true;
     physicsAccumulator = 0.0f;
     temperatureBufferAIsCurrent = true;
-    simRuntime.reset();
+    playbackRuntime.reset();
     resetVoronoiTemperatures();
 
-    for (const auto& [id, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [id, heatModel] : domainRuntime.getActiveModels()) {
         if (!heatModel) {
             continue;
         }
@@ -597,7 +738,7 @@ void HeatSystem::resetSimulationState() {
 }
 
 void HeatSystem::resetVoronoiTemperatures() {
-    for (const auto& [runtimeModelId, heatModel] : runtime.getActiveModels()) {
+    for (const auto& [runtimeModelId, heatModel] : domainRuntime.getActiveModels()) {
         if (!heatModel) continue;
 
         const float temperature = heatModel->getInitialTemperatureC();
@@ -663,7 +804,7 @@ bool HeatSystem::hasDispatchableComputeWork() const {
 }
 
 bool HeatSystem::voronoiReady() const {
-    if (!simRuntime.isInitialized() || modelRuntimeModelIds.empty()) {
+    if (!playbackRuntime.isInitialized() || modelRuntimeModelIds.empty()) {
         return false;
     }
     for (uint32_t runtimeModelId : modelRuntimeModelIds) {
@@ -711,12 +852,12 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         simStage &&
         surfaceStage &&
         diffusionStage) {
-        const auto* pbData = simRuntime.getMappedPlaybackData();
+        const auto* pbData = playbackRuntime.getMappedPlaybackData();
         const uint32_t recordedFrames = getRecordedTimelineFrames();
 
         // Capture the initial state on the first frame after a reset
         if (needsInitialCapture) {
-            for (const auto& [id, heatModel] : runtime.getActiveModels()) {
+            for (const auto& [id, heatModel] : domainRuntime.getActiveModels()) {
                 if (!heatModel || heatModel->getSimNodeCount() == 0) continue;
 
                 VkBufferMemoryBarrier barrier{};
@@ -745,7 +886,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
         const bool resultingAIsCurrent = simStage->recordComputeCommands(
             commandBuffer,
-            runtime.getActiveModels(),
+            domainRuntime.getActiveModels(),
             *diffusionStage,
             shouldStepPhysics,
             captureFrame,
@@ -762,7 +903,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         const bool replayFromHistory = displayFrame < recordedFrames;
 
         if (replayFromHistory) {
-            for (const auto& [id, heatModel] : runtime.getActiveModels()) {
+            for (const auto& [id, heatModel] : domainRuntime.getActiveModels()) {
                 if (!heatModel) continue;
                 auto* pb = heatModel->getPlayback();
                 if (!pb) continue;
@@ -774,7 +915,7 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
 
         if (shouldStepPhysics) {
             std::vector<VkBufferMemoryBarrier> surfaceReadBarriers;
-            for (const auto& [id, heatModel] : runtime.getActiveModels()) {
+            for (const auto& [id, heatModel] : domainRuntime.getActiveModels()) {
                 if (!heatModel || heatModel->getSimNodeCount() == 0) continue;
 
                 VkBuffer finalBuf = finalWritesBufferB ? heatModel->getTempBufferB() : heatModel->getTempBufferA();
@@ -799,12 +940,12 @@ void HeatSystem::recordComputeCommands(VkCommandBuffer commandBuffer, uint32_t c
         }
 
         surfaceStage->dispatchSurfaceTemperatureUpdates(
-            commandBuffer, runtime.getActiveModels(),
+            commandBuffer, domainRuntime.getActiveModels(),
             replayFromHistory, finalWritesBufferB, currentFrame);
 
         if (currentFrame % 4 == 0) {
             surfaceStage->dispatchSurfaceGradientUpdates(
-                commandBuffer, runtime.getActiveModels(),
+                commandBuffer, domainRuntime.getActiveModels(),
                 replayFromHistory, finalWritesBufferB, currentFrame);
         }
     }
@@ -823,21 +964,33 @@ void HeatSystem::setComputeTimingQueries(VkQueryPool queryPool, uint32_t startQu
 
 bool HeatSystem::configureMaterialNodes() {
     if (modelNodesByModelId.empty()) {
+        std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: modelNodesByModelId empty" << std::endl;
         return false;
     }
 
     for (const auto& [id, nodes] : modelNodesByModelId) {
-        HeatModelRuntime* heatModelPtr = runtime.getModelByRuntimeId(id);
-        if (!heatModelPtr) return false;
+        HeatModelRuntime* heatModelPtr = domainRuntime.getModelByRuntimeId(id);
+        if (!heatModelPtr) {
+            std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: no HeatModelRuntime for id=" << id << std::endl;
+            return false;
+        }
+        const float metersPerUnit = heatModelPtr->getMetersPerWorldUnit();
+        const float volumeScale = metersPerUnit * metersPerUnit * metersPerUnit;
 
         auto countIt = simNodeCounts.find(id);
-        if (countIt == simNodeCounts.end()) return false;
+        if (countIt == simNodeCounts.end()) {
+            std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: no simNodeCounts for id=" << id << std::endl;
+            return false;
+        }
 
         float d = heatModelPtr->getDensity();
         float s = heatModelPtr->getSpecificHeat();
         float c = heatModelPtr->getConductivity();
         uint32_t modelNodeCount = countIt->second;
         if (modelNodeCount == 0 || nodes.size() != modelNodeCount) {
+            std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: node count mismatch id=" << id
+                      << " simNodeCount=" << modelNodeCount
+                      << " voronoiNodes=" << nodes.size() << std::endl;
             return false;
         }
 
@@ -850,14 +1003,17 @@ bool HeatSystem::configureMaterialNodes() {
             materialNode.conductivity = c;
             const float volume = nodes[localNodeIndex].volume;
             if (!std::isfinite(volume) || volume <= 0.0f) {
+                std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: bad volume id=" << id
+                          << " localNode=" << localNodeIndex << " volume=" << volume << std::endl;
                 return false;
             }
-            materialNode.thermalMass = d * s * volume;
+            materialNode.thermalMass = d * s * volume * volumeScale;
             if (materialNode.thermalMass > 1e-20f) materialNode.conductivityPerMass = c / materialNode.thermalMass;
             nodalThermalMasses[localNodeIndex] = materialNode.thermalMass;
         }
 
         if (!heatModelPtr->createMaterialBuffer(materialNodes)) {
+            std::cerr << "[HeatSystem-Diag] configureMaterialNodes FAILED: createMaterialBuffer id=" << id << std::endl;
             return false;
         }
 
@@ -868,8 +1024,9 @@ bool HeatSystem::configureMaterialNodes() {
 }
 
 bool HeatSystem::configureModelBoundaries() {
-    for (const auto& [id, heatModelPtr] : runtime.getActiveModels()) {
+    for (const auto& [id, heatModelPtr] : domainRuntime.getActiveModels()) {
         if (!heatModelPtr) {
+            std::cerr << "[HeatSystem-Diag] configureModelBoundaries FAILED: null model id=" << id << std::endl;
             return false;
         }
 
@@ -877,9 +1034,15 @@ bool HeatSystem::configureModelBoundaries() {
         const auto surfaceAreasIt = modelSurfacePatchAreasByModelId.find(id);
         if (surfaceNodesIt == modelSurfaceNodeIdsByModelId.end() ||
             surfaceAreasIt == modelSurfacePatchAreasByModelId.end()) {
+            std::cerr << "[HeatSystem-Diag] configureModelBoundaries FAILED: missing surface data id=" << id
+                      << " hasNodes=" << (surfaceNodesIt != modelSurfaceNodeIdsByModelId.end())
+                      << " hasAreas=" << (surfaceAreasIt != modelSurfacePatchAreasByModelId.end()) << std::endl;
             return false;
         }
         if (!heatModelPtr->configureBoundary(surfaceNodesIt->second, surfaceAreasIt->second)) {
+            std::cerr << "[HeatSystem-Diag] configureModelBoundaries FAILED: configureBoundary id=" << id
+                      << " surfaceNodes=" << surfaceNodesIt->second.size()
+                      << " surfaceAreas=" << surfaceAreasIt->second.size() << std::endl;
             return false;
         }
     }
@@ -888,15 +1051,24 @@ bool HeatSystem::configureModelBoundaries() {
 }
 
 bool HeatSystem::rebuildVoronoiRuntime() {
-    if (modelRuntimeModelIds.empty() || modelSimNodeBufferByModelId.empty()) return false;
-    return configureMaterialNodes() && configureModelBoundaries();
+    if (modelRuntimeModelIds.empty() || modelSimNodeBufferByModelId.empty()) {
+        std::cerr << "[HeatSystem-Diag] rebuildVoronoiRuntime FAILED: empty input"
+                  << " modelRuntimeModelIds=" << modelRuntimeModelIds.size()
+                  << " modelSimNodeBufferByModelId=" << modelSimNodeBufferByModelId.size() << std::endl;
+        return false;
+    }
+    if (!configureMaterialNodes()) {
+        std::cerr << "[HeatSystem-Diag] rebuildVoronoiRuntime FAILED: configureMaterialNodes" << std::endl;
+        return false;
+    }
+    if (!configureModelBoundaries()) {
+        std::cerr << "[HeatSystem-Diag] rebuildVoronoiRuntime FAILED: configureModelBoundaries" << std::endl;
+        return false;
+    }
+    return true;
 }
 
 void HeatSystem::cleanup() {
-    if (contactRuntime) {
-        contactRuntime->cleanup();
-        contactRuntime.reset();
-    }
-    simRuntime.cleanup(memoryAllocator);
-    runtime.cleanup();
+    playbackRuntime.cleanup(memoryAllocator);
+    domainRuntime.cleanup();
 }

@@ -5,9 +5,9 @@
 RemeshSystem::RemeshSystem(
     Remesher& remesher,
     VulkanDevice& vulkanDevice,
-    ModelRegistry& resourceManager)
+    ModelRegistry& modelRegistry)
     : vulkanDevice(vulkanDevice),
-      resourceManager(resourceManager),
+      modelRegistry(modelRegistry),
       remesher(remesher) {
 }
 

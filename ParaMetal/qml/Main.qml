@@ -73,6 +73,11 @@ Rectangle {
                 Action { text: qsTr("Console"); checkable: true; checked: consolePane.visible; onTriggered: consolePane.visible = checked }
                 Action { text: qsTr("Node Graph"); checkable: true; checked: nodeEditor.visible; onTriggered: nodeEditor.visible = checked }
             }
+            UiMenu {
+                theme: root.theme
+                title: qsTr("Project")
+                Action { text: qsTr("Settings..."); onTriggered: projectSettings.open() }
+            }
         }
 
         SplitView {
@@ -169,6 +174,52 @@ Rectangle {
         function onError(message) {
             projectErrorDialog.text = message
             projectErrorDialog.open()
+        }
+    }
+
+    Popup {
+        id: projectSettings
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 300
+        padding: 16
+        background: Rectangle { color: theme.panelBackground; border.color: theme.subtleBorder }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text { text: qsTr("Project Settings"); color: theme.headingText; font.pixelSize: theme.titleFontSize }
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: qsTr("World Unit"); color: theme.text; font: theme.regularFont; Layout.fillWidth: true }
+                UiComboBox {
+                    theme: root.theme
+                    Layout.preferredWidth: 150
+                    Layout.preferredHeight: 28
+                    model: [qsTr("Millimeters"), qsTr("Centimeters"), qsTr("Meters")]
+                    currentIndex: project.worldUnit
+                    onActivated: project.setWorldUnit(currentIndex)
+                }
+            }
+            Button {
+                id: closeButton
+                text: qsTr("Close")
+                Layout.alignment: Qt.AlignRight
+                Layout.preferredHeight: 28
+                onClicked: projectSettings.close()
+                contentItem: Text {
+                    text: closeButton.text
+                    color: theme.text
+                    font: theme.regularFont
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 84
+                    radius: 3
+                    color: closeButton.hovered ? theme.hover : theme.toolNormal
+                    border.width: 1
+                    border.color: theme.border
+                }
+            }
         }
     }
 }

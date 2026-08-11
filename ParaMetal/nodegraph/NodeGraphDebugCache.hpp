@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NodeGraphEvaluatedTypes.hpp"
+#include "NodeGraphEvaluation.hpp"
 #include "NodeGraphKernels.hpp"
 #include "NodeGraphState.hpp"
 

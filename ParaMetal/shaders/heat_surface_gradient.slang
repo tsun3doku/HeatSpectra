@@ -25,6 +25,7 @@ struct GMLSSurfaceGradientWeight
 
 struct HeatModelPushConstant {
     uint elementCount;
+    float metersPerUnit;
 };
 
 [[vk::binding(0)]] StructuredBuffer<float> nodeTemperatureReadBuffer;
@@ -73,6 +74,7 @@ void main(uint3 dtid : SV_DispatchThreadID)
         float cellTemp = nodeTemperatureReadBuffer[weight.cellIndex];
         gradientT += float3(weight.dTdxWeight, weight.dTdyWeight, weight.dTdzWeight) * cellTemp;
     }
+    gradientT /= pushConstants.metersPerUnit;
 
     SurfacePoint p = surfaceBuffer[vertexID];
 

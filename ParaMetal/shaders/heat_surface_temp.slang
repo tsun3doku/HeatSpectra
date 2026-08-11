@@ -31,6 +31,7 @@ struct BoundaryState
 
 struct HeatModelPushConstant {
     uint elementCount;
+    float metersPerUnit;
 };
 
 [[vk::binding(0)]] StructuredBuffer<float> nodeTemperatureReadBuffer;

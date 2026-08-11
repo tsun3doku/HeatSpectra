@@ -2,8 +2,9 @@
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
 #include "runtime/HeatDisplayController.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 #include "runtime/RuntimeProductManager.hpp"
+#include "util/GeometryUtils.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -26,27 +27,28 @@ public:
         }
 
         std::unordered_set<uint64_t> nextSocketKeys;
-        registry.forEach<HeatPackage>([&](uint64_t socketKey, const HeatPackage& package) {
+        for (const auto& [socketKey, package] : registry.heatSystems()) {
+            if (!registry.isCurrent(socketKey)) continue;
             if (visibleKeys.find(socketKey) == visibleKeys.end()) {
-                return;
+                continue;
             }
 
             HeatDisplayController::Config config{};
             if (!tryBuildConfig(socketKey, package, config)) {
                 controller->remove(socketKey);
-                return;
+                continue;
             }
 
             controller->apply(socketKey, config);
             nextSocketKeys.insert(socketKey);
-        });
+        }
 
         for (uint64_t socketKey : activeSocketKeys) {
             if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
                 controller->remove(socketKey);
             }
         }
-        activeSocketKeys = std::move(nextSocketKeys);
+        activeSocketKeys = nextSocketKeys;
     }
 
     void finalizeSync() {
@@ -81,10 +83,14 @@ private:
         outConfig.fluxVectorScale = package.display.fluxVectorScale;
         outConfig.authoredActive = package.authored.active;
         outConfig.active = package.authored.active;
+        outConfig.canonicalToWorldScale = package.canonicalToWorldScale;
+        uint64_t productDisplayHash = computeProduct->hashes.display;
 
-        for (size_t i = 0; i < package.remeshProducts.size(); ++i) {
-            const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.modelProducts[i]);
-            const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(package.remeshProducts[i]);
+        for (const HeatModelPackage& model : package.models) {
+            const ModelProduct* modelProduct = products->resolve<ModelProduct>(
+                model.modelProduct);
+            const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(
+                model.remeshProduct);
             if (!remeshProduct || !modelProduct || modelProduct->runtimeModelId == 0) {
                 return false;
             }
@@ -113,11 +119,18 @@ private:
                 return false;
             }
 
-            outConfig.models.push_back(*modelProduct);
-            outConfig.modelInitialTemperaturesC.push_back(package.resolvedInitialTemperaturesC[i]);
-            outConfig.modelBoundaryTemperaturesC.push_back(package.resolvedBoundaryTemperaturesC[i]);
-            outConfig.modelBoundaryConditionTypes.push_back(package.resolvedBoundaryConditionTypes[i]);
+            outConfig.modelRuntimeIds.push_back(modelProduct->runtimeModelId);
+            outConfig.modelRenderVertexBuffers.push_back(modelProduct->renderVertexBuffer);
+            outConfig.modelRenderVertexBufferOffsets.push_back(modelProduct->renderVertexBufferOffset);
+            outConfig.modelRenderIndexBuffers.push_back(modelProduct->renderIndexBuffer);
+            outConfig.modelRenderIndexBufferOffsets.push_back(modelProduct->renderIndexBufferOffset);
+            outConfig.modelRenderIndexCounts.push_back(modelProduct->renderIndexCount);
+            outConfig.modelMatrices.push_back(toMat4(model.localToWorld));
+            outConfig.modelInitialTemperaturesC.push_back(model.initialTemperatureC);
+            outConfig.modelBoundaryTemperaturesC.push_back(model.boundaryTemperatureC);
+            outConfig.modelBoundaryConditionTypes.push_back(model.boundaryConditionType);
             outConfig.modelBufferViews.push_back(modelBufferViews);
+            HashBuilder::combine(productDisplayHash, modelProduct->hashes.display);
 
             const auto surfaceIt = std::find(
                 computeProduct->modelRuntimeModelIds.begin(),
@@ -153,7 +166,7 @@ private:
 
         }
 
-        outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->hashes.display);
+        outConfig.displayHash = buildDisplayHash(outConfig, productDisplayHash);
         return true;
     }
 

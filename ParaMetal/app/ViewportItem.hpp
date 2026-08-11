@@ -27,6 +27,7 @@ public slots:
     void requestSelection(int nodeId);
     void requestHeatPaletteRange(float minimum, float maximum);
     void requestHeatPalette(int palette);
+    void requestWorldUnit(int unit);
     void applyViewportProjectState(const ProjectFile::Viewport& viewport);
     void requestCurrentViewportProjectState();
     void initializeGraph(const NodeGraphState& graphState);

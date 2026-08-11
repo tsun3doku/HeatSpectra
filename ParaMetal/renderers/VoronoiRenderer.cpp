@@ -614,7 +614,7 @@ bool VoronoiRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass) 
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(GeometryPushConstant);  
+    pushConstantRange.size = sizeof(SurfacePushConstant);
     
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -667,11 +667,11 @@ bool VoronoiRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass) 
 void VoronoiRenderer::drawBinding(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const VoronoiRenderBinding& binding) const {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-    GeometryPushConstant pushConstant{};
+    SurfacePushConstant pushConstant{};
     pushConstant.modelMatrix = binding.modelMatrix;
-    pushConstant.alpha = 1.0f; 
+    pushConstant.canonicalToWorldScale = binding.canonicalToWorldScale;
     vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 
-                      0, sizeof(GeometryPushConstant), &pushConstant);
+                      0, sizeof(SurfacePushConstant), &pushConstant);
     
     VkBuffer vertexBuffers[] = {binding.vertexBuffer};
     VkDeviceSize offsets[] = {binding.vertexOffset};

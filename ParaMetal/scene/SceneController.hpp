@@ -8,7 +8,7 @@
 
 class CameraController;
 class ModelUploader;
-class ModelComputeRuntime;
+class ModelComputeController;
 class ModelRegistry;
 class VulkanDevice;
 class FrameSync;
@@ -17,18 +17,16 @@ class SceneController {
 public:
     SceneController(
         VulkanDevice& vulkanDevice,
-        ModelRegistry& resourceManager,
+        ModelRegistry& modelRegistry,
         ModelUploader& modelUploader,
         FrameSync& frameSync,
         CameraController& cameraController,
         std::atomic<bool>& isOperating);
 
-    void setModelComputeRuntime(ModelComputeRuntime* updatedModelComputeRuntime);
-    uint32_t loadModel(const std::string& modelPath, uint32_t preferredModelId = 0);
-    bool removeModelByID(uint32_t modelId);
+    void setModelComputeController(ModelComputeController* updatedModelComputeController);
     bool tryGetRuntimeModelSocketKey(uint32_t runtimeModelId, uint64_t& outSocketKey) const;
     void focusOnVisibleModel();
-    void focusCameraOn(const glm::vec3& localCenter);
+    void focusCameraOn(const glm::vec3& worldCenter);
 
 private:
     class OperatingScope {
@@ -42,12 +40,12 @@ private:
     };
 
     VulkanDevice& vulkanDevice;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     ModelUploader& modelUploader;
     FrameSync& frameSync;
     CameraController& cameraController;
     std::atomic<bool>& isOperating;
-    ModelComputeRuntime* modelComputeRuntime = nullptr;
+    ModelComputeController* modelComputeController = nullptr;
 };
 
 

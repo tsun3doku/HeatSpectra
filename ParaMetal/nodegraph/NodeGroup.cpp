@@ -64,6 +64,12 @@ void NodeGroup::execute(NodeKernelEval& eval) const {
         }
 
         GeometryData updatedGeometry = *inputGeometry;
+        if (!payloadRegistry->resolveLocalToWorld(
+                inputMeshValue->payloadHandle,
+                updatedGeometry.localToWorld)) {
+            populateMetadata(outputValue, nullptr, payloadRegistry);
+            continue;
+        }
         const bool changed = applyAssignment(updatedGeometry, sourceGroupName, targetGroupName);
         if (changed) {
             const uint64_t payloadKey = NodeSocketKey(eval.node.id, outputSocket.id);

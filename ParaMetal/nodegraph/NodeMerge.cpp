@@ -7,6 +7,8 @@
 #include "NodePayloadRegistry.hpp"
 #include "domain/GeometryData.hpp"
 #include "domain/PointData.hpp"
+
+#include <limits>
 #include "../util/GeometryUtils.hpp"
 
 #include <glm/glm.hpp>
@@ -50,11 +52,15 @@ void NodeMerge::execute(NodeKernelEval& eval) const {
 
     if (dataType == payloadtypes::Points) {
         std::vector<const PointData*> pointInputs;
+        std::vector<std::array<float, 16>> pointMatrices;
         for (const NodeDataBlock* block : inputs) {
             if (block && block->dataType == payloadtypes::Points && block->payloadHandle.key != 0) {
-                const PointData* pointData = payloadRegistry->get<PointData>(block->payloadHandle);
-                if (pointData && pointData->active && !pointData->positions.empty()) {
+                const PointData* pointData = payloadRegistry->resolvePoints(block->payloadHandle);
+                std::array<float, 16> localToWorld{};
+                if (pointData && pointData->active && !pointData->positions.empty() &&
+                    payloadRegistry->resolveLocalToWorld(block->payloadHandle, localToWorld)) {
                     pointInputs.push_back(pointData);
+                    pointMatrices.push_back(localToWorld);
                 }
             }
         }
@@ -65,19 +71,34 @@ void NodeMerge::execute(NodeKernelEval& eval) const {
         }
 
         PointData payload{};
-        payload.localToWorld = pointInputs[0]->localToWorld;
+        payload.localToWorld = pointMatrices[0];
         payload.active = true;
+        payload.domainMinimum = glm::vec3(std::numeric_limits<float>::max());
+        payload.domainMaximum = glm::vec3(std::numeric_limits<float>::lowest());
 
         glm::mat4 referenceL2W = toMat4(payload.localToWorld);
         glm::mat4 invReferenceL2W = glm::inverse(referenceL2W);
 
         for (size_t i = 0; i < pointInputs.size(); ++i) {
             const PointData* input = pointInputs[i];
-            glm::mat4 inputL2W = toMat4(input->localToWorld);
+            glm::mat4 inputL2W = toMat4(pointMatrices[i]);
             glm::mat4 inputToReference = invReferenceL2W * inputL2W;
 
             for (const auto& pos : input->positions) {
                 payload.positions.push_back(inputToReference * pos);
+            }
+
+            const glm::vec3& minimum = input->domainMinimum;
+            const glm::vec3& maximum = input->domainMaximum;
+            for (uint32_t corner = 0; corner < 8; ++corner) {
+                const glm::vec4 point(
+                    (corner & 1u) ? maximum.x : minimum.x,
+                    (corner & 2u) ? maximum.y : minimum.y,
+                    (corner & 4u) ? maximum.z : minimum.z,
+                    1.0f);
+                const glm::vec3 transformed = glm::vec3(inputToReference * point);
+                payload.domainMinimum = glm::min(payload.domainMinimum, transformed);
+                payload.domainMaximum = glm::max(payload.domainMaximum, transformed);
             }
         }
 
@@ -88,13 +109,17 @@ void NodeMerge::execute(NodeKernelEval& eval) const {
 
     } else if (dataType == payloadtypes::Geometry || dataType == payloadtypes::Remesh) {
         std::vector<const GeometryData*> geometryInputs;
+        std::vector<std::array<float, 16>> geometryMatrices;
         for (const NodeDataBlock* block : inputs) {
             if (block &&
                 (block->dataType == payloadtypes::Geometry || block->dataType == payloadtypes::Remesh) &&
                 block->payloadHandle.key != 0) {
                 const GeometryData* geometryData = payloadRegistry->resolveGeometry(block->payloadHandle);
-                if (geometryData && !geometryData->pointPositions.empty()) {
+                std::array<float, 16> localToWorld{};
+                if (geometryData && !geometryData->pointPositions.empty() &&
+                    payloadRegistry->resolveLocalToWorld(block->payloadHandle, localToWorld)) {
                     geometryInputs.push_back(geometryData);
+                    geometryMatrices.push_back(localToWorld);
                 }
             }
         }
@@ -105,7 +130,7 @@ void NodeMerge::execute(NodeKernelEval& eval) const {
         }
 
         GeometryData payload{};
-        payload.localToWorld = geometryInputs[0]->localToWorld;
+        payload.localToWorld = geometryMatrices[0];
         payload.baseModelPath = geometryInputs[0]->baseModelPath;
 
         glm::mat4 referenceL2W = toMat4(payload.localToWorld);
@@ -117,7 +142,7 @@ void NodeMerge::execute(NodeKernelEval& eval) const {
 
         for (size_t i = 0; i < geometryInputs.size(); ++i) {
             const GeometryData* input = geometryInputs[i];
-            glm::mat4 inputL2W = toMat4(input->localToWorld);
+            glm::mat4 inputL2W = toMat4(geometryMatrices[i]);
             glm::mat4 inputToReference = invReferenceL2W * inputL2W;
 
             const uint32_t vertexOffset = static_cast<uint32_t>(payload.pointPositions.size() / 3);

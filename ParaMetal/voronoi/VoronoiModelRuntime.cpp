@@ -2,6 +2,8 @@
 
 #include "mesh/remesher/iODT.hpp"
 #include "util/Structs.hpp"
+#include "voronoi/VoronoiNodeDomain.hpp"
+#include "spatial/VoxelGrid.hpp"
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
 #include "vulkan/VulkanBuffer.hpp"
@@ -34,8 +36,7 @@ VoronoiModelRuntime::VoronoiModelRuntime(
       renderCommandPool(renderCommandPool) {
 }
 
-VoronoiModelRuntime::~VoronoiModelRuntime() {
-}
+VoronoiModelRuntime::~VoronoiModelRuntime() = default;
 
 bool VoronoiModelRuntime::createVoronoiBuffers() {
     if (surfaceVertices.empty() || surfaceTriangleIndices.empty()) {
@@ -181,12 +182,12 @@ bool VoronoiModelRuntime::resetSurfaceState() {
     return createSurfaceBuffers();
 }
 
-void VoronoiModelRuntime::stageGMLSSurfaceData(
+bool VoronoiModelRuntime::stageGMLSSurfaceData(
     const std::vector<voronoi::GMLSSurfaceStencil>& stencils,
     const std::vector<voronoi::GMLSSurfaceWeight>& valueWeights,
     const std::vector<voronoi::GMLSSurfaceGradientWeight>& gradientWeights) {
     if (stencils.empty() || surfaceVertices.empty() || stencils.size() != surfaceVertices.size()) {
-        return;
+        return false;
     }
 
     freeBuffer(memoryAllocator, gmlsSurfaceStencilBuffer, gmlsSurfaceStencilBufferOffset);
@@ -206,7 +207,7 @@ void VoronoiModelRuntime::stageGMLSSurfaceData(
                 storageAlignment,
                 gmlsSurfaceStencilBuffer,
                 gmlsSurfaceStencilBufferOffset) != VK_SUCCESS) {
-            return;
+            return false;
         }
     }
 
@@ -221,7 +222,7 @@ void VoronoiModelRuntime::stageGMLSSurfaceData(
                 storageAlignment,
                 gmlsSurfaceWeightBuffer,
                 gmlsSurfaceWeightBufferOffset) != VK_SUCCESS) {
-            return;
+            return false;
         }
         valueWeightCount = valueWeights.size();
     }
@@ -237,10 +238,11 @@ void VoronoiModelRuntime::stageGMLSSurfaceData(
                 storageAlignment,
                 gmlsSurfaceGradientWeightBuffer,
                 gmlsSurfaceGradientWeightBufferOffset) != VK_SUCCESS) {
-            return;
+            return false;
         }
         gradientWeightCount = gradientWeights.size();
     }
+    return true;
 }
 
 void VoronoiModelRuntime::cleanup() {
@@ -259,11 +261,22 @@ void VoronoiModelRuntime::cleanup() {
     freeBuffer(memoryAllocator, surfaceBuffer, surfaceBufferOffset);
 }
 
-std::vector<glm::vec3> VoronoiModelRuntime::getSurfacePositions() const {
+bool VoronoiModelRuntime::buildAndStageSurfaceMappings(
+    VoronoiNodeDomain& nodeDomain, const VoxelGrid& voxelGrid) {
+    if (surfaceVertices.empty()) return false;
+
     std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
     positions.reserve(surfaceVertices.size());
+    normals.reserve(surfaceVertices.size());
     for (const voronoi::SurfaceVertex& vertex : surfaceVertices) {
         positions.push_back(glm::vec3(vertex.position));
+        normals.push_back(glm::vec3(vertex.normal));
     }
-    return positions;
+
+    if (!nodeDomain.buildSurfaceMappings(positions, normals, voxelGrid)) return false;
+    return stageGMLSSurfaceData(
+        nodeDomain.getSurfaceStencils(),
+        nodeDomain.getSurfaceValueWeights(),
+        nodeDomain.getSurfaceGradientWeights());
 }

@@ -90,6 +90,11 @@ protected:
             static_cast<float>(viewportItem->window() ? viewportItem->window()->devicePixelRatio() : 1.0),
             std::memory_order_release);
 
+        int worldUnit = static_cast<int>(units::defaultLengthUnit());
+        if (mailbox.takeWorldUnit(worldUnit, runtimeFresh)) {
+            runtime.setWorldUnit(worldUnit);
+        }
+
         if (const NodeGraphState* graphState = mailbox.graphReplacement(runtimeFresh)) {
             runtime.replaceGraphState(*graphState);
             mailbox.graphReplacementApplied();
@@ -203,8 +208,10 @@ protected:
             nativeCommandBuffer->commandBuffer,
             static_cast<uint32_t>(rhi()->currentFrameSlot()));
         commandBuffer->endExternal();
-        for (const InputAction& action : runtime.takePendingAuthoringActions()) {
-            emit notifier.inputActionRequested(action);
+        NodeGraphNodeId nodeId{};
+        std::vector<NodeGraphParamValue> parameters;
+        while (runtime.takePendingNodeParameters(nodeId, parameters)) {
+            emit notifier.nodeParametersRequested(nodeId, parameters);
         }
         colorTexture()->setNativeLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         if (!snapshotTimer.isValid() || snapshotTimer.elapsed() >= 16) {
@@ -295,6 +302,11 @@ void ViewportItem::bindRuntime(RuntimeSystems& runtime_, RuntimeNotifier& notifi
     Q_ASSERT(!runtime && !notifier);
     runtime = &runtime_;
     notifier = &notifier_;
+}
+
+void ViewportItem::requestWorldUnit(int unit) {
+    mailbox.requestWorldUnit(unit);
+    update();
 }
 
 void ViewportItem::requestWireframeMode(app::WireframeMode mode) { mailbox.requestWireframeMode(mode); update(); }

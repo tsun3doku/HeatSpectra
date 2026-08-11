@@ -49,7 +49,7 @@ RenderRuntime::RenderRuntime(
 
 RenderRuntime::~RenderRuntime() = default;
 
-bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& resourceManager, UniformBufferManager& ubo, IBLSystem& iblSystem) {
+bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, MemoryAllocator& allocator, ModelRegistry& modelRegistry, UniformBufferManager& ubo, IBLSystem& iblSystem) {
     if (swapChainFormat == VK_FORMAT_UNDEFINED || extent.width == 0 || extent.height == 0) {
         return false;
     }
@@ -77,7 +77,7 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
         allocator,
         *frameGraph,
         frameGraphBackend->getRuntime(),
-        resourceManager,
+        modelRegistry,
         ubo,
         renderconfig::MaxFramesInFlight,
         renderCommandPool,
@@ -93,7 +93,7 @@ bool RenderRuntime::initializeBase(VkFormat swapChainFormat, VkExtent2D extent, 
     modelSelection = std::make_unique<ModelSelection>(
         vulkanDevice,
         frameGraphBackend->getRuntime(),
-        resourceManager,
+        modelRegistry,
         frameGraph->getResourceId(framegraph::resources::PickID));
     if (!modelSelection) {
         return false;

@@ -1,6 +1,6 @@
 #include "HeatSystemDiffusionStage.hpp"
 
-#include "HeatSystemSimRuntime.hpp"
+#include "HeatPlaybackRuntime.hpp"
 #include "heat/HeatGpuStructs.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
 

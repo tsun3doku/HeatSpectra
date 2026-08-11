@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-constexpr int ProjectVersion = 1;
+constexpr int ProjectVersion = 2;
 constexpr const char* ProjectApp = "ParaMetal";
 
 bool ProjectFile::save(const ProjectState& data, const QString& filePath, QString* outError) {
@@ -52,6 +52,7 @@ bool ProjectFile::save(const ProjectState& data, const QString& filePath, QStrin
     graph["edges"] = edges;
     root["graph"] = graph;
     root["viewport"] = viewportToJson(data.viewport);
+    root["worldUnit"] = QString::fromUtf8(units::toString(data.worldUnit));
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
@@ -143,6 +144,15 @@ bool ProjectFile::load(ProjectState& outData, const QString& filePath, QString* 
 
     if (root.contains("viewport") && !viewportFromJson(root["viewport"], loaded.viewport, outError)) {
         return false;
+    }
+    if (root.contains("worldUnit")) {
+        units::LengthUnit parsed = units::defaultLengthUnit();
+        if (!root["worldUnit"].isString() ||
+            !units::tryParse(root["worldUnit"].toString().toStdString(), parsed)) {
+            setError(outError, "Project worldUnit is invalid.");
+            return false;
+        }
+        loaded.worldUnit = parsed;
     }
 
     outData = loaded;

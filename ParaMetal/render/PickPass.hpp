@@ -44,7 +44,7 @@ private:
 
     VulkanDevice& vulkanDevice;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     GeometryPass& geometryPass;
     GizmoRenderer& gizmoRenderer;
     framegraph::PassId passId{};

@@ -8,7 +8,6 @@
 #include "framegraph/FrameGraphPasses.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
 #include "renderers/GizmoRenderer.hpp"
-#include "runtime/RuntimeProducts.hpp"
 #include "scene/GizmoController.hpp"
 #include "scene/Model.hpp"
 #include "scene/ModelSelection.hpp"
@@ -29,7 +28,7 @@ PickPass::PickPass(
     framegraph::PassId pickPassId)
     : vulkanDevice(device),
       frameGraphRuntime(runtime),
-      resourceManager(resources),
+      modelRegistry(resources),
       geometryPass(geometry),
       gizmoRenderer(gizmo),
       passId(pickPassId) {
@@ -77,33 +76,35 @@ void PickPass::record(const FrameContext& context, const SceneView& view, const 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipelineLayout, 0, 1, &geometryDescriptorSet, 0, nullptr);
 
-    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
-        ModelProduct product{};
-        if (!resourceManager.exportProduct(modelId, product)) {
-            continue;
-        }
-
-        if (product.renderVertexBuffer == VK_NULL_HANDLE ||
-            product.renderIndexBuffer == VK_NULL_HANDLE ||
-            product.renderIndexCount == 0) {
+    for (uint32_t modelId : modelRegistry.getRenderableModelIds()) {
+        VkBuffer vertexBuffer = VK_NULL_HANDLE;
+        VkDeviceSize vertexBufferOffset = 0;
+        VkBuffer indexBuffer = VK_NULL_HANDLE;
+        VkDeviceSize indexBufferOffset = 0;
+        uint32_t indexCount = 0;
+        glm::mat4 modelMatrix{1.0f};
+        if (!modelRegistry.tryGetRenderGeometry(
+                modelId, vertexBuffer, vertexBufferOffset,
+                indexBuffer, indexBufferOffset, indexCount) ||
+            !modelRegistry.tryGetModelMatrix(modelId, modelMatrix)) {
             continue;
         }
 
         PickPushConstant pushConstant{};
-        pushConstant.modelMatrix = product.modelMatrix;
+        pushConstant.modelMatrix = modelMatrix;
         pushConstant.pickId = pickid::encodeModel(modelId);
         vkCmdPushConstants(commandBuffer, modelPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PickPushConstant), &pushConstant);
 
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &product.renderVertexBuffer, &product.renderVertexBufferOffset);
-        vkCmdBindIndexBuffer(commandBuffer, product.renderIndexBuffer, product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(commandBuffer, product.renderIndexCount, 1, 0, 0, 0);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexBufferOffset);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexBufferOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, 0, 0);
     }
 
     ModelSelection& modelSelection = *services.modelSelection;
     GizmoController& gizmoController = *services.gizmoController;
     if (modelSelection.getSelected()) {
-        const glm::vec3 gizmoPosition = gizmoController.calculateGizmoPosition(resourceManager, modelSelection);
-        const float gizmoScale = gizmoRenderer.calculateGizmoScale(resourceManager, modelSelection);
+        const glm::vec3 gizmoPosition = gizmoController.calculateGizmoPosition(modelRegistry, modelSelection);
+        const float gizmoScale = gizmoRenderer.calculateGizmoScale(modelRegistry, modelSelection);
         gizmoRenderer.renderPick(commandBuffer, gizmoPosition, context.extent, gizmoScale, view, gizmoController);
     }
 }

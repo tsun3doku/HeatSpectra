@@ -4,8 +4,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
-#include "RuntimeInputController.hpp"
+#include "RuntimeInput.hpp"
 #include "RuntimeRenderController.hpp"
 
 class RenderContext;
@@ -32,13 +33,16 @@ public:
 
     bool hasLastFrameSlot() const;
     uint32_t lastFrameSlot() const;
+    std::vector<ViewportCommand> takePendingViewportCommands();
+    bool takePendingNodeParameters(
+        NodeGraphNodeId& outNodeId,
+        std::vector<NodeGraphParamValue>& outParameters);
 
 private:
-    RuntimeInputController& inputController();
     NodeGraphController* nodeGraphController();
     CameraController* cameraController();
 
-    std::unique_ptr<RuntimeInputController> runtimeInputController;
+    std::unique_ptr<RuntimeInput> runtimeInput;
     std::unique_ptr<RuntimeRenderController> runtimeRenderController;
     RenderContext* render = nullptr;
     SceneContext* scene = nullptr;

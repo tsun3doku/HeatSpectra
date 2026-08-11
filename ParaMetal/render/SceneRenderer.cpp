@@ -33,7 +33,7 @@ SceneRenderer::SceneRenderer(VulkanDevice& device, MemoryAllocator& allocator, F
       memoryAllocator(allocator),
       frameGraph(graph),
       frameGraphRuntime(runtime),
-      resourceManager(manager),
+      modelRegistry(manager),
       uniformBufferManager(ubo),
       renderCommandPool(commandPool),
       iblSystem(iblSystem),
@@ -99,7 +99,7 @@ bool SceneRenderer::initializePasses() {
     auto geometry = std::make_unique<render::GeometryPass>(
         vulkanDevice,
         frameGraphRuntime,
-        resourceManager,
+        modelRegistry,
         uniformBufferManager,
         maxFramesInFlight,
         geometryPassId);
@@ -174,7 +174,7 @@ bool SceneRenderer::initializePasses() {
         vulkanDevice,
         memoryAllocator,
         frameGraphRuntime,
-        resourceManager,
+        modelRegistry,
         uniformBufferManager,
         *geometryPass,
         *heatOverlayRenderer,
@@ -194,7 +194,7 @@ bool SceneRenderer::initializePasses() {
     auto pick = std::make_unique<render::PickPass>(
         vulkanDevice,
         frameGraphRuntime,
-        resourceManager,
+        modelRegistry,
         *geometryPass,
         *gizmoRenderer,
         pickPassId);
@@ -379,10 +379,11 @@ void SceneRenderer::setTimingOverlayLines(const std::vector<std::string>& lines)
     }
 }
 
-void SceneRenderer::updateGridLabels(const glm::vec3& gridSize) {
-    if (overlayPass) {
-        overlayPass->updateGridLabels(gridSize);
-    }
+void SceneRenderer::updateGrid(
+    uint32_t frameIndex,
+    const render::SceneView& sceneView,
+    const glm::vec3& sceneExtent) {
+    if (overlayPass) overlayPass->updateGrid(frameIndex, sceneView, sceneExtent);
 }
 
 VkDescriptorSetLayout SceneRenderer::getGbufferDescriptorSetLayout() const {
@@ -418,6 +419,10 @@ bool SceneRenderer::recordCommandBuffer(
         insertComputeToGraphicsBarrier,
         computeToGraphicsDstStageMask,
         postRenderCommands);
+}
+
+void SceneRenderer::setWorldUnit(units::LengthUnit unit) {
+    if (overlayPass) overlayPass->setWorldUnit(unit);
 }
 
 bool SceneRenderer::recordExternalCommandBuffer(

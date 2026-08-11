@@ -62,6 +62,7 @@ void ViewportMailbox::requestHeatPaletteRange(float minimum, float maximum) {
     heatPaletteRangeDirty = true;
 }
 void ViewportMailbox::requestHeatPalette(int palette) { requestedHeatPalette = palette; heatPaletteDirty = true; }
+void ViewportMailbox::requestWorldUnit(int unit) { requestedWorldUnit = unit; worldUnitDirty = true; }
 
 void ViewportMailbox::applyViewportProjectState(const ProjectFile::Viewport& viewport) {
     appliedViewportProjectState = viewport;
@@ -147,6 +148,12 @@ bool ViewportMailbox::takeHeatPaletteRange(float& minimum, float& maximum, bool 
 bool ViewportMailbox::takeHeatPalette(int& palette, bool force) {
     if (!heatPaletteDirty && !force) return false;
     palette = requestedHeatPalette; heatPaletteDirty = false; return true;
+}
+bool ViewportMailbox::takeWorldUnit(int& unit, bool force) {
+    if (!worldUnitDirty && !force) return false;
+    unit = requestedWorldUnit;
+    worldUnitDirty = false;
+    return true;
 }
 
 bool ViewportMailbox::takeAppliedViewportProjectState(ProjectFile::Viewport& viewport) {

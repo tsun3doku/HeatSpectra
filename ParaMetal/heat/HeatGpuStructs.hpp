@@ -27,7 +27,9 @@ struct SurfacePoint {
 
 struct HeatModelPushConstant {
     uint32_t elementCount;
+    float metersPerUnit;
 };
+static_assert(sizeof(HeatModelPushConstant) == 8);
 
 struct MaterialNode {
     float conductivityPerMass;

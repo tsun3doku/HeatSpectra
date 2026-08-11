@@ -2,40 +2,27 @@
 
 #include "vulkan/CommandBufferManager.hpp"
 #include "vulkan/MemoryAllocator.hpp"
-#include "vulkan/ModelRegistry.hpp"
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiCandidateCompute.hpp"
 #include "voronoi/VoronoiModelRuntime.hpp"
 
 #include <glm/mat4x4.hpp>
+#include <iostream>
 
 VoronoiSystem::VoronoiSystem(
     VulkanDevice& vulkanDevice,
     MemoryAllocator& memoryAllocator,
-    ModelRegistry& resourceManager,
-    uint32_t maxFramesInFlight,
     CommandPool& commandPool)
     : vulkanDevice(vulkanDevice),
       memoryAllocator(memoryAllocator),
-      resourceManager(resourceManager),
-      commandPool(commandPool),
-      maxFramesInFlight(maxFramesInFlight) {
-
+      commandPool(commandPool) {
     voronoiSystemBuildStage = std::make_unique<VoronoiSystemBuildStage>(vulkanDevice, memoryAllocator, commandPool);
-    initializeVoronoiCandidateCompute();
-
-    initialized = true;
+    voronoiCandidateCompute = std::make_unique<VoronoiCandidateCompute>(vulkanDevice, commandPool);
+    voronoiCandidateCompute->initialize();
 }
 
-VoronoiSystem::~VoronoiSystem() {
-}
-
-void VoronoiSystem::failInitialization(const char* stage) {
-    (void)stage;
-    cleanupResources();
-    cleanup();
-}
+VoronoiSystem::~VoronoiSystem() = default;
 
 void VoronoiSystem::setMeshGeometry(
     const std::vector<glm::vec3>& geometryPositions,
@@ -57,17 +44,22 @@ void VoronoiSystem::setMeshGeometry(
 
 }
 
-void VoronoiSystem::setPointGeometry(const std::vector<glm::vec4>& positions) {
+void VoronoiSystem::setPointGeometry(
+    const std::vector<glm::vec4>& positions,
+    const std::array<glm::vec3, 8>& domainCorners) {
     runtime.setPointGeometry(
         vulkanDevice,
         memoryAllocator,
         commandPool,
         0,  
-        positions);
+        positions,
+        domainCorners);
 }
 
-void VoronoiSystem::setSeedPositions(const std::vector<glm::vec4>& positions) {
-    runtime.setSeedPositions(positions);
+void VoronoiSystem::setSeedPositions(
+    const std::vector<glm::vec4>& positions,
+    const std::array<glm::vec3, 8>& domainCorners) {
+    runtime.setSeedPositions(positions, domainCorners);
 }
 
 void VoronoiSystem::clearGeometry() {
@@ -79,41 +71,27 @@ void VoronoiSystem::setParams(float cellSize, int voxelResolution) {
 }
 
 bool VoronoiSystem::ensureConfigured() {
-    if (runtime.isReady()) {
-        executeBufferTransfers();
-        return true;
+    if (!runtime.isReady()) {
+        if (!rebuildVoronoiRuntime()) {
+            std::cerr << "[VoronoiSystem] rebuildVoronoiRuntime returned false" << std::endl;
+            return false;
+        }
     }
 
-    if (!rebuildVoronoiRuntime()) {
-        return false;
-    }
-
-    executeBufferTransfers();
+    dispatchVoronoiCandidateUpdates();
     return true;
 }
 
-void VoronoiSystem::initializeVoronoiCandidateCompute() {
-    voronoiCandidateCompute = std::make_unique<VoronoiCandidateCompute>(vulkanDevice, commandPool);
-    if (voronoiCandidateCompute) {
-        voronoiCandidateCompute->initialize();
-    }
-}
-
 bool VoronoiSystem::rebuildVoronoiRuntime() {
-    if (!voronoiSystemBuildStage->buildVoronoiDiagram(
-            runtime,
-            runtime.getCellSize(),
-            runtime.getVoxelResolution(),
-            K_NEIGHBORS)) {
+    if (!voronoiSystemBuildStage->prepareDomainGeometry(
+            runtime, runtime.getCellSize(), runtime.getVoxelResolution())) {
+        std::cerr << "[VoronoiSystem] prepareDomainGeometry returned false" << std::endl;
         return false;
     }
 
-    voronoiSystemBuildStage->setGhostFromVoxelGrid(runtime);
-    runtime.reorderNodes();
-
-    runtime.markMeshGridReady();
-
-    if (!voronoiSystemBuildStage->dispatchVoronoiCompute(runtime, debugEnable, K_NEIGHBORS)) {
+    runtime.reorderSeeds();
+    if (!voronoiSystemBuildStage->buildNodeDomain(runtime, K_NEIGHBORS)) {
+        std::cerr << "[VoronoiSystem] buildNodeDomain returned false" << std::endl;
         return false;
     }
 
@@ -121,11 +99,12 @@ bool VoronoiSystem::rebuildVoronoiRuntime() {
         return false;
     }
 
-    if (VoronoiDomainRuntime* domainRuntime = runtime.getDomainRuntime()) {
-        if (!domainRuntime->isPointDomain()) {
-            if (!voronoiSystemBuildStage->stageSurfaceMappings(runtime)) {
-                return false;
-            }
+    VoronoiDomainRuntime* domainRuntime = runtime.getDomainRuntime();
+    if (!domainRuntime) return false;
+    if (!domainRuntime->isPointDomain()) {
+        auto* modelRuntime = static_cast<VoronoiModelRuntime*>(domainRuntime);
+        if (!modelRuntime->buildAndStageSurfaceMappings(runtime.getNodeDomain(), runtime.getVoxelGrid())) {
+            return false;
         }
     }
 
@@ -133,19 +112,10 @@ bool VoronoiSystem::rebuildVoronoiRuntime() {
     return true;
 }
 
-void VoronoiSystem::executeBufferTransfers() {
-    dispatchVoronoiCandidateUpdates();
-}
-
 void VoronoiSystem::dispatchVoronoiCandidateUpdates() {
     if (!voronoiCandidateCompute || voronoiSystemBuildStage->getCandidateNodeCount() == 0) {
         return;
     }
-
-    size_t dispatchedCount = 0;
-    size_t skippedMissingGeometryRuntime = 0;
-    size_t skippedZeroFaces = 0;
-    size_t skippedMissingCandidateBuffer = 0;
 
     VoronoiDomainRuntime* domainRuntime = runtime.getDomainRuntime();
     if (!domainRuntime) {
@@ -160,15 +130,12 @@ void VoronoiSystem::dispatchVoronoiCandidateUpdates() {
     VoronoiModelRuntime* modelRuntime = static_cast<VoronoiModelRuntime*>(domainRuntime);
     uint32_t faceCount = static_cast<uint32_t>(modelRuntime->getSurfaceTriangleCount());
     if (modelRuntime->getSurfaceBuffer() == VK_NULL_HANDLE) {
-        ++skippedMissingGeometryRuntime;
         return;
     }
     if (faceCount == 0) {
-        ++skippedZeroFaces;
         return;
     }
     if (modelRuntime->getCandidateBuffer() == VK_NULL_HANDLE) {
-        ++skippedMissingCandidateBuffer;
         return;
     }
 
@@ -184,7 +151,6 @@ void VoronoiSystem::dispatchVoronoiCandidateUpdates() {
 
     voronoiCandidateCompute->updateDescriptors(bindings);
     voronoiCandidateCompute->dispatch(faceCount, voronoiSystemBuildStage->getCandidateNodeCount());
-    ++dispatchedCount;
 
 }
 
@@ -201,5 +167,5 @@ void VoronoiSystem::cleanup() {
     if (voronoiSystemBuildStage) {
         voronoiSystemBuildStage->cleanup();
     }
-    runtime.cleanup(memoryAllocator);
+    runtime.cleanup();
 }

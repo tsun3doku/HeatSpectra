@@ -133,15 +133,16 @@ float GizmoController::calculateRotationDelta(const glm::vec3& rayOrigin, const 
     return glm::degrees(angle);
 }
 
-glm::vec3 GizmoController::calculateGizmoPosition(ModelRegistry& resourceManager, const ModelSelection& modelSelection) {
+glm::vec3 GizmoController::calculateGizmoPosition(ModelRegistry& modelRegistry, const ModelSelection& modelSelection) {
     const auto& selectedModelIDs = modelSelection.getSelectedModelIDsRenderThread();
     glm::vec3 gizmoPosition(0.0f);
     int count = 0;
 
     for (uint32_t id : selectedModelIDs) {
-        glm::vec3 worldCenter(0.0f);
-        if (resourceManager.tryGetWorldBoundingBoxCenter(id, worldCenter)) {
-            gizmoPosition += worldCenter;
+        glm::vec3 worldMin(0.0f);
+        glm::vec3 worldMax(0.0f);
+        if (modelRegistry.tryGetWorldBounds(id, worldMin, worldMax)) {
+            gizmoPosition += (worldMin + worldMax) * 0.5f;
             count++;
         }
     }
@@ -151,10 +152,11 @@ glm::vec3 GizmoController::calculateGizmoPosition(ModelRegistry& resourceManager
         return gizmoPosition;
     }
 
-    for (uint32_t modelId : resourceManager.getRenderableModelIds()) {
-        glm::vec3 worldCenter(0.0f);
-        if (resourceManager.tryGetWorldBoundingBoxCenter(modelId, worldCenter)) {
-            return worldCenter;
+    for (uint32_t modelId : modelRegistry.getRenderableModelIds()) {
+        glm::vec3 worldMin(0.0f);
+        glm::vec3 worldMax(0.0f);
+        if (modelRegistry.tryGetWorldBounds(modelId, worldMin, worldMax)) {
+            return (worldMin + worldMax) * 0.5f;
         }
     }
 

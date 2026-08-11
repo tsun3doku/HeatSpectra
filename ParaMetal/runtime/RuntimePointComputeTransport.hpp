@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "runtime/PointComputeRuntime.hpp"

@@ -702,8 +702,6 @@ void IntrinsicRenderer::releaseDescriptorSetsForSocket(uint64_t socketKey) {
         return;
     }
 
-    // Descriptor sets may still be referenced by in-flight command buffers.
-    // Keep cached sets alive until renderer cleanup/pool destruction.
     remeshConfigsBySocketKey.erase(socketKey);
 }
 
@@ -711,9 +709,9 @@ void IntrinsicRenderer::pruneStaleSocketResources() {
     std::vector<uint64_t> staleSocketKeys;
     staleSocketKeys.reserve(remeshConfigsBySocketKey.size());
 
-    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
+    for (const auto& [socketKey, config] : remeshConfigsBySocketKey) {
         if (socketKey == 0 ||
-            !product.isValid()) {
+            !config.isValid()) {
             staleSocketKeys.push_back(socketKey);
         }
     }
@@ -1227,12 +1225,12 @@ void IntrinsicRenderer::renderSurface(VkCommandBuffer commandBuffer, uint32_t cu
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipeline);
     vkCmdSetDepthBias(commandBuffer, 0.1f, 0.0f, 0.1f);
 
-    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
-        if (!product.isValid() || !product.showRemeshOverlay) {
+    for (const auto& [socketKey, config] : remeshConfigsBySocketKey) {
+        if (!config.isValid() || !config.showRemeshOverlay) {
             continue;
         }
 
-        updateSupportingHalfedgeDescriptorSet(socketKey, product, currentFrame);
+        updateSupportingHalfedgeDescriptorSet(socketKey, config, currentFrame);
         auto it = supportingHalfedgeDescriptorSetsBySocket.find(socketKey);
         if (it == supportingHalfedgeDescriptorSetsBySocket.end()) {
             continue;
@@ -1243,15 +1241,15 @@ void IntrinsicRenderer::renderSurface(VkCommandBuffer commandBuffer, uint32_t cu
             continue;
         }
 
-        glm::mat4 modelMatrix = product.modelMatrix;
+        glm::mat4 modelMatrix = config.modelMatrix;
         vkCmdPushConstants(commandBuffer, supportingHalfedgePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
 
-        VkBuffer modelVertexBuffer = product.renderVertexBuffer;
-        VkDeviceSize modelVertexOffset = product.renderVertexBufferOffset;
+        VkBuffer modelVertexBuffer = config.renderVertexBuffer;
+        VkDeviceSize modelVertexOffset = config.renderVertexBufferOffset;
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &modelVertexBuffer, &modelVertexOffset);
-        vkCmdBindIndexBuffer(commandBuffer, product.renderIndexBuffer, product.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, config.renderIndexBuffer, config.renderIndexBufferOffset, VK_INDEX_TYPE_UINT32);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, supportingHalfedgePipelineLayout, 0, 1, &modelDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, product.renderIndexCount, 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, config.renderIndexCount, 1, 0, 0, 0);
     }
 
     vkCmdSetDepthBias(commandBuffer, 0.0f, 0.0f, 0.0f);
@@ -1270,18 +1268,18 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
     pruneStaleSocketResources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipeline);
 
-    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
-        if (!product.isValid() || !product.showFaceNormals) {
+    for (const auto& [socketKey, config] : remeshConfigsBySocketKey) {
+        if (!config.isValid() || !config.showFaceNormals) {
             continue;
         }
 
-        updateFaceNormalDescriptorSet(socketKey, product, currentFrame);
+        updateFaceNormalDescriptorSet(socketKey, config, currentFrame);
         auto it = intrinsicNormalsDescriptorSetsBySocket.find(socketKey);
         if (it == intrinsicNormalsDescriptorSetsBySocket.end()) {
             continue;
         }
 
-        size_t triangleCount = product.intrinsicTriangleCount;
+        size_t triangleCount = config.intrinsicTriangleCount;
         if (triangleCount == 0) {
             continue;
         }
@@ -1292,9 +1290,9 @@ void IntrinsicRenderer::renderIntrinsicNormals(VkCommandBuffer commandBuffer, ui
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = product.modelMatrix;
-        pushConstants.normalLength = product.normalLength;
-        pushConstants.avgArea = product.averageTriangleArea;
+        pushConstants.modelMatrix = config.modelMatrix;
+        pushConstants.normalLength = config.normalLength;
+        pushConstants.avgArea = config.averageTriangleArea;
 
         vkCmdPushConstants(commandBuffer, intrinsicNormalsPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicNormalsPipelineLayout, 0, 1, &modelDescriptorSets[currentFrame], 0, nullptr);
@@ -1310,18 +1308,18 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
     pruneStaleSocketResources();
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, intrinsicVertexNormalsPipeline);
 
-    for (const auto& [socketKey, product] : remeshConfigsBySocketKey) {
-        if (!product.isValid() || !product.showVertexNormals) {
+    for (const auto& [socketKey, config] : remeshConfigsBySocketKey) {
+        if (!config.isValid() || !config.showVertexNormals) {
             continue;
         }
 
-        updateVertexNormalDescriptorSet(socketKey, product, currentFrame);
+        updateVertexNormalDescriptorSet(socketKey, config, currentFrame);
         auto it = intrinsicVertexNormalsDescriptorSetsBySocket.find(socketKey);
         if (it == intrinsicVertexNormalsDescriptorSetsBySocket.end()) {
             continue;
         }
 
-        size_t vertexCount = product.intrinsicVertexCount;
+        size_t vertexCount = config.intrinsicVertexCount;
         if (vertexCount == 0) {
             continue;
         }
@@ -1332,8 +1330,8 @@ void IntrinsicRenderer::renderIntrinsicVertexNormals(VkCommandBuffer commandBuff
         }
 
         NormalPushConstant pushConstants{};
-        pushConstants.modelMatrix = product.modelMatrix;
-        pushConstants.normalLength = product.normalLength;
+        pushConstants.modelMatrix = config.modelMatrix;
+        pushConstants.normalLength = config.normalLength;
         pushConstants.avgArea = 0.0f;
 
         vkCmdPushConstants(commandBuffer, intrinsicVertexNormalsPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(NormalPushConstant), &pushConstants);

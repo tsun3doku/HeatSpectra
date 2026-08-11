@@ -1,5 +1,11 @@
 #include "GlyphText.hpp"
 
+#include <QByteArray>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -18,57 +24,78 @@ bool GlyphText::load() {
         std::cerr << "[GlyphText] Failed to open font metadata json: " << atlasMetadataPath << std::endl;
         return false;
     }
-    const std::string json((std::istreambuf_iterator<char>(jsonFile)), std::istreambuf_iterator<char>());
-
-    atlasWidthPx = GlyphText::readJsonNumber(json, "\"scaleW\":", 856.0f);
-    atlasHeightPx = GlyphText::readJsonNumber(json, "\"scaleH\":", 64.0f);
-    if (atlasWidthPx <= 0.0f) {
-        atlasWidthPx = 856.0f;
-    }
-    if (atlasHeightPx <= 0.0f) {
-        atlasHeightPx = 64.0f;
-    }
-
-    size_t cursor = json.find("\"chars\"");
-    cursor = (cursor == std::string::npos) ? cursor : json.find('[', cursor);
-    if (cursor == std::string::npos) {
-        std::cerr << "[GlyphText] Missing chars array in font metadata: " << atlasMetadataPath << std::endl;
+    const std::string jsonText((std::istreambuf_iterator<char>(jsonFile)), std::istreambuf_iterator<char>());
+    QJsonParseError parseError{};
+    const QJsonDocument document = QJsonDocument::fromJson(
+        QByteArray::fromStdString(jsonText), &parseError);
+    if (document.isNull() || !document.isObject()) {
+        std::cerr << "[GlyphText] Invalid font metadata json: " << atlasMetadataPath
+                  << " (" << parseError.errorString().toStdString() << ")" << std::endl;
         return false;
     }
 
-    while (true) {
-        const size_t start = json.find('{', cursor);
-        if (start == std::string::npos) {
-            break;
-        }
-        const size_t end = json.find('}', start);
-        if (end == std::string::npos) {
-            break;
-        }
+    const QJsonObject root = document.object();
+    const QJsonObject atlas = root.value("atlas").toObject();
+    if (atlas.isEmpty() || root.value("glyphs").toArray().isEmpty()) {
+        std::cerr << "[GlyphText] Expected native msdf-atlas-gen JSON: "
+                  << atlasMetadataPath << std::endl;
+        return false;
+    }
+    if (atlas.value("yOrigin").toString() != "top") {
+        std::cerr << "[GlyphText] Font atlas must be generated with -yorigin top: "
+                  << atlasMetadataPath << std::endl;
+        return false;
+    }
 
-        const std::string item = json.substr(start, end - start + 1);
-        const int id = static_cast<int>(GlyphText::readJsonNumber(item, "\"id\":", -1.0f));
+    atlasWidthPx = static_cast<float>(atlas.value("width").toDouble());
+    atlasHeightPx = static_cast<float>(atlas.value("height").toDouble());
+    atlasEmSizePx = static_cast<float>(atlas.value("size").toDouble());
+    const QJsonObject grid = atlas.value("grid").toObject();
+    cellWidthPx = static_cast<float>(grid.value("cellWidth").toDouble());
+    cellHeightPx = static_cast<float>(grid.value("cellHeight").toDouble());
+    cellOriginXEm = static_cast<float>(grid.value("originX").toDouble());
+    cellOriginYEm = static_cast<float>(grid.value("originY").toDouble());
+    if (atlasWidthPx <= 0.0f || atlasHeightPx <= 0.0f || atlasEmSizePx <= 0.0f ||
+        cellWidthPx <= 0.0f || cellHeightPx <= 0.0f) {
+        std::cerr << "[GlyphText] Invalid atlas dimensions in: " << atlasMetadataPath << std::endl;
+        return false;
+    }
 
-        if (id >= 0) {
-            const size_t index = static_cast<size_t>(id);
-            if (index >= charMap.size()) {
-                charMap.resize(index + 1);
+    for (const QJsonValue glyphValue : root.value("glyphs").toArray()) {
+        const QJsonObject glyph = glyphValue.toObject();
+        const int id = glyph.value("unicode").toInt(-1);
+        if (id < 0) continue;
+
+        const size_t index = static_cast<size_t>(id);
+        if (index >= charMap.size()) charMap.resize(index + 1);
+
+        CharInfo info{};
+        info.advanceEm = static_cast<float>(glyph.value("advance").toDouble());
+        const QJsonObject plane = glyph.value("planeBounds").toObject();
+        const QJsonObject bounds = glyph.value("atlasBounds").toObject();
+        if (!plane.isEmpty() && !bounds.isEmpty()) {
+            const float left = static_cast<float>(bounds.value("left").toDouble());
+            const float top = static_cast<float>(bounds.value("top").toDouble());
+            const float right = static_cast<float>(bounds.value("right").toDouble());
+            const float bottom = static_cast<float>(bounds.value("bottom").toDouble());
+            info.u = left / atlasWidthPx;
+            info.v = top / atlasHeightPx;
+            info.width = right - left;
+            info.height = bottom - top;
+            info.planeLeft = static_cast<float>(plane.value("left").toDouble());
+            info.planeTop = static_cast<float>(plane.value("top").toDouble());
+            info.planeRight = static_cast<float>(plane.value("right").toDouble());
+            info.planeBottom = static_cast<float>(plane.value("bottom").toDouble());
+            if (planeHeightEm <= 0.0f) {
+                planeHeightEm = info.planeBottom - info.planeTop;
             }
-
-            CharInfo info{};
-            const float x = GlyphText::readJsonNumber(item, "\"x\":", 0.0f);
-            const float y = GlyphText::readJsonNumber(item, "\"y\":", 0.0f);
-            info.width = GlyphText::readJsonNumber(item, "\"width\":", 0.0f);
-            info.height = GlyphText::readJsonNumber(item, "\"height\":", 0.0f);
-            info.xadvance = GlyphText::readJsonNumber(item, "\"xadvance\":", info.width);
-            info.xoffset = GlyphText::readJsonNumber(item, "\"xoffset\":", 0.0f);
-            info.yoffset = GlyphText::readJsonNumber(item, "\"yoffset\":", 0.0f);
-            info.u = x / atlasWidthPx;
-            info.v = y / atlasHeightPx;
-            charMap[index] = info;
         }
-
-        cursor = end + 1;
+        charMap[index] = info;
+    }
+    if (planeHeightEm <= 0.0f) {
+        std::cerr << "[GlyphText] Invalid uniform-grid glyph bounds in: "
+                  << atlasMetadataPath << std::endl;
+        return false;
     }
     return true;
 }
@@ -93,32 +120,4 @@ glm::vec4 GlyphText::getCharUV(char c) const {
 bool GlyphText::hasGlyph(char c) const {
     const CharInfo& info = getCharInfo(c);
     return info.width > 0.0f && info.height > 0.0f;
-}
-
-float GlyphText::readJsonNumber(const std::string& text, const std::string& key, float fallback) {
-    const size_t keyPos = text.find(key);
-    if (keyPos == std::string::npos) {
-        return fallback;
-    }
-
-    size_t pos = keyPos + key.size();
-    while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\t')) {
-        ++pos;
-    }
-
-    size_t end = pos;
-    while (end < text.size()) {
-        const char c = text[end];
-        if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+') {
-            ++end;
-            continue;
-        }
-        break;
-    }
-
-    if (end <= pos) {
-        return fallback;
-    }
-
-    return std::stof(text.substr(pos, end - pos));
 }

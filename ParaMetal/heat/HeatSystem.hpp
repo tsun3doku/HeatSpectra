@@ -5,8 +5,9 @@
 #include "contact/ContactTypes.hpp"
 #include "framegraph/ComputePass.hpp"
 #include "util/Structs.hpp"
-#include "HeatSystemSimRuntime.hpp"
-#include "HeatSystemRuntime.hpp"
+#include "util/Units.hpp"
+#include "HeatPlaybackRuntime.hpp"
+#include "HeatDomainRuntime.hpp"
 #include "HeatSystemPresets.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
 
@@ -16,7 +17,6 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-class ModelRegistry;
 class MemoryAllocator;
 class VulkanDevice;
 class CommandPool;
@@ -27,7 +27,7 @@ class HeatContactRuntime;
 
 class HeatSystem : public ComputePass {
 public:
-    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, ModelRegistry& resourceManager,
+    HeatSystem(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator,
         uint32_t maxFramesInFlight, CommandPool& renderCommandPool, CommandPool& transferCommandPool);
     ~HeatSystem() override;
 
@@ -58,7 +58,8 @@ public:
         const std::unordered_map<uint32_t, float>& modelVolumetricPowerDensitiesByRuntimeId,
         const std::unordered_map<uint32_t, float>& modelDensity,
         const std::unordered_map<uint32_t, float>& modelSpecificHeat,
-        const std::unordered_map<uint32_t, float>& modelConductivity);
+        const std::unordered_map<uint32_t, float>& modelConductivity,
+        units::LengthUnit worldUnit);
 
     void clearVoronoiInputs();
     void addVoronoiModelInput(
@@ -105,8 +106,8 @@ public:
 
     const std::vector<VkCommandBuffer>& getComputeCommandBuffers() const override { return computeCommandBuffers; }
     ComputePass::Synchronization getSynchronization() const override;
-    const std::unordered_map<uint32_t, std::unique_ptr<HeatModelRuntime>>& getActiveModels() const { return runtime.getActiveModels(); }
-    HeatModelRuntime* getModelByRuntimeId(uint32_t runtimeModelId) const { return runtime.getModelByRuntimeId(runtimeModelId); }
+    const std::unordered_map<uint32_t, std::unique_ptr<HeatModelRuntime>>& getActiveModels() const { return domainRuntime.getActiveModels(); }
+    HeatModelRuntime* getModelByRuntimeId(uint32_t runtimeModelId) const { return domainRuntime.getModelByRuntimeId(runtimeModelId); }
 
 private:
     static constexpr float TimelineFPS = 60.0f;
@@ -118,6 +119,9 @@ private:
     bool rebuildVoronoiRuntime();
     bool configureMaterialNodes();
     bool configureModelBoundaries();
+    float getInitialTemperatureC(uint32_t runtimeModelId) const;
+    void configureModelProperties(HeatModelRuntime& model, uint32_t runtimeModelId) const;
+    bool rebuildDomainRuntime();
     void resetVoronoiTemperatures();
 
     void processResetTrigger();
@@ -125,12 +129,11 @@ private:
     void configureGMLSSurfaceWeights(bool heatVoronoiReady);
     bool recreateDescriptorPools();
     void configureModelSimResources();
-    bool rebuildContactRuntimes();
+    bool rebuildContactRuntime();
     bool resolveModelBoundaryAreas();
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ModelRegistry& resourceManager;
     CommandPool& renderCommandPool;
     CommandPool& transferCommandPool;
     std::vector<VkCommandBuffer> computeCommandBuffers;
@@ -143,11 +146,23 @@ private:
     std::unique_ptr<HeatSystemSurfaceStage> surfaceStage;
     std::unique_ptr<HeatSystemDiffusionStage> diffusionStage;
 
-    HeatSystemRuntime runtime;
-    HeatSystemSimRuntime simRuntime;
-    std::unique_ptr<HeatContactRuntime> contactRuntime;
+    HeatDomainRuntime domainRuntime;
+    HeatPlaybackRuntime playbackRuntime;
 
+    std::vector<std::vector<glm::vec3>> modelSurfacePositions;
+    std::vector<std::vector<glm::vec3>> modelSurfaceNormals;
+    std::vector<std::vector<uint32_t>> modelSurfaceTriangleIndices;
     std::vector<uint32_t> modelRuntimeModelIds;
+    std::unordered_map<uint32_t, float> modelInitialTemperaturesCByRuntimeId;
+    std::unordered_map<uint32_t, uint32_t> modelBoundaryConditionTypesByRuntimeId;
+    std::unordered_map<uint32_t, float> modelBoundaryTemperaturesCByRuntimeId;
+    std::unordered_map<uint32_t, float> modelBoundaryHeatFluxesByRuntimeId;
+    std::unordered_map<uint32_t, float> modelBoundaryHeatTransferCoefficientsByRuntimeId;
+    std::unordered_map<uint32_t, float> modelVolumetricPowerDensitiesByRuntimeId;
+    std::unordered_map<uint32_t, float> modelDensity;
+    std::unordered_map<uint32_t, float> modelSpecificHeat;
+    std::unordered_map<uint32_t, float> modelConductivity;
+    units::LengthUnit worldUnit = units::defaultLengthUnit();
     std::vector<ContactCoupling> contactCouplings;
     float contactThermalConductance = 16000.0f;
 
@@ -162,6 +177,7 @@ private:
 
     bool isActive = false;
     bool initialized = false;
+    bool domainDirty = true;
     bool voronoiConfigDirty = true;
     bool heatParamsDirty = true;
     bool contactCouplingsDirty = true;

@@ -84,6 +84,7 @@ static NodeTypeDefinition buildModelNode() {
         },
         {
             {nodegraphparams::model::Path, "Model Path", NodeGraphParamType::String, 0.0, 0, false, "", false},
+            makeEnumParamDefinition(nodegraphparams::model::SourceUnit, "Import Units", "Meters", {"Meters", "Centimeters", "Millimeters"}),
         },
     };
 }

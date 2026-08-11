@@ -13,6 +13,7 @@
 
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "runtime/RuntimeProducts.hpp"
+#include "util/Units.hpp"
 
 class UniformBufferManager;
 class MemoryAllocator;
@@ -76,7 +77,8 @@ public:
     render::VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
 
     void setTimingOverlayLines(const std::vector<std::string>& lines);
-    void updateGridLabels(const glm::vec3& gridSize);
+    void updateGrid(uint32_t frameIndex, const render::SceneView& sceneView, const glm::vec3& sceneExtent);
+    void setWorldUnit(units::LengthUnit unit);
 
     bool createCommandBuffers();
     void freeCommandBuffers();
@@ -139,7 +141,7 @@ private:
     MemoryAllocator& memoryAllocator;
     FrameGraph& frameGraph;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     UniformBufferManager& uniformBufferManager;
     CommandPool& renderCommandPool;
     IBLSystem& iblSystem;

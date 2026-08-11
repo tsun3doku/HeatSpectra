@@ -7,7 +7,7 @@
 #include "framegraph/FrameSync.hpp"
 #include "contact/ContactSystemComputeController.hpp"
 #include "runtime/RemeshController.hpp"
-#include "runtime/ModelComputeRuntime.hpp"
+#include "runtime/ModelComputeController.hpp"
 #include "runtime/ModelDisplayController.hpp"
 #include "runtime/PointComputeRuntime.hpp"
 #include "runtime/PointDisplayController.hpp"
@@ -63,8 +63,8 @@ public:
     HeatSystemComputeController* heatSystemComputeController();
     const HeatSystemComputeController* heatSystemComputeController() const;
     ContactSystemComputeController* contactSystemComputeController();
-    ModelComputeRuntime* modelComputeRuntime();
-    const ModelComputeRuntime* modelComputeRuntime() const;
+    ModelComputeController* modelComputeController();
+    const ModelComputeController* modelComputeController() const;
     SceneController* sceneController();
     const SceneController* sceneController() const;
     NodeGraphController* nodeGraphController();
@@ -88,7 +88,7 @@ private:
     std::unique_ptr<RuntimeRemeshComputeTransport> runtimeRemeshTransportState;
     std::unique_ptr<RuntimeVoronoiComputeTransport> runtimeVoronoiComputeTransportState;
     std::unique_ptr<RuntimeVoronoiDisplayTransport> runtimeVoronoiDisplayTransportState;
-    std::unique_ptr<ModelComputeRuntime> modelComputeRuntimeState;
+    std::unique_ptr<ModelComputeController> modelComputeControllerState;
     std::unique_ptr<ModelDisplayController> modelDisplayControllerState;
     std::unique_ptr<PointComputeRuntime> pointComputeRuntimeState;
     std::unique_ptr<PointDisplayController> pointDisplayControllerState;

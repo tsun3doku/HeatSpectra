@@ -12,6 +12,14 @@
 #include "contact/ContactTypes.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
 
+//                                                      [ Invariant:
+//                                                        - Products are outputs produced by runtime backends
+//                                                        - Products contain runtime identities, generated CPU result
+//                                                          data, GPU resources, offsets and counts
+//                                                        - Products are published through RuntimeProductManager and
+//                                                          referenced through ProductHandle
+//                                                        - Runtime inputs are carried by Packages and controller Configs ]
+
 struct ModelProduct {
     uint32_t runtimeModelId = 0;
     VkBuffer vertexBuffer = VK_NULL_HANDLE;
@@ -24,7 +32,6 @@ struct ModelProduct {
     VkBuffer renderIndexBuffer = VK_NULL_HANDLE;
     VkDeviceSize renderIndexBufferOffset = 0;
     uint32_t renderIndexCount = 0;
-    glm::mat4 modelMatrix{ 1.0f };
     HashValues hashes{};
 
     bool isValid() const {
@@ -77,7 +84,6 @@ struct RemeshProduct {
     VkBuffer lengthBuffer = VK_NULL_HANDLE;
     VkDeviceSize lengthOffset = 0;
     VkBufferView lengthView = VK_NULL_HANDLE;
-
 
     VkBuffer inputHalfedgeBuffer = VK_NULL_HANDLE;
     VkDeviceSize inputHalfedgeOffset = 0;

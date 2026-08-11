@@ -1,50 +1,33 @@
 #include "NodeGraphController.hpp"
-#include "NodeGraphRegistry.hpp"
-#include "NodeGraphUtils.hpp"
-
-#include <unordered_set>
 
 #include "NodeGraphDebugCache.hpp"
+#include "NodeGraphRegistry.hpp"
+#include "NodeGraphUtils.hpp"
 #include "NodePayloadRegistry.hpp"
-#include "runtime/RuntimeContactComputeTransport.hpp"
 #include "runtime/RuntimeContactDisplayTransport.hpp"
-#include "runtime/RuntimeHeatComputeTransport.hpp"
 #include "runtime/RuntimeHeatDisplayTransport.hpp"
-#include "runtime/RuntimeModelComputeTransport.hpp"
 #include "runtime/RuntimeModelDisplayTransport.hpp"
-#include "runtime/RuntimePackageCompiler.hpp"
-#include "runtime/RuntimePointComputeTransport.hpp"
 #include "runtime/RuntimePointDisplayTransport.hpp"
-#include "runtime/RuntimeRemeshComputeTransport.hpp"
+#include "runtime/RuntimeProductManager.hpp"
 #include "runtime/RuntimeRemeshDisplayTransport.hpp"
-#include "runtime/RuntimeVoronoiComputeTransport.hpp"
 #include "runtime/RuntimeVoronoiDisplayTransport.hpp"
-#include "runtime/RuntimePackageManager.hpp"
-#include "vulkan/VulkanDevice.hpp"
+#include "runtime/RuntimeProducts.hpp"
 #include "vulkan/MemoryAllocator.hpp"
+#include "vulkan/VulkanDevice.hpp"
 
+#include <iostream>
+#include <unordered_set>
 
-NodeGraphController::NodeGraphController(const NodeRuntimeServices& services)
-    : runtimeServices(services),
-      runtime(services) {
+NodeGraphController::NodeGraphController(
+    NodePayloadRegistry& payloadRegistry,
+    const RuntimeConnections& connections,
+    VulkanDevice& vulkanDevice,
+    MemoryAllocator& memoryAllocator)
+    : payloadRegistry(payloadRegistry),
+      runtimeConnections(connections),
+      runtime(&payloadRegistry),
+      packageController(connections, vulkanDevice, memoryAllocator) {
     plan.isValid = false;
-    if (runtimeServices.vulkanDevice && runtimeServices.memoryAllocator) {
-        productManager = std::make_unique<RuntimeProductManager>(
-            *runtimeServices.vulkanDevice, *runtimeServices.memoryAllocator);
-    }
-    RuntimeProductManager* pm = productManager.get();
-    if (runtimeServices.modelComputeTransport) { runtimeServices.modelComputeTransport->setProducts(pm); }
-    if (runtimeServices.remeshComputeTransport) { runtimeServices.remeshComputeTransport->setProducts(pm); }
-    if (runtimeServices.voronoiComputeTransport) { runtimeServices.voronoiComputeTransport->setProducts(pm); }
-    if (runtimeServices.contactComputeTransport) { runtimeServices.contactComputeTransport->setProducts(pm); }
-    if (runtimeServices.heatComputeTransport) { runtimeServices.heatComputeTransport->setProducts(pm); }
-    if (runtimeServices.pointComputeTransport) { runtimeServices.pointComputeTransport->setProducts(pm); }
-    if (runtimeServices.modelDisplayTransport) { runtimeServices.modelDisplayTransport->setProducts(pm); }
-    if (runtimeServices.remeshDisplayTransport) { runtimeServices.remeshDisplayTransport->setProducts(pm); }
-    if (runtimeServices.voronoiDisplayTransport) { runtimeServices.voronoiDisplayTransport->setProducts(pm); }
-    if (runtimeServices.contactDisplayTransport) { runtimeServices.contactDisplayTransport->setProducts(pm); }
-    if (runtimeServices.heatDisplayTransport) { runtimeServices.heatDisplayTransport->setProducts(pm); }
-    if (runtimeServices.pointDisplayTransport) { runtimeServices.pointDisplayTransport->setProducts(pm); }
 }
 
 void NodeGraphController::rebuildForDelta(const NodeGraphDelta& delta) {
@@ -57,21 +40,17 @@ void NodeGraphController::rebuildForDelta(const NodeGraphDelta& delta) {
             break;
         }
     }
-    if (!nonLayout) {
-        return;
-    }
+    if (!nonLayout) return;
 
-    pendingPackageRevision = runtime.state().revision;
-    NodeGraphDebugCache::instance().setState(runtime.state(), runtimeServices.payloadRegistry);
+    packageCompilationPending = true;
+    NodeGraphDebugCache::instance().setState(runtime.state(), &payloadRegistry);
     plan = NodeGraphCompiler::compile(runtime.state());
 }
 
 void NodeGraphController::tick() {
-    if (plan.isValid && completedPackageRevision != pendingPackageRevision) {
-        compileRuntimePackages();
-        completedPackageRevision = pendingPackageRevision;
+    if (plan.isValid && packageCompilationPending) {
+        if (compileRuntimePackages()) packageCompilationPending = false;
     }
-
     updateDisplayTransports();
 }
 
@@ -107,194 +86,113 @@ const NodeGraphState& NodeGraphController::graphState() const {
     return runtime.state();
 }
 
-bool NodeGraphController::resolveGizmoTransformNode(uint64_t outputSocketKey, NodeGraphNodeId& outNodeId) const {
+bool NodeGraphController::resolveGizmoTransformNode(
+    uint64_t outputSocketKey,
+    NodeGraphNodeId& outNodeId) const {
     outNodeId = {};
     return outputSocketKey != 0 &&
-        findFirstUpstreamNodeByType(runtime.state(), outputSocketKey, nodegraphtypes::Transform, outNodeId);
+        findFirstUpstreamNodeByType(
+            runtime.state(), outputSocketKey, nodegraphtypes::Transform, outNodeId);
 }
 
-void NodeGraphController::compileRuntimePackages() {
+bool NodeGraphController::compileRuntimePackages() {
     runtime.execute(plan);
-    const NodeGraphEvaluationState& execState = runtime.evaluationState();
-
-    RuntimePackageCompiler packageCompiler{};
-    packageManager.beginCompile();
-
-    // Compile and apply packages in topological order
-    for (NodeGraphNodeId nodeId : plan.executionOrder) {
-        const auto nodeIt = runtime.state().nodes.find(nodeId.value);
-        if (nodeIt == runtime.state().nodes.end()) {
-            continue;
+    const NodeGraphEvaluation& evaluation = runtime.evaluation();
+    const RuntimePackageCompiler::FrozenPackages frozenPackages =
+        frozenPackageRebuildPending
+            ? RuntimePackageCompiler::FrozenPackages::Rebuild
+            : RuntimePackageCompiler::FrozenPackages::Preserve;
+    std::vector<std::string> errors;
+    if (!packageCompiler.validate(
+            runtime.state(),
+            plan,
+            evaluation,
+            payloadRegistry,
+            errors)) {
+        for (const std::string& error : errors) {
+            std::cerr << "Runtime package compilation failed: " << error << '\n';
         }
-        const auto& node = nodeIt->second;
-
-        packageCompiler.compileNode(runtime.state(), node, execState, runtimeServices.payloadRegistry, *productManager, packageManager);
-
-        updateComputeTransports(node);
+        return false;
     }
 
-    // Clean up stale packages
-    if (runtimeServices.modelComputeTransport) {
-        packageManager.forEachStale<ModelPackage>([this](uint64_t key, const ModelPackage&) {
-            runtimeServices.modelComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
+    const RuntimeProductManager* products = packageController.products();
+    if (!products) return false;
+    packageController.beginCompilation();
+    for (NodeGraphNodeId nodeId : plan.executionOrder) {
+        const NodeGraphNode* node = runtime.state().node(nodeId);
+        if (!node || !packageCompiler.compileNode(
+                runtime.state(),
+                *node,
+                evaluation,
+                payloadRegistry,
+                *products,
+                activeWorldUnit,
+                frozenPackages,
+                packageController.packages(),
+                errors) ||
+            !packageController.applyNode(*node)) {
+            for (const std::string& error : errors) {
+                std::cerr << "Runtime package compilation failed: " << error << '\n';
+            }
+            return false;
+        }
     }
-    if (runtimeServices.pointComputeTransport) {
-        packageManager.forEachStale<PointPackage>([this](uint64_t key, const PointPackage&) {
-            runtimeServices.pointComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
-    }
-    if (runtimeServices.remeshComputeTransport) {
-        packageManager.forEachStale<RemeshPackage>([this](uint64_t key, const RemeshPackage&) {
-            runtimeServices.remeshComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
-    }
-    if (runtimeServices.voronoiComputeTransport) {
-        packageManager.forEachStale<VoronoiPackage>([this](uint64_t key, const VoronoiPackage&) {
-            runtimeServices.voronoiComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
-    }
-    if (runtimeServices.contactComputeTransport) {
-        packageManager.forEachStale<ContactPackage>([this](uint64_t key, const ContactPackage&) {
-            runtimeServices.contactComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
-    }
-    if (runtimeServices.heatComputeTransport) {
-        packageManager.forEachStale<HeatPackage>([this](uint64_t key, const HeatPackage&) {
-            runtimeServices.heatComputeTransport->remove(key);
-            runtime.setOutputProductHandle(key, {});
-        });
-    }
-
-    packageManager.destroyStale();
-
-    if (runtimeServices.modelComputeTransport) {
-        runtimeServices.modelComputeTransport->flush();
-    }
+    packageController.finishCompilation();
+    frozenPackageRebuildPending = false;
 
     NodeGraphDebugCache::instance().update(
         runtime.state().revision,
-        execState.outputBySocket);
+        evaluation.outputsBySocket);
+    return true;
 }
 
-void NodeGraphController::updateComputeTransports(const NodeGraphNode& node) {
-    for (const NodeGraphSocket& outputSocket : node.outputs) {
-        const uint64_t socketKey = NodeSocketKey(node.id, outputSocket.id).value;
-        updateComputeTransport(socketKey);
-    }
-}
-
-void NodeGraphController::updateComputeTransport(uint64_t socketKey) {
-    if (socketKey == 0) return;
-
-    if (runtimeServices.modelComputeTransport) {
-        if (const auto* pkg = packageManager.find<ModelPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.modelComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
-    if (runtimeServices.pointComputeTransport) {
-        if (const auto* pkg = packageManager.find<PointPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.pointComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
-    if (runtimeServices.remeshComputeTransport) {
-        if (const auto* pkg = packageManager.find<RemeshPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.remeshComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
-    if (runtimeServices.voronoiComputeTransport) {
-        if (const auto* pkg = packageManager.find<VoronoiPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.voronoiComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
-    if (runtimeServices.contactComputeTransport) {
-        if (const auto* pkg = packageManager.find<ContactPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.contactComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
-    if (runtimeServices.heatComputeTransport) {
-        if (const auto* pkg = packageManager.find<HeatPackage>(socketKey)) {
-            ProductHandle handle = runtimeServices.heatComputeTransport->apply(socketKey, *pkg);
-            if (handle.isValid()) {
-                runtime.setOutputProductHandle(socketKey, handle);
-                packageManager.setProductHandle(socketKey, handle);
-            }
-            return;
-        }
-    }
+void NodeGraphController::setWorldUnit(units::LengthUnit unit) {
+    if (unit == activeWorldUnit) return;
+    activeWorldUnit = unit;
+    packageCompilationPending = true;
+    frozenPackageRebuildPending = true;
 }
 
 void NodeGraphController::updateDisplayTransports() {
-    const bool hasDisplayTransports = runtimeServices.modelDisplayTransport ||
-        runtimeServices.remeshDisplayTransport ||
-        runtimeServices.voronoiDisplayTransport ||
-        runtimeServices.contactDisplayTransport ||
-        runtimeServices.heatDisplayTransport ||
-        runtimeServices.pointDisplayTransport;
-    if (!hasDisplayTransports) {
-        return;
-    }
+    const bool hasDisplayTransports = runtimeConnections.modelDisplayTransport ||
+        runtimeConnections.remeshDisplayTransport ||
+        runtimeConnections.voronoiDisplayTransport ||
+        runtimeConnections.contactDisplayTransport ||
+        runtimeConnections.heatDisplayTransport ||
+        runtimeConnections.pointDisplayTransport;
+    if (!hasDisplayTransports) return;
 
+    RuntimePackageManager& packages = packageController.packages();
     const std::unordered_set<uint64_t> visibleKeys =
         nodeGraphDisplay.computeDisplayKeys(
             runtime.state(),
-            runtime.evaluationState(),
-            packageManager,
-            runtimeServices.payloadRegistry);
+            runtime.evaluation(),
+            packages,
+            &payloadRegistry);
 
-    if (runtimeServices.modelDisplayTransport) {
-        runtimeServices.modelDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.modelDisplayTransport->finalizeSync();
+    if (runtimeConnections.modelDisplayTransport) {
+        runtimeConnections.modelDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.modelDisplayTransport->finalizeSync();
     }
-    if (runtimeServices.remeshDisplayTransport) {
-        runtimeServices.remeshDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.remeshDisplayTransport->finalizeSync();
+    if (runtimeConnections.remeshDisplayTransport) {
+        runtimeConnections.remeshDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.remeshDisplayTransport->finalizeSync();
     }
-    if (runtimeServices.voronoiDisplayTransport) {
-        runtimeServices.voronoiDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.voronoiDisplayTransport->finalizeSync();
+    if (runtimeConnections.voronoiDisplayTransport) {
+        runtimeConnections.voronoiDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.voronoiDisplayTransport->finalizeSync();
     }
-    if (runtimeServices.contactDisplayTransport) {
-        runtimeServices.contactDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.contactDisplayTransport->finalizeSync();
+    if (runtimeConnections.contactDisplayTransport) {
+        runtimeConnections.contactDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.contactDisplayTransport->finalizeSync();
     }
-    if (runtimeServices.heatDisplayTransport) {
-        runtimeServices.heatDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.heatDisplayTransport->finalizeSync();
+    if (runtimeConnections.heatDisplayTransport) {
+        runtimeConnections.heatDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.heatDisplayTransport->finalizeSync();
     }
-    if (runtimeServices.pointDisplayTransport) {
-        runtimeServices.pointDisplayTransport->sync(packageManager, visibleKeys);
-        runtimeServices.pointDisplayTransport->finalizeSync();
+    if (runtimeConnections.pointDisplayTransport) {
+        runtimeConnections.pointDisplayTransport->sync(packages, visibleKeys);
+        runtimeConnections.pointDisplayTransport->finalizeSync();
     }
 }
 
@@ -303,8 +201,8 @@ const NodeGraphCompiled& NodeGraphController::compiledState() const {
 }
 
 void NodeGraphController::addRuntimeModelId(
-    std::vector<uint32_t>& outIds, uint32_t id) const
-{
+    std::vector<uint32_t>& outIds,
+    uint32_t id) const {
     if (id == 0) return;
     for (uint32_t existing : outIds) {
         if (existing == id) return;
@@ -313,64 +211,54 @@ void NodeGraphController::addRuntimeModelId(
 }
 
 bool NodeGraphController::runtimeModelIdsForSocket(
-    uint64_t socketKey, std::vector<uint32_t>& outIds) const
-{
-    if (socketKey == 0 || !productManager) {
-        return false;
-    }
+    uint64_t socketKey,
+    std::vector<uint32_t>& outIds) const {
+    const RuntimeProductManager* products = packageController.products();
+    const RuntimePackageManager& packages = packageController.packages();
+    if (socketKey == 0 || !products) return false;
 
-    if (const ModelPackage* pkg = packageManager.findAny<ModelPackage>(socketKey)) {
-        const ModelProduct* p = productManager->resolve<ModelProduct>(pkg->productHandle);
-        if (p)
-            addRuntimeModelId(outIds, p->runtimeModelId);
+    if (const ModelPackage* package = packages.findAny<ModelPackage>(socketKey)) {
+        if (const ModelProduct* product = products->resolve<ModelProduct>(package->productHandle))
+            addRuntimeModelId(outIds, product->runtimeModelId);
         return true;
     }
-    if (const RemeshPackage* pkg = packageManager.findAny<RemeshPackage>(socketKey)) {
-        const RemeshProduct* p = productManager->resolve<RemeshProduct>(pkg->productHandle);
-        if (p)
-            addRuntimeModelId(outIds, p->runtimeModelId);
+    if (const RemeshPackage* package = packages.findAny<RemeshPackage>(socketKey)) {
+        if (const RemeshProduct* product = products->resolve<RemeshProduct>(package->productHandle))
+            addRuntimeModelId(outIds, product->runtimeModelId);
         return true;
     }
-    if (const VoronoiPackage* pkg = packageManager.findAny<VoronoiPackage>(socketKey)) {
-        const VoronoiProduct* p = productManager->resolve<VoronoiProduct>(pkg->productHandle);
-        if (p && p->runtimeModelId != 0)
-            addRuntimeModelId(outIds, p->runtimeModelId);
+    if (const VoronoiPackage* package = packages.findAny<VoronoiPackage>(socketKey)) {
+        if (const VoronoiProduct* product = products->resolve<VoronoiProduct>(package->productHandle))
+            addRuntimeModelId(outIds, product->runtimeModelId);
         return true;
     }
-    if (const HeatPackage* pkg = packageManager.findAny<HeatPackage>(socketKey)) {
-        for (const ProductHandle& h : pkg->modelProducts) {
-            const ModelProduct* p = productManager->resolve<ModelProduct>(h);
-            if (p)
-                addRuntimeModelId(outIds, p->runtimeModelId);
+    if (const HeatPackage* package = packages.findAny<HeatPackage>(socketKey)) {
+        for (const HeatModelPackage& model : package->models) {
+            if (const ModelProduct* product = products->resolve<ModelProduct>(model.modelProduct))
+                addRuntimeModelId(outIds, product->runtimeModelId);
         }
         return true;
     }
-    if (const ContactPackage* pkg = packageManager.findAny<ContactPackage>(socketKey)) {
-        if (const ContactProduct* p = productManager->resolve<ContactProduct>(pkg->productHandle)) {
-            addRuntimeModelId(outIds, p->modelARuntimeModelId);
-            addRuntimeModelId(outIds, p->modelBRuntimeModelId);
+    if (const ContactPackage* package = packages.findAny<ContactPackage>(socketKey)) {
+        if (const ContactProduct* product = products->resolve<ContactProduct>(package->productHandle)) {
+            addRuntimeModelId(outIds, product->modelARuntimeModelId);
+            addRuntimeModelId(outIds, product->modelBRuntimeModelId);
         }
         return true;
     }
-    if (packageManager.findAny<PointPackage>(socketKey)) {
-        return true;
-    }
-    return false;
+    return packages.findAny<PointPackage>(socketKey) != nullptr;
 }
 
 bool NodeGraphController::runtimeModelIdsForNode(
-    NodeGraphNodeId nodeId, std::vector<uint32_t>& outIds) const
-{
+    NodeGraphNodeId nodeId,
+    std::vector<uint32_t>& outIds) const {
     outIds.clear();
-    const auto it = runtime.state().nodes.find(nodeId.value);
-    if (it == runtime.state().nodes.end()) {
-        return false;
-    }
+    const auto nodeIt = runtime.state().nodes.find(nodeId.value);
+    if (nodeIt == runtime.state().nodes.end()) return false;
 
-    for (const NodeGraphSocket& output : it->second.outputs) {
-        const uint64_t socketKey = NodeSocketKey(it->second.id, output.id).value;
-        if (runtimeModelIdsForSocket(socketKey, outIds))
-            return true;
+    for (const NodeGraphSocket& output : nodeIt->second.outputs) {
+        const uint64_t socketKey = NodeSocketKey(nodeIt->second.id, output.id).value;
+        if (runtimeModelIdsForSocket(socketKey, outIds)) return true;
     }
     return false;
 }

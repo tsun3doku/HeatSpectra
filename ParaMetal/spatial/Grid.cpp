@@ -7,6 +7,7 @@
 #include "vulkan/VulkanImage.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "vulkan/VulkanDevice.hpp"
+#include "scene/SceneView.hpp"
 #include "Grid.hpp"
 #include "GridLabel.hpp"
 
@@ -253,10 +254,26 @@ void GridRenderer::cleanup() const {
     vkDestroyDescriptorPool(vulkanDevice.getDevice(), gridDescriptorPool, nullptr);
 }
 
-void GridRenderer::updateLabels(const glm::vec3& gridSize) {
-    if (gridLabel) {
-        gridLabel->updateLabels(gridSize);
-    }
+void GridRenderer::update(
+    uint32_t frameIndex,
+    const render::SceneView& sceneView,
+    const glm::vec3& sceneExtent) {
+    const float minimumExtent = units::canonicalToWorldScale(worldUnit);
+    const glm::vec3 gridExtent = glm::max(sceneExtent, glm::vec3(minimumExtent));
+
+    GridUniformBufferObject gridUbo{};
+    uniformBufferManager.updateGridUniformBuffer(
+        frameIndex,
+        sceneView,
+        gridUbo,
+        gridExtent);
+
+    if (gridLabel) gridLabel->updateLabels(gridExtent);
+}
+
+void GridRenderer::setWorldUnit(units::LengthUnit unit) {
+    worldUnit = unit;
+    if (gridLabel) gridLabel->setWorldUnit(unit);
 }
 
 void GridRenderer::renderLabels(VkCommandBuffer commandBuffer, uint32_t currentFrame) {

@@ -31,15 +31,15 @@ void NodeContact::execute(NodeKernelEval& eval) const {
     NodeDataHandle emitterMeshHandle{};
     bool hasEmitterEndpoint = false;
     if (payloadRegistry && emitterInput && emitterInput->payloadHandle.key != 0) {
-        emitterMeshHandle = payloadRegistry->resolveMeshHandle(emitterInput->dataType, emitterInput->payloadHandle);
-        hasEmitterEndpoint = emitterMeshHandle.key != 0;
+        hasEmitterEndpoint = payloadRegistry->resolveRemesh(
+            emitterInput->payloadHandle, &emitterMeshHandle) != nullptr;
     }
 
     NodeDataHandle receiverMeshHandle{};
     bool hasReceiverEndpoint = false;
     if (payloadRegistry && receiverInput && receiverInput->payloadHandle.key != 0) {
-        receiverMeshHandle = payloadRegistry->resolveMeshHandle(receiverInput->dataType, receiverInput->payloadHandle);
-        hasReceiverEndpoint = receiverMeshHandle.key != 0;
+        hasReceiverEndpoint = payloadRegistry->resolveRemesh(
+            receiverInput->payloadHandle, &receiverMeshHandle) != nullptr;
     }
 
     const bool hasValidContact = hasEmitterEndpoint && hasReceiverEndpoint &&

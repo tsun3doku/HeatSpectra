@@ -4,20 +4,34 @@
 #include <glm/glm.hpp>
 #include <Qt>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
-#include "InputActions.hpp"
-#include "nodegraph/NodeGraphTypes.hpp"
+#include "GizmoController.hpp"
 
 class Camera;
 class CameraController;
-class GizmoController;
 class NavigationGizmoController;
-class NodeGraphController;
 class ModelSelection;
 class ModelRegistry;
-class SceneController;
 struct WindowRuntimeState;
+
+enum class ViewportCommand : uint8_t {
+    ToggleWireframe,
+    ToggleTimingOverlay,
+    ToggleGrid
+};
+
+struct GizmoDragBegin {
+    uint32_t runtimeModelId = 0;
+    GizmoMode mode = GizmoMode::Translate;
+    GizmoAxis axis = GizmoAxis::None;
+};
+
+struct GizmoDragUpdate {
+    glm::vec3 translationDeltaWorld{0.0f};
+    float rotationDeltaDegrees = 0.0f;
+};
 
 class InputController {
 public:
@@ -25,9 +39,7 @@ public:
         GizmoController& gizmoController,
         NavigationGizmoController& navigationGizmoController,
         ModelSelection& modelSelection,
-        ModelRegistry& resourceManager,
-        SceneController& sceneController,
-        NodeGraphController& graphController,
+        ModelRegistry& modelRegistry,
         const WindowRuntimeState& windowState);
     ~InputController() = default;
 
@@ -39,11 +51,11 @@ public:
 
     void processInput(bool shiftPressed, bool middleButtonPressed, double mouseX, double mouseY, float deltaTime);
     void updateGizmo();
-    std::vector<InputAction> takePendingActions();
-
-    bool resolveSelectedTransformNode(NodeGraphNodeId& outTransformNodeId);
-
-    bool isDraggingGizmo = false;
+    std::vector<ViewportCommand> takePendingViewportCommands();
+    std::optional<GizmoDragBegin> takePendingGizmoDragBegin();
+    std::optional<GizmoDragUpdate> takePendingGizmoDragUpdate();
+    bool takePendingGizmoDragEnd();
+    void cancelGizmoDrag();
 
 private:
     CameraController& cameraController;
@@ -51,20 +63,17 @@ private:
     GizmoController& gizmoController;
     NavigationGizmoController& navigationGizmoController;
     ModelSelection& modelSelection;
-    ModelRegistry& resourceManager;
-    SceneController& sceneController;
-    NodeGraphController& graphController;
+    ModelRegistry& modelRegistry;
     const WindowRuntimeState& windowState;
-    std::vector<InputAction> pendingActions;
+    std::vector<ViewportCommand> pendingViewportCommands;
+    std::optional<GizmoDragBegin> pendingGizmoDragBegin;
+    std::optional<GizmoDragUpdate> pendingGizmoDragUpdate;
+    bool pendingGizmoDragEnd = false;
+    bool isDraggingGizmo = false;
 
     glm::vec3 accumulatedTranslation{0.0f};
-    glm::vec3 lastAppliedTranslation{0.0f};
     float accumulatedRotation = 0.0f;
-    float lastAppliedRotation = 0.0f;
     glm::vec3 cachedGizmoPosition{0.0f};
-    NodeGraphNodeId activeTransformNodeId{};
-    glm::vec3 transformDragStartTranslation{0.0f};
-    glm::vec3 transformDragStartRotationDegrees{0.0f};
 };
 
 

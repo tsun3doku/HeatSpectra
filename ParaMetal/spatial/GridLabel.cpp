@@ -8,6 +8,7 @@
 #include "util/file_utils.h"
 #include "util/Structs.hpp"
 #include <array>
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -193,9 +194,9 @@ void GridLabel::createFontAtlas(VulkanDevice& vulkanDevice) {
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.minLod = 0.0f;
     
-    // Limit maxLod to padding pixel count
-    float atlasPadding = 8.0f;
-    float maxSafeLod = std::floor(std::log2(atlasPadding));
+    // The generated atlas has an 8-pixel outer gutter around each glyph.
+    const float atlasPadding = 8.0f;
+    const float maxSafeLod = std::floor(std::log2(atlasPadding));
     samplerInfo.maxLod = std::min(static_cast<float>(mipLevels), maxSafeLod);
     
     samplerInfo.mipLodBias = 0.0f;
@@ -345,7 +346,7 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     instanceBinding.stride = sizeof(LabelInstance);
     instanceBinding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    std::array<VkVertexInputAttributeDescription, 5> instanceAttributes{};
+    std::array<VkVertexInputAttributeDescription, 6> instanceAttributes{};
     instanceAttributes[0].binding = 1;
     instanceAttributes[0].location = 2;
     instanceAttributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -371,9 +372,14 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     instanceAttributes[4].format = VK_FORMAT_R32G32B32_SFLOAT;
     instanceAttributes[4].offset = offsetof(LabelInstance, upVec);
 
+    instanceAttributes[5].binding = 1;
+    instanceAttributes[5].location = 7;
+    instanceAttributes[5].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    instanceAttributes[5].offset = offsetof(LabelInstance, color);
+
     std::array<VkVertexInputBindingDescription, 2> bindings = {vertexBinding, instanceBinding};
-    // 2 (vertex) + 5 (instance)
-    std::array<VkVertexInputAttributeDescription, 7> attributes;
+    // 2 vertex attributes + 6 instance attributes
+    std::array<VkVertexInputAttributeDescription, 8> attributes;
     std::copy(vertexAttributes.begin(), vertexAttributes.end(), attributes.begin());
     std::copy(instanceAttributes.begin(), instanceAttributes.end(), attributes.begin() + 2);
 
@@ -418,7 +424,6 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     depthStencil.stencilTestEnable = VK_FALSE;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachments[1] = {};
-    // Line overlay target.
     colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachments[0].blendEnable = VK_TRUE;
@@ -435,10 +440,7 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = colorBlendAttachments;
 
-    std::vector<VkDynamicState> dynamicStates = {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
-    };
+    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -484,34 +486,55 @@ void GridLabel::createPipeline(VulkanDevice& vulkanDevice, VkRenderPass renderPa
     vkDestroyShaderModule(vulkanDevice.getDevice(), vertShaderModule, nullptr);
 }
 
-void GridLabel::addEdgeLabels(const glm::vec3& basePos, int varyingAxis, float start, float end, float interval, float scale, const glm::vec3& textRight, const glm::vec3& textUp, bool includeOrigin) {
-    
-    // Label at Origin
-    if (includeOrigin && start <= 0.001f && end >= -0.001f) {
-        addTextInstances("0", basePos, scale, 0.6f, textRight, textUp);
-    }
-    
+void GridLabel::addEdgeLabels(
+    const glm::vec3& basePos, 
+    int varyingAxis, 
+    float halfExtent,
+    float interval, 
+    float scale, 
+    const glm::vec3& textRight, 
+    const glm::vec3& textUp) {
+    const glm::vec4 labelColor = varyingAxis == 0
+        ? glm::vec4(1.0f, 0.32f, 0.38f, 1.0f)
+        : glm::vec4(0.30f, 0.48f, 1.0f, 1.0f);
+
     // Positive Axis Labels 
-    for (float t = interval; t <= end + 0.001f; t += interval) {
+    for (int tick = 1; tick * interval <= halfExtent + 0.001f; ++tick) {
+        const float t = tick * interval;
+        const float labelScale = tick % 5 == 0 ? scale * 2.0f : scale;
         glm::vec3 position = basePos;
         position[varyingAxis] = t;
-        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp);
+        addTextInstances(
+            floatToString(t, 1),
+            position,
+            labelScale,
+            labelColor,
+            textRight,
+            textUp);
     }
 
     // Negative Axis Labels
-    for (float t = -interval; t >= start - 0.001f; t -= interval) {
+    for (int tick = 1; tick * interval <= halfExtent + 0.001f; ++tick) {
+        const float t = -tick * interval;
+        const float labelScale = tick % 5 == 0 ? scale * 2.0f : scale;
         glm::vec3 position = basePos;
         position[varyingAxis] = t;
-        addTextInstances(floatToString(t, 1), position, scale, 0.6f, textRight, textUp);
+        addTextInstances(
+            floatToString(t, 1),
+            position,
+            labelScale,
+            labelColor,
+            textRight,
+            textUp);
     }
 }
 
 void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     labelInstances.clear();
-    float interval = 0.5f;
+    const float interval = calculateInterval(gridSize);
     float halfW = gridSize.x * 0.5f;
     float halfD = gridSize.y * 0.5f;
-    float scale = 0.08f;
+    const float scale = interval * 0.16f;
 
     // X-Axis Labels (Floor)
     const glm::vec3 xRight(-1.0f, 0.0f, 0.0f);
@@ -522,86 +545,105 @@ void GridLabel::generateLabelInstances(const glm::vec3& gridSize) {
     const glm::vec3 zUp(1.0f, 0.0f, 0.0f);
 
     // Central X-Axis Labels (at Z=0)
-    glm::vec3 xAxisBasePos = glm::vec3(-0.005f, 0.001f, -0.025f);
-    addEdgeLabels(xAxisBasePos, 0, -halfW, halfW, interval, scale, xRight, xUp, false);
+    glm::vec3 xAxisBasePos = glm::vec3(-interval * 0.01f, interval * 0.002f, interval * 0.05f);
+    addEdgeLabels(xAxisBasePos, 0, halfW, interval, scale, xRight, xUp);
 
     // Central Z-Axis Labels (at X=0)
-    glm::vec3 zAxisBasePos = glm::vec3(0.025f, 0.001f, 0.005f);
-    addEdgeLabels(zAxisBasePos, 2, -halfD, halfD, interval, scale, zRight, zUp, false);
+    glm::vec3 zAxisBasePos = glm::vec3(interval * 0.05f, interval * 0.002f, interval * 0.01f);
+    addEdgeLabels(zAxisBasePos, 2, halfD, interval, scale, zRight, zUp);
     
     instanceCount = static_cast<uint32_t>(labelInstances.size());
 }
 
-void GridLabel::addTextInstances(const std::string& text, const glm::vec3& position, float scale, float charSpacing, const glm::vec3& textRight, const glm::vec3& textUp) {
+void GridLabel::addTextInstances(
+    const std::string& text, 
+    const glm::vec3& position, 
+    float scale, 
+    const glm::vec4& color,
+    const glm::vec3& textRight, 
+    const glm::vec3& textUp) {
     if (text.empty()) 
         return;
 
-    const float fontReferenceSize = 64.0f;
-    const float advanceFactor = 0.225f;
-    float metricConversionFactor = scale / fontReferenceSize;
-
-    // Calculate total width for centering
-    float totalWidth = 0.0f;
+    const float emScale = scale / glyphText.getPlaneHeight();
+    constexpr float lineGapEm = 0.05f;
+    float firstPlaneLeft = 0.0f;
     for (char c : text) {
         const GlyphText::CharInfo& info = glyphText.getCharInfo(c);
-        if (info.width <= 0.0f || info.height <= 0.0f) {
-            continue;
+        if (info.width > 0.0f && info.height > 0.0f) {
+            firstPlaneLeft = info.planeLeft;
+            break;
         }
-        totalWidth += info.xadvance * advanceFactor * metricConversionFactor;
     }
-    
-    float cursorX = -totalWidth * 0.5f;
+    float cursorX = (lineGapEm - firstPlaneLeft) * emScale;
 
     for (size_t i = 0; i < text.length(); i++) {
         char c = text[i];
         const GlyphText::CharInfo& info = glyphText.getCharInfo(c);
         if (info.width <= 0.0f || info.height <= 0.0f) {
+            cursorX += info.advanceEm * emScale;
             continue;
         }
-        float quadWidthWorld = info.width * metricConversionFactor;
-        float xoffsetWorld = info.xoffset * metricConversionFactor;
-        float yoffsetWorld = info.yoffset * metricConversionFactor;
-        
-        float charCenterOffset = cursorX + xoffsetWorld + (quadWidthWorld * 0.5f);
-        
-        // Apply yoffset to shift the character down
-        float charVerticalOffset = yoffsetWorld;
+        const float planeHeight = info.planeBottom - info.planeTop;
+        const float charCenterOffset = cursorX + 0.5f * (info.planeLeft + info.planeRight) * emScale;
+        const float glyphCenterYEm = 0.5f * (info.planeTop + info.planeBottom);
+        // Native plane bounds are relative to the font baseline. Keeping the
+        // baseline at position makes labels grow away from the axis as scaled.
+        const float charVerticalOffset = -glyphCenterYEm * emScale;
 
         LabelInstance instance;
         instance.charUV = glyphText.getCharUV(c);
         if (instance.charUV.z <= 0.0f || instance.charUV.w <= 0.0f) {
             continue;
         }
-        instance.scale = scale;
+        instance.scale = planeHeight * emScale;
         instance.upVec = textUp;
+        instance.color = color;
 
         instance.position = position + charCenterOffset * textRight + charVerticalOffset * textUp;
         instance.rightVec = textRight;
         
         labelInstances.push_back(instance);
-        cursorX += info.xadvance * advanceFactor * metricConversionFactor;
+        cursorX += info.advanceEm * emScale;
     }
 }
 
 std::string GridLabel::floatToString(float value, int precision) {
     std::ostringstream ss;
-    ss << std::fixed << std::setprecision(precision) << value;
+    ss << std::fixed << std::setprecision(precision) << value << ' ' << units::toString(worldUnit);
     return ss.str();
 }
 
+float GridLabel::calculateInterval(const glm::vec3& gridSize) {
+    const float extent = std::max(std::abs(gridSize.x), std::abs(gridSize.y));
+    if (!(extent > 0.0f) || !std::isfinite(extent)) return 0.1f;
+    const float rawInterval = extent / 10.0f;
+    const float magnitude = std::pow(10.0f, std::floor(std::log10(rawInterval)));
+    const float normalized = rawInterval / magnitude;
+    if (normalized <= 1.0f) return magnitude;
+    if (normalized <= 2.0f) return 2.0f * magnitude;
+    if (normalized <= 5.0f) return 5.0f * magnitude;
+    return 10.0f * magnitude;
+}
+
 void GridLabel::updateLabels(const glm::vec3& gridSize) {
-    // Only regenerate if grid size changed
-    if (gridSize == cachedGridSize) 
-        return;
+    if (!labelsDirty && gridSize == cachedGridSize) return;
     
     cachedGridSize = gridSize;
     generateLabelInstances(gridSize);
+    labelsDirty = false;
     
     // Update all instance buffers
     for (size_t i = 0; i < instanceBuffersMapped.size(); i++) {
         memcpy(instanceBuffersMapped[i], labelInstances.data(), 
                sizeof(LabelInstance) * labelInstances.size());
     }
+}
+
+void GridLabel::setWorldUnit(units::LengthUnit unit) {
+    if (worldUnit == unit) return;
+    worldUnit = unit;
+    labelsDirty = true;
 }
 
 void GridLabel::render(VkCommandBuffer commandBuffer, uint32_t currentFrame) {

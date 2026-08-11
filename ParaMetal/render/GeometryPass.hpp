@@ -35,13 +35,13 @@ public:
 private:
     bool createGeometryDescriptorPool(uint32_t maxFramesInFlight);
     bool createGeometryDescriptorSetLayout();
-    bool createGeometryDescriptorSets(ModelRegistry& resourceManager, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
+    bool createGeometryDescriptorSets(ModelRegistry& modelRegistry, UniformBufferManager& uniformBufferManager, uint32_t maxFramesInFlight);
     bool createGeometryPipeline();
     bool createStencilOnlyPipeline();
 
     ::VulkanDevice& vulkanDevice;
     VkFrameGraphRuntime& frameGraphRuntime;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     UniformBufferManager& uniformBufferManager;
     uint32_t maxFramesInFlight = 0;
     framegraph::PassId passId{};

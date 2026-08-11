@@ -1,17 +1,15 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 
-class ModelComputeRuntime;
+class ModelComputeController;
 
 class RuntimeModelComputeTransport {
 public:
-    void setRuntime(ModelComputeRuntime* updatedRuntime) {
-        modelRuntime = updatedRuntime;
+    void setController(ModelComputeController* updatedController) {
+        controller = updatedController;
     }
 
     void setProducts(RuntimeProductManager* updatedProducts) {
@@ -20,9 +18,8 @@ public:
 
     ProductHandle apply(uint64_t socketKey, const ModelPackage& package);
     void remove(uint64_t socketKey);
-    void flush();
 
 private:
-    ModelComputeRuntime* modelRuntime = nullptr;
+    ModelComputeController* controller = nullptr;
     RuntimeProductManager* products = nullptr;
 };

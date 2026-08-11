@@ -30,17 +30,22 @@ public:
 	bool setModelVisible(uint32_t modelID, bool visible);
 	bool isModelVisible(uint32_t modelID) const;
 	bool exportProduct(uint32_t modelID, ModelProduct& outProduct) const;
+	bool tryGetRenderGeometry(
+		uint32_t modelID,
+		VkBuffer& outVertexBuffer,
+		VkDeviceSize& outVertexBufferOffset,
+		VkBuffer& outIndexBuffer,
+		VkDeviceSize& outIndexBufferOffset,
+		uint32_t& outIndexCount) const;
 	bool setModelMatrix(uint32_t modelID, const glm::mat4& matrix);
 	bool tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) const;
-	bool tryGetBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const;
-	bool tryGetBoundingBoxMinMax(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const;
-	bool tryGetWorldBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const;
+	bool tryGetLocalBounds(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const;
+	bool tryGetWorldBounds(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const;
+	glm::vec3 sceneWorldExtent() const;
 
 	MemoryAllocator& getMemoryAllocator() {
 		return memoryAllocator;
 	}
-
-	glm::vec3 calculateMaxBoundingBoxSize() const;
 
 private:
 	static constexpr uint32_t MaxStencilModelId = 255u;

@@ -38,6 +38,7 @@ public:
         VkDeviceSize indexOffset = 0;
         uint32_t indexCount = 0;
         glm::mat4 modelMatrix{1.0f};
+        float canonicalToWorldScale = 1.0f;
     };
 
     VoronoiRenderer(VulkanDevice& device, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager, CommandPool& commandPool);
@@ -48,6 +49,14 @@ public:
     void cleanup();
 
 private:
+    struct SurfacePushConstant {
+        alignas(16) glm::mat4 modelMatrix{1.0f};
+        float alpha = 1.0f;
+        float canonicalToWorldScale = 1.0f;
+        float padding0 = 0.0f;
+        float padding1 = 0.0f;
+    };
+
     uint32_t calculateMipLevels(uint32_t width, uint32_t height);
     bool createWireframeTexture();
 

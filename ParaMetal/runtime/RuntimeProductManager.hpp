@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "runtime/RuntimePackages.hpp"
+#include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
 class MemoryAllocator;

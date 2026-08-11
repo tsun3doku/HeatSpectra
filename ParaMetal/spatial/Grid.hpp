@@ -4,12 +4,17 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <memory>
+#include "util/Units.hpp"
 
 class MemoryAllocator;
 class UniformBufferManager;
 class VulkanDevice;
 class GridLabel;
 class CommandPool;
+
+namespace render {
+struct SceneView;
+}
 
 class GridRenderer {
 public:
@@ -18,7 +23,8 @@ public:
     ~GridRenderer();
 
     void cleanup() const;
-    void updateLabels(const glm::vec3& gridSize);
+    void update(uint32_t frameIndex, const render::SceneView& sceneView, const glm::vec3& sceneExtent);
+    void setWorldUnit(units::LengthUnit unit);
     void renderLabels(VkCommandBuffer commandBuffer, uint32_t currentFrame);
 
     void createGridDescriptorPool(uint32_t maxFramesInFlight);
@@ -60,4 +66,5 @@ private:
     VkPipelineLayout gridPipelineLayout;
     
     std::unique_ptr<GridLabel> gridLabel;
+    units::LengthUnit worldUnit = units::defaultLengthUnit();
 };

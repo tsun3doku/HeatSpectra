@@ -11,8 +11,7 @@ TimingRenderer::~TimingRenderer() = default;
 void TimingRenderer::buildGlyphInstances() {
     glyphInstances.clear();
     const GlyphText& glyphText = textRenderer.getGlyphText();
-    const float scale = 18.0f / 64.0f;
-    const float advanceFactor = 0.4f;
+    const float emScale = 18.0f / glyphText.getPlaneHeight();
     const float marginX = 8.0f;
     const float marginY = 8.0f;
     const float lineSpacing = 18.0f;
@@ -22,16 +21,19 @@ void TimingRenderer::buildGlyphInstances() {
     float lineTop = marginY;
     for (const std::string& line : activeLines) {
         const size_t separatorPosition = line.find(':');
-        float cursorX = marginX;
+        float cursorX = marginX + glyphText.getCellOriginX() * emScale;
+        const float baselineY = lineTop + glyphText.getCellOriginY() * emScale;
         for (size_t characterIndex = 0; characterIndex < line.size(); ++characterIndex) {
             const char character = line[characterIndex];
             const GlyphText::CharInfo& info = glyphText.getCharInfo(character);
             if (info.width > 0.0f && info.height > 0.0f) {
                 GlyphText::GlyphInstance glyph{};
                 glyph.centerPx = glm::vec2(
-                    cursorX + info.xoffset * scale + 0.5f * info.width * scale,
-                    lineTop - info.yoffset * scale + 0.5f * info.height * scale);
-                glyph.sizePx = glm::vec2(info.width * scale, info.height * scale);
+                    cursorX + 0.5f * (info.planeLeft + info.planeRight) * emScale,
+                    baselineY + 0.5f * (info.planeTop + info.planeBottom) * emScale);
+                glyph.sizePx = glm::vec2(
+                    (info.planeRight - info.planeLeft) * emScale,
+                    (info.planeBottom - info.planeTop) * emScale);
                 glyph.charUV = glyphText.getCharUV(character);
                 glyph.color = separatorPosition != std::string::npos && characterIndex > separatorPosition
                     ? valueColor
@@ -43,7 +45,7 @@ void TimingRenderer::buildGlyphInstances() {
                     }
                 }
             }
-            cursorX += info.xadvance * scale * advanceFactor;
+            cursorX += info.advanceEm * emScale;
         }
         if (glyphInstances.size() >= maxGlyphCapacity) {
             break;

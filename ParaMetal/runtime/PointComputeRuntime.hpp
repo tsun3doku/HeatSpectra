@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 
 #include "runtime/RuntimeProducts.hpp"
+#include "util/Units.hpp"
 
 class VulkanDevice;
 class MemoryAllocator;

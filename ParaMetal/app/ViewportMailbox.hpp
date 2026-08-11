@@ -31,6 +31,7 @@ public:
     void requestSelection(int nodeId);
     void requestHeatPaletteRange(float minimum, float maximum);
     void requestHeatPalette(int palette);
+    void requestWorldUnit(int unit);
     void replaceGraphState(const NodeGraphState& graphState);
     void applyViewportProjectState(const ProjectFile::Viewport& viewport);
     void requestCurrentViewportProjectState();
@@ -46,6 +47,7 @@ public:
     bool takeSelection(int& nodeId, bool force = false);
     bool takeHeatPaletteRange(float& minimum, float& maximum, bool force = false);
     bool takeHeatPalette(int& palette, bool force = false);
+    bool takeWorldUnit(int& unit, bool force = false);
     bool takeAppliedViewportProjectState(ProjectFile::Viewport& viewport);
     bool takeCurrentViewportProjectState();
 
@@ -79,6 +81,8 @@ private:
     bool heatPaletteRangeDirty = false;
     int requestedHeatPalette = 0;
     bool heatPaletteDirty = false;
+    int requestedWorldUnit = static_cast<int>(units::defaultLengthUnit());
+    bool worldUnitDirty = false;
 
     ProjectFile::Viewport appliedViewportProjectState;
     bool viewportProjectStateDirty = false;

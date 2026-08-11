@@ -17,7 +17,7 @@ public:
     FrameUpdateStage(
         InputController& inputController,
         UniformBufferManager& uniformBufferManager,
-        ModelRegistry& resourceManager,
+        ModelRegistry& modelRegistry,
         LightingSystem& lightingSystem,
         MaterialSystem& materialSystem,
         SceneRenderer& sceneRenderer,
@@ -29,7 +29,7 @@ public:
 private:
     InputController& inputController;
     UniformBufferManager& uniformBufferManager;
-    ModelRegistry& resourceManager;
+    ModelRegistry& modelRegistry;
     LightingSystem& lightingSystem;
     MaterialSystem& materialSystem;
     SceneRenderer& sceneRenderer;

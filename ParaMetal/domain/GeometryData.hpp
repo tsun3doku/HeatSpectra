@@ -2,7 +2,6 @@
 
 #include "nodegraph/NodeGraphCoreTypes.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
-
 #include <array>
 #include <cstdint>
 #include <string>
@@ -31,6 +30,10 @@ struct GeometryData {
     };
     std::vector<float> pointPositions;
     std::vector<uint32_t> triangleIndices;
+    std::vector<float> renderPositions;
+    std::vector<float> renderNormals;
+    std::vector<float> renderTexcoords;
+    std::vector<uint32_t> renderIndices;
     std::vector<uint32_t> triangleGroupIds;
     std::vector<GeometryGroup> groups;
 

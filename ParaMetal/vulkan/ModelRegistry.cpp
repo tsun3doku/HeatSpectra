@@ -118,7 +118,6 @@ bool ModelRegistry::exportProduct(uint32_t modelID, ModelProduct& outProduct) co
     outProduct.renderIndexBuffer = model->getRenderIndexBuffer();
     outProduct.renderIndexBufferOffset = model->getRenderIndexBufferOffset();
     outProduct.renderIndexCount = static_cast<uint32_t>(model->getRenderIndices().size());
-    outProduct.modelMatrix = model->getModelMatrix();
     HashProduct::seal(outProduct);
     return outProduct.isValid();
 }
@@ -134,7 +133,7 @@ bool ModelRegistry::setModelMatrix(uint32_t modelID, const glm::mat4& matrix) {
 }
 
 bool ModelRegistry::tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) const {
-    Model* model = const_cast<Model*>(findModel(modelID));
+    const Model* model = findModel(modelID);
     if (!model) {
         return false;
     }
@@ -143,36 +142,45 @@ bool ModelRegistry::tryGetModelMatrix(uint32_t modelID, glm::mat4& outMatrix) co
     return true;
 }
 
-bool ModelRegistry::tryGetBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const {
-    Model* model = const_cast<Model*>(findModel(modelID));
-    if (!model) {
-        return false;
-    }
-
-    outCenter = model->getBoundingBoxCenter();
-    return true;
+bool ModelRegistry::tryGetLocalBounds(
+    uint32_t modelID,
+    glm::vec3& outMin,
+    glm::vec3& outMax) const {
+    const Model* model = findModel(modelID);
+    return model && model->getLocalBounds(outMin, outMax);
 }
 
-bool ModelRegistry::tryGetBoundingBoxMinMax(uint32_t modelID, glm::vec3& outMin, glm::vec3& outMax) const {
-    Model* model = const_cast<Model*>(findModel(modelID));
-    if (!model) {
-        return false;
-    }
+bool ModelRegistry::tryGetRenderGeometry(
+    uint32_t modelID,
+    VkBuffer& outVertexBuffer,
+    VkDeviceSize& outVertexBufferOffset,
+    VkBuffer& outIndexBuffer,
+    VkDeviceSize& outIndexBufferOffset,
+    uint32_t& outIndexCount) const {
+    outVertexBuffer = VK_NULL_HANDLE;
+    outVertexBufferOffset = 0;
+    outIndexBuffer = VK_NULL_HANDLE;
+    outIndexBufferOffset = 0;
+    outIndexCount = 0;
 
-    outMin = model->getBoundingBoxMin();
-    outMax = model->getBoundingBoxMax();
-    return true;
+    const Model* model = findModel(modelID);
+    if (!model) return false;
+
+    outVertexBuffer = model->getRenderVertexBuffer();
+    outVertexBufferOffset = model->getRenderVertexBufferOffset();
+    outIndexBuffer = model->getRenderIndexBuffer();
+    outIndexBufferOffset = model->getRenderIndexBufferOffset();
+    outIndexCount = static_cast<uint32_t>(model->getRenderIndices().size());
+    return outVertexBuffer != VK_NULL_HANDLE &&
+        outIndexBuffer != VK_NULL_HANDLE && outIndexCount != 0;
 }
 
-bool ModelRegistry::tryGetWorldBoundingBoxCenter(uint32_t modelID, glm::vec3& outCenter) const {
-    glm::vec3 localCenter(0.0f);
-    glm::mat4 modelMatrix(1.0f);
-    if (!tryGetBoundingBoxCenter(modelID, localCenter) || !tryGetModelMatrix(modelID, modelMatrix)) {
-        return false;
-    }
-
-    outCenter = glm::vec3(modelMatrix * glm::vec4(localCenter, 1.0f));
-    return true;
+bool ModelRegistry::tryGetWorldBounds(
+    uint32_t modelID,
+    glm::vec3& outMin,
+    glm::vec3& outMax) const {
+    const Model* model = findModel(modelID);
+    return model && model->getWorldBounds(outMin, outMax);
 }
 
 Model* ModelRegistry::findModel(uint32_t modelID) {
@@ -255,43 +263,37 @@ void ModelRegistry::unregisterModel(uint32_t modelId) {
     }
 }
 
-glm::vec3 ModelRegistry::calculateMaxBoundingBoxSize() const {
+glm::vec3 ModelRegistry::sceneWorldExtent() const {
     glm::vec3 globalMin = glm::vec3(std::numeric_limits<float>::max());
     glm::vec3 globalMax = glm::vec3(std::numeric_limits<float>::lowest());
     bool hasAnyBounds = false;
 
     for (uint32_t modelId : getRenderableModelIds()) {
-        Model* model = const_cast<Model*>(findModel(modelId));
+        const Model* model = findModel(modelId);
         if (!model || model->getVertexCount() == 0) {
             continue;
         }
 
-        globalMin = glm::min(globalMin, model->getBoundingBoxMin());
-        globalMax = glm::max(globalMax, model->getBoundingBoxMax());
+        glm::vec3 worldMin(0.0f);
+        glm::vec3 worldMax(0.0f);
+        if (!model->getWorldBounds(worldMin, worldMax)) continue;
+        globalMin = glm::min(globalMin, worldMin);
+        globalMax = glm::max(globalMax, worldMax);
         hasAnyBounds = true;
     }
 
-    if (!hasAnyBounds) {
+    if (!hasAnyBounds) return glm::vec3(1.0f);
+
+    const glm::vec3 boundsSize = globalMax - globalMin;
+    const float largestExtent = glm::max(boundsSize.x, glm::max(boundsSize.y, boundsSize.z));
+    if (!(largestExtent > 0.0f) || !std::isfinite(largestExtent)) {
         return glm::vec3(1.0f);
     }
 
-    glm::vec3 size = globalMax - globalMin;
-
-    float greaterLineInterval = 1.0f;
-    float snappedWidth = std::ceil(size.x / greaterLineInterval) * greaterLineInterval;
-    float snappedDepth = std::ceil(size.z / greaterLineInterval) * greaterLineInterval;
-    float snappedHeight = std::ceil(size.y / greaterLineInterval) * greaterLineInterval;
-
-    float minSize = 1.0f;
-    snappedWidth = glm::max(snappedWidth, minSize);
-    snappedDepth = glm::max(snappedDepth, minSize);
-    snappedHeight = glm::max(snappedHeight, minSize);
-
-    float padding = 1.0f;
-    if (size.x >= snappedWidth) snappedWidth += padding;
-    if (size.z >= snappedDepth) snappedDepth += padding;
-    if (size.y >= snappedHeight) snappedHeight += padding;
-
-    return glm::vec3(snappedWidth, snappedDepth, snappedHeight);
+    const float padding = largestExtent * 0.25f;
+    const glm::vec3 gridAxesSize(boundsSize.x, boundsSize.z, boundsSize.y);
+    return glm::max(
+        gridAxesSize + glm::vec3(padding),
+        glm::vec3(largestExtent * 0.5f));
 }
 

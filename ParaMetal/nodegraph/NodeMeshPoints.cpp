@@ -9,6 +9,8 @@
 #include "domain/GeometryData.hpp"
 #include "domain/PointData.hpp"
 
+#include <limits>
+
 const char* NodeMeshPoints::typeId() const {
     return nodegraphtypes::MeshPoints;
 }
@@ -45,16 +47,24 @@ void NodeMeshPoints::execute(NodeKernelEval& eval) const {
         PointData payload{};
         const std::size_t vertexCount = geometryData->pointPositions.size() / 3;
         payload.positions.reserve(vertexCount);
+        payload.domainMinimum = glm::vec3(std::numeric_limits<float>::max());
+        payload.domainMaximum = glm::vec3(std::numeric_limits<float>::lowest());
         for (std::size_t i = 0; i < vertexCount; ++i) {
-            payload.positions.push_back(glm::vec4(
+            const glm::vec3 position(
                 geometryData->pointPositions[3 * i + 0],
                 geometryData->pointPositions[3 * i + 1],
-                geometryData->pointPositions[3 * i + 2],
-                1.0f
-            ));
+                geometryData->pointPositions[3 * i + 2]);
+            payload.positions.push_back(glm::vec4(position, 1.0f));
+            payload.domainMinimum = glm::min(payload.domainMinimum, position);
+            payload.domainMaximum = glm::max(payload.domainMaximum, position);
         }
 
-        payload.localToWorld = geometryData->localToWorld;
+        if (!payloadRegistry->resolveLocalToWorld(
+                inputData->payloadHandle,
+                payload.localToWorld)) {
+            populateMetadata(outputValue, nullptr, payloadRegistry);
+            continue;
+        }
         payload.active = true;
         const uint64_t payloadKey = NodeSocketKey(eval.node.id, outputSocket.id);
         outputValue.payloadHandle = payloadRegistry->store(payloadKey, payload, eval.outputHashes);

@@ -1,5 +1,4 @@
 #include "RuntimeVoronoiComputeTransport.hpp"
-#include "hash/HashProduct.hpp"
 #include "runtime/RuntimeProducts.hpp"
 #include "util/GeometryUtils.hpp"
 
@@ -19,6 +18,7 @@ ProductHandle RuntimeVoronoiComputeTransport::apply(uint64_t socketKey, const Vo
     config.active = true;
     config.cellSize = package.authored.cellSize;
     config.voxelResolution = package.authored.voxelResolution;
+    config.pointDomainCorners = package.pointDomainCorners;
 
     if (package.domainType == DomainType::Mesh) {
         if (package.modelMeshHandle.key == 0 || package.modelRemeshHandle.key == 0) {
@@ -44,7 +44,7 @@ ProductHandle RuntimeVoronoiComputeTransport::apply(uint64_t socketKey, const Vo
             config.surfaceVertices.push_back(vertex);
         }
         config.surfaceTriangleIndices = remeshProduct->surfaceTriangleIndices;
-        config.meshModelMatrix = toMat4(package.modelLocalToWorld);
+        config.meshModelMatrix = toMat4(package.localToWorld);
         config.pointPositions = package.pointPositions;
     } else if (package.domainType == DomainType::Points) {
         if (package.pointPositions.empty()) {

@@ -10,6 +10,7 @@
 #include "scene/MeshImporter.hpp"
 
 #include <filesystem>
+#include <cmath>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -30,6 +31,13 @@ void NodeModel::execute(NodeKernelEval& eval) const {
     if (!modelPath.empty() && std::filesystem::exists(modelPath)) {
         hasGeometry = loadGeometryFromModelPath(modelPath, geometry);
         geometry.baseModelPath = modelPath;
+        const float sourceToCanonical = units::sourceToCanonicalScale(params.sourceUnit);
+        for (float& coordinate : geometry.pointPositions) {
+            coordinate *= sourceToCanonical;
+        }
+        for (float& coordinate : geometry.renderPositions) {
+            coordinate *= sourceToCanonical;
+        }
     }
 
     for (std::size_t outputIndex = 0;
@@ -57,6 +65,7 @@ HashValues NodeModel::computeOutputHashes(const NodeKernelHash& hash) const {
     uint64_t hashValue = HashBuilder::start();
     HashBuilder::combineString(hashValue, nodegraphtypes::Model);
     HashBuilder::combineString(hashValue, readModelNodeParams(hash.node).path);
+    HashBuilder::combine(hashValue, static_cast<uint64_t>(readModelNodeParams(hash.node).sourceUnit));
 
     HashValues values{};
     values.full = hashValue;
@@ -65,7 +74,7 @@ HashValues NodeModel::computeOutputHashes(const NodeKernelHash& hash) const {
     return values;
 }
 
-bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geometry) {
+bool NodeModel::parseMeshGeometry(const std::string& modelPath, GeometryData& geometry) {
     geometry = {};
 
     MeshImporter::Mesh importedMesh;
@@ -79,6 +88,55 @@ bool NodeModel::parseObjGeometry(const std::string& modelPath, GeometryData& geo
         geometry.triangleIndices.push_back(importedMesh.corners[cornerIndex].vertexIndex);
     }
     geometry.triangleGroupIds = importedMesh.triangleGroupIds;
+
+    geometry.renderPositions.reserve(importedMesh.triangleCornerIndices.size() * 3);
+    geometry.renderNormals.reserve(importedMesh.triangleCornerIndices.size() * 3);
+    geometry.renderTexcoords.reserve(importedMesh.triangleCornerIndices.size() * 2);
+    geometry.renderIndices.reserve(importedMesh.triangleCornerIndices.size());
+
+    for (uint32_t cornerIndex : importedMesh.triangleCornerIndices) {
+        const MeshImporter::Corner& corner = importedMesh.corners[cornerIndex];
+        const uint32_t renderIndex = static_cast<uint32_t>(geometry.renderPositions.size() / 3);
+        const std::size_t positionOffset = static_cast<std::size_t>(corner.vertexIndex) * 3;
+        geometry.renderPositions.insert(
+            geometry.renderPositions.end(),
+            importedMesh.positions.begin() + positionOffset,
+            importedMesh.positions.begin() + positionOffset + 3);
+
+        if (corner.normalIndex >= 0) {
+            const std::size_t normalOffset = static_cast<std::size_t>(corner.normalIndex) * 3;
+            float nx = importedMesh.normals[normalOffset + 0];
+            float ny = importedMesh.normals[normalOffset + 1];
+            float nz = importedMesh.normals[normalOffset + 2];
+            const float lengthSquared = nx * nx + ny * ny + nz * nz;
+            if (lengthSquared > 1e-12f) {
+                const float inverseLength = 1.0f / std::sqrt(lengthSquared);
+                nx *= inverseLength;
+                ny *= inverseLength;
+                nz *= inverseLength;
+            } else {
+                nx = 0.0f;
+                ny = 0.0f;
+                nz = 1.0f;
+            }
+            geometry.renderNormals.insert(
+                geometry.renderNormals.end(), {nx, ny, nz});
+        } else {
+            geometry.renderNormals.insert(
+                geometry.renderNormals.end(), {0.0f, 0.0f, 0.0f});
+        }
+
+        if (corner.texcoordIndex >= 0) {
+            const std::size_t texcoordOffset = static_cast<std::size_t>(corner.texcoordIndex) * 2;
+            geometry.renderTexcoords.push_back(importedMesh.texcoords[texcoordOffset + 0]);
+            geometry.renderTexcoords.push_back(1.0f - importedMesh.texcoords[texcoordOffset + 1]);
+        } else {
+            geometry.renderTexcoords.insert(
+                geometry.renderTexcoords.end(), {0.0f, 0.0f});
+        }
+
+        geometry.renderIndices.push_back(renderIndex);
+    }
 
     geometry.groups.reserve(importedMesh.groups.size());
     for (const auto& group : importedMesh.groups) {
@@ -108,7 +166,7 @@ bool NodeModel::loadGeometryFromModelPath(const std::string& modelPath, Geometry
         }
 
         GeometryData candidateGeometry;
-        if (!parseObjGeometry(candidatePath, candidateGeometry)) {
+        if (!parseMeshGeometry(candidatePath, candidateGeometry)) {
             failedGeometryByPath.insert(candidatePath);
             continue;
         }

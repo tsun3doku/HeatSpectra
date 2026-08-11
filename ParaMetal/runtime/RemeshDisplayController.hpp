@@ -1,13 +1,13 @@
 #pragma once
 
 #include "hash/HashBuilder.hpp"
-#include "runtime/RuntimePackages.hpp"
-#include "runtime/RuntimeProducts.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <glm/mat4x4.hpp>
 #include <unordered_map>
 #include <unordered_set>
+#include <vulkan/vulkan.h>
 
 class IntrinsicRenderer;
 
@@ -85,6 +85,7 @@ inline uint64_t buildDisplayHash(const RemeshDisplayController::Config& config, 
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showFaceNormals ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showVertexNormals ? 1u : 0u));
     HashBuilder::combinePod(hash, config.normalLength);
+    HashBuilder::combinePod(hash, config.modelMatrix);
     HashBuilder::combine(hash, productDisplayHash);
     return hash;
 }

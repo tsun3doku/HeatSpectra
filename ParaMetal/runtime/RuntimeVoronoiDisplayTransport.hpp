@@ -1,9 +1,10 @@
 #pragma once
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 #include "runtime/VoronoiDisplayController.hpp"
+#include "util/GeometryUtils.hpp"
 
 #include <iostream>
 #include <unordered_set>
@@ -25,27 +26,28 @@ public:
         }
 
         std::unordered_set<uint64_t> nextSocketKeys;
-        registry.forEach<VoronoiPackage>([&](uint64_t socketKey, const VoronoiPackage& package) {
+        for (const auto& [socketKey, package] : registry.voronois()) {
+            if (!registry.isCurrent(socketKey)) continue;
             if (visibleKeys.find(socketKey) == visibleKeys.end()) {
-                return;
+                continue;
             }
 
             VoronoiDisplayController::Config config{};
             if (!tryBuildConfig(socketKey, package, config)) {
                 controller->remove(socketKey);
-                return;
+                continue;
             }
 
             controller->apply(socketKey, config);
             nextSocketKeys.insert(socketKey);
-        });
+        }
 
         for (uint64_t socketKey : activeSocketKeys) {
             if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
                 controller->remove(socketKey);
             }
         }
-        activeSocketKeys = std::move(nextSocketKeys);
+        activeSocketKeys = nextSocketKeys;
     }
 
     void finalizeSync() {
@@ -137,7 +139,8 @@ private:
             outConfig.indexBuffer = modelProduct->indexBuffer;
             outConfig.indexBufferOffset = modelProduct->indexBufferOffset;
             outConfig.indexCount = modelProduct->indexCount;
-            outConfig.modelMatrix = modelProduct->modelMatrix;
+            outConfig.modelMatrix = toMat4(package.localToWorld);
+            outConfig.canonicalToWorldScale = package.canonicalToWorldScale;
         }
         outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->hashes.display);
         return true;

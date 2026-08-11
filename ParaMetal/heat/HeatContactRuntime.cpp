@@ -182,6 +182,8 @@ bool HeatContactRuntime::build(
 
         const HeatModelRuntime& modelA = *modelAIt->second;
         const HeatModelRuntime& modelB = *modelBIt->second;
+        const double metersPerUnit = modelA.getMetersPerWorldUnit();
+        const double areaScale = metersPerUnit * metersPerUnit;
         if (!modelA.getNodeIndex().isValid() || !modelB.getNodeIndex().isValid()) continue;
 
         const auto& triangleIndices = coupling.modelBTriangleIndices;
@@ -240,7 +242,7 @@ bool HeatContactRuntime::build(
 
                 ContactSampleData sample{};
                 sample.conductance =
-                    static_cast<double>(heatTransferCoefficient) * contactSample.contactSampleArea;
+                    static_cast<double>(heatTransferCoefficient) * contactSample.contactSampleArea * areaScale;
                 sample.nodes.reserve(nodesA.size() + nodesB.size());
                 double sampleWeightSum = 0.0;
                 for (size_t index = 0; index < nodesA.size(); ++index) {

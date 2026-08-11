@@ -22,6 +22,7 @@ public:
         uint32_t sampleCount = 0;
         glm::mat4 modelMatrix{1.0f};
         float scale = 1.0f;
+        float canonicalToWorldScale = 1.0f;
     };
 
     VectorArrowRenderer(VulkanDevice& device, MemoryAllocator& allocator, UniformBufferManager& uniformBufferManager, CommandPool& commandPool);

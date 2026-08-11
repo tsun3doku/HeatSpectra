@@ -26,8 +26,8 @@ public:
     const CameraController& cameraController() const;
     UniformBufferManager* uniformBufferManager();
     const UniformBufferManager* uniformBufferManager() const;
-    ModelRegistry* resourceManager();
-    const ModelRegistry* resourceManager() const;
+    ModelRegistry* modelRegistry();
+    const ModelRegistry* modelRegistry() const;
     ModelUploader* modelUploader();
     const ModelUploader* modelUploader() const;
     MaterialSystem* materialSystem();
@@ -41,7 +41,7 @@ private:
     Camera camera;
     CameraController cameraControllerState;
     std::unique_ptr<UniformBufferManager> uniformBufferManagerState;
-    std::unique_ptr<ModelRegistry> resourceManagerState;
+    std::unique_ptr<ModelRegistry> modelRegistryState;
     std::unique_ptr<ModelUploader> modelUploaderState;
     std::unique_ptr<MaterialSystem> materialSystemState;
     std::unique_ptr<LightingSystem> lightingSystemState;

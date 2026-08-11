@@ -2,8 +2,9 @@
 
 #include "nodegraph/NodeGraphProductTypes.hpp"
 #include "runtime/ContactDisplayController.hpp"
-#include "runtime/RuntimePackageManager.hpp"
+#include "runtime/package/RuntimePackageManager.hpp"
 #include "runtime/RuntimeProductManager.hpp"
+#include "util/Units.hpp"
 
 #include <unordered_set>
 #include <vector>
@@ -24,27 +25,28 @@ public:
         }
 
         std::unordered_set<uint64_t> nextSocketKeys;
-        registry.forEach<ContactPackage>([&](uint64_t socketKey, const ContactPackage& package) {
+        for (const auto& [socketKey, package] : registry.contacts()) {
+            if (!registry.isCurrent(socketKey)) continue;
             if (visibleKeys.find(socketKey) == visibleKeys.end()) {
-                return;
+                continue;
             }
 
             ContactDisplayController::Config config{};
             if (!tryBuildConfig(socketKey, package, config)) {
                 controller->remove(socketKey);
-                return;
+                continue;
             }
 
             controller->apply(socketKey, config);
             nextSocketKeys.insert(socketKey);
-        });
+        }
 
         for (uint64_t socketKey : activeSocketKeys) {
             if (nextSocketKeys.find(socketKey) == nextSocketKeys.end()) {
                 controller->remove(socketKey);
             }
         }
-        activeSocketKeys = std::move(nextSocketKeys);
+        activeSocketKeys = nextSocketKeys;
     }
 
     void finalizeSync() {

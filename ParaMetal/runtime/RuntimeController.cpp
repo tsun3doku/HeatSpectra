@@ -20,7 +20,7 @@ bool RuntimeController::initialize(
         return true;
     }
 
-    if (!render.heatSystemComputeController() || !render.modelComputeRuntime() || !render.sceneController() || !render.nodeGraphController()) {
+    if (!render.heatSystemComputeController() || !render.modelComputeController() || !render.sceneController() || !render.nodeGraphController()) {
         return false;
     }
 
@@ -39,7 +39,12 @@ bool RuntimeController::initialize(
     this->render = &render;
     this->scene = &scene;
 
-    runtimeInputController = std::make_unique<RuntimeInputController>(windowRuntimeState, *render.inputController());
+    runtimeInput = std::make_unique<RuntimeInput>(
+        windowRuntimeState,
+        *render.inputController(),
+        *render.nodeGraphController(),
+        *render.sceneController(),
+        *scene.modelRegistry());
     runtimeRenderController = std::make_unique<RuntimeRenderController>(
         *render.runtime(),
         render.sync(),
@@ -52,7 +57,7 @@ bool RuntimeController::initialize(
 
 void RuntimeController::shutdown() {
     runtimeRenderController.reset();
-    runtimeInputController.reset();
+    runtimeInput.reset();
     render = nullptr;
     scene = nullptr;
     initialized = false;
@@ -60,10 +65,6 @@ void RuntimeController::shutdown() {
 
 bool RuntimeController::isInitialized() const {
     return initialized;
-}
-
-RuntimeInputController& RuntimeController::inputController() {
-    return *runtimeInputController;
 }
 
 NodeGraphController* RuntimeController::nodeGraphController() {
@@ -80,13 +81,13 @@ void RuntimeController::tick(
     VkCommandBuffer commandBuffer,
     uint32_t frameIndex,
     const app::RenderSettings& renderSettings) {
-    if (!runtimeRenderController || !runtimeInputController || !render || !scene) {
+    if (!runtimeRenderController || !runtimeInput || !render || !scene) {
         return;
     }
 
     hasFrameSlot = false;
 
-    runtimeInputController->tick(deltaTime);
+    runtimeInput->tick(deltaTime);
 
     NodeGraphController* graphController = render->nodeGraphController();
     graphController->tick();
@@ -109,4 +110,18 @@ bool RuntimeController::hasLastFrameSlot() const {
 
 uint32_t RuntimeController::lastFrameSlot() const {
     return frameSlot;
+}
+
+std::vector<ViewportCommand> RuntimeController::takePendingViewportCommands() {
+    if (!runtimeInput) {
+        return {};
+    }
+    return runtimeInput->takePendingViewportCommands();
+}
+
+bool RuntimeController::takePendingNodeParameters(
+    NodeGraphNodeId& outNodeId,
+    std::vector<NodeGraphParamValue>& outParameters) {
+    return runtimeInput &&
+        runtimeInput->takePendingNodeParameters(outNodeId, outParameters);
 }

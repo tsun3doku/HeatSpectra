@@ -3,6 +3,7 @@
 
 #include "HeatContactSolver.hpp"
 #include "../cuda/CudaExternalBuffer.hpp"
+#include "../cuda/CudaVulkanDevice.hpp"
 
 #include "../vulkan/VulkanDevice.hpp"
 #include "../vulkan/VulkanExternalBuffer.hpp"
@@ -13,7 +14,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <utility>
 
@@ -108,26 +108,6 @@ bool initializeAmgxLibrary() {
     return initialized;
 }
 
-int findCudaDevice(VkPhysicalDevice physicalDevice) {
-    VkPhysicalDeviceIDProperties idProperties{};
-    idProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-    VkPhysicalDeviceProperties2 properties{};
-    properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-    properties.pNext = &idProperties;
-    vkGetPhysicalDeviceProperties2(physicalDevice, &properties);
-
-    int count = 0;
-    if (cudaGetDeviceCount(&count) != cudaSuccess) return -1;
-    for (int device = 0; device < count; ++device) {
-        cudaDeviceProp cudaProperties{};
-        if (cudaGetDeviceProperties(&cudaProperties, device) != cudaSuccess) continue;
-        if (std::memcmp(cudaProperties.uuid.bytes, idProperties.deviceUUID, VK_UUID_SIZE) == 0) {
-            return device;
-        }
-    }
-    return -1;
-}
-
 } // namespace contactcuda
 
 class HeatContactSolver::Implementation {
@@ -154,7 +134,7 @@ public:
         nodeCount = static_cast<uint32_t>(masses.size());
         boundaryValueCount = inputBoundaryValueCount;
 
-        cudaDevice = contactcuda::findCudaDevice(vulkanDevice.getPhysicalDevice());
+        cudaDevice = cudaVulkan::findDevice(vulkanDevice.getPhysicalDevice());
         if (cudaDevice < 0 || !contactcuda::cudaOk(cudaSetDevice(cudaDevice), "cudaSetDevice")) return false;
 
         if (!createTimelineSemaphore()) return false;

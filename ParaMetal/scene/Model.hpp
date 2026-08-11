@@ -76,27 +76,6 @@ struct Vertex {
     }
 };
 
-struct ModelCornerKey {
-    int32_t vertexIndex = -1;
-    int32_t texcoordIndex = -1;
-    int32_t normalIndex = -1;
-
-    bool operator==(const ModelCornerKey& other) const {
-        return vertexIndex == other.vertexIndex &&
-            texcoordIndex == other.texcoordIndex &&
-            normalIndex == other.normalIndex;
-    }
-};
-
-struct ModelCornerKeyHash {
-    size_t operator()(const ModelCornerKey& key) const {
-        size_t h0 = std::hash<int32_t>{}(key.vertexIndex);
-        size_t h1 = std::hash<int32_t>{}(key.texcoordIndex);
-        size_t h2 = std::hash<int32_t>{}(key.normalIndex);
-        return h0 ^ (h1 << 1) ^ (h2 << 2);
-    }
-};
-
 namespace std {
     template<> struct hash<Vertex> {
         size_t operator()(Vertex const& vertex) const {
@@ -114,9 +93,7 @@ class Model {
 public:
     Model(VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, Camera& camera, CommandPool& commandPool);
     ~Model();
-    bool init(const std::string modelPath);
-
-    bool loadModel(const std::string& modelPath);
+    bool init();
 
     void createVertexBuffer();
     void createIndexBuffer();
@@ -124,6 +101,14 @@ public:
     void createRenderIndexBuffer();
 
     void recalculateNormals();
+    void setGeometry(
+        const std::vector<float>& positions,
+        const std::vector<uint32_t>& newIndices);
+    void setRenderGeometry(
+        const std::vector<float>& positions,
+        const std::vector<float>& normals,
+        const std::vector<float>& texcoords,
+        const std::vector<uint32_t>& newIndices);
     void updateGeometry(const std::vector<Vertex>& newVertices, const std::vector<uint32_t>& newIndices);
     void updateVertexBuffer();
     void updateIndexBuffer();
@@ -137,10 +122,8 @@ public:
     void recreateBuffers();
     void cleanup();
 
-    glm::vec3 getBoundingBoxCenter();
-    glm::vec3 getBoundingBoxMin();
-    glm::vec3 getBoundingBoxMax();
-    std::array<glm::vec3, 8> calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& mindBound, glm::vec3& maxBound);
+    bool getLocalBounds(glm::vec3& outMin, glm::vec3& outMax) const;
+    bool getWorldBounds(glm::vec3& outMin, glm::vec3& outMax) const;
     
     glm::vec3 getTranslationOffset() const { 
         return glm::vec3(modelMatrix[3]); 
@@ -197,7 +180,7 @@ public:
         return modelPosition;
     }
 
-    glm::mat4 getModelMatrix() {
+    glm::mat4 getModelMatrix() const {
         return modelMatrix;
     }
 
@@ -222,11 +205,24 @@ public:
         renderVertices = vertices;
         hasSplitRenderMesh = false;
     }
+    void setRenderVertices(const std::vector<Vertex>& newVertices) {
+        renderVertices = newVertices;
+        hasSplitRenderMesh = renderVertices != vertices;
+    }
+    void setRenderIndices(const std::vector<uint32_t>& newIndices) {
+        renderIndices = newIndices;
+        hasSplitRenderMesh = renderIndices != indices;
+    }
     void setRuntimeModelId(uint32_t id) {
         runtimeModelId = id;
     }
 
 private:
+    static std::vector<Vertex> makeVertices(
+        const std::vector<float>& positions,
+        const std::vector<float>* normals = nullptr,
+        const std::vector<float>* texcoords = nullptr);
+
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     Camera& camera;

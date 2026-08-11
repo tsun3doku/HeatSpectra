@@ -5,6 +5,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <cstdint>
+#include "util/Units.hpp"
 
 class Camera;
 enum class CameraProjectionMode : uint8_t;
@@ -25,6 +26,7 @@ public:
     }
 
     void setPanSensitivity(float sensitivity);
+    void setWorldUnit(units::LengthUnit unit);
     void focusOn(const glm::vec3& target);
     void setCameraState(
         const glm::vec3& lookAt,

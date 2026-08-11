@@ -17,10 +17,10 @@ struct ContactPackage;
 
 class HashPackage {
 public:
-    static void seal(ModelPackage& pkg, const HashValues& geometryHashes);
+    static void seal(ModelPackage& pkg, const HashValues& sourceGeometryHashes, const HashValues& outputHashes);
     static void seal(RemeshPackage& pkg, const HashValues& sourceGeometryHashes);
     static void seal(VoronoiPackage& pkg, const HashValues& authoredHashes);
-    static void seal(PointPackage& pkg);
+    static void seal(PointPackage& pkg, const HashValues& sourceHashes);
     static void seal(HeatPackage& pkg, const HashValues& authoredHashes);
     static void seal(ContactPackage& pkg, const HashValues& authoredHashes);
 };

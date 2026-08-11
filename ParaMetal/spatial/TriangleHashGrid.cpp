@@ -1,6 +1,5 @@
 #include "TriangleHashGrid.hpp"
 
-#include "scene/Model.hpp"
 #include "util/GeometryUtils.hpp"
 
 #include <algorithm>
@@ -9,91 +8,53 @@
 #include <limits>
 #include <omp.h>
 
-TriangleHashGrid::TriangleHashGrid()
-    : cellSize_(1.0f), gridMin_(0.0f), gridMax_(1.0f), gridDim_(1) {
-}
-
-void TriangleHashGrid::build(const Model& model, const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize) {
-    const auto& vertices = model.getVertices();
-    std::vector<glm::vec3> positions;
-    positions.reserve(vertices.size());
-
-    for (const auto& vertex : vertices) {
-        positions.push_back(vertex.pos);
-    }
-
-    initializeGrid(gridMin, gridMax, cellSize);
-    buildTriangles(positions, model.getIndices());
-}
-
-void TriangleHashGrid::build(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices, const glm::vec3& gridMin, const glm::vec3& gridMax,
-    float cellSize) {
-    clear();
-    initializeGrid(gridMin, gridMax, cellSize);
+void TriangleHashGrid::build(
+    const std::vector<glm::vec3>& vertices,
+    const std::vector<uint32_t>& indices,
+    const glm::vec3& minimum,
+    const glm::vec3& maximum,
+    float width) {
+    grid.clear();
+    gridMin = minimum;
+    gridMax = maximum;
+    cellSize = width;
+    gridDim = computeGridDimensions(minimum, maximum, width);
     buildTriangles(vertices, indices);
 }
 
 void TriangleHashGrid::getNearbyTriangles(const glm::vec3& position, std::vector<size_t>& outTriangles) const {
-    outTriangles.clear();
-
-    const glm::ivec3 cell = worldToCell(position);
-    std::unordered_set<size_t> seenTriangles;
-
-    for (int dz = -1; dz <= 1; ++dz) {
-        for (int dy = -1; dy <= 1; ++dy) {
-            for (int dx = -1; dx <= 1; ++dx) {
-                const int cx = cell.x + dx;
-                const int cy = cell.y + dy;
-                const int cz = cell.z + dz;
-
-                if (cx < 0 || cx >= gridDim_.x ||
-                    cy < 0 || cy >= gridDim_.y ||
-                    cz < 0 || cz >= gridDim_.z) {
-                    continue;
-                }
-
-                const size_t hash = hashCell(cx, cy, cz);
-                addCellTriangles(hash, seenTriangles, outTriangles);
-            }
-        }
-    }
+    getNearbyTriangles(position, 1, outTriangles);
 }
 
 void TriangleHashGrid::getNearbyTriangles(const glm::vec3& position, int radiusCells, std::vector<size_t>& outTriangles) const {
     outTriangles.clear();
-    if (radiusCells <= 1) {
-        getNearbyTriangles(position, outTriangles);
-        return;
-    }
 
     const glm::ivec3 cell = worldToCell(position);
-    const int r = radiusCells;
-    std::unordered_set<size_t> seenTriangles;
-
-    for (int dz = -r; dz <= r; ++dz) {
-        for (int dy = -r; dy <= r; ++dy) {
-            for (int dx = -r; dx <= r; ++dx) {
+    const int radius = std::max(1, radiusCells);
+    for (int dz = -radius; dz <= radius; ++dz) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
                 const int cx = cell.x + dx;
                 const int cy = cell.y + dy;
                 const int cz = cell.z + dz;
 
-                if (cx < 0 || cx >= gridDim_.x ||
-                    cy < 0 || cy >= gridDim_.y ||
-                    cz < 0 || cz >= gridDim_.z) {
+                if (cx < 0 || cx >= gridDim.x ||
+                    cy < 0 || cy >= gridDim.y ||
+                    cz < 0 || cz >= gridDim.z) {
                     continue;
                 }
 
-                const size_t hash = hashCell(cx, cy, cz);
-                addCellTriangles(hash, seenTriangles, outTriangles);
+                appendCellTriangles(cellIndex(cx, cy, cz), outTriangles);
             }
         }
     }
+    deduplicate(outTriangles);
 }
 
 void TriangleHashGrid::getTrianglesAlongRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance, std::vector<size_t>& outTriangles) const {
     outTriangles.clear();
 
-    if (grid_.empty() || maxDistance <= 0.0f || cellSize_ <= 0.0f) {
+    if (grid.empty() || maxDistance <= 0.0f || cellSize <= 0.0f) {
         return;
     }
 
@@ -105,7 +66,7 @@ void TriangleHashGrid::getTrianglesAlongRay(const glm::vec3& origin, const glm::
     const glm::vec3 rayDirection = direction / directionLength;
     float tEnter = 0.0f;
     float tExit = maxDistance;
-    if (!intersectRayAabb(origin, rayDirection, gridMin_, gridMax_, maxDistance, tEnter, tExit)) {
+    if (!intersectRayAabb(origin, rayDirection, gridMin, gridMax, maxDistance, tEnter, tExit)) {
         return;
     }
 
@@ -134,24 +95,22 @@ void TriangleHashGrid::getTrianglesAlongRay(const glm::vec3& origin, const glm::
 
         if (dirAxis > 0.0f) {
             step[axis] = 1;
-            const float nextBoundary = gridMin_[axis] + static_cast<float>(cell[axis] + 1) * cellSize_;
+            const float nextBoundary = gridMin[axis] + static_cast<float>(cell[axis] + 1) * cellSize;
             tMax[axis] = (nextBoundary - startPoint[axis]) / dirAxis;
         } else {
             step[axis] = -1;
-            const float nextBoundary = gridMin_[axis] + static_cast<float>(cell[axis]) * cellSize_;
+            const float nextBoundary = gridMin[axis] + static_cast<float>(cell[axis]) * cellSize;
             tMax[axis] = (nextBoundary - startPoint[axis]) / dirAxis;
         }
 
-        tDelta[axis] = cellSize_ / std::fabs(dirAxis);
+        tDelta[axis] = cellSize / std::fabs(dirAxis);
     }
 
     const float travelLimit = endT - startT;
-    std::unordered_set<size_t> seenTriangles;
-
-    while (cell.x >= 0 && cell.x < gridDim_.x &&
-           cell.y >= 0 && cell.y < gridDim_.y &&
-           cell.z >= 0 && cell.z < gridDim_.z) {
-        addCellTriangles(hashCell(cell.x, cell.y, cell.z), seenTriangles, outTriangles);
+    while (cell.x >= 0 && cell.x < gridDim.x &&
+           cell.y >= 0 && cell.y < gridDim.y &&
+           cell.z >= 0 && cell.z < gridDim.z) {
+        appendCellTriangles(cellIndex(cell.x, cell.y, cell.z), outTriangles);
 
         const float nextStepT = std::min(tMax.x, std::min(tMax.y, tMax.z));
         if (nextStepT > travelLimit) {
@@ -169,17 +128,7 @@ void TriangleHashGrid::getTrianglesAlongRay(const glm::vec3& origin, const glm::
             tMax.z += tDelta.z;
         }
     }
-}
-
-void TriangleHashGrid::clear() {
-    grid_.clear();
-}
-
-void TriangleHashGrid::initializeGrid(const glm::vec3& gridMin, const glm::vec3& gridMax, float cellSize) {
-    gridMin_ = gridMin;
-    gridMax_ = gridMax;
-    cellSize_ = cellSize;
-    gridDim_ = computeGridDimensions(gridMin, gridMax, cellSize);
+    deduplicate(outTriangles);
 }
 
 void TriangleHashGrid::buildTriangles(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) {
@@ -217,8 +166,8 @@ void TriangleHashGrid::buildTriangles(const std::vector<glm::vec3>& vertices, co
             for (int z = cellMin.z; z <= cellMax.z; ++z) {
                 for (int y = cellMin.y; y <= cellMax.y; ++y) {
                     for (int x = cellMin.x; x <= cellMax.x; ++x) {
-                        const size_t hash = hashCell(x, y, z);
-                        threadLocalGrids[threadId][hash].push_back(triangleIndex);
+                        const size_t cell = cellIndex(x, y, z);
+                        threadLocalGrids[threadId][cell].push_back(triangleIndex);
                     }
                 }
             }
@@ -226,36 +175,34 @@ void TriangleHashGrid::buildTriangles(const std::vector<glm::vec3>& vertices, co
     }
 
     for (const auto& localGrid : threadLocalGrids) {
-        for (const auto& [hash, triangles] : localGrid) {
-            grid_[hash].insert(grid_[hash].end(), triangles.begin(), triangles.end());
-        }
-    }
-
-}
-
-void TriangleHashGrid::addCellTriangles(size_t hash, std::unordered_set<size_t>& seenTriangles, std::vector<size_t>& outTriangles) const {
-    const auto it = grid_.find(hash);
-    if (it == grid_.end()) {
-        return;
-    }
-
-    for (size_t triangleIndex : it->second) {
-        if (seenTriangles.insert(triangleIndex).second) {
-            outTriangles.push_back(triangleIndex);
+        for (const auto& [cell, triangles] : localGrid) {
+            grid[cell].insert(grid[cell].end(), triangles.begin(), triangles.end());
         }
     }
 }
 
-size_t TriangleHashGrid::hashCell(int x, int y, int z) const {
-    return static_cast<size_t>(z) * static_cast<size_t>(gridDim_.y) * static_cast<size_t>(gridDim_.x) +
-        static_cast<size_t>(y) * static_cast<size_t>(gridDim_.x) +
+void TriangleHashGrid::appendCellTriangles(size_t cell, std::vector<size_t>& outTriangles) const {
+    const auto it = grid.find(cell);
+    if (it != grid.end()) {
+        outTriangles.insert(outTriangles.end(), it->second.begin(), it->second.end());
+    }
+}
+
+void TriangleHashGrid::deduplicate(std::vector<size_t>& triangles) {
+    std::sort(triangles.begin(), triangles.end());
+    triangles.erase(std::unique(triangles.begin(), triangles.end()), triangles.end());
+}
+
+size_t TriangleHashGrid::cellIndex(int x, int y, int z) const {
+    return static_cast<size_t>(z) * static_cast<size_t>(gridDim.y) * static_cast<size_t>(gridDim.x) +
+        static_cast<size_t>(y) * static_cast<size_t>(gridDim.x) +
         static_cast<size_t>(x);
 }
 
-glm::ivec3 TriangleHashGrid::worldToCell(const glm::vec3& pos) const {
-    const glm::vec3 gridPos = (pos - gridMin_) / cellSize_;
+glm::ivec3 TriangleHashGrid::worldToCell(const glm::vec3& position) const {
+    const glm::vec3 gridPosition = (position - gridMin) / cellSize;
     return glm::ivec3(
-        glm::clamp(static_cast<int>(gridPos.x), 0, gridDim_.x - 1),
-        glm::clamp(static_cast<int>(gridPos.y), 0, gridDim_.y - 1),
-        glm::clamp(static_cast<int>(gridPos.z), 0, gridDim_.z - 1));
+        glm::clamp(static_cast<int>(gridPosition.x), 0, gridDim.x - 1),
+        glm::clamp(static_cast<int>(gridPosition.y), 0, gridDim.y - 1),
+        glm::clamp(static_cast<int>(gridPosition.z), 0, gridDim.z - 1));
 }

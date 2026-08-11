@@ -19,7 +19,6 @@
 
 class VulkanDevice;
 class MemoryAllocator;
-class ModelRegistry;
 class CommandPool;
 class HeatModelRuntime;
 struct HeatProduct;
@@ -54,6 +53,7 @@ public:
         std::unordered_map<uint32_t, float> modelDensity;
         std::unordered_map<uint32_t, float> modelSpecificHeat;
         std::unordered_map<uint32_t, float> modelConductivity;
+        units::LengthUnit worldUnit = units::defaultLengthUnit();
         std::unordered_map<uint64_t, bool> serialEnabledBySourceKey;
         std::unordered_map<uint64_t, std::string> serialPortNamesBySourceKey;
         std::unordered_map<uint64_t, uint32_t> serialBaudRatesBySourceKey;
@@ -86,7 +86,6 @@ public:
     HeatSystemComputeController(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
-        ModelRegistry& resourceManager,
         CommandPool& renderCommandPool,
         CommandPool& transferCommandPool,
         uint32_t maxFramesInFlight);
@@ -115,7 +114,6 @@ private:
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
-    ModelRegistry& resourceManager;
     CommandPool& renderCommandPool;
     CommandPool& transferCommandPool;
 

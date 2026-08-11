@@ -3,7 +3,6 @@
 #include <glm/gtx/norm.hpp>
 
 #include <array>
-#include <unordered_map>
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
@@ -15,11 +14,11 @@
 
 #include "Camera.hpp"
 #include "Model.hpp"
-#include "MeshImporter.hpp"
 #include "util/Structs.hpp"
 
-bool Model::init(const std::string modelPath) {
-    if (!loadModel(modelPath)) {
+bool Model::init() {
+    if (vertices.empty() || indices.empty() ||
+        renderVertices.empty() || renderIndices.empty()) {
         return false;
     }
 
@@ -49,167 +48,41 @@ void Model::recreateBuffers() {
     createRenderIndexBuffer();
 }
 
-std::array<glm::vec3, 8> Model::calculateBoundingBox(const std::vector<Vertex>& vertices, glm::vec3& minBound, glm::vec3& maxBound) {
-    // Initialize min and max bounding box values
-    minBound = glm::vec3(FLT_MAX);
-    maxBound = glm::vec3(-FLT_MAX);
+bool Model::getLocalBounds(glm::vec3& outMin, glm::vec3& outMax) const {
+    if (vertices.empty()) return false;
 
-    // Iterate through all vertices to find the min and max coordinates
-    for (const auto& vertex : vertices) {
-        minBound.x = std::min(minBound.x, vertex.pos.x);
-        minBound.y = std::min(minBound.y, vertex.pos.y);
-        minBound.z = std::min(minBound.z, vertex.pos.z);
-
-        maxBound.x = std::max(maxBound.x, vertex.pos.x);
-        maxBound.y = std::max(maxBound.y, vertex.pos.y);
-        maxBound.z = std::max(maxBound.z, vertex.pos.z);
+    outMin = vertices.front().pos;
+    outMax = vertices.front().pos;
+    for (const Vertex& vertex : vertices) {
+        outMin = glm::min(outMin, vertex.pos);
+        outMax = glm::max(outMax, vertex.pos);
     }
-
-    std::array<glm::vec3, 8> points;
-    points[0] = minBound; // min x, min y, min z
-    points[1] = glm::vec3(maxBound.x, minBound.y, minBound.z); 
-    points[2] = glm::vec3(maxBound.x, maxBound.y, minBound.z); 
-    points[3] = glm::vec3(minBound.x, maxBound.y, minBound.z); 
-    points[4] = glm::vec3(minBound.x, minBound.y, maxBound.z); 
-    points[5] = glm::vec3(maxBound.x, minBound.y, maxBound.z); 
-    points[6] = maxBound; // max x, max y, max z
-    points[7] = glm::vec3(minBound.x, maxBound.y, maxBound.z); 
-
-    return points;
+    return true;
 }
 
-glm::vec3 Model::getBoundingBoxCenter() {
-    glm::vec3 minBound, maxBound;
-    std::array<glm::vec3, 8> points = calculateBoundingBox(vertices, minBound, maxBound);
+bool Model::getWorldBounds(glm::vec3& outMin, glm::vec3& outMax) const {
+    glm::vec3 localMin(0.0f);
+    glm::vec3 localMax(0.0f);
+    if (!getLocalBounds(localMin, localMax)) return false;
 
-    return (points[0] + points[1] + points[2] + points[3] +
-        points[4] + points[5] + points[6] + points[7]) * 0.125f; // Calculate the average
-}
+    const std::array<glm::vec3, 8> corners{
+        glm::vec3(localMin.x, localMin.y, localMin.z),
+        glm::vec3(localMax.x, localMin.y, localMin.z),
+        glm::vec3(localMin.x, localMax.y, localMin.z),
+        glm::vec3(localMax.x, localMax.y, localMin.z),
+        glm::vec3(localMin.x, localMin.y, localMax.z),
+        glm::vec3(localMax.x, localMin.y, localMax.z),
+        glm::vec3(localMin.x, localMax.y, localMax.z),
+        glm::vec3(localMax.x, localMax.y, localMax.z)};
 
-glm::vec3 Model::getBoundingBoxMin() {
-    glm::vec3 minBound, maxBound;
-    calculateBoundingBox(vertices, minBound, maxBound);
-    return minBound;
-}
-
-glm::vec3 Model::getBoundingBoxMax() {
-    glm::vec3 minBound, maxBound;
-    calculateBoundingBox(vertices, minBound, maxBound);
-    return maxBound;
-}
-
-bool Model::loadModel(const std::string& modelPath) {
-    // Reset transform when loading new model
-    modelMatrix = glm::mat4(1.0f);
-
-    vertices.clear();
-    indices.clear();
-    renderVertices.clear();
-    renderIndices.clear();
-    hasSplitRenderMesh = false;
-
-    MeshImporter::Mesh importedMesh;
-    if (!MeshImporter::loadMesh(modelPath, importedMesh) || !importedMesh.isValid()) {
-        std::cerr << "[Model] Failed to load model: " << modelPath << std::endl;
-        return false;
+    const glm::vec3 firstCorner = glm::vec3(modelMatrix * glm::vec4(corners.front(), 1.0f));
+    outMin = firstCorner;
+    outMax = firstCorner;
+    for (std::size_t i = 1; i < corners.size(); ++i) {
+        const glm::vec3 worldCorner = glm::vec3(modelMatrix * glm::vec4(corners[i], 1.0f));
+        outMin = glm::min(outMin, worldCorner);
+        outMax = glm::max(outMax, worldCorner);
     }
-
-    // Build vertices directly from imported vertex position list
-    const size_t vertexCount = importedMesh.positions.size() / 3;
-    vertices.resize(vertexCount);
-
-    for (size_t i = 0; i < vertexCount; ++i) {
-        vertices[i].pos = {
-            importedMesh.positions[3 * i + 0],
-            importedMesh.positions[3 * i + 1],
-            importedMesh.positions[3 * i + 2]
-        };
-        vertices[i].color = { 1.0f, 1.0f, 1.0f };
-        vertices[i].normal = { 0.0f, 0.0f, 1.0f };
-        vertices[i].texCoord = { 0.0f, 0.0f };
-    }
-
-    bool hasAnyCornerNormal = false;
-    bool hasMissingCornerNormal = false;
-    std::unordered_map<ModelCornerKey, uint32_t, ModelCornerKeyHash> renderVertexMap;
-    renderVertexMap.reserve(importedMesh.corners.size());
-
-    // Process faces and build topology + render indices from imported corners
-    for (uint32_t cornerIdx : importedMesh.triangleCornerIndices) {
-        const auto& corner = importedMesh.corners[cornerIdx];
-        if (corner.vertexIndex < 0 || static_cast<size_t>(corner.vertexIndex) >= vertices.size()) {
-            continue;
-        }
-
-        indices.push_back(corner.vertexIndex);
-
-        if (corner.texcoordIndex >= 0 && static_cast<size_t>(corner.texcoordIndex * 2 + 1) < importedMesh.texcoords.size()) {
-            vertices[corner.vertexIndex].texCoord = {
-                importedMesh.texcoords[2 * corner.texcoordIndex + 0],
-                1.0f - importedMesh.texcoords[2 * corner.texcoordIndex + 1]
-            };
-        }
-
-        ModelCornerKey key{};
-        key.vertexIndex = corner.vertexIndex;
-        key.texcoordIndex = corner.texcoordIndex;
-        key.normalIndex = corner.normalIndex;
-
-        auto it = renderVertexMap.find(key);
-        if (it == renderVertexMap.end()) {
-            Vertex renderVertex{};
-            renderVertex.pos = vertices[corner.vertexIndex].pos;
-            renderVertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
-            renderVertex.texCoord = vertices[corner.vertexIndex].texCoord;
-
-            if (corner.texcoordIndex >= 0 && static_cast<size_t>(corner.texcoordIndex * 2 + 1) < importedMesh.texcoords.size()) {
-                renderVertex.texCoord = glm::vec2(
-                    importedMesh.texcoords[2 * corner.texcoordIndex + 0],
-                    1.0f - importedMesh.texcoords[2 * corner.texcoordIndex + 1]
-                );
-            }
-
-            renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
-            if (corner.normalIndex >= 0 && static_cast<size_t>(corner.normalIndex * 3 + 2) < importedMesh.normals.size()) {
-                hasAnyCornerNormal = true;
-                renderVertex.normal = glm::vec3(
-                    importedMesh.normals[3 * corner.normalIndex + 0],
-                    importedMesh.normals[3 * corner.normalIndex + 1],
-                    importedMesh.normals[3 * corner.normalIndex + 2]
-                );
-
-                const float n2 = glm::dot(renderVertex.normal, renderVertex.normal);
-                if (n2 > 1e-12f) {
-                    renderVertex.normal *= (1.0f / std::sqrt(n2));
-                } else {
-                    renderVertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
-                }
-            } else {
-                hasMissingCornerNormal = true;
-            }
-
-            const uint32_t newRenderIndex = static_cast<uint32_t>(renderVertices.size());
-            renderVertices.push_back(renderVertex);
-            renderIndices.push_back(newRenderIndex);
-            renderVertexMap.emplace(key, newRenderIndex);
-        } else {
-            renderIndices.push_back(it->second);
-        }
-    }
-
-    if (!hasAnyCornerNormal || hasMissingCornerNormal) {
-        recalculateNormals();
-    }
-
-    if (renderVertices.empty() || renderIndices.empty()) {
-        renderVertices = vertices;
-        renderIndices = indices;
-        recalculateNormals();
-        hasSplitRenderMesh = false;
-    } else {
-        hasSplitRenderMesh = true;
-    }
-
     return true;
 }
 
@@ -304,6 +177,68 @@ glm::vec3 Model::getFaceNormal(uint32_t faceIndex) const {
     glm::vec3 v2 = vertices[i2].pos;
 
     return glm::normalize(glm::cross(v1 - v0, v2 - v0));
+}
+
+std::vector<Vertex> Model::makeVertices(
+    const std::vector<float>& positions,
+    const std::vector<float>* normals,
+    const std::vector<float>* texcoords) {
+    const std::size_t vertexCount = positions.size() / 3;
+    std::vector<Vertex> result(vertexCount);
+    for (std::size_t i = 0; i < vertexCount; ++i) {
+        Vertex& vertex = result[i];
+        vertex.pos = glm::vec3(
+            positions[i * 3 + 0],
+            positions[i * 3 + 1],
+            positions[i * 3 + 2]);
+        vertex.color = glm::vec3(1.0f);
+        vertex.normal = glm::vec3(0.0f, 0.0f, 1.0f);
+        vertex.texCoord = glm::vec2(0.0f);
+        if (normals && normals->size() == vertexCount * 3) {
+            vertex.normal = glm::vec3(
+                (*normals)[i * 3 + 0],
+                (*normals)[i * 3 + 1],
+                (*normals)[i * 3 + 2]);
+        }
+        if (texcoords && texcoords->size() == vertexCount * 2) {
+            vertex.texCoord = glm::vec2(
+                (*texcoords)[i * 2 + 0],
+                (*texcoords)[i * 2 + 1]);
+        }
+    }
+    return result;
+}
+
+void Model::setGeometry(
+    const std::vector<float>& positions,
+    const std::vector<uint32_t>& newIndices) {
+    vertices = makeVertices(positions);
+    indices = newIndices;
+    renderVertices = vertices;
+    renderIndices = indices;
+    hasSplitRenderMesh = false;
+    recalculateNormals();
+}
+
+void Model::setRenderGeometry(
+    const std::vector<float>& positions,
+    const std::vector<float>& normals,
+    const std::vector<float>& texcoords,
+    const std::vector<uint32_t>& newIndices) {
+    renderVertices = makeVertices(positions, &normals, &texcoords);
+    renderIndices = newIndices;
+    hasSplitRenderMesh = renderVertices != vertices || renderIndices != indices;
+
+    bool missingNormal = normals.size() != renderVertices.size() * 3;
+    if (!missingNormal) {
+        for (const Vertex& vertex : renderVertices) {
+            if (glm::dot(vertex.normal, vertex.normal) <= 1e-12f) {
+                missingNormal = true;
+                break;
+            }
+        }
+    }
+    if (missingNormal) recalculateNormals();
 }
 
 void Model::recalculateNormals() {

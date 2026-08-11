@@ -10,50 +10,11 @@
 #include <unordered_map>
 #include <vector>
 
-class HeatSystemComputeController;
 class NodePayloadRegistry;
-class ModelRegistry;
-class RuntimeModelComputeTransport;
-class RuntimeRemeshComputeTransport;
-class RuntimeVoronoiComputeTransport;
-class RuntimeContactComputeTransport;
-class RuntimeHeatComputeTransport;
-class RuntimePointComputeTransport;
-class RuntimePointDisplayTransport;
-class RuntimeModelDisplayTransport;
-class RuntimeRemeshDisplayTransport;
-class RuntimeVoronoiDisplayTransport;
-class RuntimeContactDisplayTransport;
-class RuntimeHeatDisplayTransport;
-class SceneController;
-class VulkanDevice;
-class MemoryAllocator;
-
-struct NodeRuntimeServices {
-    SceneController* sceneController = nullptr;
-    RuntimeModelComputeTransport* modelComputeTransport = nullptr;
-    RuntimeRemeshComputeTransport* remeshComputeTransport = nullptr;
-    RuntimeVoronoiComputeTransport* voronoiComputeTransport = nullptr;
-    RuntimeContactComputeTransport* contactComputeTransport = nullptr;
-    RuntimeHeatComputeTransport* heatComputeTransport = nullptr;
-    RuntimeModelDisplayTransport* modelDisplayTransport = nullptr;
-    RuntimePointDisplayTransport* pointDisplayTransport = nullptr;
-    RuntimeRemeshDisplayTransport* remeshDisplayTransport = nullptr;
-    RuntimeVoronoiDisplayTransport* voronoiDisplayTransport = nullptr;
-    RuntimeContactDisplayTransport* contactDisplayTransport = nullptr;
-    RuntimeHeatDisplayTransport* heatDisplayTransport = nullptr;
-    RuntimePointComputeTransport* pointComputeTransport = nullptr;
-    HeatSystemComputeController* heatSystemController = nullptr;
-    NodePayloadRegistry* payloadRegistry = nullptr;
-    ModelRegistry* resourceManager = nullptr;
-    VulkanDevice* vulkanDevice = nullptr;
-    MemoryAllocator* memoryAllocator = nullptr;
-};
 
 struct NodeKernelRuntime {
     const NodeGraphState& graph;
     NodePayloadRegistry* const payloadRegistry;
-    const NodeRuntimeServices& services;
 };
 
 struct NodeKernelHash {

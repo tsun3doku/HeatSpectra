@@ -34,7 +34,6 @@ ProductHandle RuntimeHeatComputeTransport::apply(uint64_t socketKey, const HeatP
     return handle;
 }
 
-
 void RuntimeHeatComputeTransport::remove(uint64_t socketKey) {
     if (!controller || socketKey == 0) {
         return;
@@ -47,12 +46,13 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
     const HeatPackage& package,
     HeatSystemComputeController::Config& outConfig) const {
 
-    if (package.remeshProducts.empty() || package.voronoiProducts.empty()) {
+    if (package.models.empty()) {
         return false;
     }
 
     outConfig = {};
     outConfig.active = package.authored.active;
+    outConfig.worldUnit = package.worldUnit;
     outConfig.syntheticDirichletTestEnabled = false;
     outConfig.contactThermalConductance = package.authored.contactThermalConductance;
     outConfig.simulationDuration = package.authored.simulationDuration;
@@ -62,18 +62,17 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
         outConfig.serialBaudRatesBySourceKey[sourceKey] = data.baudRate;
     }
 
-    outConfig.modelSurfacePositions.reserve(package.remeshProducts.size());
-    outConfig.modelSurfaceNormals.reserve(package.remeshProducts.size());
-    outConfig.modelSurfaceTriangleIndices.reserve(package.remeshProducts.size());
-    outConfig.modelRuntimeModelIds.reserve(package.remeshProducts.size());
-    outConfig.modelInitialTemperaturesCByRuntimeId.reserve(package.remeshProducts.size());
-    outConfig.modelBoundaryConditionTypesByRuntimeId.reserve(package.remeshProducts.size());
-    outConfig.modelBoundaryTemperaturesCByRuntimeId.reserve(package.remeshProducts.size());
-    outConfig.modelBoundaryHeatFluxesByRuntimeId.reserve(package.remeshProducts.size());
-    outConfig.modelBoundaryHeatTransferCoefficientsByRuntimeId.reserve(package.remeshProducts.size());
-    outConfig.modelVolumetricPowerDensitiesByRuntimeId.reserve(package.remeshProducts.size());
-
-    const size_t modelCount = package.remeshProducts.size();
+    const size_t modelCount = package.models.size();
+    outConfig.modelSurfacePositions.reserve(modelCount);
+    outConfig.modelSurfaceNormals.reserve(modelCount);
+    outConfig.modelSurfaceTriangleIndices.reserve(modelCount);
+    outConfig.modelRuntimeModelIds.reserve(modelCount);
+    outConfig.modelInitialTemperaturesCByRuntimeId.reserve(modelCount);
+    outConfig.modelBoundaryConditionTypesByRuntimeId.reserve(modelCount);
+    outConfig.modelBoundaryTemperaturesCByRuntimeId.reserve(modelCount);
+    outConfig.modelBoundaryHeatFluxesByRuntimeId.reserve(modelCount);
+    outConfig.modelBoundaryHeatTransferCoefficientsByRuntimeId.reserve(modelCount);
+    outConfig.modelVolumetricPowerDensitiesByRuntimeId.reserve(modelCount);
     outConfig.supportingHalfedgeViews.resize(modelCount, VK_NULL_HANDLE);
     outConfig.supportingAngleViews.resize(modelCount, VK_NULL_HANDLE);
     outConfig.halfedgeViews.resize(modelCount, VK_NULL_HANDLE);
@@ -86,82 +85,68 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
     outConfig.inputLengthViews.resize(modelCount, VK_NULL_HANDLE);
 
     for (size_t i = 0; i < modelCount; ++i) {
-        const RemeshProduct* product = products->resolve<RemeshProduct>(package.remeshProducts[i]);
-        if (!product || product->runtimeModelId == 0) {
+        const HeatModelPackage& model = package.models[i];
+        const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(
+            model.remeshProduct);
+        const VoronoiProduct* voronoiProduct = products->resolve<VoronoiProduct>(
+            model.voronoiProduct);
+        if (!remeshProduct || !voronoiProduct ||
+            !voronoiProduct->isValid() ||
+            remeshProduct->runtimeModelId == 0 ||
+            voronoiProduct->runtimeModelId != remeshProduct->runtimeModelId) {
             return false;
         }
 
-        outConfig.modelSurfacePositions.push_back(product->surfacePositions);
-        outConfig.modelSurfaceNormals.push_back(product->surfaceNormals);
-        outConfig.modelSurfaceTriangleIndices.push_back(product->surfaceTriangleIndices);
-        outConfig.modelRuntimeModelIds.push_back(product->runtimeModelId);
-        outConfig.modelInitialTemperaturesCByRuntimeId[product->runtimeModelId] = package.resolvedInitialTemperaturesC[i];
-        outConfig.modelBoundaryConditionTypesByRuntimeId[product->runtimeModelId] = package.resolvedBoundaryConditionTypes[i];
-        outConfig.modelBoundaryTemperaturesCByRuntimeId[product->runtimeModelId] = package.resolvedBoundaryTemperaturesC[i];
-        outConfig.modelBoundaryHeatFluxesByRuntimeId[product->runtimeModelId] = package.resolvedBoundaryHeatFluxes[i];
-        outConfig.modelBoundaryHeatTransferCoefficientsByRuntimeId[product->runtimeModelId] = package.resolvedBoundaryHeatTransferCoefficients[i];
-        outConfig.modelVolumetricPowerDensitiesByRuntimeId[product->runtimeModelId] = package.resolvedVolumetricPowerDensities[i];
-        outConfig.modelDensity[product->runtimeModelId] = package.resolvedDensity[i];
-        outConfig.modelSpecificHeat[product->runtimeModelId] = package.resolvedSpecificHeat[i];
-        outConfig.modelConductivity[product->runtimeModelId] = package.resolvedConductivity[i];
-        if (i < package.resolvedRobinSourceKeys.size() && package.resolvedRobinSourceKeys[i] != 0) {
-            outConfig.modelRobinSourceKeys[product->runtimeModelId] = package.resolvedRobinSourceKeys[i];
+        const uint32_t runtimeModelId = remeshProduct->runtimeModelId;
+        outConfig.modelSurfacePositions.push_back(remeshProduct->surfacePositions);
+        outConfig.modelSurfaceNormals.push_back(remeshProduct->surfaceNormals);
+        outConfig.modelSurfaceTriangleIndices.push_back(remeshProduct->surfaceTriangleIndices);
+        outConfig.modelRuntimeModelIds.push_back(runtimeModelId);
+        outConfig.modelInitialTemperaturesCByRuntimeId[runtimeModelId] = model.initialTemperatureC;
+        outConfig.modelBoundaryConditionTypesByRuntimeId[runtimeModelId] = model.boundaryConditionType;
+        outConfig.modelBoundaryTemperaturesCByRuntimeId[runtimeModelId] = model.boundaryTemperatureC;
+        outConfig.modelBoundaryHeatFluxesByRuntimeId[runtimeModelId] = model.boundaryHeatFlux;
+        outConfig.modelBoundaryHeatTransferCoefficientsByRuntimeId[runtimeModelId] =
+            model.boundaryHeatTransferCoefficient;
+        outConfig.modelVolumetricPowerDensitiesByRuntimeId[runtimeModelId] =
+            model.volumetricPowerDensity;
+        outConfig.modelDensity[runtimeModelId] = model.density;
+        outConfig.modelSpecificHeat[runtimeModelId] = model.specificHeat;
+        outConfig.modelConductivity[runtimeModelId] = model.conductivity;
+        if (model.robinSourceKey != 0) {
+            outConfig.modelRobinSourceKeys[runtimeModelId] = model.robinSourceKey;
         }
 
-        outConfig.supportingHalfedgeViews[i] = product->supportingHalfedgeView;
-        outConfig.supportingAngleViews[i] = product->supportingAngleView;
-        outConfig.halfedgeViews[i] = product->halfedgeView;
-        outConfig.edgeViews[i] = product->edgeView;
-        outConfig.triangleViews[i] = product->triangleView;
-        outConfig.lengthViews[i] = product->lengthView;
-        outConfig.inputHalfedgeViews[i] = product->inputHalfedgeView;
-        outConfig.inputEdgeViews[i] = product->inputEdgeView;
-        outConfig.inputTriangleViews[i] = product->inputTriangleView;
-        outConfig.inputLengthViews[i] = product->inputLengthView;
-    }
+        outConfig.supportingHalfedgeViews[i] = remeshProduct->supportingHalfedgeView;
+        outConfig.supportingAngleViews[i] = remeshProduct->supportingAngleView;
+        outConfig.halfedgeViews[i] = remeshProduct->halfedgeView;
+        outConfig.edgeViews[i] = remeshProduct->edgeView;
+        outConfig.triangleViews[i] = remeshProduct->triangleView;
+        outConfig.lengthViews[i] = remeshProduct->lengthView;
+        outConfig.inputHalfedgeViews[i] = remeshProduct->inputHalfedgeView;
+        outConfig.inputEdgeViews[i] = remeshProduct->inputEdgeView;
+        outConfig.inputTriangleViews[i] = remeshProduct->inputTriangleView;
+        outConfig.inputLengthViews[i] = remeshProduct->inputLengthView;
 
-    for (const ProductHandle& voronoiProduct : package.voronoiProducts) {
-        const VoronoiProduct* product = products->resolve<VoronoiProduct>(voronoiProduct);
-        if (!product || !product->isValid()) {
-            return false;
-        }
-
-        const uint32_t runtimeModelId = product->runtimeModelId;
-        if (runtimeModelId == 0) {
-            continue;
-        }
-
-        bool modelKnown = false;
-        for (uint32_t mIdx = 0; mIdx < static_cast<uint32_t>(outConfig.modelRuntimeModelIds.size()); ++mIdx) {
-            if (outConfig.modelRuntimeModelIds[mIdx] == runtimeModelId) {
-                modelKnown = true;
-                break;
-            }
-        }
-        if (!modelKnown) {
-            continue;
-        }
-
-
-        outConfig.modelSimNodeBufferByModelId[runtimeModelId] = product->nodeBuffer;
-        outConfig.modelSimNodeBufferOffsetByModelId[runtimeModelId] = product->nodeBufferOffset;
-        outConfig.modelSimNodeCouplingBufferByModelId[runtimeModelId] = product->couplingBuffer;
-        outConfig.modelSimNodeCouplingBufferOffsetByModelId[runtimeModelId] = product->couplingBufferOffset;
-        outConfig.simNodeCouplingCounts[runtimeModelId] = product->couplingCount;
-        outConfig.simNodeCounts[runtimeModelId] = product->nodeCount;
-        outConfig.modelNodePositionsByModelId[runtimeModelId] = product->nodePositions;
-        outConfig.modelNodesByModelId[runtimeModelId] = product->nodes;
-        outConfig.modelNodeCouplingsByModelId[runtimeModelId] = product->couplings;
-        outConfig.modelSurfaceNodeIdsByModelId[runtimeModelId] = product->surfaceNodeIds;
-        outConfig.modelSurfacePatchAreasByModelId[runtimeModelId] = product->surfacePatchAreas;
-        outConfig.modelGMLSSurfaceStencilBufferByModelId[runtimeModelId] = product->gmlsSurfaceStencilBuffer;
-        outConfig.modelGMLSSurfaceStencilBufferOffsetByModelId[runtimeModelId] = product->gmlsSurfaceStencilBufferOffset;
-        outConfig.modelGMLSSurfaceWeightBufferByModelId[runtimeModelId] = product->gmlsSurfaceWeightBuffer;
-        outConfig.modelGMLSSurfaceWeightBufferOffsetByModelId[runtimeModelId] = product->gmlsSurfaceWeightBufferOffset;
-        outConfig.modelGMLSSurfaceWeightCountByModelId[runtimeModelId] = product->gmlsSurfaceWeightCount;
-        outConfig.modelGMLSSurfaceGradientWeightBufferByModelId[runtimeModelId] = product->gmlsSurfaceGradientWeightBuffer;
-        outConfig.modelGMLSSurfaceGradientWeightBufferOffsetByModelId[runtimeModelId] = product->gmlsSurfaceGradientWeightBufferOffset;
-        outConfig.modelGMLSSurfaceGradientWeightCountByModelId[runtimeModelId] = product->gmlsSurfaceGradientWeightCount;
+        outConfig.modelSimNodeBufferByModelId[runtimeModelId] = voronoiProduct->nodeBuffer;
+        outConfig.modelSimNodeBufferOffsetByModelId[runtimeModelId] = voronoiProduct->nodeBufferOffset;
+        outConfig.modelSimNodeCouplingBufferByModelId[runtimeModelId] = voronoiProduct->couplingBuffer;
+        outConfig.modelSimNodeCouplingBufferOffsetByModelId[runtimeModelId] = voronoiProduct->couplingBufferOffset;
+        outConfig.simNodeCouplingCounts[runtimeModelId] = voronoiProduct->couplingCount;
+        outConfig.simNodeCounts[runtimeModelId] = voronoiProduct->nodeCount;
+        outConfig.modelNodePositionsByModelId[runtimeModelId] = voronoiProduct->nodePositions;
+        outConfig.modelNodesByModelId[runtimeModelId] = voronoiProduct->nodes;
+        outConfig.modelNodeCouplingsByModelId[runtimeModelId] = voronoiProduct->couplings;
+        outConfig.modelSurfaceNodeIdsByModelId[runtimeModelId] = voronoiProduct->surfaceNodeIds;
+        outConfig.modelSurfacePatchAreasByModelId[runtimeModelId] = voronoiProduct->surfacePatchAreas;
+        outConfig.modelGMLSSurfaceStencilBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceStencilBuffer;
+        outConfig.modelGMLSSurfaceStencilBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceStencilBufferOffset;
+        outConfig.modelGMLSSurfaceWeightBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightBuffer;
+        outConfig.modelGMLSSurfaceWeightBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightBufferOffset;
+        outConfig.modelGMLSSurfaceWeightCountByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightCount;
+        outConfig.modelGMLSSurfaceGradientWeightBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightBuffer;
+        outConfig.modelGMLSSurfaceGradientWeightBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightBufferOffset;
+        outConfig.modelGMLSSurfaceGradientWeightCountByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightCount;
     }
 
     for (const ProductHandle& contactProduct : package.contactProducts) {
@@ -174,18 +159,16 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
     }
 
     uint64_t structuralHash = HashBuilder::start();
-    HashBuilder::combine(structuralHash, static_cast<uint64_t>(package.remeshProducts.size()));
-    for (size_t i = 0; i < package.remeshProducts.size(); ++i) {
-        HashBuilder::combine(structuralHash, package.remeshProducts[i].hashes.geometry);
-        HashBuilder::combine(structuralHash, package.modelProducts[i].hashes.geometry);
-        HashBuilder::combineFloat(structuralHash, package.resolvedDensity[i]);
-        HashBuilder::combineFloat(structuralHash, package.resolvedSpecificHeat[i]);
-        HashBuilder::combineFloat(structuralHash, package.resolvedConductivity[i]);
-        HashBuilder::combineFloat(structuralHash, package.resolvedInitialTemperaturesC[i]);
-        HashBuilder::combine(structuralHash, package.resolvedBoundaryConditionTypes[i]);
-    }
-    for (const ProductHandle& handle : package.voronoiProducts) {
-        HashBuilder::combine(structuralHash, handle.hashes.simulation);
+    HashBuilder::combine(structuralHash, static_cast<uint64_t>(package.models.size()));
+    for (const HeatModelPackage& model : package.models) {
+        HashBuilder::combine(structuralHash, model.remeshProduct.hashes.geometry);
+        HashBuilder::combine(structuralHash, model.modelProduct.hashes.geometry);
+        HashBuilder::combine(structuralHash, model.voronoiProduct.hashes.simulation);
+        HashBuilder::combineFloat(structuralHash, model.density);
+        HashBuilder::combineFloat(structuralHash, model.specificHeat);
+        HashBuilder::combineFloat(structuralHash, model.conductivity);
+        HashBuilder::combineFloat(structuralHash, model.initialTemperatureC);
+        HashBuilder::combine(structuralHash, model.boundaryConditionType);
     }
     for (const ProductHandle& handle : package.contactProducts) {
         HashBuilder::combine(structuralHash, handle.hashes.simulation);

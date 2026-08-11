@@ -246,7 +246,7 @@ void VoxelGrid::build(
 
     glm::vec3 extent = meshMax - meshMin;
     float maxExtent = std::max(std::max(extent.x, extent.y), extent.z);
-    if (maxExtent < 1e-20f) {
+    if (!std::isfinite(maxExtent) || maxExtent <= 0.0f) {
         std::cerr << "[VoxelGrid] Error: mesh bbox degenerate" << std::endl;
         return;
     }
@@ -275,21 +275,27 @@ void VoxelGrid::build(
     int borderCount = 0;
 
     // Find border corners using fast distance check
-    #pragma omp parallel for reduction(+:borderCount)
-    for (int z = 0; z <= dimZ; z++) {
-        for (int y = 0; y <= dimY; y++) {
-            for (int x = 0; x <= dimX; x++) {
-                glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
-                glm::vec3 cornerPos = toWorld(canonicalCornerPos);
-                float dist = distanceToNearestTriangle(cornerPos, positions, indices, triangleGrid);
+    #pragma omp parallel reduction(+:borderCount)
+    {
+        std::vector<size_t> nearbyTriangles;
+        nearbyTriangles.reserve(64);
+        #pragma omp for schedule(static)
+        for (int z = 0; z <= dimZ; z++) {
+            for (int y = 0; y <= dimY; y++) {
+                for (int x = 0; x <= dimX; x++) {
+                    glm::vec3 canonicalCornerPos = glm::vec3(x, y, z) * canonicalVoxelSize;
+                    glm::vec3 cornerPos = toWorld(canonicalCornerPos);
+                    float dist = distanceToNearestTriangle(
+                        cornerPos, positions, indices, triangleGrid, nearbyTriangles);
 
-                size_t idx = getCornerIndex(x, y, z);
+                    size_t idx = getCornerIndex(x, y, z);
 
-                if (dist < borderThreshold) {
-                    occupancy[idx] = 1;  // Border
-                    borderCount++;
-                } else {
-                    occupancy[idx] = 255; // OUTSIDE
+                    if (dist < borderThreshold) {
+                        occupancy[idx] = 1;  // Border
+                        borderCount++;
+                    } else {
+                        occupancy[idx] = 255; // OUTSIDE
+                    }
                 }
             }
         }
@@ -447,15 +453,15 @@ float VoxelGrid::distanceToNearestTriangle(
     const glm::vec3& point,
     const std::vector<glm::vec3>& positions,
     const std::vector<uint32_t>& indices,
-    const TriangleHashGrid& triangleGrid) const {
-    std::vector<size_t> nearbyTriangles;
+    const TriangleHashGrid& triangleGrid,
+    std::vector<size_t>& nearbyTriangles) const {
     triangleGrid.getNearbyTriangles(point, nearbyTriangles);
     
     if (nearbyTriangles.empty()) {
         return FLT_MAX;
     }
     
-    float minDist = FLT_MAX;
+    float minDistanceSquared = FLT_MAX;
     for (size_t triIdx : nearbyTriangles) {
         const size_t indexBase = triIdx * 3;
         if (indexBase + 2 >= indices.size()) {
@@ -471,12 +477,12 @@ float VoxelGrid::distanceToNearestTriangle(
         const glm::vec3& v1 = positions[indices[indexBase + 1]];
         const glm::vec3& v2 = positions[indices[indexBase + 2]];
         
-        glm::vec3 closest = closestPointOnTriangle(point, v0, v1, v2);
-        float dist = glm::length(point - closest);
-        minDist = std::min(minDist, dist);
+        const glm::vec3 closest = closestPointOnTriangle(point, v0, v1, v2);
+        const glm::vec3 delta = point - closest;
+        minDistanceSquared = std::min(minDistanceSquared, glm::dot(delta, delta));
     }
-    
-    return minDist;
+
+    return std::sqrt(minDistanceSquared);
 }
 
 
@@ -485,20 +491,8 @@ void VoxelGrid::buildTriangleLists(
     const std::vector<glm::vec3>& positions,
     const std::vector<uint32_t>& indices,
     const TriangleHashGrid& triangleGrid) {
-    meshPoints.clear();
-    meshTriangles.clear();
     trianglesList.clear();
     offsets.clear();
-
-    meshPoints.reserve(positions.size());
-    for (const glm::vec3& position : positions) {
-        meshPoints.push_back(position);
-    }
-
-    meshTriangles.reserve(indices.size());
-    for (uint32_t idx : indices) {
-        meshTriangles.push_back(static_cast<int32_t>(idx));
-    }
 
     int gridSize = params.gridDim.x;
     int numVoxels = params.gridDim.x * params.gridDim.y * params.gridDim.z;
@@ -620,11 +614,6 @@ bool VoxelGrid::segmentStaysInside(const glm::vec3& a, const glm::vec3& b, int o
     }
 
     glm::vec3 seg = b - a;
-    float segLen = glm::length(seg);
-    if (segLen < 1e-8f) {
-        return true; // Degenerate segment
-    }
-
     // Convert endpoints to voxel-space float coordinates
     float canonicalVoxelSize = CANONICAL_DOMAIN_SIZE / float(params.gridDim.x);
     glm::vec3 aVox = toCanonical(a) / canonicalVoxelSize;
