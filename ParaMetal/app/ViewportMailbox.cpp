@@ -14,6 +14,45 @@ void ViewportMailbox::requestGridEnabled(bool enabled) {
     gridDirty = true;
 }
 
+void ViewportMailbox::requestBackgroundMode(app::BackgroundMode mode) {
+    requestedBackgroundMode = mode;
+    backgroundModeDirty = true;
+}
+
+void ViewportMailbox::requestNavigationCubeVisible(bool visible) {
+    requestedNavigationCubeVisible = visible;
+    navigationCubeVisibleDirty = true;
+}
+
+void ViewportMailbox::requestAxisLabelsVisible(bool visible) {
+    requestedAxisLabelsVisible = visible;
+    axisLabelsVisibleDirty = true;
+}
+
+void ViewportMailbox::requestFocusWorldOrigin() {
+    focusWorldOriginPending = true;
+}
+
+void ViewportMailbox::requestProjectionMode(CameraProjectionMode mode) {
+    requestedProjectionMode = mode;
+    projectionModeDirty = true;
+}
+
+void ViewportMailbox::requestCameraFov(float degrees) {
+    requestedCameraFov = degrees;
+    cameraFovDirty = true;
+}
+
+void ViewportMailbox::requestCameraZoomSpeed(float speed) {
+    requestedCameraZoomSpeed = speed;
+    cameraZoomSpeedDirty = true;
+}
+
+void ViewportMailbox::requestCameraPanSpeed(float speed) {
+    requestedCameraPanSpeed = speed;
+    cameraPanSpeedDirty = true;
+}
+
 void ViewportMailbox::requestTimelinePlaying(bool playing) {
     pendingScrubFrame.store(noPendingScrubFrame, std::memory_order_relaxed);
     requestedTimelineStep = 0;
@@ -67,6 +106,9 @@ void ViewportMailbox::requestWorldUnit(int unit) { requestedWorldUnit = unit; wo
 void ViewportMailbox::applyViewportProjectState(const ProjectFile::Viewport& viewport) {
     appliedViewportProjectState = viewport;
     viewportProjectStateDirty = true;
+    requestedBackgroundMode = viewport.backgroundMode;
+    requestedNavigationCubeVisible = viewport.navigationCubeVisible;
+    requestedAxisLabelsVisible = viewport.axisLabelsVisible;
 }
 
 void ViewportMailbox::requestCurrentViewportProjectState() {
@@ -100,6 +142,61 @@ bool ViewportMailbox::takeGridEnabled(bool& enabled, bool force) {
     if (!force && !gridDirty) return false;
     enabled = requestedGridEnabled;
     gridDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeBackgroundMode(app::BackgroundMode& mode, bool force) {
+    if (!force && !backgroundModeDirty) return false;
+    mode = requestedBackgroundMode;
+    backgroundModeDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeNavigationCubeVisible(bool& visible, bool force) {
+    if (!force && !navigationCubeVisibleDirty) return false;
+    visible = requestedNavigationCubeVisible;
+    navigationCubeVisibleDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeAxisLabelsVisible(bool& visible, bool force) {
+    if (!force && !axisLabelsVisibleDirty) return false;
+    visible = requestedAxisLabelsVisible;
+    axisLabelsVisibleDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeFocusWorldOrigin() {
+    if (!focusWorldOriginPending) return false;
+    focusWorldOriginPending = false;
+    return true;
+}
+
+bool ViewportMailbox::takeProjectionMode(CameraProjectionMode& mode) {
+    if (!projectionModeDirty) return false;
+    mode = requestedProjectionMode;
+    projectionModeDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeCameraFov(float& degrees) {
+    if (!cameraFovDirty) return false;
+    degrees = requestedCameraFov;
+    cameraFovDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeCameraZoomSpeed(float& speed) {
+    if (!cameraZoomSpeedDirty) return false;
+    speed = requestedCameraZoomSpeed;
+    cameraZoomSpeedDirty = false;
+    return true;
+}
+
+bool ViewportMailbox::takeCameraPanSpeed(float& speed) {
+    if (!cameraPanSpeedDirty) return false;
+    speed = requestedCameraPanSpeed;
+    cameraPanSpeedDirty = false;
     return true;
 }
 

@@ -24,6 +24,7 @@ public:
     int worldUnit() const { return static_cast<int>(projectWorldUnit); }
 
     Q_INVOKABLE void newProject();
+    Q_INVOKABLE void newEmptyProject();
     Q_INVOKABLE void open(const QUrl& url);
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs(const QUrl& url);

@@ -120,6 +120,22 @@ void App::connectUi(ViewportItem& viewport, GraphHost& graphHost) {
                      &viewport, &ViewportItem::requestWireframeMode);
     QObject::connect(uiModel.viewport(), &ViewportUiModel::gridEnabledRequested,
                      &viewport, &ViewportItem::requestGridEnabled);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::backgroundModeRequested,
+                     &viewport, &ViewportItem::requestBackgroundMode);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::navigationCubeVisibleRequested,
+                     &viewport, &ViewportItem::requestNavigationCubeVisible);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::axisLabelsVisibleRequested,
+                     &viewport, &ViewportItem::requestAxisLabelsVisible);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::focusWorldOriginRequested,
+                     &viewport, &ViewportItem::requestFocusWorldOrigin);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::projectionModeRequested,
+                     &viewport, &ViewportItem::requestProjectionMode);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::cameraFovRequested,
+                     &viewport, &ViewportItem::requestCameraFov);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::cameraZoomSpeedRequested,
+                     &viewport, &ViewportItem::requestCameraZoomSpeed);
+    QObject::connect(uiModel.viewport(), &ViewportUiModel::cameraPanSpeedRequested,
+                     &viewport, &ViewportItem::requestCameraPanSpeed);
     QObject::connect(uiModel.heatPalette(), &HeatPaletteUiModel::paletteRequested,
                      &viewport, &ViewportItem::requestHeatPalette);
     QObject::connect(uiModel.heatPalette(), &HeatPaletteUiModel::rangeRequested,
@@ -161,8 +177,6 @@ void App::connectUi(ViewportItem& viewport, GraphHost& graphHost) {
                      &graphHost, &GraphHost::pasteFragment, Qt::QueuedConnection);
     QObject::connect(uiModel.console(), &ConsoleUiModel::executeRequested,
                      &graphHost, &GraphHost::executePython, Qt::QueuedConnection);
-    QObject::connect(uiModel.console(), &ConsoleUiModel::resetGraphRequested,
-                     &graphHost, &GraphHost::resetGraph, Qt::QueuedConnection);
     QObject::connect(projectController.get(), &ProjectController::pathChanged,
                      &window, [this]() {
                          const QString path = projectController->path();

@@ -21,6 +21,14 @@ enum class CameraProjectionMode : uint8_t {
 
 class Camera {
 public:
+    static constexpr float DefaultFov = 45.0f;
+    static constexpr float DefaultZoomSpeed = 1.0f;
+    static constexpr float MinZoomSpeed = 0.1f;
+    static constexpr float MaxZoomSpeed = 5.0f;
+    static constexpr float DefaultPanSpeed = 1.0f;
+    static constexpr float MinPanSpeed = 0.1f;
+    static constexpr float MaxPanSpeed = 5.0f;
+
     void update(float deltaTime);   
     void processMouseMovement(bool middleButtonPressed, double mouseX, double mouseY, bool shiftPressed = false);  
     void processMouseScroll(double yOffset);
@@ -28,14 +36,24 @@ public:
     void setOrientation(const glm::quat& q);
     void setRadius(float r);
     void setFov(float f);
+    void setZoomSpeed(float speed);
+    void setPanSpeed(float speed);
     void setProjectionMode(CameraProjectionMode mode);
     void setOrthographicHeight(float height);
-    void pan(float dx, float dy);
     void orbit(float dx, float dy);
     void resetRadius();
     void setWorldUnit(units::LengthUnit unit);
     glm::vec3 screenToWorldRayOrigin(double mouseX, double mouseY, int screenWidth, int screenHeight) const;
-    glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight);
+    glm::vec3 screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight) const;
+    void setState(
+        const glm::vec3& target,
+        const glm::quat& orientation,
+        float radius,
+        float fov,
+        CameraProjectionMode projectionMode,
+        float orthographicHeight,
+        float zoomSpeed,
+        float panSpeed);
 
     glm::mat4 getViewMatrix() const;  
     glm::mat4 getProjectionMatrix(float aspectRatio) const; 
@@ -49,6 +67,14 @@ public:
 
     float getBaseFov() const {
         return baseFov;
+    }
+
+    float getZoomSpeed() const {
+        return zoomSpeed;
+    }
+
+    float getPanSpeed() const {
+        return panSpeed;
     }
 
     glm::vec3 getLookAt() const {
@@ -71,11 +97,9 @@ public:
         return orthographicHeight;
     }
 
-    float radius = 2.0f;            // Camera distance from origin
-    float sensitivity = 0.005f;     // Mouse interaction speed 
-    float panSensitivity = 0.001f;  // Panning speed multiplier
-
 private:
+    void pan(float dx, float dy);
+
     bool isMousePressed = false;
     double lastMouseX = 0.0;
     double lastMouseY = 0.0;
@@ -89,9 +113,16 @@ private:
     float nearPlane = 0.01f, farPlane = 100.0f;
 
     float radiusVelocity = 0.0f;
+    float radius = 2.0f;
+    float sensitivity = 0.005f;
+    static constexpr float panScale = 0.001f;
+    float panSpeed = DefaultPanSpeed;
     float dampingFactor = 0.15f;
-    float currentFov = 45.0f;
-    float baseFov = 45.0f;
+    static constexpr float zoomScale = 0.6f;
+    static constexpr float zoomScaleOrtho = 0.72f;
+    float zoomSpeed = DefaultZoomSpeed;
+    float currentFov = DefaultFov;
+    float baseFov = DefaultFov;
     float minFov = 10.0f; 
     float zoomThreshold = 2.0f;
     float maxRadiusVelocity = 300.0f;
@@ -101,7 +132,7 @@ private:
 
     CameraProjectionMode projectionMode = CameraProjectionMode::Perspective;
     float orthographicHeight = 2.0f;
-    float orthographicReferenceFov = 45.0f;
+    float orthographicReferenceFov = DefaultFov;
     float orthographicZoomVelocity = 0.0f;
     float minOrthographicHeight = 0.001f;
     float maxOrthographicHeight = 1000.0f;

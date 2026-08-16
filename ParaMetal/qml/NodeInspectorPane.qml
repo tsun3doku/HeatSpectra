@@ -123,7 +123,7 @@ Item {
                     placeholderText: "models/teapot.obj"
                     color: root.theme.text
                     font: root.theme.regularFont
-                    background: Rectangle { radius: 3; color: "#242429"; border.width: 1; border.color: root.theme.border }
+                    background: Rectangle { radius: 3; color: root.theme.inputBackground; border.width: 1; border.color: root.theme.border }
                 }
                 Button {
                     Layout.preferredWidth: 84
@@ -140,9 +140,9 @@ Item {
                     }
                     background: Rectangle {
                         radius: 4
-                        color: parent.hovered ? "#474664" : "#3a3950"
+                        color: parent.hovered ? root.theme.sourceButtonHover : root.theme.sourceButton
                         border.width: 1
-                        border.color: "#585670"
+                        border.color: root.theme.sourceButtonBorder
                     }
                     onClicked: modelDialog.open()
                 }

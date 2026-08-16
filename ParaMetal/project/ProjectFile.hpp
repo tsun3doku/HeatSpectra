@@ -3,6 +3,7 @@
 #include "nodegraph/NodeGraphState.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
 #include "scene/Camera.hpp"
+#include "render/RenderSettings.hpp"
 #include "util/Units.hpp"
 
 #include <glm/glm.hpp>
@@ -21,9 +22,14 @@ public:
         glm::vec3 lookAt{0.0f};
         glm::quat orientation{1.0f, 0.0f, 0.0f, 0.0f};
         float radius = 2.0f;
-        float fov = 45.0f;
+        float fov = Camera::DefaultFov;
         CameraProjectionMode projectionMode = CameraProjectionMode::Perspective;
         float orthographicHeight = 2.0f;
+        float zoomSpeed = Camera::DefaultZoomSpeed;
+        float panSpeed = Camera::DefaultPanSpeed;
+        app::BackgroundMode backgroundMode = app::RenderSettings{}.backgroundMode;
+        bool navigationCubeVisible = app::RenderSettings{}.navigationCubeVisible;
+        bool axisLabelsVisible = app::RenderSettings{}.axisLabelsVisible;
     };
 
     struct ProjectState {

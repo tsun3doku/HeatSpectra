@@ -25,20 +25,23 @@ public:
         return camera;
     }
 
-    void setPanSensitivity(float sensitivity);
+    void setPanSpeed(float speed);
     void setWorldUnit(units::LengthUnit unit);
     void focusOn(const glm::vec3& target);
+    void focusWorldOrigin();
+    void setProjectionMode(CameraProjectionMode mode);
+    void setBaseFov(float degrees);
+    void setZoomSpeed(float speed);
     void setCameraState(
         const glm::vec3& lookAt,
         const glm::quat& orientation,
         float radius,
         float fov,
         CameraProjectionMode projectionMode,
-        float orthographicHeight);
-    void snapToDirection(
-        const glm::vec3& lookDirection,
-        const glm::vec3& screenUp,
-        CameraProjectionMode projectionMode);
+        float orthographicHeight,
+        float zoomSpeed,
+        float panSpeed);
+    void snapToDirection(const glm::vec3& lookDirection, const glm::vec3& screenUp, CameraProjectionMode projectionMode);
     void orbitFromNavigationGizmo(float dx, float dy);
     void cancelTransition();
     void tick(float deltaTime);
@@ -52,8 +55,9 @@ private:
         glm::quat targetOrientation{1.0f, 0.0f, 0.0f, 0.0f};
         CameraProjectionMode targetProjectionMode;
         float elapsedSeconds = 0.0f;
-        float durationSeconds = 0.30f;
     };
+
+    static constexpr float transitionDurationSeconds = 0.30f;
 
     Camera& camera;
     Transition transition;

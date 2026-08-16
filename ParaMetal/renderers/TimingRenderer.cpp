@@ -13,7 +13,7 @@ void TimingRenderer::buildGlyphInstances() {
     const GlyphText& glyphText = textRenderer.getGlyphText();
     const float emScale = 18.0f / glyphText.getPlaneHeight();
     const float marginX = 8.0f;
-    const float marginY = 8.0f;
+    const float marginY = 44.0f;
     const float lineSpacing = 18.0f;
     const glm::vec4 labelColor(0.82f, 0.84f, 0.86f, 1.0f);
     const glm::vec4 valueColor(0.2f, 0.75f, 0.25f, 1.0f);

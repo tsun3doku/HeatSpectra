@@ -118,6 +118,37 @@ protected:
         if (mailbox.takeGridEnabled(gridEnabled, runtimeFresh)) {
             runtime.setGridEnabled(gridEnabled);
         }
+        app::BackgroundMode backgroundMode{};
+        if (mailbox.takeBackgroundMode(backgroundMode, runtimeFresh)) {
+            runtime.setBackgroundMode(backgroundMode);
+        }
+        bool navigationCubeVisible = true;
+        if (mailbox.takeNavigationCubeVisible(navigationCubeVisible, runtimeFresh)) {
+            runtime.setNavigationCubeVisible(navigationCubeVisible);
+        }
+        bool axisLabelsVisible = true;
+        if (mailbox.takeAxisLabelsVisible(axisLabelsVisible, runtimeFresh)) {
+            runtime.setAxisLabelsVisible(axisLabelsVisible);
+        }
+        if (mailbox.takeFocusWorldOrigin()) {
+            runtime.focusCameraOnWorldOrigin();
+        }
+        CameraProjectionMode projectionMode{};
+        if (mailbox.takeProjectionMode(projectionMode)) {
+            runtime.setCameraProjectionMode(projectionMode);
+        }
+        float cameraFov = Camera::DefaultFov;
+        if (mailbox.takeCameraFov(cameraFov)) {
+            runtime.setCameraFov(cameraFov);
+        }
+        float cameraZoomSpeed = Camera::DefaultZoomSpeed;
+        if (mailbox.takeCameraZoomSpeed(cameraZoomSpeed)) {
+            runtime.setCameraZoomSpeed(cameraZoomSpeed);
+        }
+        float cameraPanSpeed = Camera::DefaultPanSpeed;
+        if (mailbox.takeCameraPanSpeed(cameraPanSpeed)) {
+            runtime.setCameraPanSpeed(cameraPanSpeed);
+        }
 
         TimelineController* timeline = runtime.timelineController();
         uint32_t frameCount = 0;
@@ -147,6 +178,9 @@ protected:
         if (mailbox.takeHeatPalette(palette, runtimeFresh)) runtime.setHeatPalette(palette);
         ProjectFile::Viewport viewportProjectState;
         if (mailbox.takeAppliedViewportProjectState(viewportProjectState)) {
+            runtime.setBackgroundMode(viewportProjectState.backgroundMode);
+            runtime.setNavigationCubeVisible(viewportProjectState.navigationCubeVisible);
+            runtime.setAxisLabelsVisible(viewportProjectState.axisLabelsVisible);
             if (CameraController* cameraController = runtime.getCameraController()) {
                 cameraController->setCameraState(
                     viewportProjectState.lookAt,
@@ -154,7 +188,9 @@ protected:
                     viewportProjectState.radius,
                     viewportProjectState.fov,
                     viewportProjectState.projectionMode,
-                    viewportProjectState.orthographicHeight);
+                    viewportProjectState.orthographicHeight,
+                    viewportProjectState.zoomSpeed,
+                    viewportProjectState.panSpeed);
             }
         }
         if (mailbox.takeCurrentViewportProjectState() && viewportItemForSignals) {
@@ -164,9 +200,15 @@ protected:
                 viewport.lookAt = camera.getLookAt();
                 viewport.orientation = camera.getOrientation();
                 viewport.radius = camera.getRadius();
-                viewport.fov = camera.getFov();
+                viewport.fov = camera.getBaseFov();
                 viewport.projectionMode = camera.getProjectionMode();
                 viewport.orthographicHeight = camera.getOrthographicHeight();
+                viewport.zoomSpeed = camera.getZoomSpeed();
+                viewport.panSpeed = camera.getPanSpeed();
+                const app::RenderSettings& renderSettings = runtime.renderSettings();
+                viewport.backgroundMode = renderSettings.backgroundMode;
+                viewport.navigationCubeVisible = renderSettings.navigationCubeVisible;
+                viewport.axisLabelsVisible = renderSettings.axisLabelsVisible;
                 emit viewportItemForSignals->projectViewportStateReady(viewport);
             }
         }
@@ -242,6 +284,16 @@ private:
         ViewportUiState viewport{};
         viewport.wireframeMode = renderSettings.wireframeMode;
         viewport.gridEnabled = renderSettings.gridEnabled;
+        viewport.backgroundMode = renderSettings.backgroundMode;
+        viewport.navigationCubeVisible = renderSettings.navigationCubeVisible;
+        viewport.axisLabelsVisible = renderSettings.axisLabelsVisible;
+        if (const CameraController* cameraController = runtime.getCameraController()) {
+            const Camera& camera = cameraController->getCamera();
+            viewport.projectionMode = camera.getProjectionMode();
+            viewport.baseFov = camera.getBaseFov();
+            viewport.zoomSpeed = camera.getZoomSpeed();
+            viewport.panSpeed = camera.getPanSpeed();
+        }
         if (viewport != publishedViewport) {
             publishedViewport = viewport;
             emit notifier.viewportStateChanged(viewport);
@@ -311,6 +363,14 @@ void ViewportItem::requestWorldUnit(int unit) {
 
 void ViewportItem::requestWireframeMode(app::WireframeMode mode) { mailbox.requestWireframeMode(mode); update(); }
 void ViewportItem::requestGridEnabled(bool enabled) { mailbox.requestGridEnabled(enabled); update(); }
+void ViewportItem::requestBackgroundMode(app::BackgroundMode mode) { mailbox.requestBackgroundMode(mode); update(); }
+void ViewportItem::requestNavigationCubeVisible(bool visible) { mailbox.requestNavigationCubeVisible(visible); update(); }
+void ViewportItem::requestAxisLabelsVisible(bool visible) { mailbox.requestAxisLabelsVisible(visible); update(); }
+void ViewportItem::requestFocusWorldOrigin() { mailbox.requestFocusWorldOrigin(); update(); }
+void ViewportItem::requestProjectionMode(CameraProjectionMode mode) { mailbox.requestProjectionMode(mode); update(); }
+void ViewportItem::requestCameraFov(float degrees) { mailbox.requestCameraFov(degrees); update(); }
+void ViewportItem::requestCameraZoomSpeed(float speed) { mailbox.requestCameraZoomSpeed(speed); update(); }
+void ViewportItem::requestCameraPanSpeed(float speed) { mailbox.requestCameraPanSpeed(speed); update(); }
 void ViewportItem::requestTimelinePlaying(bool playing) { mailbox.requestTimelinePlaying(playing); update(); }
 void ViewportItem::requestTimelineReset() { mailbox.requestTimelineReset(); update(); }
 void ViewportItem::requestTimelineScrub(uint32_t frame) { mailbox.requestTimelineScrub(frame); }

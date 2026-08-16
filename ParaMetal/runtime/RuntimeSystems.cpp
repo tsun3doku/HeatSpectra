@@ -4,6 +4,7 @@
 #include "render/SceneRenderer.hpp"
 #include "render/HeatOverlayRenderer.hpp"
 #include "scene/InputController.hpp"
+#include "scene/NavigationGizmoController.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -155,8 +156,7 @@ const RuntimeQuery* RuntimeSystems::runtimeQuery() const {
     return this;
 }
 
-bool RuntimeSystems::getSerialTemperatureStatus(
-    uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const {
+bool RuntimeSystems::getSerialTemperatureStatus(uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const {
     const HeatSystemComputeController* controller = render.heatSystemComputeController();
     return controller && controller->getSerialTemperatureStatus(sourceKey, outStatus);
 }
@@ -169,16 +169,47 @@ const TimelineController* RuntimeSystems::timelineController() const {
     return &timelineControllerInstance;
 }
 
-void RuntimeSystems::setPanSensitivity(float sensitivity) {
-    scene.cameraController().setPanSensitivity(sensitivity);
-}
-
 void RuntimeSystems::setWireframeMode(app::WireframeMode mode) {
     renderSettingsState.wireframeMode = mode;
 }
 
 void RuntimeSystems::setGridEnabled(bool enabled) {
     renderSettingsState.gridEnabled = enabled;
+}
+
+void RuntimeSystems::setBackgroundMode(app::BackgroundMode mode) {
+    renderSettingsState.backgroundMode = mode;
+}
+
+void RuntimeSystems::setNavigationCubeVisible(bool visible) {
+    renderSettingsState.navigationCubeVisible = visible;
+    if (render.runtime()) {
+        render.runtime()->getNavigationGizmoController().setEnabled(visible);
+    }
+}
+
+void RuntimeSystems::setAxisLabelsVisible(bool visible) {
+    renderSettingsState.axisLabelsVisible = visible;
+}
+
+void RuntimeSystems::focusCameraOnWorldOrigin() {
+    scene.cameraController().focusWorldOrigin();
+}
+
+void RuntimeSystems::setCameraProjectionMode(CameraProjectionMode mode) {
+    scene.cameraController().setProjectionMode(mode);
+}
+
+void RuntimeSystems::setCameraFov(float degrees) {
+    scene.cameraController().setBaseFov(degrees);
+}
+
+void RuntimeSystems::setCameraZoomSpeed(float speed) {
+    scene.cameraController().setZoomSpeed(speed);
+}
+
+void RuntimeSystems::setCameraPanSpeed(float speed) {
+    scene.cameraController().setPanSpeed(speed);
 }
 
 void RuntimeSystems::setWorldUnit(int unit) {

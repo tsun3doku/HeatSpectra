@@ -23,6 +23,14 @@ public:
 
     void requestWireframeMode(app::WireframeMode mode);
     void requestGridEnabled(bool enabled);
+    void requestBackgroundMode(app::BackgroundMode mode);
+    void requestNavigationCubeVisible(bool visible);
+    void requestAxisLabelsVisible(bool visible);
+    void requestFocusWorldOrigin();
+    void requestProjectionMode(CameraProjectionMode mode);
+    void requestCameraFov(float degrees);
+    void requestCameraZoomSpeed(float speed);
+    void requestCameraPanSpeed(float speed);
     void requestTimelinePlaying(bool playing);
     void requestTimelineReset();
     void requestTimelineScrub(uint32_t frame);
@@ -39,6 +47,14 @@ public:
 
     bool takeWireframeMode(app::WireframeMode& mode, bool force = false);
     bool takeGridEnabled(bool& enabled, bool force = false);
+    bool takeBackgroundMode(app::BackgroundMode& mode, bool force = false);
+    bool takeNavigationCubeVisible(bool& visible, bool force = false);
+    bool takeAxisLabelsVisible(bool& visible, bool force = false);
+    bool takeFocusWorldOrigin();
+    bool takeProjectionMode(CameraProjectionMode& mode);
+    bool takeCameraFov(float& degrees);
+    bool takeCameraZoomSpeed(float& speed);
+    bool takeCameraPanSpeed(float& speed);
     bool takeTimelinePlaying(bool& playing, bool force = false);
     bool takeTimelineReset();
     int takeTimelineStep();
@@ -63,6 +79,21 @@ private:
     bool wireframeDirty = false;
     bool requestedGridEnabled = app::RenderSettings{}.gridEnabled;
     bool gridDirty = false;
+    app::BackgroundMode requestedBackgroundMode = app::RenderSettings{}.backgroundMode;
+    bool backgroundModeDirty = false;
+    bool requestedNavigationCubeVisible = app::RenderSettings{}.navigationCubeVisible;
+    bool navigationCubeVisibleDirty = false;
+    bool requestedAxisLabelsVisible = app::RenderSettings{}.axisLabelsVisible;
+    bool axisLabelsVisibleDirty = false;
+    bool focusWorldOriginPending = false;
+    CameraProjectionMode requestedProjectionMode = CameraProjectionMode::Perspective;
+    bool projectionModeDirty = false;
+    float requestedCameraFov = Camera::DefaultFov;
+    bool cameraFovDirty = false;
+    float requestedCameraZoomSpeed = Camera::DefaultZoomSpeed;
+    bool cameraZoomSpeedDirty = false;
+    float requestedCameraPanSpeed = Camera::DefaultPanSpeed;
+    bool cameraPanSpeedDirty = false;
 
     bool requestedTimelinePlaying = false;
     bool timelinePlayingDirty = false;

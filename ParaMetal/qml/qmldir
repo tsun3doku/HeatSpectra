@@ -2,10 +2,16 @@ singleton UiTheme 1.0 UiTheme.qml
 UiMenu 1.0 UiMenu.qml
 UiMenuItem 1.0 UiMenuItem.qml
 UiMenuSeparator 1.0 UiMenuSeparator.qml
+UiCheckBox 1.0 UiCheckBox.qml
+WelcomeScreen 1.0 WelcomeScreen.qml
 ConsolePane 1.0 ConsolePane.qml
 InspectorField 1.0 InspectorField.qml
 NodeEditorPane 1.0 NodeEditorPane.qml
 NodeInspectorPane 1.0 NodeInspectorPane.qml
 TimelineBar 1.0 TimelineBar.qml
 ToolIconButton 1.0 ToolIconButton.qml
+UiSplitterHandle 1.0 UiSplitterHandle.qml
+UiPanelPopup 1.0 UiPanelPopup.qml
+CameraControl 1.0 CameraControl.qml
 ViewportPane 1.0 ViewportPane.qml
+ViewportSettingsControl 1.0 ViewportSettingsControl.qml

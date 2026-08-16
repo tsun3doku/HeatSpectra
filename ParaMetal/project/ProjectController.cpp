@@ -27,6 +27,17 @@ void ProjectController::newProject() {
     setModified(false);
 }
 
+void ProjectController::newEmptyProject() {
+    if (busyState) { emit error(QStringLiteral("A project operation is already in progress.")); return; }
+    QMetaObject::invokeMethod(&host, "newEmptyProject", Qt::QueuedConnection);
+    projectWorldUnit = units::defaultLengthUnit();
+    emit worldUnitChanged();
+    emit worldUnitRequested(worldUnit());
+    emit viewportStateApplied(ProjectFile::Viewport{});
+    setPath({});
+    setModified(false);
+}
+
 void ProjectController::open(const QUrl& url) {
     if (busyState) { emit error(QStringLiteral("A project operation is already in progress.")); return; }
     if (!url.isLocalFile()) {

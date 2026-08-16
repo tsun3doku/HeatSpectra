@@ -18,6 +18,7 @@ public slots:
     void initialize();
     void shutdown();
     void newProject();
+    void newEmptyProject();
     void resetGraph();
     void replaceGraph(const NodeGraphState& state);
     void addNode(const QString& typeId, float x, float y);

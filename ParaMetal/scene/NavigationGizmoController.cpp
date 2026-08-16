@@ -46,6 +46,15 @@ NavigationGizmoController::NavigationGizmoController(CameraController& controlle
     : cameraController(controller) {
 }
 
+void NavigationGizmoController::setEnabled(bool value) {
+    enabled = value;
+    if (!enabled) {
+        hoveredRegion = 0;
+        pressedRegion = 0;
+        dragging = false;
+    }
+}
+
 void NavigationGizmoController::setViewport(VkExtent2D extent, float scale) {
     viewportExtent = extent;
     dpiScale = glm::clamp(scale, 0.5f, 4.0f);
@@ -80,7 +89,7 @@ glm::ivec3 NavigationGizmoController::decodeRegion(uint8_t region) {
 }
 
 uint8_t NavigationGizmoController::hitTest(float x, float y) const {
-    if (sizePx <= 0.0f || x < originPx.x || y < originPx.y ||
+    if (!enabled || sizePx <= 0.0f || x < originPx.x || y < originPx.y ||
         x > originPx.x + sizePx || y > originPx.y + sizePx) {
         return 0;
     }

@@ -38,6 +38,13 @@ void GraphHost::newProject() {
     publishTimelineRange();
 }
 
+void GraphHost::newEmptyProject() {
+    graph.clear();
+    publishedRevision = graph.getRevision();
+    emit graphReplaced(graph.state());
+    publishTimelineRange();
+}
+
 void GraphHost::requestGraphState() {
     emit graphStateReady(graph.state());
 }

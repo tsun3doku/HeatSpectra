@@ -92,8 +92,7 @@ void InputController::handleKeyInput(Qt::Key key, bool pressed, bool ctrlPressed
     }
     else if (key == Qt::Key_G) {
         if (ctrlPressed) {
-            camera.setLookAt(glm::vec3(0.0f));
-            camera.resetRadius();
+            cameraController.focusWorldOrigin();
         } else {
             pendingViewportCommands.push_back(ViewportCommand::ToggleGrid);
         }

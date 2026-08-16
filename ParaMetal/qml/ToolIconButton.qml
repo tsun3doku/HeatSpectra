@@ -12,9 +12,9 @@ Button {
     property color pressedColor: UiTheme.toolPressed
     property color selectedColor: UiTheme.interactiveAccent
     property color selectedPressedColor: UiTheme.toolSelectedPressed
-    implicitWidth: 32
-    implicitHeight: 32
-    padding: 7
+    implicitWidth: UiTheme.toolButtonSize
+    implicitHeight: UiTheme.toolButtonSize
+    padding: UiTheme.toolButtonPadding
     checkable: true
 
     background: Rectangle {

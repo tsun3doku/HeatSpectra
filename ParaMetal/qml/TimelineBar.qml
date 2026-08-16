@@ -1,11 +1,10 @@
 import QtQuick
-import QtQuick.Controls
 
 Rectangle {
     id: root
     required property QtObject theme
     required property QtObject bridge
-    color: "#1e1e1e"
+    color: theme.timelineBackground
 
     readonly property int marginX: 18
     readonly property int buttonSize: 20
@@ -24,10 +23,8 @@ Rectangle {
                                           : 0
 
     function playbackIcon(folder) {
-        return "../textures/icons/Playback/" + folder + "/32w/Artboard 1.png"
+        return "../textures/icons/Playback/" + folder + "/128w/Artboard 1.png"
     }
-
-    Rectangle { anchors.left: parent.left; anchors.right: parent.right; height: 1; color: theme.border }
 
     Row {
         x: root.marginX
@@ -86,7 +83,7 @@ Rectangle {
             y: root.centerY - 1
             width: parent.width
             height: 3
-            color: "#41434c"
+            color: root.theme.timelineTrack
         }
 
         Rectangle {
@@ -95,7 +92,7 @@ Rectangle {
                    ? Math.max(1, Math.round(parent.width * root.availableFrame / root.maximumFrame))
                    : 0
             height: 3
-            color: "#416d9c"
+            color: root.theme.timelineRecorded
             visible: root.availableFrame > 0
         }
 
@@ -108,7 +105,7 @@ Rectangle {
                 y: root.centerY - (major ? 7 : 6)
                 width: major ? 2 : 1
                 height: major ? 15 : 12
-                color: "#767780"
+                color: root.theme.timelineTick
             }
         }
 
@@ -122,7 +119,7 @@ Rectangle {
                 width: 56
                 height: 14
                 text: frameNumber
-                color: "#cccccc"
+                color: root.theme.timelineText
                 font: root.theme.regularFont
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -134,7 +131,7 @@ Rectangle {
             y: root.centerY - 7
             width: 2
             height: 23
-            color: "#2e7eff"
+            color: root.theme.timelinePlayhead
         }
 
         Rectangle {
@@ -143,12 +140,12 @@ Rectangle {
             x: Math.max(-width / 2, Math.min(track.width - width / 2, Math.round(root.normalizedFrame * track.width) - width / 2))
             y: root.centerY - 20
             radius: 6
-            color: "#3578ff"
+            color: root.theme.timelineFrameBackground
             Text {
                 id: frameLabel
                 anchors.centerIn: parent
                 text: root.bridge.currentFrame
-                color: "#f5f8ff"
+                color: root.theme.timelineFrameText
                 font: root.theme.regularFont
             }
         }
@@ -170,38 +167,67 @@ Rectangle {
     Item {
         x: root.trackLeft + root.trackWidth + 18
         width: root.rightControls - 18
-        height: parent.height
+        height: 20
+        anchors.verticalCenter: parent.verticalCenter
 
-        Text {
-            x: 0; y: 5; width: 34; height: 14
-            text: qsTr("Start")
-            color: "#cccccc"
-            font: root.theme.regularFont
-            horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
-        }
-        Text {
-            x: 0; y: 23; width: 34; height: 14
-            text: qsTr("End")
-            color: "#cccccc"
-            font: root.theme.regularFont
-            horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
-        }
-        Rectangle {
-            x: 42; y: 5; width: 42; height: 14; radius: 5
-            color: "#222328"; border.width: 1; border.color: "#3a3c44"
-            Text { anchors.centerIn: parent; text: "0"; color: "#cccccc"; font: root.theme.regularFont }
-        }
-        Rectangle {
-            x: 42; y: 23; width: 42; height: 14; radius: 5
-            color: "#222328"; border.width: 1; border.color: "#3a3c44"
-            Text { anchors.centerIn: parent; text: root.maximumFrame; color: "#cccccc"; font: root.theme.regularFont }
-        }
-        Text {
-            x: 102; y: 14; height: 16
-            text: bridge.currentSeconds.toFixed(2) + " / " + bridge.durationSeconds.toFixed(2) + " s"
-            color: "#cccccc"
-            font: root.theme.regularFont
-            verticalAlignment: Text.AlignVCenter
+        Row {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+
+            Text {
+                width: 30
+                height: 18
+                text: qsTr("Start")
+                color: root.theme.timelineText
+                font: root.theme.regularFont
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Rectangle {
+                width: 42
+                height: 18
+                radius: 3
+                color: root.theme.timelineFieldBackground
+                Text {
+                    anchors.centerIn: parent
+                    text: "0"
+                    color: root.theme.timelineText
+                    font: root.theme.regularFont
+                }
+            }
+
+            Text {
+                width: 26
+                height: 18
+                text: qsTr("End")
+                color: root.theme.timelineText
+                font: root.theme.regularFont
+                horizontalAlignment: Text.AlignRight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Rectangle {
+                width: 42
+                height: 18
+                radius: 3
+                color: root.theme.timelineFieldBackground
+                Text {
+                    anchors.centerIn: parent
+                    text: root.maximumFrame
+                    color: root.theme.timelineText
+                    font: root.theme.regularFont
+                }
+            }
+
+            Text {
+                height: 18
+                text: bridge.currentSeconds.toFixed(2) + " / " + bridge.durationSeconds.toFixed(2) + " s"
+                color: root.theme.timelineText
+                font: root.theme.regularFont
+                verticalAlignment: Text.AlignVCenter
+            }
         }
     }
 }

@@ -19,6 +19,14 @@ public:
 public slots:
     void requestWireframeMode(app::WireframeMode mode);
     void requestGridEnabled(bool enabled);
+    void requestBackgroundMode(app::BackgroundMode mode);
+    void requestNavigationCubeVisible(bool visible);
+    void requestAxisLabelsVisible(bool visible);
+    void requestFocusWorldOrigin();
+    void requestProjectionMode(CameraProjectionMode mode);
+    void requestCameraFov(float degrees);
+    void requestCameraZoomSpeed(float speed);
+    void requestCameraPanSpeed(float speed);
     void requestTimelinePlaying(bool playing);
     void requestTimelineReset();
     void requestTimelineScrub(uint32_t frame);

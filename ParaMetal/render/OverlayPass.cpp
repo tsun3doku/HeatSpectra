@@ -230,7 +230,9 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
             0, 
             nullptr);
         vkCmdDraw(commandBuffer, gridRenderer->vertexCount, 1, 0, 0);
-        gridRenderer->renderLabels(commandBuffer, currentFrame);
+        if (flags.drawAxisLabels) {
+            gridRenderer->renderLabels(commandBuffer, currentFrame);
+        }
     }
 
     if (flags.wireframeMode > 0) {
@@ -280,7 +282,7 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
         gizmoRenderer.render(commandBuffer, gizmoPosition, extent, gizmoScale, view, gizmoController);
     }
 
-    if (services.navigationGizmoController) {
+    if (flags.drawNavigationCube && services.navigationGizmoController) {
         navigationGizmoRenderer.render(commandBuffer, services.navigationGizmoController->getRenderData());
     }
 }

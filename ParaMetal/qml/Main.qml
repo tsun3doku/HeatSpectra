@@ -16,7 +16,6 @@ Rectangle {
         spacing: 0
 
         MenuBar {
-            id: menuBar
             Layout.fillWidth: true
             Layout.preferredHeight: 25
             font.family: theme.fontFamily
@@ -54,7 +53,7 @@ Rectangle {
             UiMenu {
                 theme: root.theme
                 title: qsTr("File")
-                Action { text: qsTr("New"); onTriggered: project.newProject() }
+                Action { text: qsTr("New"); onTriggered: welcomeScreen.visible = true }
                 Action { text: qsTr("Open..."); onTriggered: openProjectDialog.open() }
                 Action {
                     text: qsTr("Save")
@@ -81,14 +80,12 @@ Rectangle {
         }
 
         SplitView {
-            id: mainSplit
             Layout.fillWidth: true
             Layout.fillHeight: true
             orientation: Qt.Horizontal
 
-            handle: Rectangle {
-                implicitWidth: 7
-                color: theme.subtleBorder
+            handle: UiSplitterHandle {
+                orientation: Qt.Horizontal
             }
 
             ConsolePane {
@@ -100,20 +97,22 @@ Rectangle {
                 bridge: ui.console
             }
 
-            ColumnLayout {
+            SplitView {
                 SplitView.fillWidth: true
                 SplitView.fillHeight: true
-                spacing: 0
+                orientation: Qt.Vertical
+
+                handle: UiSplitterHandle {
+                    orientation: Qt.Vertical
+                }
 
                 SplitView {
-                    id: workspaceSplit
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    SplitView.fillWidth: true
+                    SplitView.fillHeight: true
                     orientation: Qt.Horizontal
 
-                    handle: Rectangle {
-                        implicitWidth: 7
-                        color: theme.subtleBorder
+                    handle: UiSplitterHandle {
+                        orientation: Qt.Horizontal
                     }
 
                     NodeEditorPane {
@@ -136,12 +135,29 @@ Rectangle {
                 }
 
                 TimelineBar {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 44
+                    SplitView.fillWidth: true
+                    SplitView.preferredHeight: 44
+                    SplitView.minimumHeight: 44
+                    SplitView.maximumHeight: 160
                     theme: root.theme
                     bridge: ui.timeline
                 }
             }
+        }
+    }
+
+    WelcomeScreen {
+        id: welcomeScreen
+        anchors.fill: parent
+        z: 1000
+        theme: root.theme
+        onEmptyGraphRequested: {
+            project.newEmptyProject()
+            visible = false
+        }
+        onDefaultGraphRequested: {
+            project.newProject()
+            visible = false
         }
     }
 
@@ -150,7 +166,10 @@ Rectangle {
         title: qsTr("Open ParaMetal Project")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("ParaMetal projects (*.pm)"), qsTr("All files (*)")]
-        onAccepted: project.open(selectedFile)
+        onAccepted: {
+            welcomeScreen.visible = false
+            project.open(selectedFile)
+        }
     }
 
     FileDialog {

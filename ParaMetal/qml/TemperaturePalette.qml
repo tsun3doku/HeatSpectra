@@ -74,7 +74,7 @@ Rectangle {
             Layout.fillWidth: true; spacing: 6
             Text { text: qsTr("Palette"); color: theme.text; font: theme.regularFont; Layout.preferredWidth: 48 }
             UiComboBox {
-                id: paletteBox; theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
+                theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
                 model: [
                     { text: qsTr("Inferno 2"), value: 0 },
                     { text: qsTr("Parula"), value: 1 },
@@ -97,7 +97,7 @@ Rectangle {
             Layout.fillWidth: true; spacing: 6
             Text { text: qsTr("Units"); color: theme.text; font: theme.regularFont; Layout.preferredWidth: 48 }
             UiComboBox {
-                id: unitsBox; theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
+                theme: root.theme; Layout.fillWidth: true; Layout.preferredHeight: 28
                 model: [qsTr("°C"), qsTr("K"), qsTr("°F")]
                 currentIndex: heatPalette.units
                 onActivated: heatPalette.setUnits(currentIndex)

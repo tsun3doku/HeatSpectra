@@ -119,7 +119,6 @@ void BlendPass::updateDescriptors() {
 
 void BlendPass::record(const FrameContext& context, const SceneView& view, const RenderFlags& flags, RenderServices& services) {
     (void)view;
-    (void)flags;
     (void)services;
     if (!ready) {
         return;
@@ -130,6 +129,8 @@ void BlendPass::record(const FrameContext& context, const SceneView& view, const
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blendPipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blendPipelineLayout, 0, 1, &blendDescriptorSets[frameIndex], 0, nullptr);
+    const uint32_t backgroundMode = static_cast<uint32_t>(flags.backgroundMode);
+    vkCmdPushConstants(commandBuffer, blendPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(backgroundMode), &backgroundMode);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 }
 
@@ -359,6 +360,11 @@ bool BlendPass::createBlendPipeline() {
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &blendDescriptorSetLayout;
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pushConstantRange.size = sizeof(uint32_t);
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(vulkanDevice.getDevice(), &pipelineLayoutInfo, nullptr, &blendPipelineLayout) != VK_SUCCESS) {
         vkDestroyShaderModule(vulkanDevice.getDevice(), vertModule, nullptr);

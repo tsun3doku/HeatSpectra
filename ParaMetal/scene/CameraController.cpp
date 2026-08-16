@@ -9,8 +9,8 @@ CameraController::CameraController(Camera& camera)
     : camera(camera) {
 }
 
-void CameraController::setPanSensitivity(float sensitivity) {
-    camera.panSensitivity = sensitivity;
+void CameraController::setPanSpeed(float speed) {
+    camera.setPanSpeed(speed);
 }
 
 void CameraController::setWorldUnit(units::LengthUnit unit) {
@@ -21,27 +21,51 @@ void CameraController::focusOn(const glm::vec3& target) {
     camera.setLookAt(target);
 }
 
+void CameraController::focusWorldOrigin() {
+    cancelTransition();
+    camera.setLookAt(glm::vec3(0.0f));
+    camera.resetRadius();
+    camera.update(0.0f);
+}
+
+void CameraController::setProjectionMode(CameraProjectionMode mode) {
+    cancelTransition();
+    camera.setProjectionMode(mode);
+    camera.update(0.0f);
+}
+
+void CameraController::setBaseFov(float degrees) {
+    camera.setFov(degrees);
+    camera.update(0.0f);
+}
+
+void CameraController::setZoomSpeed(float speed) {
+    camera.setZoomSpeed(speed);
+}
+
 void CameraController::setCameraState(
     const glm::vec3& lookAt,
     const glm::quat& orientation,
     float radius,
     float fov,
     CameraProjectionMode projectionMode,
-    float orthographicHeight) {
+    float orthographicHeight,
+    float zoomSpeed,
+    float panSpeed) {
     cancelTransition();
-    camera.setLookAt(lookAt);
-    camera.setOrientation(orientation);
-    camera.setFov(fov);
-    camera.setProjectionMode(projectionMode);
-    camera.setRadius(radius);
-    camera.setOrthographicHeight(orthographicHeight);
+    camera.setState(
+        lookAt,
+        orientation,
+        radius,
+        fov,
+        projectionMode,
+        orthographicHeight,
+        zoomSpeed,
+        panSpeed);
     camera.update(0.0f);
 }
 
-void CameraController::snapToDirection(
-    const glm::vec3& lookDirection,
-    const glm::vec3& screenUp,
-    CameraProjectionMode projectionMode) {
+void CameraController::snapToDirection(const glm::vec3& lookDirection, const glm::vec3& screenUp, CameraProjectionMode projectionMode) {
     const glm::vec3 forward = glm::normalize(lookDirection);
     glm::vec3 right = glm::cross(forward, screenUp);
     if (glm::dot(right, right) < 1e-8f) {
@@ -73,10 +97,9 @@ void CameraController::cancelTransition() {
 void CameraController::tick(float deltaTime) {
     if (transition.active) {
         transition.elapsedSeconds += (std::max)(0.0f, deltaTime);
-        float t = transition.durationSeconds > 0.0f
-            ? transition.elapsedSeconds / transition.durationSeconds
-            : 1.0f;
-        t = glm::clamp(t, 0.0f, 1.0f);
+        const float t = (std::min)(
+            transition.elapsedSeconds / transitionDurationSeconds,
+            1.0f);
         const float eased = t * t * (3.0f - 2.0f * t);
         camera.setOrientation(glm::slerp(
             transition.startOrientation,

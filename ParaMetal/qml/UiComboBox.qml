@@ -28,7 +28,7 @@ ComboBox {
 
     background: Rectangle {
         radius: 3
-        color: "#242429"
+        color: control.theme.inputBackground
         border.width: 1
         border.color: control.activeFocus ? control.theme.accent : control.theme.border
     }

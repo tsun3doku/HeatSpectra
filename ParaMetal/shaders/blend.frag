@@ -5,6 +5,9 @@ layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput lineOver
 layout(input_attachment_index=1, set=0, binding=1) uniform subpassInput lightingInput;
 layout(input_attachment_index=2, set=0, binding=2) uniform subpassInput albedoCoverageInput;
 layout(set=0, binding=3) uniform sampler2D backgroundTexture;
+layout(push_constant) uniform BlendSettings {
+    uint backgroundMode;
+} settings;
 layout(location=0) in vec2 inUV;
 layout(location=0) out vec4 outColor;
 
@@ -24,7 +27,9 @@ void main() {
     vec4 lighting = subpassLoad(lightingInput);
     vec4 lineOverlay = subpassLoad(lineOverlayInput);
 
-    vec3 clearColor = texture(backgroundTexture, inUV).rgb;
+    vec3 clearColor = settings.backgroundMode == 0u
+        ? texture(backgroundTexture, inUV).rgb
+        : vec3(1.0);
 
     float coverage = clamp(lighting.a, 0.0, 1.0);
     vec3 color = lighting.rgb + clearColor.rgb * (1.0 - coverage);

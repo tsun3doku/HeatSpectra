@@ -33,18 +33,28 @@ MenuItem {
         verticalAlignment: Text.AlignVCenter
     }
 
-    indicator: Text {
+    indicator: Item {
         x: control.mirrored ? control.width - width - control.rightPadding : control.leftPadding
         y: control.topPadding + (control.availableHeight - height) / 2
-        width: 10
+        width: 14
         height: 14
         visible: control.checkable
-        text: control.checked ? "\u2713" : ""
-        color: control.theme.menuText
-        font.family: control.theme.fontFamily
-        font.pixelSize: control.theme.regularFontSize
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 3
+            color: control.checked ? control.theme.accent : control.theme.checkboxBackground
+            border.width: 1
+            border.color: control.checked ? control.theme.accent : control.theme.checkboxBorder
+        }
+
+        Image {
+            anchors.fill: parent
+            source: "../textures/icons/Settings/check/128w/Artboard 1.png"
+            sourceSize.width: width
+            sourceSize.height: height
+            visible: control.checked
+        }
     }
 
     arrow: Text {

@@ -21,6 +21,7 @@ class NavigationGizmoController {
 public:
     explicit NavigationGizmoController(CameraController& cameraController);
 
+    void setEnabled(bool value);
     void setViewport(VkExtent2D extent, float dpiScale);
     bool handlePointerMove(float x, float y);
     bool handlePointerPress(float x, float y);
@@ -46,4 +47,5 @@ private:
     glm::vec2 pressPosition{0.0f};
     glm::vec2 lastPosition{0.0f};
     bool dragging = false;
+    bool enabled = true;
 };

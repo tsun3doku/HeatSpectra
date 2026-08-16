@@ -29,17 +29,18 @@ Rectangle {
     function nodeIconSource(typeId) {
         const folder = nodeIconFolder(typeId)
         return folder.length > 0
-            ? "../textures/icons/" + folder + "/32w/Artboard 1.png"
+            ? "../textures/icons/" + folder + "/128w/Artboard 1.png"
             : ""
     }
 
     SplitView {
         anchors.fill: parent
         orientation: Qt.Vertical
-        handle: Rectangle { implicitHeight: 7; color: theme.subtleBorder }
+        handle: UiSplitterHandle {
+            orientation: Qt.Vertical
+        }
 
         Rectangle {
-            id: inspector
             SplitView.preferredHeight: 260
             SplitView.minimumHeight: 150
             color: theme.panelBackground
@@ -111,7 +112,7 @@ Rectangle {
                             font.weight: theme.regularFontWeight
                             contentItem: Text {
                                 text: tabButton.text
-                                color: tabButton.checked ? "#f4f2ff" : theme.mutedText
+                                color: tabButton.checked ? theme.activeTabText : theme.mutedText
                                 font: tabButton.font
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -163,7 +164,6 @@ Rectangle {
             property real createY: 0
 
             NodeGraphCanvasItem {
-                id: graphCanvas
                 anchors.fill: parent
                 model: graphModel
                 focus: true
@@ -240,13 +240,15 @@ Rectangle {
                         spacing: 14
                         Image {
                             width: 20; height: 20
-                            source: "../textures/icons/NodeGraph_nav/" + modelData.icon + "/32w/Artboard 1.png"
+                            source: "../textures/icons/NodeGraph_nav/" + modelData.icon + "/128w/Artboard 1.png"
+                            sourceSize.width: width
+                            sourceSize.height: height
                             fillMode: Image.PreserveAspectFit
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.label
-                            color: "#9695a2"
+                            color: theme.navigationText
                             font.family: theme.fontFamily
                             font.pixelSize: theme.descriptionFontSize
                             font.weight: Font.Light

@@ -19,6 +19,7 @@
 
 class NodeGraph;
 class CameraController;
+enum class CameraProjectionMode : uint8_t;
 class ModelSelection;
 class NodeGraphController;
 class RuntimeQuery;
@@ -35,18 +36,23 @@ public:
     bool updateViewportTarget(VkImage image, VkFormat format, VkExtent2D extent);
     void replaceGraphState(const NodeGraphState& state);
     bool applyGraphDelta(const NodeGraphDelta& delta);
-    bool takePendingNodeParameters(
-        NodeGraphNodeId& outNodeId,
-        std::vector<NodeGraphParamValue>& outParameters);
+    bool takePendingNodeParameters(NodeGraphNodeId& outNodeId, std::vector<NodeGraphParamValue>& outParameters);
     void shutdown();
     bool isInitialized() const;
 
     const RuntimeQuery* runtimeQuery() const;
     TimelineController* timelineController();
     const TimelineController* timelineController() const;
-    void setPanSensitivity(float sensitivity);
     void setWireframeMode(app::WireframeMode mode);
     void setGridEnabled(bool enabled);
+    void setBackgroundMode(app::BackgroundMode mode);
+    void setNavigationCubeVisible(bool visible);
+    void setAxisLabelsVisible(bool visible);
+    void focusCameraOnWorldOrigin();
+    void setCameraProjectionMode(CameraProjectionMode mode);
+    void setCameraFov(float degrees);
+    void setCameraZoomSpeed(float speed);
+    void setCameraPanSpeed(float speed);
     void setHeatPaletteRange(float minimum, float maximum);
     void setHeatPalette(int palette);
     void setWorldUnit(int unit);
@@ -80,8 +86,7 @@ private:
     uint32_t getTimelineEndDisplayFrame() const override;
     float getTimelineCurrentSeconds() const override;
     float getTimelineDurationSeconds() const override;
-    bool getSerialTemperatureStatus(
-        uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const override;
+    bool getSerialTemperatureStatus(uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const override;
 
     WindowRuntimeState* windowRuntimeState = nullptr;
     bool initialized = false;

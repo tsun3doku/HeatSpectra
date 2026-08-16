@@ -70,7 +70,7 @@ Item {
                 width: slider.availableWidth
                 height: 4
                 radius: 2
-                color: "#696875"
+                color: root.theme.sliderTrack
                 Rectangle {
                     width: slider.visualPosition * parent.width
                     height: parent.height
@@ -82,9 +82,9 @@ Item {
                 x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
                 y: slider.topPadding + slider.availableHeight / 2 - height / 2
                 width: 16; height: 16; radius: 8
-                color: "#2f2e35"
+                color: root.theme.sliderHandle
                 border.width: 2
-                border.color: "#e6e4ef"
+                border.color: root.theme.sliderHandleBorder
             }
         }
 
@@ -96,13 +96,13 @@ Item {
             text: root.formattedValue()
             color: root.theme.text
             selectionColor: root.theme.accent
-            selectedTextColor: "white"
+            selectedTextColor: root.theme.onAccentText
             font: root.theme.regularFont
             padding: 7
             verticalAlignment: TextInput.AlignVCenter
             background: Rectangle {
                 radius: 3
-                color: "#242429"
+                color: root.theme.inputBackground
                 border.width: 1
                 border.color: numberField.activeFocus ? root.theme.accent : root.theme.border
             }
@@ -115,31 +115,13 @@ Item {
             }
         }
 
-        CheckBox {
-            id: checkBox
+        UiCheckBox {
+            theme: root.theme
             visible: root.editor === "bool"
             Layout.fillWidth: visible
             checked: root.parameter ? Boolean(root.parameter.value) : false
             text: ""
             onToggled: root.valueEdited(checked)
-            indicator: Rectangle {
-                x: checkBox.leftPadding
-                y: (checkBox.height - height) / 2
-                implicitWidth: 14
-                implicitHeight: 14
-                radius: 4
-                color: checkBox.checked ? root.theme.accent : "#3a3946"
-                border.width: 1
-                border.color: checkBox.checked ? root.theme.accent : "#77758b"
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 6
-                    height: 6
-                    radius: 2
-                    visible: checkBox.checked
-                    color: "#ffffff"
-                }
-            }
         }
 
         UiComboBox {

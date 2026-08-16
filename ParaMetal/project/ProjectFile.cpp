@@ -429,6 +429,13 @@ QJsonObject ProjectFile::viewportToJson(const Viewport& viewport) {
         ? QStringLiteral("orthographic")
         : QStringLiteral("perspective");
     obj["orthographicHeight"] = viewport.orthographicHeight;
+    obj["zoomSpeed"] = viewport.zoomSpeed;
+    obj["panSpeed"] = viewport.panSpeed;
+    obj["background"] = viewport.backgroundMode == app::BackgroundMode::SolidColor
+        ? QStringLiteral("solid")
+        : QStringLiteral("image");
+    obj["navigationCubeVisible"] = viewport.navigationCubeVisible;
+    obj["axisLabelsVisible"] = viewport.axisLabelsVisible;
     return obj;
 }
 
@@ -708,5 +715,59 @@ bool ProjectFile::viewportFromJson(const QJsonValue& value, Viewport& outViewpor
     } else {
         outViewport.orthographicHeight = static_cast<float>(orthographicHeightValue.toDouble());
     }
+
+    const QJsonValue zoomSpeedValue = obj["zoomSpeed"];
+    if (zoomSpeedValue.isUndefined()) {
+        outViewport.zoomSpeed = Camera::DefaultZoomSpeed;
+    } else if (!zoomSpeedValue.isDouble() ||
+               !std::isfinite(zoomSpeedValue.toDouble()) ||
+               zoomSpeedValue.toDouble() < Camera::MinZoomSpeed ||
+               zoomSpeedValue.toDouble() > Camera::MaxZoomSpeed) {
+        setError(outError, "Viewport zoom speed is invalid.");
+        return false;
+    } else {
+        outViewport.zoomSpeed = static_cast<float>(zoomSpeedValue.toDouble());
+    }
+
+    const QJsonValue panSpeedValue = obj["panSpeed"];
+    if (panSpeedValue.isUndefined()) {
+        outViewport.panSpeed = Camera::DefaultPanSpeed;
+    } else if (!panSpeedValue.isDouble() ||
+               !std::isfinite(panSpeedValue.toDouble()) ||
+               panSpeedValue.toDouble() < Camera::MinPanSpeed ||
+               panSpeedValue.toDouble() > Camera::MaxPanSpeed) {
+        setError(outError, "Viewport pan speed is invalid.");
+        return false;
+    } else {
+        outViewport.panSpeed = static_cast<float>(panSpeedValue.toDouble());
+    }
+
+    const QJsonValue backgroundValue = obj["background"];
+    if (backgroundValue.isUndefined() || backgroundValue.toString() == QStringLiteral("image")) {
+        outViewport.backgroundMode = app::BackgroundMode::Image;
+    } else if (backgroundValue.isString() && backgroundValue.toString() == QStringLiteral("solid")) {
+        outViewport.backgroundMode = app::BackgroundMode::SolidColor;
+    } else {
+        setError(outError, "Viewport background is not recognized.");
+        return false;
+    }
+
+    const QJsonValue navigationCubeValue = obj["navigationCubeVisible"];
+    if (!navigationCubeValue.isUndefined() && !navigationCubeValue.isBool()) {
+        setError(outError, "Viewport navigation cube visibility is invalid.");
+        return false;
+    }
+    outViewport.navigationCubeVisible = navigationCubeValue.isUndefined()
+        ? app::RenderSettings{}.navigationCubeVisible
+        : navigationCubeValue.toBool();
+
+    const QJsonValue axisLabelsValue = obj["axisLabelsVisible"];
+    if (!axisLabelsValue.isUndefined() && !axisLabelsValue.isBool()) {
+        setError(outError, "Viewport axis label visibility is invalid.");
+        return false;
+    }
+    outViewport.axisLabelsVisible = axisLabelsValue.isUndefined()
+        ? app::RenderSettings{}.axisLabelsVisible
+        : axisLabelsValue.toBool();
     return true;
 }

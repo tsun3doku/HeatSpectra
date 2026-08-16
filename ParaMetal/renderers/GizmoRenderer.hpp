@@ -5,6 +5,8 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
+#include "scene/Camera.hpp"
+
 #include <array>
 #include <vector>
 
@@ -97,7 +99,7 @@ private:
         float distance = 0.0f;
         glm::mat4 view = glm::mat4(1.0f);
         glm::mat4 proj = glm::mat4(1.0f);
-        float cameraFov = 45.0f;
+        float cameraFov = Camera::DefaultFov;
         bool orthographic = false;
         float orthographicHeight = 2.0f;
     };

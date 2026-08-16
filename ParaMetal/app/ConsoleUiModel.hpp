@@ -16,7 +16,6 @@ public:
 
     Q_INVOKABLE void execute(const QString& source);
     Q_INVOKABLE void clear();
-    Q_INVOKABLE void resetDefaultGraph() { emit resetGraphRequested(); }
     void setPythonVersion(const QString& version);
 
 public slots:
@@ -25,7 +24,6 @@ public slots:
 signals:
     void outputChanged();
     void executeRequested(const QString& source);
-    void resetGraphRequested();
 
 private:
     QString terminalOutput;

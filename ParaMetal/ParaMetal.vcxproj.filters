@@ -893,6 +893,12 @@
     <None Include="qml\UiMenuSeparator.qml">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="qml\UiCheckBox.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="qml\WelcomeScreen.qml">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="qml\UiTheme.qml">
       <Filter>Source Files</Filter>
     </None>
@@ -900,6 +906,9 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="qml\ConsolePane.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="qml\CameraControl.qml">
       <Filter>Source Files</Filter>
     </None>
     <None Include="qml\InspectorField.qml">
@@ -920,7 +929,16 @@
     <None Include="qml\ToolIconButton.qml">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="qml\UiSplitterHandle.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="qml\UiPanelPopup.qml">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="qml\ViewportPane.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="qml\ViewportSettingsControl.qml">
       <Filter>Source Files</Filter>
     </None>
   </ItemGroup>

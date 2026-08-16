@@ -22,6 +22,9 @@ struct RenderFlags {
     int wireframeMode = 0;
     bool drawTimingOverlay = false;
     bool drawGrid = false;
+    int backgroundMode = 0;
+    bool drawNavigationCube = true;
+    bool drawAxisLabels = true;
 };
 
 struct RenderServices {

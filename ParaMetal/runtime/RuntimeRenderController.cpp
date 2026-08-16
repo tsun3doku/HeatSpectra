@@ -12,6 +12,9 @@ render::RenderFlags buildRenderFlags(const app::RenderSettings& settings) {
     flags.wireframeMode = static_cast<int>(settings.wireframeMode);
     flags.drawTimingOverlay = settings.gpuTimingOverlayEnabled;
     flags.drawGrid = settings.gridEnabled;
+    flags.backgroundMode = static_cast<int>(settings.backgroundMode);
+    flags.drawNavigationCube = settings.navigationCubeVisible;
+    flags.drawAxisLabels = settings.axisLabelsVisible;
     return flags;
 }
 

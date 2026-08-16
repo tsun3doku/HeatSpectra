@@ -1,6 +1,7 @@
 #pragma once
 
 #include "render/RenderSettings.hpp"
+#include "scene/Camera.hpp"
 #include "nodegraph/NodeGraphEditor.hpp"
 #include "nodegraph/NodeGraphState.hpp"
 #include "nodegraph/NodeGraphTypes.hpp"
@@ -14,9 +15,24 @@
 struct ViewportUiState {
     app::WireframeMode wireframeMode = app::WireframeMode::Off;
     bool gridEnabled = app::RenderSettings{}.gridEnabled;
+    app::BackgroundMode backgroundMode = app::RenderSettings{}.backgroundMode;
+    bool navigationCubeVisible = app::RenderSettings{}.navigationCubeVisible;
+    bool axisLabelsVisible = app::RenderSettings{}.axisLabelsVisible;
+    CameraProjectionMode projectionMode = CameraProjectionMode::Perspective;
+    float baseFov = Camera::DefaultFov;
+    float zoomSpeed = Camera::DefaultZoomSpeed;
+    float panSpeed = Camera::DefaultPanSpeed;
 
     bool operator==(const ViewportUiState& other) const {
-        return wireframeMode == other.wireframeMode && gridEnabled == other.gridEnabled;
+        return wireframeMode == other.wireframeMode &&
+               gridEnabled == other.gridEnabled &&
+               backgroundMode == other.backgroundMode &&
+               navigationCubeVisible == other.navigationCubeVisible &&
+               axisLabelsVisible == other.axisLabelsVisible &&
+               projectionMode == other.projectionMode &&
+               baseFov == other.baseFov &&
+               zoomSpeed == other.zoomSpeed &&
+               panSpeed == other.panSpeed;
     }
     bool operator!=(const ViewportUiState& other) const { return !(*this == other); }
 };

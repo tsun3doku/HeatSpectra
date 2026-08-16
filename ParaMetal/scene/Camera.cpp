@@ -22,7 +22,7 @@ void Camera::update(float deltaTime) {
     if (radius < minRadius) radius = minRadius;
     if (radius > maxRadius) radius = maxRadius;
 
-    // Dynamic FOV at close range (macro mode) is perspective-only.
+    // Dynamic FOV at close range (macro mode)
     if (projectionMode == CameraProjectionMode::Perspective && radius < zoomThreshold) {
         float t = (radius - minRadius) / (zoomThreshold - minRadius);
         t = glm::clamp(t, 0.0f, 1.0f);
@@ -52,11 +52,22 @@ void Camera::setRadius(float r) {
 }
 
 void Camera::setFov(float f) {
+    if (!std::isfinite(f)) return;
     baseFov = glm::clamp(f, 1.0f, 120.0f);
     currentFov = baseFov;
     if (projectionMode == CameraProjectionMode::Orthographic) {
         orthographicReferenceFov = currentFov;
     }
+}
+
+void Camera::setZoomSpeed(float speed) {
+    if (!std::isfinite(speed)) return;
+    zoomSpeed = glm::clamp(speed, MinZoomSpeed, MaxZoomSpeed);
+}
+
+void Camera::setPanSpeed(float speed) {
+    if (!std::isfinite(speed)) return;
+    panSpeed = glm::clamp(speed, MinPanSpeed, MaxPanSpeed);
 }
 
 void Camera::setProjectionMode(CameraProjectionMode mode) {
@@ -71,12 +82,10 @@ void Camera::setProjectionMode(CameraProjectionMode mode) {
             maxOrthographicHeight);
     } else {
         const float halfFovTangent = std::tan(glm::radians(orthographicReferenceFov) * 0.5f);
-        if (halfFovTangent > 1e-6f) {
-            radius = glm::clamp(
-                orthographicHeight / (2.0f * halfFovTangent),
-                minRadius,
-                maxRadius);
-        }
+        radius = glm::clamp(
+            orthographicHeight / (2.0f * halfFovTangent),
+            minRadius,
+            maxRadius);
     }
     projectionMode = mode;
     radiusVelocity = 0.0f;
@@ -127,16 +136,14 @@ void Camera::pan(float dx, float dy) {
     float viewScale = radius;
     if (projectionMode == CameraProjectionMode::Orthographic) {
         const float halfFovTangent = std::tan(glm::radians(orthographicReferenceFov) * 0.5f);
-        if (halfFovTangent > 1e-6f) {
-            viewScale = orthographicHeight / (2.0f * halfFovTangent);
-        }
+        viewScale = orthographicHeight / (2.0f * halfFovTangent);
     }
-    const float panSpeed = viewScale * panSensitivity;
+    const float effectivePanSpeed = viewScale * panScale * panSpeed;
 
     glm::vec3 right = orientation * glm::vec3(1.0f, 0.0f, 0.0f);
     glm::vec3 cameraUp = orientation * glm::vec3(0.0f, 1.0f, 0.0f);
 
-    glm::vec3 offset = -right * dx * panSpeed + cameraUp * dy * panSpeed;
+    glm::vec3 offset = -right * dx * effectivePanSpeed + cameraUp * dy * effectivePanSpeed;
 
     lookAt += offset;
 }
@@ -150,9 +157,11 @@ void Camera::setWorldUnit(units::LengthUnit unit) {
     if (unit == worldUnit) return;
     const float factor = units::scaleBetween(worldUnit, unit);
     if (!(factor > 0.0f) || !std::isfinite(factor)) return;
+
     lookAt *= factor;
     position *= factor;
     radius *= factor;
+    radiusVelocity *= factor;
     orthographicHeight *= factor;
     worldUnit = unit;
 
@@ -161,40 +170,38 @@ void Camera::setWorldUnit(units::LengthUnit unit) {
     farPlane = 100.0f * metersToWorld;
     minRadius = 0.1f * metersToWorld;
     maxRadius = 200.0f * metersToWorld;
+    zoomThreshold = 2.0f * metersToWorld;
     minOrthographicHeight = 0.001f * metersToWorld;
     maxOrthographicHeight = 1000.0f * metersToWorld;
     maxRadiusVelocity = 300.0f * metersToWorld;
-    maxOrthographicZoomVelocity = 7.2f * metersToWorld;
+
+    update(0.0f);
 }
 
 void Camera::processMouseScroll(double yOffset) {
     const float metersToWorld = units::canonicalToWorldScale(worldUnit);
     if (projectionMode == CameraProjectionMode::Orthographic) {
-        orthographicZoomVelocity += static_cast<float>(-yOffset) * 0.72f * metersToWorld;
-        orthographicZoomVelocity = glm::clamp(
-            orthographicZoomVelocity,
-            -maxOrthographicZoomVelocity,
-            maxOrthographicZoomVelocity);
+        orthographicZoomVelocity += static_cast<float>(-yOffset) * zoomScaleOrtho * zoomSpeed;
+        orthographicZoomVelocity = glm::clamp(orthographicZoomVelocity, -maxOrthographicZoomVelocity, maxOrthographicZoomVelocity);
         return;
     }
-    const float baseZoomSpeed = 0.6f * metersToWorld;
-    float zoomSpeed = baseZoomSpeed;
+    const float scaledZoomSpeed = zoomScale * zoomSpeed * metersToWorld;
+    float effectiveZoomSpeed = scaledZoomSpeed;
 
     // Slow down zoom at close range
     const float closeRange = 1.0f * metersToWorld;
     if (radius < closeRange) {
         const float normalizedRadius = radius / closeRange;
-        zoomSpeed = baseZoomSpeed * std::max(0.1f, normalizedRadius);
+        effectiveZoomSpeed = scaledZoomSpeed * std::max(0.1f, normalizedRadius);
     }
 
-    radiusVelocity += (float)(-yOffset) * zoomSpeed;
+    radiusVelocity += (float)(-yOffset) * effectiveZoomSpeed;
 
     radiusVelocity = glm::clamp(radiusVelocity, -maxRadiusVelocity, maxRadiusVelocity);
 }
 
 glm::mat4 Camera::getViewMatrix() const {
-    const glm::mat4 cameraTransform =
-        glm::translate(glm::mat4(1.0f), position) * glm::mat4_cast(orientation);
+    const glm::mat4 cameraTransform = glm::translate(glm::mat4(1.0f), position) * glm::mat4_cast(orientation);
     return glm::inverse(cameraTransform);
 }
 
@@ -202,25 +209,16 @@ glm::mat4 Camera::getProjectionMatrix(float aspectRatio) const {
     if (projectionMode == CameraProjectionMode::Orthographic) {
         const float halfHeight = orthographicHeight * 0.5f;
         const float halfWidth = halfHeight * aspectRatio;
-        return glm::orthoRH_ZO(
-            -halfWidth,
-            halfWidth,
-            -halfHeight,
-            halfHeight,
-            nearPlane,
-            farPlane);
+        return glm::orthoRH_ZO(-halfWidth,halfWidth,-halfHeight, halfHeight, nearPlane, farPlane);
     }
-    return glm::perspectiveRH_ZO(
-        glm::radians(currentFov),
-        aspectRatio,
-        nearPlane,
-        farPlane);
+    return glm::perspectiveRH_ZO(glm::radians(currentFov), aspectRatio, nearPlane, farPlane);
 }
 
-glm::vec3 Camera::screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight) {
-    if (projectionMode == CameraProjectionMode::Orthographic) {
+glm::vec3 Camera::screenToWorldRay(double mouseX, double mouseY, int screenWidth, int screenHeight) const {
+    if (projectionMode == CameraProjectionMode::Orthographic || screenWidth <= 0 || screenHeight <= 0) {
         return glm::normalize(orientation * glm::vec3(0.0f, 0.0f, -1.0f));
     }
+
     float x = static_cast<float>((2.0 * mouseX) / screenWidth - 1.0);
     float y = static_cast<float>(1.0 - (2.0 * mouseY) / screenHeight);
 
@@ -230,6 +228,26 @@ glm::vec3 Camera::screenToWorldRay(double mouseX, double mouseY, int screenWidth
 
     glm::vec3 rayWorld = glm::vec3(glm::inverse(getViewMatrix()) * rayView);
     return glm::normalize(rayWorld);
+}
+
+void Camera::setState(
+    const glm::vec3& target,
+    const glm::quat& nextOrientation,
+    float nextRadius,
+    float fov,
+    CameraProjectionMode nextProjectionMode,
+    float nextOrthographicHeight,
+    float nextZoomSpeed,
+    float nextPanSpeed) {
+    setLookAt(target);
+    setOrientation(nextOrientation);
+    setFov(fov);
+    setRadius(nextRadius);
+    setOrthographicHeight(nextOrthographicHeight);
+    setZoomSpeed(nextZoomSpeed);
+    setPanSpeed(nextPanSpeed);
+    projectionMode = nextProjectionMode;
+    orthographicReferenceFov = baseFov;
 }
 
 glm::vec3 Camera::screenToWorldRayOrigin(
