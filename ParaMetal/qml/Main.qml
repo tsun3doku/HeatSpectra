@@ -159,6 +159,7 @@ Rectangle {
             project.newProject()
             visible = false
         }
+        onOpenProjectRequested: openProjectDialog.open()
     }
 
     FileDialog {

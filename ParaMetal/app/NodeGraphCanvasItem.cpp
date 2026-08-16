@@ -1,6 +1,7 @@
 #include "NodeGraphCanvasItem.hpp"
 
 #include "NodeGraphUiModel.hpp"
+#include "nodegraph/NodeGraphRegistry.hpp"
 #include "nodegraph/ui/scene/NodeGraphSceneStyle.hpp"
 #include "ui/UiTypography.hpp"
 
@@ -19,6 +20,7 @@
 #include <QtGui/QWheelEvent>
 
 #include <algorithm>
+#include <cmath>
 
 static QColor graphBlendColor(const QColor& first, const QColor& second, qreal amount) {
     const qreal factor = std::clamp(amount, 0.0, 1.0);
@@ -68,6 +70,61 @@ static QImage graphIconImage(const QString& typeId) {
     }
     imageCache.insert(typeId, {});
     return {};
+}
+
+static void paintArcText(
+    QPainter& painter,
+    const QString& text,
+    const QPointF& center,
+    qreal radius,
+    qreal centerAngleDegrees,
+    qreal maxSweepDegrees,
+    qreal baselineInset,
+    bool reverseDirection) {
+    constexpr qreal pi = 3.14159265358979323846;
+    QFont arcFont = ui::UiTypography::font(ui::TextRole::Title);
+    arcFont.setPixelSize(arcFont.pixelSize() + 3);
+    arcFont.setWeight(QFont::Bold);
+    arcFont.setLetterSpacing(QFont::AbsoluteSpacing, arcFont.letterSpacing() + 2.5);
+    painter.setFont(arcFont);
+
+    const QFontMetricsF metrics(arcFont);
+    qreal totalAdvance = 0.0;
+    for (const QChar character : text) {
+        totalAdvance += metrics.horizontalAdvance(QString(character));
+    }
+
+    const qreal direction = reverseDirection ? -1.0 : 1.0;
+    const qreal maxSweepRadians = maxSweepDegrees * pi / 180.0;
+    const qreal naturalSweepRadians = totalAdvance / radius;
+    const qreal usedSweepRadians = std::min(maxSweepRadians, naturalSweepRadians);
+    const qreal sweepScale = naturalSweepRadians > 0.0
+        ? usedSweepRadians / naturalSweepRadians
+        : 1.0;
+    const qreal centerAngleRadians = centerAngleDegrees * pi / 180.0;
+    const qreal firstAngleRadians = centerAngleRadians - direction * usedSweepRadians * 0.5;
+    const qreal baselineOffset = direction > 0.0
+        ? baselineInset
+        : metrics.ascent() - metrics.descent() - baselineInset;
+
+    qreal advanceBefore = 0.0;
+    for (const QChar character : text) {
+        const QString glyph(character);
+        const qreal advance = metrics.horizontalAdvance(glyph);
+        const qreal angle = firstAngleRadians + direction *
+            (advanceBefore + advance * 0.5) / radius * sweepScale;
+        const QPointF position(
+            center.x() + std::cos(angle) * radius,
+            center.y() + std::sin(angle) * radius);
+
+        painter.save();
+        painter.translate(position);
+        painter.rotate(angle * 180.0 / pi + (direction > 0.0 ? 90.0 : -90.0));
+        painter.drawText(QPointF(-advance * 0.5, baselineOffset), glyph);
+        painter.restore();
+
+        advanceBefore += advance;
+    }
 }
 
 static void paintGraphCap(
@@ -177,6 +234,52 @@ void NodeGraphCanvasItem::refreshModel() {
 }
 
 void NodeGraphCanvasItem::requestRender() { update(); }
+
+bool NodeGraphCanvasItem::isSimulationNode(const Node& node) {
+    return node.typeId == QString::fromLatin1(nodegraphtypes::HeatSolve);
+}
+
+void NodeGraphCanvasItem::paintSimulationHighlight(QPainter& painter, const Node& node) const {
+    const QPointF center(
+        node.x + nodegraphscene::nodeWidth * 0.5,
+        node.y + nodegraphscene::nodeHeight * 0.5);
+    const qreal halfDiagonal = std::hypot(
+        nodegraphscene::nodeWidth * 0.5,
+        nodegraphscene::nodeHeight * 0.5);
+    const qreal ringRadius = halfDiagonal + nodegraphscene::simulationRingPadding;
+
+    QColor ringColor = nodegraphscene::simulationRingColor();
+    if (node.selected || node.id == hoveredNodeId) ringColor = ringColor.lighter(120);
+
+    painter.save();
+    painter.setPen(QPen(ringColor, nodegraphscene::simulationRingWidth,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(center, ringRadius, ringRadius);
+
+    // Remove both labels from the solid circle so the graph background shows through them.
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.setPen(QColor(0, 0, 0, 255));
+    paintArcText(
+        painter,
+        QStringLiteral("SIMULATION"),
+        center,
+        ringRadius - nodegraphscene::simulationLabelRadiusInset,
+        nodegraphscene::simulationLabelCenterAngle,
+        nodegraphscene::simulationLabelMaxSweep,
+        nodegraphscene::simulationLabelBaselineInset,
+        false);
+    paintArcText(
+        painter,
+        QStringLiteral("NODE"),
+        center,
+        ringRadius - nodegraphscene::simulationLabelRadiusInset,
+        nodegraphscene::simulationNodeLabelCenterAngle,
+        nodegraphscene::simulationNodeLabelMaxSweep,
+        nodegraphscene::simulationLabelBaselineInset,
+        true);
+    painter.restore();
+}
 
 void NodeGraphCanvasItem::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) {
     QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
@@ -590,6 +693,12 @@ void NodeGraphCanvasItem::paint(QPainter* painter) {
     painter->translate(pan);
     painter->scale(zoomValue, zoomValue);
 
+    for (const Node& node : nodes) {
+        if (isSimulationNode(node)) {
+            paintSimulationHighlight(*painter, node);
+        }
+    }
+
     for (int edgeIndex = 0; edgeIndex < static_cast<int>(edges.size()); ++edgeIndex) {
         const Edge& edge = edges[edgeIndex];
         const Node* from = findNode(edge.fromNode);
@@ -611,7 +720,20 @@ void NodeGraphCanvasItem::paint(QPainter* painter) {
         if (const Node* source = findNode(interactionNodeId)) {
             const QPointF start = socketPositionById(*source, connectionFromOutput, interactionSocketId);
             const QPointF end = graphPosition(connectionEnd);
-            QPen pen(nodegraphscene::dragPreviewColor(), nodegraphscene::edgeDefaultWidth,
+            const auto& sourceSockets = connectionFromOutput ? source->outputs : source->inputs;
+            const Socket* sourceSocket = nullptr;
+            for (const Socket& socket : sourceSockets) {
+                if (socket.id == interactionSocketId) {
+                    sourceSocket = &socket;
+                    break;
+                }
+            }
+            QColor previewColor = nodegraphscene::dragPreviewColor();
+            if (sourceSocket && sourceSocket->valueType != 0) {
+                previewColor = nodegraphscene::valueTypeColor(
+                    static_cast<NodeGraphValueType>(sourceSocket->valueType)).lighter(135);
+            }
+            QPen pen(previewColor, nodegraphscene::edgeDefaultWidth,
                      Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
             painter->setPen(pen);
             painter->setBrush(Qt::NoBrush);

@@ -22,8 +22,6 @@ constexpr qreal titleTopOffset = 1.0;
 constexpr qreal iconBoxWidth = 37.0;
 constexpr qreal iconBoxHeight = 25.0;
 constexpr qreal capGlowRadius = 8.0;
-constexpr qreal boundingOutlinePad = 2.0;
-constexpr qreal boundingSocketPad = 8.0;
 constexpr qreal centerGradientDarken = 110;
 constexpr qreal capGlowRadiusMultiplier = 0.7;
 constexpr int capGlowAlpha = 85;
@@ -39,12 +37,17 @@ constexpr qreal edgeMaxTangent = 210.0;
 constexpr qreal edgeTangentVertScale = 0.35;
 constexpr qreal edgeTangentHorzScale = 0.1;
 constexpr qreal socketDistance = 0.8;
-constexpr qreal dragLineZValue = 3.0;
-constexpr qreal clickDragThreshold = 3.0;
-constexpr qreal pasteOffset = 40.0;
 constexpr qreal nodeShadowOffsetX = 2.0;
 constexpr qreal nodeShadowOffsetY = 3.0;
 constexpr int nodeShadowAlpha = 60;
+constexpr qreal simulationRingPadding = 5.0;
+constexpr qreal simulationRingWidth = 14.0;
+constexpr qreal simulationLabelRadiusInset = 3.0;
+constexpr qreal simulationLabelCenterAngle = 270.0;
+constexpr qreal simulationLabelMaxSweep = 120.0;
+constexpr qreal simulationNodeLabelCenterAngle = 90.0;
+constexpr qreal simulationNodeLabelMaxSweep = 90.0;
+constexpr qreal simulationLabelBaselineInset = 3.0;
 
 enum class NodeHitRegion : uint8_t {
     None = 0,
@@ -52,8 +55,6 @@ enum class NodeHitRegion : uint8_t {
     LeftCap = 2,
     RightCap = 3
 };
-
-inline constexpr QColor sceneBackgroundColor = QColor(46, 46, 52);
 
 QColor valueTypeColor(NodeGraphValueType valueType);
 QColor nodeShellColor();
@@ -66,9 +67,8 @@ QColor frozenCapInactiveColor();
 QColor displayCapActiveColor();
 QColor displayCapInactiveColor();
 QColor socketBorderColor();
-QColor edgeDefaultColor();
 QColor dragPreviewColor();
-QPointF snapToGrid(const QPointF& position);
+QColor simulationRingColor();
 QRectF nodeRect();
 QRectF outerFrameRect();
 QRectF segmentBoundsRect();

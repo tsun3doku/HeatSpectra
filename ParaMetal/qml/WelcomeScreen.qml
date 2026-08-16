@@ -15,6 +15,7 @@ Item {
 
     signal emptyGraphRequested()
     signal defaultGraphRequested()
+    signal openProjectRequested()
 
     Rectangle {
         anchors.fill: parent
@@ -197,6 +198,7 @@ Item {
                     source: "../textures/icons/Menu/x/128w/Artboard 1.png"
                     sourceSize.width: width
                     sourceSize.height: height
+                    fillMode: Image.PreserveAspectFit
                     opacity: closeArea.containsMouse ? 1.0 : 0.7
                 }
             }
@@ -237,6 +239,7 @@ Item {
 
                 Text {
                     Layout.fillWidth: true
+                    id: subtitleText
                     text: qsTr("Choose a starting point for your workspace")
                     color: root.theme.welcomeSubtext
                     font.family: root.theme.fontFamily
@@ -244,6 +247,48 @@ Item {
                     font.weight: Font.Normal
                     horizontalAlignment: Text.AlignRight
                 }
+            }
+
+            Button {
+                id: openProjectButton
+                Layout.alignment: Qt.AlignRight
+                Layout.preferredWidth: subtitleText.implicitWidth
+                Layout.minimumWidth: subtitleText.implicitWidth
+                Layout.maximumWidth: subtitleText.implicitWidth
+                Layout.preferredHeight: 32
+                padding: 0
+                onClicked: root.openProjectRequested()
+
+                contentItem: Row {
+                    anchors.left: parent.left
+                    spacing: 8
+
+                    Image {
+                        width: 20
+                        height: 20
+                        source: "../textures/icons/File/open/32w/Artboard 1.png"
+                        sourceSize.width: width
+                        sourceSize.height: height
+                        anchors.verticalCenter: parent.verticalCenter
+                        layer.enabled: openProjectButton.hovered || openProjectButton.pressed
+                        layer.effect: MultiEffect {
+                            colorization: 1.0
+                            colorizationColor: root.theme.accent
+                        }
+                    }
+
+                    Text {
+                        text: qsTr("Open Project")
+                        color: openProjectButton.hovered || openProjectButton.pressed
+                               ? root.theme.accent : root.theme.welcomeText
+                        font.family: root.theme.fontFamily
+                        font.pixelSize: root.theme.regularFontSize + 2
+                        font.weight: Font.Medium
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                background: Item {}
             }
 
             Item { Layout.preferredHeight: 10 }

@@ -90,6 +90,8 @@ private:
     const Node* findNode(int nodeId) const;
     Node* findNode(int nodeId);
     void updateHover(const QPointF& graphPosition);
+    static bool isSimulationNode(const Node& node);
+    void paintSimulationHighlight(QPainter& painter, const Node& node) const;
     static bool socketTypesCompatible(const Socket& source, const Socket& target);
     int edgeIndexAt(const QPointF& graphPosition) const;
     void finishConnection(const QPointF& itemPosition);

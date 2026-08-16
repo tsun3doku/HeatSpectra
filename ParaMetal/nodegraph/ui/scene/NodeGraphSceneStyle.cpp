@@ -1,16 +1,9 @@
 #include "NodeGraphSceneStyle.hpp"
-#include "nodegraph/NodeGraphLayout.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 namespace nodegraphscene {
-
-QPointF snapToGrid(const QPointF& position) {
-    return QPointF(
-        nodegraphlayout::snapCoordinate(position.x()),
-        nodegraphlayout::snapCoordinate(position.y()));
-}
 
 QColor valueTypeColor(NodeGraphValueType valueType) {
     switch (valueType) {
@@ -79,12 +72,12 @@ QColor socketBorderColor() {
     return QColor(22, 23, 23);
 }
 
-QColor edgeDefaultColor() {
-    return QColor(120, 200, 255);
-}
-
 QColor dragPreviewColor() {
     return QColor(166, 206, 255);
+}
+
+QColor simulationRingColor() {
+    return QColor(224, 171, 226, 210);
 }
 
 QRectF nodeRect() {
@@ -245,7 +238,10 @@ QPainterPath buildEdgePath(
     NodeGraphSocketDirection dstDirection) {
     const qreal dy = dst.y() - src.y();
     const qreal dx = dst.x() - src.x();
-    const qreal baseTangent = std::max(edgeMinTangent, std::min(edgeMaxTangent, std::fabs(dy) * edgeTangentVertScale + std::fabs(dx) * edgeTangentHorzScale));
+    const qreal baseTangent = std::max(
+        edgeMinTangent,
+        std::min(edgeMaxTangent,
+                 std::fabs(dy) * edgeTangentVertScale + std::fabs(dx) * edgeTangentHorzScale));
 
     const qreal srcSign = (srcDirection == NodeGraphSocketDirection::Output) ? 1.0 : -1.0;
     const qreal dstSign = (dstDirection == NodeGraphSocketDirection::Input) ? -1.0 : 1.0;
