@@ -32,7 +32,6 @@ static QColor graphBlendColor(const QColor& first, const QColor& second, qreal a
 }
 
 static QString graphIconFolder(const QString& typeId) {
-    if (typeId == QStringLiteral("contact")) return QStringLiteral("Contact");
     if (typeId == QStringLiteral("heat_solve")) return QStringLiteral("HeatSystem");
     if (typeId == QStringLiteral("model")) return QStringLiteral("Model");
     if (typeId == QStringLiteral("heat_model")) return QStringLiteral("HeatModel");

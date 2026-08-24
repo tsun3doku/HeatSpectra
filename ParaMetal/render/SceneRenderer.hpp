@@ -27,7 +27,7 @@ class IntrinsicRenderer;
 class GizmoRenderer;
 class NavigationGizmoRenderer;
 class ScreenTextRenderer;
-namespace render { class ContactOverlayRenderer; }
+
 namespace render { class HeatOverlayRenderer; }
 namespace render { class PointOverlayRenderer; }
 namespace render { class VoronoiOverlayRenderer; }
@@ -71,7 +71,6 @@ public:
     void resize(VkExtent2D extent);
     void updateDescriptorSets();
     IntrinsicRenderer* getIntrinsicRenderer() const;
-    render::ContactOverlayRenderer* getContactOverlayRenderer() const;
     render::HeatOverlayRenderer* getHeatOverlayRenderer() const;
     render::PointOverlayRenderer* getPointOverlayRenderer() const;
     render::VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
@@ -172,4 +171,3 @@ private:
 
     bool ready = false;
 };
-

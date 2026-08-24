@@ -28,13 +28,15 @@ public:
         std::vector<glm::vec4> pointPositions;
         std::array<glm::vec3, 8> pointDomainCorners{};
 
-        // Mesh path
-        std::vector<glm::vec3> geometryPositions;
-        std::vector<uint32_t> geometryTriangleIndices;
-        std::vector<voronoi::SurfaceVertex> surfaceVertices;
-        std::vector<uint32_t> surfaceTriangleIndices;
-        uint32_t runtimeModelId = 0;
-        glm::mat4 meshModelMatrix{1.0f};
+        // Global path
+        bool isGlobalDomain = false;
+        float sdfPadding = 0.0f;
+        std::vector<uint32_t> globalRemeshRuntimeModelIds;
+        std::vector<std::vector<glm::vec3>> globalRemeshPositions;
+        std::vector<std::vector<uint32_t>> globalRemeshTriangleIndices;
+        std::vector<std::vector<glm::vec3>> globalRemeshSurfacePositions;
+        std::vector<std::vector<uint32_t>> globalRemeshSurfaceTriangleIndices;
+
         uint64_t computeHash = 0;
     };
 

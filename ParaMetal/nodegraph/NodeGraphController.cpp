@@ -4,7 +4,6 @@
 #include "NodeGraphRegistry.hpp"
 #include "NodeGraphUtils.hpp"
 #include "NodePayloadRegistry.hpp"
-#include "runtime/RuntimeContactDisplayTransport.hpp"
 #include "runtime/RuntimeHeatDisplayTransport.hpp"
 #include "runtime/RuntimeModelDisplayTransport.hpp"
 #include "runtime/RuntimePointDisplayTransport.hpp"
@@ -109,7 +108,10 @@ bool NodeGraphController::compileRuntimePackages() {
             evaluation,
             payloadRegistry,
             errors)) {
+        lastPackageErrors_.clear();
         for (const std::string& error : errors) {
+            if (!lastPackageErrors_.empty()) lastPackageErrors_ += "; ";
+            lastPackageErrors_ += error;
             std::cerr << "Runtime package compilation failed: " << error << '\n';
         }
         return false;
@@ -131,13 +133,17 @@ bool NodeGraphController::compileRuntimePackages() {
                 packageController.packages(),
                 errors) ||
             !packageController.applyNode(*node)) {
+            lastPackageErrors_.clear();
             for (const std::string& error : errors) {
+                if (!lastPackageErrors_.empty()) lastPackageErrors_ += "; ";
+                lastPackageErrors_ += error;
                 std::cerr << "Runtime package compilation failed: " << error << '\n';
             }
             return false;
         }
     }
     packageController.finishCompilation();
+    lastPackageErrors_.clear();
     frozenPackageRebuildPending = false;
 
     NodeGraphDebugCache::instance().update(
@@ -157,7 +163,6 @@ void NodeGraphController::updateDisplayTransports() {
     const bool hasDisplayTransports = runtimeConnections.modelDisplayTransport ||
         runtimeConnections.remeshDisplayTransport ||
         runtimeConnections.voronoiDisplayTransport ||
-        runtimeConnections.contactDisplayTransport ||
         runtimeConnections.heatDisplayTransport ||
         runtimeConnections.pointDisplayTransport;
     if (!hasDisplayTransports) return;
@@ -181,10 +186,6 @@ void NodeGraphController::updateDisplayTransports() {
     if (runtimeConnections.voronoiDisplayTransport) {
         runtimeConnections.voronoiDisplayTransport->sync(packages, visibleKeys);
         runtimeConnections.voronoiDisplayTransport->finalizeSync();
-    }
-    if (runtimeConnections.contactDisplayTransport) {
-        runtimeConnections.contactDisplayTransport->sync(packages, visibleKeys);
-        runtimeConnections.contactDisplayTransport->finalizeSync();
     }
     if (runtimeConnections.heatDisplayTransport) {
         runtimeConnections.heatDisplayTransport->sync(packages, visibleKeys);
@@ -236,13 +237,6 @@ bool NodeGraphController::runtimeModelIdsForSocket(
         for (const HeatModelPackage& model : package->models) {
             if (const ModelProduct* product = products->resolve<ModelProduct>(model.modelProduct))
                 addRuntimeModelId(outIds, product->runtimeModelId);
-        }
-        return true;
-    }
-    if (const ContactPackage* package = packages.findAny<ContactPackage>(socketKey)) {
-        if (const ContactProduct* product = products->resolve<ContactProduct>(package->productHandle)) {
-            addRuntimeModelId(outIds, product->modelARuntimeModelId);
-            addRuntimeModelId(outIds, product->modelBRuntimeModelId);
         }
         return true;
     }

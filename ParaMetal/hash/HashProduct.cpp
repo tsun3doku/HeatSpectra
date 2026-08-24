@@ -129,6 +129,38 @@ void HashProduct::seal(VoronoiProduct& p) {
     combineVkBuffer(hash, p.gmlsSurfaceGradientWeightBuffer);
     HashBuilder::combine(hash, p.gmlsSurfaceGradientWeightBufferOffset);
     HashBuilder::combine(hash, p.gmlsSurfaceGradientWeightCount);
+    HashBuilder::combine(hash, static_cast<uint64_t>(p.isGlobalDomain ? 1u : 0u));
+    HashBuilder::combinePodVector(hash, p.globalSeedPositions);
+    HashBuilder::combinePodVector(hash, p.fragmentInstanceIds);
+    HashBuilder::combinePodVector(hash, p.fragmentSeedIds);
+    HashBuilder::combinePodVector(hash, p.fragmentSurfaceBoundaryAreas);
+    HashBuilder::combinePodVector(hash, p.fragmentVolumes);
+    HashBuilder::combinePodVector(hash, p.faceInstanceIds);
+    HashBuilder::combinePodVector(hash, p.faceFragmentA);
+    HashBuilder::combinePodVector(hash, p.faceFragmentB);
+    HashBuilder::combinePodVector(hash, p.faceAreas);
+    HashBuilder::combinePodVector(hash, p.cutFaceFragmentA);
+    HashBuilder::combinePodVector(hash, p.cutFaceFragmentB);
+    HashBuilder::combinePodVector(hash, p.cutFaceAreas);
+    HashBuilder::combinePodVector(hash, p.cutFaceGaps);
+    HashBuilder::combinePodVector(hash, p.instanceFragmentCounts);
+    HashBuilder::combinePodVector(hash, p.globalSdfValues);
+    HashBuilder::combine(hash, uint64_t(p.globalFragmentCount));
+    HashBuilder::combine(hash, uint64_t(p.globalFaceCount));
+    HashBuilder::combine(hash, uint64_t(p.globalCutFaceCount));
+    HashBuilder::combinePod(hash, p.globalSdfGridMin);
+    HashBuilder::combinePod(hash, p.globalSdfGridDim);
+    HashBuilder::combine(hash, p.globalSdfCellSize);
+    HashBuilder::combine(hash, static_cast<uint64_t>(p.globalDisplayRuntimeModelIds.size()));
+    for (size_t i = 0; i < p.globalDisplayRuntimeModelIds.size(); ++i) {
+        HashBuilder::combine(hash, p.globalDisplayRuntimeModelIds[i]);
+        combineVkBuffer(hash, p.globalDisplayVertexBuffers[i]);
+        HashBuilder::combine(hash, p.globalDisplayVertexBufferOffsets[i]);
+        combineVkBuffer(hash, p.globalDisplayFaceIndexBuffers[i]);
+        HashBuilder::combine(hash, p.globalDisplayFaceIndexBufferOffsets[i]);
+        combineVkBuffer(hash, p.globalDisplayCandidateBuffers[i]);
+        HashBuilder::combine(hash, p.globalDisplayCandidateBufferOffsets[i]);
+    }
 
     p.hashes.full = hash;
     p.hashes.geometry = hash;
@@ -148,28 +180,6 @@ void HashProduct::seal(PointProduct& p) {
     p.hashes.geometry = hash;
     p.hashes.simulation = hash;
     p.hashes.display = hash;
-    p.hashes.thermal = 0;
-}
-
-void HashProduct::seal(ContactProduct& p) {
-    uint64_t hash = HashBuilder::start();
-    HashBuilder::combine(hash, p.coupling.modelARuntimeModelId);
-    HashBuilder::combine(hash, p.coupling.modelBRuntimeModelId);
-    HashBuilder::combinePodVector(hash, p.coupling.modelBTriangleIndices);
-    HashBuilder::combine(hash, p.coupling.contactPairCount);
-    HashBuilder::combinePodVector(hash, p.coupling.contactPairs);
-    HashBuilder::combine(hash, p.modelARuntimeModelId);
-    HashBuilder::combine(hash, p.modelBRuntimeModelId);
-    HashBuilder::combinePodVector(hash, p.outlineVertices);
-    HashBuilder::combinePodVector(hash, p.correspondenceVertices);
-    combineVkBuffer(hash, p.contactPairBuffer);
-    HashBuilder::combine(hash, p.contactPairBufferOffset);
-
-    p.hashes.full = hash;
-    p.hashes.geometry = hash;
-    p.hashes.simulation = hash;
-    p.hashes.display = hash;
-    p.hashes.thermal = 0;
 }
 
 void HashProduct::seal(HeatProduct& p) {

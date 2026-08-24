@@ -1,5 +1,6 @@
 #include "VoronoiOverlayRenderer.hpp"
 
+#include <array>
 #include <glm/mat4x4.hpp>
 
 #include "renderers/PointRenderer.hpp"
@@ -67,54 +68,54 @@ void VoronoiOverlayRenderer::rebuildBindings() {
             continue;
         }
 
-        if (config.runtimeModelId == 0 ||
-            config.indexCount == 0 ||
-            config.seedPositionBuffer == VK_NULL_HANDLE ||
-            config.candidateNeighborIndicesBuffer == VK_NULL_HANDLE ||
-            config.candidateBuffer == VK_NULL_HANDLE ||
-            config.vertexBuffer == VK_NULL_HANDLE ||
-            config.indexBuffer == VK_NULL_HANDLE ||
-            config.supportingHalfedgeView == VK_NULL_HANDLE ||
-            config.supportingAngleView == VK_NULL_HANDLE ||
-            config.halfedgeView == VK_NULL_HANDLE ||
-            config.edgeView == VK_NULL_HANDLE ||
-            config.triangleView == VK_NULL_HANDLE ||
-            config.lengthView == VK_NULL_HANDLE ||
-            config.inputHalfedgeView == VK_NULL_HANDLE ||
-            config.inputEdgeView == VK_NULL_HANDLE ||
-            config.inputTriangleView == VK_NULL_HANDLE ||
-            config.inputLengthView == VK_NULL_HANDLE) {
-            continue;
-        }
+        for (size_t i = 0; i < config.modelRuntimeIds.size(); ++i) {
+            if (config.modelRuntimeIds[i] == 0 ||
+                config.modelIndexCounts[i] == 0 ||
+                config.seedPositionBuffer == VK_NULL_HANDLE ||
+                config.candidateNeighborIndicesBuffer == VK_NULL_HANDLE ||
+                config.candidateBuffers[i] == VK_NULL_HANDLE ||
+                config.modelVertexBuffers[i] == VK_NULL_HANDLE ||
+                config.modelIndexBuffers[i] == VK_NULL_HANDLE) {
+                continue;
+            }
 
-        VoronoiRenderer::VoronoiRenderBinding binding{};
-        binding.bindingKey = config.bindingKey != 0 ? config.bindingKey : socketKey;
-        binding.runtimeModelId = config.runtimeModelId;
-        binding.vertexCount = static_cast<uint32_t>(config.intrinsicVertexCount);
-        binding.seedBuffer = config.seedPositionBuffer;
-        binding.seedOffset = config.seedPositionBufferOffset;
-        binding.neighborBuffer = config.candidateNeighborIndicesBuffer;
-        binding.neighborOffset = config.candidateNeighborIndicesBufferOffset;
-        binding.supportingHalfedgeView = config.supportingHalfedgeView;
-        binding.supportingAngleView = config.supportingAngleView;
-        binding.halfedgeView = config.halfedgeView;
-        binding.edgeView = config.edgeView;
-        binding.triangleView = config.triangleView;
-        binding.lengthView = config.lengthView;
-        binding.inputHalfedgeView = config.inputHalfedgeView;
-        binding.inputEdgeView = config.inputEdgeView;
-        binding.inputTriangleView = config.inputTriangleView;
-        binding.inputLengthView = config.inputLengthView;
-        binding.candidateBuffer = config.candidateBuffer;
-        binding.candidateOffset = config.candidateBufferOffset;
-        binding.vertexBuffer = config.vertexBuffer;
-        binding.vertexOffset = config.vertexBufferOffset;
-        binding.indexBuffer = config.indexBuffer;
-        binding.indexOffset = config.indexBufferOffset;
-        binding.indexCount = config.indexCount;
-        binding.modelMatrix = config.modelMatrix;
-        binding.canonicalToWorldScale = config.canonicalToWorldScale;
-        voronoiBindings.push_back(binding);
+            const std::array<VkBufferView, 10>& views = config.modelBufferViews[i];
+            if (views[0] == VK_NULL_HANDLE || views[1] == VK_NULL_HANDLE || views[2] == VK_NULL_HANDLE ||
+                views[3] == VK_NULL_HANDLE || views[4] == VK_NULL_HANDLE || views[5] == VK_NULL_HANDLE ||
+                views[6] == VK_NULL_HANDLE || views[7] == VK_NULL_HANDLE || views[8] == VK_NULL_HANDLE ||
+                views[9] == VK_NULL_HANDLE) {
+                continue;
+            }
+
+            VoronoiRenderer::RenderBinding binding{};
+            binding.bindingKey = socketKey;
+            binding.runtimeModelId = config.modelRuntimeIds[i];
+            binding.vertexCount = static_cast<uint32_t>(config.intrinsicVertexCounts[i]);
+            binding.seedBuffer = config.seedPositionBuffer;
+            binding.seedOffset = config.seedPositionBufferOffset;
+            binding.neighborBuffer = config.candidateNeighborIndicesBuffer;
+            binding.neighborOffset = config.candidateNeighborIndicesBufferOffset;
+            binding.supportingHalfedgeView = views[0];
+            binding.supportingAngleView = views[1];
+            binding.halfedgeView = views[2];
+            binding.edgeView = views[3];
+            binding.triangleView = views[4];
+            binding.lengthView = views[5];
+            binding.inputHalfedgeView = views[6];
+            binding.inputEdgeView = views[7];
+            binding.inputTriangleView = views[8];
+            binding.inputLengthView = views[9];
+            binding.candidateBuffer = config.candidateBuffers[i];
+            binding.candidateOffset = config.candidateBufferOffsets[i];
+            binding.vertexBuffer = config.modelVertexBuffers[i];
+            binding.vertexOffset = config.modelVertexBufferOffsets[i];
+            binding.indexBuffer = config.modelIndexBuffers[i];
+            binding.indexOffset = config.modelIndexBufferOffsets[i];
+            binding.indexCount = config.modelIndexCounts[i];
+            binding.modelMatrix = config.modelMatrices[i];
+            binding.canonicalToWorldScale = config.modelCanonicalToWorldScales[i];
+            voronoiBindings.push_back(binding);
+        }
     }
 }
 

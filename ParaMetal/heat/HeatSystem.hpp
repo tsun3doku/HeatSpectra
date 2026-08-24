@@ -1,8 +1,6 @@
 #pragma once
 
-#include "heat/HeatContactRuntime.hpp"
 #include "heat/TimelineSimulation.hpp"
-#include "contact/ContactTypes.hpp"
 #include "framegraph/ComputePass.hpp"
 #include "util/Structs.hpp"
 #include "util/Units.hpp"
@@ -14,16 +12,15 @@
 #include <chrono>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
+#include <array>
 #include <glm/glm.hpp>
 
 class MemoryAllocator;
 class VulkanDevice;
 class CommandPool;
-class HeatSystemSimStage;
 class HeatSystemSurfaceStage;
-class HeatSystemDiffusionStage;
-class HeatContactRuntime;
 
 class HeatSystem : public ComputePass {
 public:
@@ -44,7 +41,6 @@ public:
     void setPlaybackState(bool paused, uint32_t resetCounter);
     void setSyntheticDirichletTestEnabled(bool enabled) { syntheticDirichletTestEnabled = enabled; }
     void setParams(float contactThermalConductance, float simulationDuration);
-    void setContactCouplings(const std::vector<ContactCoupling>& contactCouplings);
     void setHeatModels(
         const std::vector<std::vector<glm::vec3>>& modelSurfacePositions,
         const std::vector<std::vector<glm::vec3>>& modelSurfaceNormals,
@@ -61,28 +57,11 @@ public:
         const std::unordered_map<uint32_t, float>& modelConductivity,
         units::LengthUnit worldUnit);
 
-    void clearVoronoiInputs();
-    void addVoronoiModelInput(
-        uint32_t runtimeModelId,
-        uint32_t simNodeCount,
-        VkBuffer simNodeBuffer,
-        VkDeviceSize simNodeBufferOffset,
-        VkBuffer simNodeCouplingBuffer,
-        VkDeviceSize simNodeCouplingBufferOffset,
-        uint32_t simNodeCouplingCount,
-        VkBuffer gmlsSurfaceStencilBuffer,
-        VkDeviceSize gmlsSurfaceStencilBufferOffset,
-        VkBuffer gmlsSurfaceWeightBuffer,
-        VkDeviceSize gmlsSurfaceWeightBufferOffset,
-        size_t gmlsSurfaceWeightCount,
-        VkBuffer gmlsSurfaceGradientWeightBuffer,
-        VkDeviceSize gmlsSurfaceGradientWeightBufferOffset,
-        size_t gmlsSurfaceGradientWeightCount,
-        const std::vector<glm::vec3>& nodePositions,
-        const std::vector<voronoi::Node>& nodes,
-        const std::vector<voronoi::NodeCoupling>& nodeCouplings,
-        const std::vector<uint32_t>& surfaceNodeIds,
-        const std::vector<float>& surfacePatchAreas);
+    void clearGlobalVoronoiInput();
+
+    void setGlobalVoronoiInput(
+        const HeatDomainRuntime::GlobalThermalDomain& domain,
+        const std::unordered_map<uint32_t, std::array<float, 16>>& modelLocalToWorld);
 
     void resetSimulationState();
     bool setRuntimeDirichletTemperatureC(uint32_t runtimeModelId, uint32_t regionId, float temperatureC);
@@ -111,14 +90,13 @@ public:
 
 private:
     static constexpr float TimelineFPS = 60.0f;
-    static constexpr uint32_t DefaultSubsteps = 3;
+    static constexpr float FixedTimeStep = 1.0f / 60.0f;
 
     uint32_t computeTimelineFrameCount() const;
     uint32_t computeHistoryFrameCapacity() const { return computeTimelineFrameCount() + 1; }
     void failInitialization(const char* stage);
     bool rebuildVoronoiRuntime();
-    bool configureMaterialNodes();
-    bool configureModelBoundaries();
+    bool rebuildGlobalThermalDomain();
     float getInitialTemperatureC(uint32_t runtimeModelId) const;
     void configureModelProperties(HeatModelRuntime& model, uint32_t runtimeModelId) const;
     bool rebuildDomainRuntime();
@@ -129,8 +107,7 @@ private:
     void configureGMLSSurfaceWeights(bool heatVoronoiReady);
     bool recreateDescriptorPools();
     void configureModelSimResources();
-    bool rebuildContactRuntime();
-    bool resolveModelBoundaryAreas();
+    bool buildModelBoundaryBuffers();
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
@@ -142,9 +119,7 @@ private:
     uint32_t timingEndQuery = 0;
     uint32_t maxFramesInFlight;
 
-    std::unique_ptr<HeatSystemSimStage> simStage;
     std::unique_ptr<HeatSystemSurfaceStage> surfaceStage;
-    std::unique_ptr<HeatSystemDiffusionStage> diffusionStage;
 
     HeatDomainRuntime domainRuntime;
     HeatPlaybackRuntime playbackRuntime;
@@ -163,12 +138,12 @@ private:
     std::unordered_map<uint32_t, float> modelSpecificHeat;
     std::unordered_map<uint32_t, float> modelConductivity;
     units::LengthUnit worldUnit = units::defaultLengthUnit();
-    std::vector<ContactCoupling> contactCouplings;
     float contactThermalConductance = 16000.0f;
 
     TimelineSimulation timeline;
     float simulatedTime = 0.0f;
     bool shouldStepPhysics = false;
+    bool physicsStepCompletedThisFrame = false;
     bool needsInitialCapture = false;
     bool syntheticDirichletTestEnabled = false;
     float physicsAccumulator = 0.0f;
@@ -180,20 +155,10 @@ private:
     bool domainDirty = true;
     bool voronoiConfigDirty = true;
     bool heatParamsDirty = true;
-    bool contactCouplingsDirty = true;
     uint32_t processedResetCounter = 0;
 
-    std::unordered_map<uint32_t, VkBuffer> modelSimNodeBufferByModelId;
-    std::unordered_map<uint32_t, VkDeviceSize> modelSimNodeBufferOffsetByModelId;
-    std::unordered_map<uint32_t, VkBuffer> modelSimNodeCouplingBufferByModelId;
-    std::unordered_map<uint32_t, VkDeviceSize> modelSimNodeCouplingBufferOffsetByModelId;
     std::unordered_map<uint32_t, uint32_t> simNodeCounts;
-    std::unordered_map<uint32_t, uint32_t> simNodeCouplingCounts;
-    std::unordered_map<uint32_t, std::vector<glm::vec3>> modelNodePositionsByModelId;
-    std::unordered_map<uint32_t, std::vector<voronoi::Node>> modelNodesByModelId;
-    std::unordered_map<uint32_t, std::vector<voronoi::NodeCoupling>> modelNodeCouplingsByModelId;
-    std::unordered_map<uint32_t, std::vector<uint32_t>> modelSurfaceNodeIdsByModelId;
-    std::unordered_map<uint32_t, std::vector<float>> modelSurfacePatchAreasByModelId;
+    std::unordered_map<uint32_t, std::array<float, 16>> modelLocalToWorldByModelId;
     std::unordered_map<uint32_t, VkBuffer> modelGMLSSurfaceStencilBufferByModelId;
     std::unordered_map<uint32_t, VkDeviceSize> modelGMLSSurfaceStencilBufferOffsetByModelId;
     std::unordered_map<uint32_t, VkBuffer> modelGMLSSurfaceWeightBufferByModelId;

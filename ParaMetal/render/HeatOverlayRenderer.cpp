@@ -20,7 +20,8 @@ HeatOverlayRenderer::HeatOverlayRenderer(
       commandPool(commandPool),
       memoryAllocator(allocator),
       surfaceRenderer(std::make_unique<HeatSurfaceRenderer>(device, allocator, uniformBufferManager, commandPool)),
-      vectorArrowRenderer(std::make_unique<VectorArrowRenderer>(device, allocator, uniformBufferManager, commandPool)) {
+      vectorArrowRenderer(std::make_unique<VectorArrowRenderer>(device, allocator, uniformBufferManager, commandPool)),
+      contactLevelSetRenderer(std::make_unique<HeatContactLevelSetRenderer>(device, allocator, uniformBufferManager)) {
 }
 
 HeatOverlayRenderer::~HeatOverlayRenderer() {
@@ -39,12 +40,17 @@ void HeatOverlayRenderer::initializeSurface(VkRenderPass renderPass, uint32_t su
 }
 
 void HeatOverlayRenderer::initializeOverlay(VkRenderPass renderPass, uint32_t overlaySubpass, uint32_t updatedMaxFramesInFlight) {
-    if (!vectorArrowRenderer || overlayInitialized) {
+    if ((!vectorArrowRenderer && !contactLevelSetRenderer) || overlayInitialized) {
         return;
     }
 
     maxFramesInFlight = updatedMaxFramesInFlight;
-    vectorArrowRenderer->initialize(renderPass, overlaySubpass, maxFramesInFlight);
+    if (vectorArrowRenderer) {
+        vectorArrowRenderer->initialize(renderPass, overlaySubpass, maxFramesInFlight);
+    }
+    if (contactLevelSetRenderer) {
+        contactLevelSetRenderer->initialize(renderPass, overlaySubpass, maxFramesInFlight);
+    }
     overlayInitialized = true;
     rebuildBindings();
 }
@@ -77,6 +83,7 @@ void HeatOverlayRenderer::rebuildBindings() {
 
     surfaceBindings.clear();
     fluxVectorBindings.clear();
+    contactLevelSetBindings.clear();
 
     paletteVisible = false;
 
@@ -156,6 +163,28 @@ void HeatOverlayRenderer::rebuildBindings() {
                 }
             }
         }
+
+        if (config.showContactLevelSet &&
+            config.contactRegionBuffer != VK_NULL_HANDLE &&
+            config.indirectDrawBuffer != VK_NULL_HANDLE &&
+            !config.globalSdfImageViews.empty() &&
+            config.globalSdfSampler != VK_NULL_HANDLE) {
+            HeatContactLevelSetRenderer::RenderBinding contactBinding{};
+            contactBinding.sdfImageViews = config.globalSdfImageViews;
+            contactBinding.psiImageViews = config.globalPsiImageViews;
+            contactBinding.sdfSampler = config.globalSdfSampler;
+            contactBinding.regionBuffer = config.contactRegionBuffer;
+            contactBinding.regionBufferOffset = config.contactRegionBufferOffset;
+            contactBinding.regionBufferSize = config.contactRegionBufferSize;
+            contactBinding.indirectDrawBuffer = config.indirectDrawBuffer;
+            contactBinding.indirectDrawOffset = config.indirectDrawBufferOffset;
+            contactBinding.gridMin = config.globalSdfGridMin;
+            contactBinding.gridDim = config.globalSdfGridDim;
+            contactBinding.cellSize = config.globalSdfCellSize;
+            contactBinding.range = config.contactLevelSetRange;
+
+            contactLevelSetBindings.push_back(contactBinding);
+        }
     }
 }
 
@@ -177,17 +206,23 @@ void HeatOverlayRenderer::setPalette(int palette) {
 }
 
 void HeatOverlayRenderer::renderOverlay(VkCommandBuffer commandBuffer, uint32_t frameIndex) {
-    if (!overlayInitialized || !vectorArrowRenderer) {
+    if (!overlayInitialized) {
         return;
     }
 
-    vectorArrowRenderer->render(commandBuffer, frameIndex, fluxVectorBindings);
+    if (vectorArrowRenderer) {
+        vectorArrowRenderer->render(commandBuffer, frameIndex, fluxVectorBindings);
+    }
+    if (contactLevelSetRenderer) {
+        contactLevelSetRenderer->render(commandBuffer, frameIndex, contactLevelSetBindings);
+    }
 }
 
 void HeatOverlayRenderer::cleanup() {
     configsBySocket.clear();
     surfaceBindings.clear();
     fluxVectorBindings.clear();
+    contactLevelSetBindings.clear();
     maxFramesInFlight = 0;
     surfaceInitialized = false;
     overlayInitialized = false;
@@ -196,6 +231,9 @@ void HeatOverlayRenderer::cleanup() {
     }
     if (vectorArrowRenderer) {
         vectorArrowRenderer->cleanup();
+    }
+    if (contactLevelSetRenderer) {
+        contactLevelSetRenderer->cleanup();
     }
 }
 

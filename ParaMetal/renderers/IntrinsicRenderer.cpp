@@ -161,6 +161,7 @@ bool IntrinsicRenderer::createWireframeTexture() {
 
     if (createImage(
             vulkanDevice,
+            allocator,
             width,
             height,
             wireFormat,
@@ -1406,7 +1407,7 @@ void IntrinsicRenderer::cleanup() {
         wireframeTextureImage = VK_NULL_HANDLE;
     }
     if (wireframeTextureMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(vulkanDevice.getDevice(), wireframeTextureMemory, nullptr);
+        allocator.freeImageMemory(wireframeTextureMemory);
         wireframeTextureMemory = VK_NULL_HANDLE;
     }
 

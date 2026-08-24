@@ -13,7 +13,6 @@ inline constexpr const char* Transform = "transform";
 inline constexpr const char* Group = "group";
 inline constexpr const char* Remesh = "remesh";
 inline constexpr const char* HeatModel = "heat_model";
-inline constexpr const char* Contact = "contact";
 inline constexpr const char* Voronoi = "voronoi";
 inline constexpr const char* HeatSolve = "heat_solve";
 inline constexpr const char* Points = "points";
@@ -78,6 +77,8 @@ constexpr uint32_t FluxVectorScale = 8;
 constexpr uint32_t ShowHeatPalette = 9;
 constexpr uint32_t RewindFrame = 10;
 constexpr uint32_t SimulationDuration = 11;
+constexpr uint32_t ShowContactLevelSet = 12;
+constexpr uint32_t ContactLevelSetRange = 13;
 }
 
 namespace voronoi {
@@ -85,12 +86,7 @@ constexpr uint32_t SDFSize = 1;
 constexpr uint32_t VoxelResolution = 2;
 constexpr uint32_t ShowVoronoi = 3;
 constexpr uint32_t ShowPoints = 4;
-}
-
-namespace contact {
-constexpr uint32_t MinNormalDot = 1;
-constexpr uint32_t ContactRadius = 2;
-constexpr uint32_t ShowContactLines = 3;
+constexpr uint32_t SDFPadding = 5;
 }
 
 namespace heatsource {

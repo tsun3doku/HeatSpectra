@@ -106,10 +106,6 @@ Examples:
   b = g.add_node('transform', 'My Transform', 200, 0)
   g.connect(a.output('Mesh'), b.input('Mesh'))
 
-  c = g.add_node('contact', '', 400, 0)
-  g.connect(a.output('Mesh'), c.input('SurfaceA'))
-  g.connect(b.output('Mesh'), c.input('SurfaceB'))
-
   for e in g.edges:
       print(e)
 

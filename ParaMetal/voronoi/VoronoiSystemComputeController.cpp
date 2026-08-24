@@ -7,7 +7,6 @@
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiDomainRuntime.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 
 VoronoiSystemComputeController::VoronoiSystemComputeController(
     VulkanDevice& vulkanDevice,
@@ -45,18 +44,19 @@ void VoronoiSystemComputeController::apply(uint64_t socketKey, const Config& con
     failedComputeHashes.erase(socketKey);
 
     system->setParams(config.cellSize, config.voxelResolution);
-    if (config.isPointDomain) {
+    if (config.isGlobalDomain) {
+        system->clearGeometry();
+        system->setSeedPositions(config.pointPositions, config.pointDomainCorners);
+        system->setGlobalGeometry(
+            config.globalRemeshRuntimeModelIds,
+            config.globalRemeshPositions,
+            config.globalRemeshTriangleIndices,
+            config.globalRemeshSurfacePositions,
+            config.globalRemeshSurfaceTriangleIndices,
+            config.sdfPadding);
+    } else {
         system->clearGeometry();
         system->setPointGeometry(config.pointPositions, config.pointDomainCorners);
-    } else {
-        system->setMeshGeometry(
-            config.geometryPositions,
-            config.geometryTriangleIndices,
-            config.surfaceVertices,
-            config.surfaceTriangleIndices,
-            config.runtimeModelId,
-            config.meshModelMatrix);
-        system->setSeedPositions(config.pointPositions, config.pointDomainCorners);
     }
     const bool configured = system->ensureConfigured();
 
@@ -135,6 +135,60 @@ bool VoronoiSystemComputeController::buildProduct(uint64_t socketKey, VoronoiPro
         return false;
     }
 
+    if (voronoiSystem->isGlobalDomain()) {
+        const VoronoiSystemBuildStage& buildStage = voronoiSystem->getBuildStage();
+        outProduct.isGlobalDomain = true;
+        outProduct.candidateNodeCount = buildStage.getCandidateNodeCount();
+        outProduct.candidateNodeBuffer = buildStage.getCandidateNodeBuffer();
+        outProduct.candidateNodeBufferOffset = buildStage.getCandidateNodeBufferOffset();
+        outProduct.candidateNeighborIndicesBuffer = buildStage.getCandidateNeighborIndicesBuffer();
+        outProduct.candidateNeighborIndicesBufferOffset = buildStage.getCandidateNeighborIndicesBufferOffset();
+        outProduct.seedPositionBuffer = buildStage.getSeedPositionBuffer();
+        outProduct.seedPositionBufferOffset = buildStage.getSeedPositionBufferOffset();
+        outProduct.globalDisplayRuntimeModelIds = buildStage.getGlobalDisplayRuntimeModelIds();
+        outProduct.globalDisplayVertexBuffers = buildStage.getGlobalDisplayVertexBuffers();
+        outProduct.globalDisplayVertexBufferOffsets = buildStage.getGlobalDisplayVertexBufferOffsets();
+        outProduct.globalDisplayFaceIndexBuffers = buildStage.getGlobalDisplayFaceIndexBuffers();
+        outProduct.globalDisplayFaceIndexBufferOffsets = buildStage.getGlobalDisplayFaceIndexBufferOffsets();
+        outProduct.globalDisplayCandidateBuffers = buildStage.getGlobalDisplayCandidateBuffers();
+        outProduct.globalDisplayCandidateBufferOffsets = buildStage.getGlobalDisplayCandidateBufferOffsets();
+        outProduct.globalSeedPositions = buildStage.getGlobalSeedPositions();
+        outProduct.globalDomainCorners = buildStage.getGlobalDomainCorners();
+        outProduct.globalSdfGridMin = buildStage.getGlobalSdfGridMin();
+        outProduct.globalSdfGridDim = buildStage.getGlobalSdfGridDim();
+        outProduct.globalSdfCellSize = buildStage.getGlobalSdfCellSize();
+        outProduct.globalSdfValues = buildStage.getGlobalSdfValues();
+        outProduct.globalSdfRuntimeModelIds = buildStage.getGlobalSdfRuntimeModelIds();
+        outProduct.fragmentInstanceIds = buildStage.getGlobalFragmentInstanceIds();
+        outProduct.fragmentSeedIds = buildStage.getGlobalFragmentSeedIds();
+        outProduct.fragmentSurfaceBoundaryAreas = buildStage.getGlobalSurfaceBoundaryAreas();
+        outProduct.fragmentVolumes = buildStage.getGlobalFragmentVolumes();
+        outProduct.faceInstanceIds = buildStage.getGlobalFaceInstanceIds();
+        outProduct.faceFragmentA = buildStage.getGlobalFaceFragmentA();
+        outProduct.faceFragmentB = buildStage.getGlobalFaceFragmentB();
+        outProduct.faceAreas = buildStage.getGlobalFaceAreas();
+        outProduct.cutFaceFragmentA = buildStage.getGlobalCutFaceFragmentA();
+        outProduct.cutFaceFragmentB = buildStage.getGlobalCutFaceFragmentB();
+        outProduct.cutFaceAreas = buildStage.getGlobalCutFaceAreas();
+        outProduct.cutFaceGaps = buildStage.getGlobalCutFaceGaps();
+        outProduct.instanceFragmentCounts = buildStage.getGlobalInstanceFragmentCounts();
+        outProduct.globalFragmentCount = static_cast<uint32_t>(outProduct.fragmentInstanceIds.size());
+        outProduct.globalFaceCount = static_cast<uint32_t>(outProduct.faceAreas.size());
+        outProduct.globalCutFaceCount = static_cast<uint32_t>(outProduct.cutFaceAreas.size());
+
+        outProduct.globalSdfImageViews = buildStage.getGlobalSdfImageViews();
+        outProduct.globalPsiImageViews = buildStage.getGlobalPsiImageViews();
+        outProduct.globalSdfSampler = buildStage.getGlobalSdfSampler();
+        outProduct.contactRegionBuffer = buildStage.getContactRegionBuffer();
+        outProduct.contactRegionBufferOffset = buildStage.getContactRegionBufferOffset();
+        outProduct.contactRegionBufferSize = buildStage.getContactRegionBufferSize();
+        outProduct.indirectDrawBuffer = buildStage.getIndirectDrawBuffer();
+        outProduct.indirectDrawBufferOffset = buildStage.getIndirectDrawBufferOffset();
+
+        HashProduct::seal(outProduct);
+        return outProduct.isValid();
+    }
+
     const VoronoiNodeDomain& nodeDomain = voronoiSystem->runtimeRef().getNodeDomain();
     outProduct.candidateNodeCount = voronoiSystem->getCandidateNodeCount();
     outProduct.nodeCount = nodeDomain.getNodeCount();
@@ -159,9 +213,6 @@ bool VoronoiSystemComputeController::buildProduct(uint64_t socketKey, VoronoiPro
     outProduct.couplingBufferOffset = buildStage.getCouplingBufferOffset();
     outProduct.seedPositionBuffer = buildStage.getSeedPositionBuffer();
     outProduct.seedPositionBufferOffset = buildStage.getSeedPositionBufferOffset();
-    outProduct.occupancyPointBuffer = buildStage.getOccupancyPointBuffer();
-    outProduct.occupancyPointBufferOffset = buildStage.getOccupancyPointBufferOffset();
-    outProduct.occupancyPointCount = buildStage.getOccupancyPointCount();
 
     const VoronoiDomainRuntime* domainRuntime = voronoiSystem->getDomainRuntime();
     if (!domainRuntime) {
@@ -170,21 +221,7 @@ bool VoronoiSystemComputeController::buildProduct(uint64_t socketKey, VoronoiPro
     outProduct.isPointDomain = domainRuntime->isPointDomain();
     outProduct.candidateBuffer = domainRuntime->getCandidateBuffer();
     outProduct.candidateBufferOffset = domainRuntime->getCandidateBufferOffset();
-
-    if (!domainRuntime->isPointDomain()) {
-        const VoronoiModelRuntime* modelRuntime = static_cast<const VoronoiModelRuntime*>(domainRuntime);
-        outProduct.runtimeModelId = modelRuntime->getRuntimeModelId();
-        outProduct.gmlsSurfaceStencilBuffer = modelRuntime->getGMLSSurfaceStencilBuffer();
-        outProduct.gmlsSurfaceStencilBufferOffset = modelRuntime->getGMLSSurfaceStencilBufferOffset();
-        outProduct.gmlsSurfaceWeightBuffer = modelRuntime->getGMLSSurfaceWeightBuffer();
-        outProduct.gmlsSurfaceWeightBufferOffset = modelRuntime->getGMLSSurfaceWeightBufferOffset();
-        outProduct.gmlsSurfaceWeightCount = modelRuntime->getGMLSSurfaceWeightCount();
-        outProduct.gmlsSurfaceGradientWeightBuffer = modelRuntime->getGMLSSurfaceGradientWeightBuffer();
-        outProduct.gmlsSurfaceGradientWeightBufferOffset = modelRuntime->getGMLSSurfaceGradientWeightBufferOffset();
-        outProduct.gmlsSurfaceGradientWeightCount = modelRuntime->getGMLSSurfaceGradientWeightCount();
-    } else {
-        outProduct.runtimeModelId = 0;
-    }
+    outProduct.runtimeModelId = 0;
 
     HashProduct::seal(outProduct);
     return outProduct.isValid();

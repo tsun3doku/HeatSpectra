@@ -15,7 +15,6 @@ namespace payloadtypes {
     uint8_t HeatModel = 0;
     uint8_t Heat = 0;
     uint8_t Voronoi = 0;
-    uint8_t Contact = 0;
     uint8_t Points = 0;
     uint8_t SerialTemperature = 0;
 }
@@ -203,23 +202,7 @@ static NodeTypeDefinition buildSerialTemperatureNode() {
     };
 }
 
-static NodeTypeDefinition buildContactNode() {
-    return {
-        nodegraphtypes::Contact,
-        "Contact",
-        NodeGraphNodeCategory::System,
-        {
-            makeInputSocket("SurfaceA", NodeGraphValueType::Remesh),
-            makeInputSocket("SurfaceB", NodeGraphValueType::Remesh),
-            makeOutputSocket("Field", NodeGraphValueType::Field, payloadtypes::Contact),
-        },
-        {
-            {nodegraphparams::contact::MinNormalDot, "Min Normal Dot", NodeGraphParamType::Float, HeatSimDefaults::minNormalDot, 0, false, "", false},
-            {nodegraphparams::contact::ContactRadius, "Contact Radius", NodeGraphParamType::Float, HeatSimDefaults::contactRadius, 0, false, "", false},
-            {nodegraphparams::contact::ShowContactLines, "Show Contact Lines", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
-        },
-    };
-}
+
 
 static NodeTypeDefinition buildVoronoiNode() {
     return {
@@ -227,13 +210,14 @@ static NodeTypeDefinition buildVoronoiNode() {
         "Voronoi",
         NodeGraphNodeCategory::System,
         {
-            makeInputSocket("Remesh", NodeGraphValueType::Remesh, false, false),
+            makeInputSocket("Remeshes", NodeGraphValueType::Remesh, true, false),
             makeInputSocket("Points", NodeGraphValueType::Points, false, true),
             makeOutputSocket("Volume", NodeGraphValueType::Volume, payloadtypes::Voronoi),
         },
         {
-            {nodegraphparams::voronoi::SDFSize, "SDF Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
+            {nodegraphparams::voronoi::SDFSize, "Cell Size", NodeGraphParamType::Float, 0.005, 0, false, "", false},
             {nodegraphparams::voronoi::VoxelResolution, "Voxel Resolution", NodeGraphParamType::Int, 0.0, 128, false, "", false},
+            {nodegraphparams::voronoi::SDFPadding, "SDF Padding", NodeGraphParamType::Float, 0.01, 0, false, "", false},
             {nodegraphparams::voronoi::ShowVoronoi, "Show Voronoi", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::voronoi::ShowPoints, "Show Points", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
         },
@@ -246,8 +230,7 @@ static NodeTypeDefinition buildHeatSolveNode() {
         "Ember",
         NodeGraphNodeCategory::System,
         {
-            makeInputSocket("Volume", NodeGraphValueType::Volume, true),
-            makeInputSocket("Field", NodeGraphValueType::Field, true),
+            makeInputSocket("Volume", NodeGraphValueType::Volume),
             makeInputSocket("HeatModel", NodeGraphValueType::HeatModel, true, false),
             makeOutputSocket("Heat", NodeGraphValueType::None, payloadtypes::Heat),
         },
@@ -255,13 +238,15 @@ static NodeTypeDefinition buildHeatSolveNode() {
             {nodegraphparams::heatsolve::Enabled, "Enabled", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::Paused, "Paused", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::ResetRequested, "Reset Requested", NodeGraphParamType::Int, 0.0, 0, false, "", false},
-            {nodegraphparams::heatsolve::ShowHeatOverlay, "Show Heat Overlay", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
-            {nodegraphparams::heatsolve::ContactThermalConductance, "Contact Thermal Conductance", NodeGraphParamType::Float, HeatSimDefaults::contactThermalConductance, 0, false, "", false},
+            {nodegraphparams::heatsolve::ShowHeatOverlay, "Show Heat Overlay", NodeGraphParamType::Bool, 0.0, 0, true, "", false},
+            {nodegraphparams::heatsolve::ContactThermalConductance, "Thermal Contact Conductance", NodeGraphParamType::Float, HeatSimDefaults::contactThermalConductance, 0, false, "", false},
             {nodegraphparams::heatsolve::ShowFluxVectors, "Show Flux Vectors", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::ShowHeatPalette, "Show Heat Palette", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
             {nodegraphparams::heatsolve::FluxVectorScale, "Flux Vector Scale", NodeGraphParamType::Float, 1.0, 0, false, "", false},
             {nodegraphparams::heatsolve::RewindFrame, "Rewind Frame", NodeGraphParamType::Int, 0.0, static_cast<int64_t>(heat::NoRewindFrame), false, "", false},
             {nodegraphparams::heatsolve::SimulationDuration, "Simulation Duration", NodeGraphParamType::Float, 5.0, 0, false, "", false},
+            {nodegraphparams::heatsolve::ShowContactLevelSet, "Show Contact Manifold", NodeGraphParamType::Bool, 0.0, 0, false, "", false},
+            {nodegraphparams::heatsolve::ContactLevelSetRange, "Contact Manifold Range", NodeGraphParamType::Float, 1.0, 0, false, "", false},
         },
     };
 }
@@ -315,7 +300,6 @@ void initNodeGraph(NodeGraphRegistry& registry) {
     payloadtypes::HeatModel  = registry.registerPayloadType("heat_model", NodeGraphValueType::HeatModel);
     payloadtypes::Heat       = registry.registerPayloadType("heat",      NodeGraphValueType::None);
     payloadtypes::Voronoi    = registry.registerPayloadType("voronoi",   NodeGraphValueType::Volume);
-    payloadtypes::Contact    = registry.registerPayloadType("contact",   NodeGraphValueType::Field);
     payloadtypes::Points     = registry.registerPayloadType("points",    NodeGraphValueType::Points);
     payloadtypes::SerialTemperature = registry.registerPayloadType("serial_temperature", NodeGraphValueType::ScalarFloat);
 
@@ -324,7 +308,6 @@ void initNodeGraph(NodeGraphRegistry& registry) {
     registry.registerNodeType(buildGroupNode());
     registry.registerNodeType(buildRemeshNode());
     registry.registerNodeType(buildHeatModelNode());
-    registry.registerNodeType(buildContactNode());
     registry.registerNodeType(buildVoronoiNode());
     registry.registerNodeType(buildHeatSolveNode());
     registry.registerNodeType(buildPointsNode());

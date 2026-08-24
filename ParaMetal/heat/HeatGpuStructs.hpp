@@ -31,17 +31,6 @@ struct HeatModelPushConstant {
 };
 static_assert(sizeof(HeatModelPushConstant) == 8);
 
-struct MaterialNode {
-    float conductivityPerMass;
-    float thermalMass;
-    float density;
-    float specificHeat;
-    float conductivity;
-    float pad0;
-    uint32_t pad1;
-    uint32_t pad2;
-};
-
 struct BoundaryState {
     uint32_t conditionType;
     float temperatureC;
@@ -60,27 +49,69 @@ struct BoundaryContribution {
     float area;
 };
 
+struct FixedContribution {
+    uint32_t boundaryValueIndex = 0;
+    float coefficient = 0.0f;
+};
+
+struct FixedRow {
+    uint32_t contributionOffset = 0;
+    uint32_t contributionCount = 0;
+};
+
 static_assert(sizeof(BoundaryState) == 16, "BoundaryState must match GPU stride");
 static_assert(sizeof(BoundaryNode) == 12, "BoundaryNode must match GPU stride");
 static_assert(sizeof(BoundaryContribution) == 8, "BoundaryContribution must match GPU stride");
+static_assert(sizeof(FixedContribution) == 8, "FixedContribution must match GPU stride");
+static_assert(sizeof(FixedRow) == 8, "FixedRow must match GPU stride");
 
-struct BufferPushConstant {
-    alignas(16) glm::mat4 modelMatrix;
-    alignas(16) glm::vec4 sourceParams;
-    uint32_t palette = 0;
-    float minTemperature = 0.0f;
-    float maxTemperature = 100.0f;
+struct ContactCameraUbo {
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 invView;
 };
+static_assert(sizeof(ContactCameraUbo) == 192);
 
-static_assert(offsetof(BufferPushConstant, palette) == 80);
-static_assert(offsetof(BufferPushConstant, minTemperature) == 84);
-static_assert(offsetof(BufferPushConstant, maxTemperature) == 88);
-
-struct SourceRenderPushConstant {
-    alignas(16) glm::mat4 modelMatrix;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-    alignas(16) glm::vec4 sourceParams;
+struct ContactLevelSetPushConstant {
+    glm::vec3 gridMin;
+    float cellSize;
+    glm::ivec3 gridDim;
+    float range;
 };
+static_assert(sizeof(ContactLevelSetPushConstant) == 32);
+
+struct ContactFace {
+    glm::vec4 centroidArea{0.0f};  // xyz = contact centroid, w = face area
+    glm::vec4 normalGap{0.0f};     // xyz = contact normal,   w = physical gap
+    uint32_t channelA{0};          // runtime SDF channel A
+    uint32_t channelB{0};          // runtime SDF channel B
+    uint32_t pad0{0};
+    uint32_t pad1{0};
+};
+static_assert(sizeof(ContactFace) == 48);
+static_assert(offsetof(ContactFace, centroidArea) == 0);
+static_assert(offsetof(ContactFace, normalGap) == 16);
+static_assert(offsetof(ContactFace, channelA) == 32);
+static_assert(offsetof(ContactFace, channelB) == 36);
+
+struct ContactRegion {
+    glm::vec4 centerExtentW{0.0f}; // xyz = region center, w = extentW 
+    glm::vec4 normalExtentU{0.0f}; // xyz = region normal, w = extentU 
+    glm::vec4 uAxisExtentV{0.0f};  // xyz = uAxis,         w = extentV 
+    glm::vec4 vAxis{0.0f};         // xyz = vAxis,         w = 0.0
+    uint32_t channelA{0};          // SDF channel A index
+    uint32_t channelB{0};          // SDF channel B index
+    uint32_t psiChannel{0};        // Precomputed Psi (sdfA - sdfB)
+    uint32_t pad0{0};
+};
+static_assert(sizeof(ContactRegion) == 80);
+static_assert(offsetof(ContactRegion, centerExtentW) == 0);
+static_assert(offsetof(ContactRegion, normalExtentU) == 16);
+static_assert(offsetof(ContactRegion, uAxisExtentV) == 32);
+static_assert(offsetof(ContactRegion, vAxis) == 48);
+static_assert(offsetof(ContactRegion, channelA) == 64);
+static_assert(offsetof(ContactRegion, channelB) == 68);
+static_assert(offsetof(ContactRegion, psiChannel) == 72);
 
 }
+

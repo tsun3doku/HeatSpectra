@@ -146,7 +146,7 @@
       <PreprocessorDefinitions>
       </PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)libs/amgx/include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include;GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/eigen;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/nanoflann;$(ProjectDir)libs/pybind11/include;$(ProjectDir)libs/tinyexr/deps/nanozlib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\include;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include;GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/eigen;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/nanoflann;$(ProjectDir)libs/pybind11/include;$(ProjectDir)libs/tinyexr/deps/nanozlib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\include;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -156,8 +156,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs/amgx/build-ninja;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\lib\x64;$(ProjectDir)libs/glfw-3.4.bin.WIN64/lib-vc2022;$(VULKAN_SDK)/Lib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>amgxsh.lib;cudart.lib;vulkan-1.lib;python312.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\lib\x64;$(ProjectDir)libs/glfw-3.4.bin.WIN64/lib-vc2022;$(VULKAN_SDK)/Lib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cudart.lib;vulkan-1.lib;python312.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -195,7 +195,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)libs/amgx/include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include;GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/eigen;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/pybind11/include;$(ProjectDir)libs/tinyexr/deps/nanozlib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\include;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include;GeneratedFiles\$(ConfigurationName);GeneratedFiles;$(ProjectDir)libs/isotropicremesher/src;$(ProjectDir)libs/tinyply/source;$(VULKAN_SDK)/Include;$(ProjectDir)libs/glfw-3.4.bin.WIN64/include;$(ProjectDir)libs/glm;$(ProjectDir)libs/eigen;$(ProjectDir)libs/stb;$(ProjectDir)libs/tinyobjloader;$(ProjectDir)libs/pybind11/include;$(ProjectDir)libs/tinyexr/deps/nanozlib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\include;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3;C:\Qt\6.9.3\msvc2022_64\include\QtGui\6.9.3\QtGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <OpenMPSupport>true</OpenMPSupport>
@@ -209,8 +209,8 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs/amgx/build-ninja;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\lib\x64;$(ProjectDir)libs/glfw-3.4.bin.WIN64/lib-vc2022;$(VULKAN_SDK)/Lib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>amgxsh.lib;cudart.lib;vulkan-1.lib;python312.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\lib\x64;$(ProjectDir)libs/glfw-3.4.bin.WIN64/lib-vc2022;$(VULKAN_SDK)/Lib;C:\Users\tsundoku\AppData\Local\Programs\Python\Python312\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cudart.lib;vulkan-1.lib;python312.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -272,7 +272,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="runtime\RenderContext.cpp" />
     <ClCompile Include="runtime\ModelComputeController.cpp" />
     <ClCompile Include="runtime\ModelDisplayController.cpp" />
-    <ClCompile Include="runtime\ContactDisplayController.cpp" />
     <ClCompile Include="runtime\HeatDisplayController.cpp" />
     <ClCompile Include="runtime\RemeshDisplayController.cpp" />
     <ClCompile Include="runtime\RemeshController.cpp" />
@@ -289,7 +288,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="runtime\PointDisplayController.cpp" />
     <ClCompile Include="runtime\RuntimeVoronoiComputeTransport.cpp" />
     <ClCompile Include="runtime\RuntimeRemeshComputeTransport.cpp" />
-    <ClCompile Include="runtime\RuntimeContactComputeTransport.cpp" />
     <ClCompile Include="runtime\RuntimeHeatComputeTransport.cpp" />
     <ClCompile Include="serial\SerialPortWindows.cpp" />
     <ClCompile Include="serial\SerialTemperatureParser.cpp" />
@@ -305,8 +303,8 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="vulkan\MemoryPool.cpp" />
     <ClCompile Include="vulkan\VulkanInstanceContext.cpp" />
     <ClCompile Include="mesh\\remesher\\CommonSubdivision.cpp" />
-    <ClCompile Include="contact\ContactMapping.cpp" />
-    <CudaCompile Include="heat\HeatContactSolver.cu" />
+    <CudaCompile Include="heat\cuda\HeatGlobalSolver.cu" />
+    <CudaCompile Include="heat\cuda\HeatGlobalSolverKernels.cu" />
     <CudaCompile Include="cuda\CudaExternalBuffer.cu" />
     <CudaCompile Include="cuda\CudaVulkanDevice.cu" />
     <CudaCompile Include="voronoi\cuda\RVD.cu">
@@ -320,12 +318,21 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <CudaCompile Include="voronoi\cuda\KNNNeighbors.cu">
       <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
     </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\GlobalSdf.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="voronoi\cuda\GlobalCutCell.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="heat\cuda\GlobalContactRegion.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
+    <CudaCompile Include="heat\cuda\GlobalContactRegionKernels.cu">
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
+    </CudaCompile>
     <CudaCompile Include="voronoi\cuda\KNNNeighborsKernels.cu">
       <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GPUDebugInfo>
     </CudaCompile>
-    <ClCompile Include="contact\ContactSystemComputeController.cpp" />
-    <ClCompile Include="contact\ContactSystem.cpp" />
-    <ClCompile Include="renderers\ContactLineRenderer.cpp" />
     <ClCompile Include="framegraph\FrameSync.cpp" />
     <ClCompile Include="framegraph\FrameGraph.cpp" />
     <ClCompile Include="framegraph\FrameGraphCompile.cpp" />
@@ -333,7 +340,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="framegraph\VkFrameGraphBackend.cpp" />
     <ClCompile Include="util\GlyphText.cpp" />
     <ClCompile Include="render\SceneRenderer.cpp" />
-    <ClCompile Include="render\ContactOverlayRenderer.cpp" />
     <ClCompile Include="render\HeatOverlayRenderer.cpp" />
     <ClCompile Include="render\PointOverlayRenderer.cpp" />
     <ClCompile Include="render\VoronoiOverlayRenderer.cpp" />
@@ -357,13 +363,14 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="renderers\HashGridRenderer.cpp" />
     <ClCompile Include="renderers\HeatSurfaceRenderer.cpp" />
     <ClCompile Include="renderers\VectorArrowRenderer.cpp" />
+    <ClCompile Include="renderers\HeatContactLevelSetRenderer.cpp" />
     <ClCompile Include="heat\HeatModelRuntime.cpp" />
     <ClCompile Include="heat\HeatBoundaryRuntime.cpp" />
-    <ClCompile Include="heat\HeatContactRuntime.cpp" />
+    <ClCompile Include="heat\GlobalContactLevelSet.cpp" />
+    <ClCompile Include="voronoi\GlobalSdfTexture.cpp" />
     <ClCompile Include="voronoi\VoronoiSystemBuildStage.cpp" />
     <ClCompile Include="voronoi\VoronoiNodeIndex.cpp" />
     <ClCompile Include="voronoi\VoronoiNodeDomain.cpp" />
-    <ClCompile Include="voronoi\VoronoiModelRuntime.cpp" />
     <ClCompile Include="voronoi\VoronoiPointRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemPresets.cpp" />
     <ClCompile Include="heat\HeatSystemComputeController.cpp" />
@@ -374,9 +381,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="heat\HeatDomainRuntime.cpp" />
     <ClCompile Include="heat\HeatPlaybackRuntime.cpp" />
     <ClCompile Include="heat\HeatSystemPlayback.cpp" />
-    <ClCompile Include="heat\HeatSystemDiffusionStage.cpp" />
-    <ClCompile Include="contact\ContactCouplingRuntime.cpp" />
-    <ClCompile Include="heat\HeatSystemSimStage.cpp" />
     <ClCompile Include="heat\HeatSystemSurfaceStage.cpp" />
     <ClCompile Include="scene\tinyexr_impl.cpp" />
     <ClCompile Include="scene\IBLSystem.cpp" />
@@ -401,7 +405,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="nodegraph\NodeTransform.cpp" />
     <ClCompile Include="nodegraph\NodeTransformParams.cpp" />
     <ClCompile Include="nodegraph\NodeGroup.cpp" />
-    <ClCompile Include="nodegraph\NodeContactParams.cpp" />
     <ClCompile Include="nodegraph\NodeRemesh.cpp" />
     <ClCompile Include="nodegraph\NodeRemeshParams.cpp" />
     <ClCompile Include="nodegraph\NodePoints.cpp" />
@@ -413,7 +416,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="nodegraph\NodeSerialTemperature.cpp" />
     <ClCompile Include="nodegraph\NodeSerialTemperatureParams.cpp" />
     <ClCompile Include="nodegraph\NodeHeatModelParams.cpp" />
-    <ClCompile Include="nodegraph\NodeContact.cpp" />
     <ClCompile Include="nodegraph\NodeVoronoi.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolve.cpp" />
     <ClCompile Include="nodegraph\NodeHeatSolveParams.cpp" />
@@ -430,6 +432,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClCompile Include="nodegraph\ui\scene\NodeGraphSceneUtils.cpp" />
     <ClCompile Include="nodegraph\NodeGraphValidator.cpp" />
     <ClCompile Include="voronoi\LloydCompute.cpp" />
+    <ClCompile Include="voronoi\VoronoiCandidate.cpp" />
     <ClCompile Include="voronoi\VoronoiCandidateCompute.cpp" />
     <ClCompile Include="scene\InputController.cpp" />
     <ClCompile Include="mesh\\remesher\\iODT.cpp" />
@@ -506,12 +509,12 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <None Include="qml\ViewportSettingsControl.qml" />
     <None Include="shaders\blend.frag" />
     <None Include="shaders\blend.vert" />
-    <None Include="shaders\contact_lines.frag" />
-    <None Include="shaders\contact_lines.vert" />
     <None Include="shaders\gbuffer.frag" />
     <None Include="shaders\gbuffer.vert" />
     <None Include="shaders\gizmo.frag" />
     <None Include="shaders\gizmo.vert" />
+    <None Include="shaders\heat_contact_levelset.frag" />
+    <None Include="shaders\heat_contact_levelset.vert" />
     <None Include="shaders\navigation_gizmo.frag" />
     <None Include="shaders\navigation_gizmo.vert" />
     <None Include="shaders\navigation_gizmo_frag.spv" />
@@ -532,7 +535,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <None Include="shaders\heat_surface_gradient.slang" />
     <None Include="shaders\heat_surface_temp.slang" />
     <None Include="shaders\heat_tetra.comp" />
-    <None Include="shaders\heat_diffusion.slang" />
     <None Include="shaders\intrinsic_normals.frag" />
     <None Include="shaders\intrinsic_normals.geom" />
     <None Include="shaders\intrinsic_normals.vert" />
@@ -581,11 +583,9 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <QtMoc Include="project\ProjectController.hpp" />
     <ClInclude Include="app\GraphThread.hpp" />
     <ClInclude Include="app\UiRuntimeTypes.hpp" />
-    <ClInclude Include="contact\ContactTypes.hpp" />
-    <ClInclude Include="contact\ContactGpuStructs.hpp" />
-    <ClInclude Include="heat\HeatContactSolver.hpp" />
+    <ClInclude Include="heat\HeatGlobalSolver.hpp" />
+    <ClInclude Include="heat\cuda\HeatGlobalSolverKernels.cuh" />
     <ClInclude Include="cuda\CudaExternalBuffer.hpp" />
-    <ClInclude Include="domain\ContactData.hpp" />
     <ClInclude Include="domain\GeometryData.hpp" />
     <ClInclude Include="domain\HeatData.hpp" />
     <ClInclude Include="domain\HeatModelData.hpp" />
@@ -593,8 +593,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="domain\RemeshData.hpp" />
     <ClInclude Include="domain\TransformData.hpp" />
     <ClInclude Include="domain\VoronoiData.hpp" />
-    <ClInclude Include="contact\ContactMapping.hpp" />
-    <ClInclude Include="heat\HeatContactRuntime.hpp" />
     <ClInclude Include="heat\HeatModelRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemPlayback.hpp" />
     <ClInclude Include="heat\TimelineSimulation.hpp" />
@@ -608,8 +606,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeGraphUtils.hpp" />
     <ClInclude Include="nodegraph\NodePayloadRegistry.hpp" />
     <ClInclude Include="py\PyGraphTypes.hpp" />
-    <ClInclude Include="runtime\RuntimeContactComputeTransport.hpp" />
-    <ClInclude Include="runtime\ContactDisplayController.hpp" />
     <ClInclude Include="runtime\HeatDisplayController.hpp" />
     <ClInclude Include="runtime\RuntimeHeatComputeTransport.hpp" />
     <ClInclude Include="serial\SerialPort.hpp" />
@@ -622,7 +618,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="runtime\ModelComputeController.hpp" />
     <ClInclude Include="runtime\ModelDisplayController.hpp" />
     <ClInclude Include="runtime\RemeshDisplayController.hpp" />
-    <ClInclude Include="render\ContactOverlayRenderer.hpp" />
     <ClInclude Include="render\PointOverlayRenderer.hpp" />
     <ClInclude Include="render\VoronoiOverlayRenderer.hpp" />
     <ClInclude Include="runtime\RuntimeModelComputeTransport.hpp" />
@@ -635,7 +630,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="runtime\RuntimeVoronoiDisplayTransport.hpp" />
     <ClInclude Include="runtime\VoronoiDisplayController.hpp" />
     <ClInclude Include="runtime\RuntimeProducts.hpp" />
-    <ClInclude Include="runtime\RuntimeContactDisplayTransport.hpp" />
     <ClInclude Include="runtime\RuntimeRemeshDisplayTransport.hpp" />
     <ClInclude Include="runtime\RuntimeRemeshComputeTransport.hpp" />
     <ClInclude Include="util\FileAssociation.hpp" />
@@ -675,9 +669,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="vulkan\MemoryPool.hpp" />
     <ClInclude Include="vulkan\VulkanInstanceContext.hpp" />
     <ClInclude Include="mesh\\remesher\\CommonSubdivision.hpp" />
-    <ClInclude Include="contact\ContactSystemComputeController.hpp" />
-    <ClInclude Include="contact\ContactSystem.hpp" />
-    <ClInclude Include="renderers\ContactLineRenderer.hpp" />
     <ClInclude Include="framegraph\FrameSync.hpp" />
     <ClInclude Include="framegraph\FrameGraph.hpp" />
     <ClInclude Include="framegraph\FrameGraphPasses.hpp" />
@@ -712,14 +703,17 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="renderers\HashGridRenderer.hpp" />
     <ClInclude Include="renderers\HeatSurfaceRenderer.hpp" />
     <ClInclude Include="renderers\VectorArrowRenderer.hpp" />
+    <ClInclude Include="heat\cuda\GlobalContactRegion.cuh" />
+    <ClInclude Include="heat\cuda\GlobalContactRegionKernels.cuh" />
+    <ClInclude Include="renderers\HeatContactLevelSetRenderer.hpp" />
+    <ClInclude Include="heat\GlobalContactLevelSet.hpp" />
+    <ClInclude Include="voronoi\GlobalSdfTexture.hpp" />
     <ClInclude Include="voronoi\VoronoiSystemBuildStage.hpp" />
     <ClInclude Include="voronoi\VoronoiNodeIndex.hpp" />
     <ClInclude Include="voronoi\VoronoiNodeDomain.hpp" />
     <ClInclude Include="voronoi\VoronoiDomainRuntime.hpp" />
-    <ClInclude Include="voronoi\VoronoiModelRuntime.hpp" />
     <ClInclude Include="voronoi\VoronoiPointRuntime.hpp" />
     <ClInclude Include="voronoi\VoronoiGpuStructs.hpp" />
-    <ClInclude Include="voronoi\VoronoiStageContext.hpp" />
     <ClInclude Include="heat\HeatSystemPresets.hpp" />
     <ClInclude Include="heat\HeatBoundaryRuntime.hpp" />
     <ClInclude Include="heat\HeatSystemComputeController.hpp" />
@@ -730,9 +724,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="voronoi\VoronoiSystemComputeController.hpp" />
     <ClInclude Include="heat\HeatDomainRuntime.hpp" />
     <ClInclude Include="heat\HeatPlaybackRuntime.hpp" />
-    <ClInclude Include="heat\HeatSystemDiffusionStage.hpp" />
-    <ClInclude Include="contact\ContactCouplingRuntime.hpp" />
-    <ClInclude Include="heat\HeatSystemSimStage.hpp" />
     <ClInclude Include="heat\HeatSystemSurfaceStage.hpp" />
     <ClInclude Include="libs\tinyexr\tinyexr.h" />
     <ClInclude Include="scene\IBLSystem.hpp" />
@@ -760,7 +751,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeTransform.hpp" />
     <ClInclude Include="nodegraph\NodeTransformParams.hpp" />
     <ClInclude Include="nodegraph\NodeGroup.hpp" />
-    <ClInclude Include="nodegraph\NodeContactParams.hpp" />
     <ClInclude Include="nodegraph\NodeRemesh.hpp" />
     <ClInclude Include="nodegraph\NodeRemeshParams.hpp" />
     <ClInclude Include="nodegraph\NodePoints.hpp" />
@@ -772,7 +762,6 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeSerialTemperature.hpp" />
     <ClInclude Include="nodegraph\NodeSerialTemperatureParams.hpp" />
     <ClInclude Include="nodegraph\NodeHeatModelParams.hpp" />
-    <ClInclude Include="nodegraph\NodeContact.hpp" />
     <ClInclude Include="nodegraph\NodeVoronoi.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolve.hpp" />
     <ClInclude Include="nodegraph\NodeHeatSolveParams.hpp" />
@@ -786,6 +775,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="nodegraph\NodeGraphTypes.hpp" />
     <ClInclude Include="nodegraph\NodeGraphValidator.hpp" />
     <ClInclude Include="voronoi\LloydCompute.hpp" />
+    <ClInclude Include="voronoi\VoronoiCandidate.hpp" />
     <ClInclude Include="voronoi\VoronoiCandidateCompute.hpp" />
     <ClInclude Include="cuda\CudaVulkanDevice.hpp" />
     <ClInclude Include="cuda\CudaCheck.cuh" />
@@ -801,6 +791,8 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="voronoi\cuda\KNNBatch.cuh" />
     <ClInclude Include="voronoi\cuda\KNNNeighbors.cuh" />
     <ClInclude Include="voronoi\cuda\KNNNeighborsKernels.cuh" />
+    <ClInclude Include="voronoi\cuda\GlobalSdf.cuh" />
+    <ClInclude Include="voronoi\cuda\GlobalCutCell.cuh" />
     <ClInclude Include="scene\InputController.hpp" />
     <ClInclude Include="mesh\\remesher\\iODT.hpp" />
     <ClInclude Include="libs\nanoflann\include\nanoflann.hpp" />
@@ -811,6 +803,7 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
     <ClInclude Include="renderers\IntrinsicRenderer.hpp" />
     <ClInclude Include="renderers\OutlineRenderer.hpp" />
     <ClInclude Include="spatial\VoxelGrid.hpp" />
+    <ClInclude Include="spatial\SdfUtils.hpp" />
     <ClInclude Include="renderers\WireframeRenderer.hpp" />
     <QtMoc Include="app\ViewportItem.hpp" />
     <ClInclude Include="app\ViewportMailbox.hpp" />
@@ -849,16 +842,10 @@ xcopy /y /d /e /i "$(ProjectDir)fonts" "$(OutDir)fonts"
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.3.targets" />
   </ImportGroup>
-  <Target Name="CopyAmgxRuntime" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
+  <Target Name="CopyCudaRuntime" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
     <ItemGroup>
-      <AmgxRuntime Include="$(ProjectDir)libs\amgx\build-ninja\amgxsh.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cudart64_12.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cublas64_12.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cublasLt64_12.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cusparse64_12.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cusolver64_11.dll" />
-      <AmgxRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvJitLink_120_0.dll" />
+      <CudaRuntime Include="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\cudart64_12.dll" />
     </ItemGroup>
-    <Copy SourceFiles="@(AmgxRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CudaRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

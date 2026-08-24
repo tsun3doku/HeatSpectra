@@ -1,7 +1,6 @@
 #include "VoronoiRuntime.hpp"
 
 #include "spatial/SpatialOrder.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 #include "voronoi/VoronoiPointRuntime.hpp"
 
 #include <iostream>
@@ -12,7 +11,13 @@ void VoronoiRuntime::invalidateMaterialization() {
     voxelGridBuilt = false;
     seedFlags.clear();
     seedPositions.clear();
-    meshTriangles.clear();
+    globalRemeshRuntimeModelIds.clear();
+    globalRemeshPositions.clear();
+    globalRemeshTriangleIndices.clear();
+    globalRemeshSurfacePositions.clear();
+    globalRemeshSurfaceTriangleIndices.clear();
+    globalSdfPadding = 0.0f;
+    isGlobal = false;
     nodeDomain = {};
 }
 
@@ -51,50 +56,6 @@ void VoronoiRuntime::reorderSeeds() {
         seedFlags = std::move(newFlags);
     }
 
-}
-
-void VoronoiRuntime::setMeshGeometry(
-    VulkanDevice& vulkanDevice,
-    MemoryAllocator& memoryAllocator,
-    CommandPool& renderCommandPool,
-    const std::vector<glm::vec3>& geometryPositions,
-    const std::vector<uint32_t>& geometryTriangleIndices,
-    const std::vector<voronoi::SurfaceVertex>& surfaceVertices,
-    const std::vector<uint32_t>& surfaceTriangleIndices,
-    uint32_t runtimeModelId,
-    const glm::mat4& meshModelMatrix) {
-    invalidateMaterialization();
-    resetDomainRuntime();
-
-    if (runtimeModelId == 0) {
-        return;
-    }
-
-    auto nextModelRuntime = std::make_unique<VoronoiModelRuntime>(
-        vulkanDevice,
-        memoryAllocator,
-        runtimeModelId,
-        meshModelMatrix,
-        geometryPositions,
-        geometryTriangleIndices,
-        surfaceVertices,
-        surfaceTriangleIndices,
-        renderCommandPool);
-    if (!nextModelRuntime->createVoronoiBuffers()) {
-        std::cerr << "[VoronoiRuntime] Failed to create Voronoi buffers for runtimeModelId="
-                  << runtimeModelId << std::endl;
-        nextModelRuntime->cleanup();
-        return;
-    }
-
-    if (!nextModelRuntime->createSurfaceBuffers()) {
-        std::cerr << "[VoronoiRuntime] Failed to create surface buffers for runtimeModelId="
-                  << runtimeModelId << std::endl;
-        nextModelRuntime->cleanup();
-        return;
-    }
-
-    domainRuntime = std::move(nextModelRuntime);
 }
 
 void VoronoiRuntime::setPointGeometry(
@@ -136,6 +97,24 @@ void VoronoiRuntime::setSeedPositions(
     seedPositions = positions;
     pointDomainCorners = domainCorners;
     seedFlags.assign(positions.size(), 0u);
+}
+
+void VoronoiRuntime::setGlobalGeometry(
+    const std::vector<uint32_t>& runtimeModelIds,
+    const std::vector<std::vector<glm::vec3>>& positions,
+    const std::vector<std::vector<uint32_t>>& triangleIndices,
+    const std::vector<std::vector<glm::vec3>>& surfacePositions,
+    const std::vector<std::vector<uint32_t>>& surfaceTriangleIndices,
+    float sdfPadding) {
+    globalRemeshRuntimeModelIds = runtimeModelIds;
+    globalRemeshPositions = positions;
+    globalRemeshTriangleIndices = triangleIndices;
+    globalRemeshSurfacePositions = surfacePositions;
+    globalRemeshSurfaceTriangleIndices = surfaceTriangleIndices;
+    globalSdfPadding = sdfPadding;
+    isGlobal = !runtimeModelIds.empty();
+    voronoiReady = false;
+    nodeDomain = {};
 }
 
 void VoronoiRuntime::clearGeometry() {

@@ -31,8 +31,6 @@ public:
     glm::ivec3 worldToVoxel(const glm::vec3& pos) const;
     glm::vec3 toCanonical(const glm::vec3& worldPos) const;
 
-    bool segmentStaysInside(const glm::vec3& a, const glm::vec3& b, int outsideCornerThreshold = 2) const;
-
     void exportOccupancyVisualization(const std::string& filename) const;
 
     // Getters

@@ -26,7 +26,6 @@ class OutlineRenderer;
 class VkFrameGraphRuntime;
 
 namespace render {
-class ContactOverlayRenderer;
 class HeatOverlayRenderer;
 class PointOverlayRenderer;
 class VoronoiOverlayRenderer;
@@ -64,7 +63,6 @@ public:
     void destroy() override;
 
     IntrinsicRenderer* getIntrinsicRenderer() const;
-    ContactOverlayRenderer* getContactOverlayRenderer() const;
     HeatOverlayRenderer* getHeatOverlayRenderer() const;
     PointOverlayRenderer* getPointOverlayRenderer() const;
     VoronoiOverlayRenderer* getVoronoiOverlayRenderer() const;
@@ -73,7 +71,6 @@ public:
     void setWorldUnit(units::LengthUnit unit);
 
 private:
-
     GeometryPass& geometryPass;
     HeatOverlayRenderer& heatOverlayRenderer;
     VoronoiOverlayRenderer& voronoiOverlayRenderer;
@@ -93,7 +90,6 @@ private:
     framegraph::ResourceId depthMsaaId{};
 
     std::unique_ptr<OutlineRenderer> outlineRenderer;
-    std::unique_ptr<ContactOverlayRenderer> contactOverlayRenderer;
     std::unique_ptr<PointOverlayRenderer> pointOverlayRenderer;
     std::unique_ptr<TimingRenderer> timingOverlay;
     std::unique_ptr<GridRenderer> gridRenderer;

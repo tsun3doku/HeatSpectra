@@ -7,6 +7,10 @@ ProductHandle RuntimeRemeshComputeTransport::apply(uint64_t socketKey, const Rem
     }
 
     const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.sourceModelProduct);
+    if (!modelProduct || modelProduct->runtimeModelId == 0) {
+        remove(socketKey);
+        return {};
+    }
 
     RemeshController::Config config{};
     config.pointPositions = package.sourceGeometry.pointPositions;
@@ -15,7 +19,7 @@ ProductHandle RuntimeRemeshComputeTransport::apply(uint64_t socketKey, const Rem
     config.minAngleDegrees = package.minAngleDegrees;
     config.maxEdgeLength = package.maxEdgeLength;
     config.stepSize = package.stepSize;
-    config.runtimeModelId = modelProduct ? modelProduct->runtimeModelId : 0;
+    config.runtimeModelId = modelProduct->runtimeModelId;
     config.computeHash = package.hashes.geometry;
 
     controller->apply(socketKey, config);

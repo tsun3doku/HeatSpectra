@@ -24,9 +24,6 @@ namespace {
 using namespace rvdDevice;
 
 constexpr uint32_t InvalidId = 0xffffffffu;
-constexpr uint32_t NodeGhost = 1u << 0u;
-constexpr uint32_t NodeSurface = 1u << 1u;
-constexpr uint32_t NodeTriangleOverflow = 1u << 2u;
 constexpr uint32_t ReferenceDiscardMask =
     rvdStatusBit(RVDStatus::RestrictedPending) |
     rvdStatusBit(RVDStatus::EmptyCell) |
@@ -236,12 +233,18 @@ __device__ bool writeIntegratedCell(uint32_t cellId,
         cell.fail(RVDStatus::NonFiniteGeometry);
         return false;
     }
+    const float volumeEpsilon = fmaxf(1e-20f, input.nominalCellSize * input.nominalCellSize *
+                                                    input.nominalCellSize * 1e-9f);
+    if (node.volume <= volumeEpsilon) {
+        cell.fail(RVDStatus::EmptyCell);
+        return false;
+    }
     output.nodes[cellId] = node;
     const float worldPatchArea = patchArea * inverseAreaScale;
     output.surfacePatchAreas[cellId] = worldPatchArea;
-    uint32_t flags = input.seedFlags[cellId] & ~(NodeSurface | NodeTriangleOverflow);
+    uint32_t flags = input.seedFlags[cellId] & ~(NodeFlags::Surface | NodeFlags::TriangleOverflow);
     const float surfaceEpsilon = fmaxf(1e-20f, input.nominalCellSize * input.nominalCellSize * 1e-8f);
-    if (worldPatchArea > surfaceEpsilon) flags |= NodeSurface;
+    if (worldPatchArea > surfaceEpsilon) flags |= NodeFlags::Surface;
     output.nodeFlags[cellId] = flags;
     output.statuses[cellId] = RVDStatus::Success;
     return true;
@@ -252,8 +255,8 @@ __device__ void processBaseCell(uint32_t cellId, const DeviceInput& input, Devic
                                 ConvexCell<RobustPredicate, FilterPredicate>& cell) {
     output.nodes[cellId] = {};
     output.surfacePatchAreas[cellId] = 0.0f;
-    output.nodeFlags[cellId] = input.seedFlags[cellId] & ~(NodeSurface | NodeTriangleOverflow);
-    if ((input.seedFlags[cellId] & NodeGhost) != 0u) {
+    output.nodeFlags[cellId] = input.seedFlags[cellId] & ~(NodeFlags::Surface | NodeFlags::TriangleOverflow);
+    if ((input.seedFlags[cellId] & NodeFlags::Ghost) != 0u) {
         output.statuses[cellId] = RVDStatus::Ghost;
         return;
     }
@@ -276,7 +279,7 @@ __device__ void processBaseCell(uint32_t cellId, const DeviceInput& input, Devic
     int3 voxelMinimum{}, voxelMaximum{};
     voxelBounds(input, minimum, maximum, voxelMinimum, voxelMaximum);
     if (emptyVoxelSpan(voxelMinimum, voxelMaximum)) {
-        output.nodeFlags[cellId] |= NodeGhost;
+        output.nodeFlags[cellId] |= NodeFlags::Ghost;
         output.statuses[cellId] = RVDStatus::Ghost;
         return;
     }
@@ -290,7 +293,7 @@ __device__ void processBaseCell(uint32_t cellId, const DeviceInput& input, Devic
         return;
     }
     if (input.occupancy[centerCorner] != 2u) {
-        output.nodeFlags[cellId] |= NodeGhost;
+        output.nodeFlags[cellId] |= NodeFlags::Ghost;
         output.statuses[cellId] = RVDStatus::Ghost;
         return;
     }
@@ -355,15 +358,15 @@ template <bool RobustPredicate, bool FilterPredicate>
 __device__ void processRestrictedCell(uint32_t cellId, const DeviceInput& input,
                                       uint32_t neighborRow,
                                       DeviceOutput output,
-                                      uint32_t candidateLimit,
-                                      ConvexCell<RobustPredicate, FilterPredicate>& cell) {
-    if ((input.seedFlags[cellId] & NodeGhost) != 0u) {
+                                       uint32_t candidateLimit,
+                                       ConvexCell<RobustPredicate, FilterPredicate>& cell) {
+    if ((input.seedFlags[cellId] & NodeFlags::Ghost) != 0u) {
         output.statuses[cellId] = RVDStatus::Ghost;
         return;
     }
     output.nodes[cellId] = {};
     output.surfacePatchAreas[cellId] = 0.0f;
-    output.nodeFlags[cellId] = input.seedFlags[cellId] & ~(NodeSurface | NodeTriangleOverflow);
+    output.nodeFlags[cellId] = input.seedFlags[cellId] & ~(NodeFlags::Surface | NodeFlags::TriangleOverflow);
 
     const bool builtUnrestricted = buildUnrestrictedCell(
         input, cellId, neighborRow, cell, candidateLimit);
@@ -385,7 +388,7 @@ __device__ void processRestrictedCell(uint32_t cellId, const DeviceInput& input,
     voxelBounds(input, minimum, maximum, voxelMinimum, voxelMaximum);
 
     if (emptyVoxelSpan(voxelMinimum, voxelMaximum)) {
-        output.nodeFlags[cellId] |= NodeGhost;
+        output.nodeFlags[cellId] |= NodeFlags::Ghost;
         output.statuses[cellId] = RVDStatus::Ghost;
         return;
     }
@@ -419,7 +422,7 @@ __device__ void processRestrictedCell(uint32_t cellId, const DeviceInput& input,
                     }
                     if (!duplicate) {
                         if (uniqueCount >= int(cell.triangleCapacity)) {
-                            output.nodeFlags[cellId] |= NodeTriangleOverflow;
+                            output.nodeFlags[cellId] |= NodeFlags::TriangleOverflow;
                             output.statuses[cellId] = RVDStatus::TriangleOverflow;
                             return;
                         }
@@ -969,19 +972,14 @@ public:
             std::cerr << "[RVD] result buffer download failed" << std::endl;
             return false;
         }
-        uint32_t emptyCellCount = 0;
         for (uint32_t cell = 0; cell < count; ++cell) {
             const RVDStatus status = downloadedStatuses[cell];
             if ((ReferenceDiscardMask & rvdStatusBit(status)) != 0u) {
                 result.nodes[cell] = {};
-                result.nodeFlags[cell] |= NodeGhost;
+                result.nodeFlags[cell] |= NodeFlags::Ghost;
                 result.surfacePatchAreas[cell] = 0.0f;
-                if (status == RVDStatus::EmptyCell) ++emptyCellCount;
                 continue;
             }
-        }
-        if (emptyCellCount != 0) {
-            std::cerr << "[RVD] discarded empty cells=" << emptyCellCount << std::endl;
         }
 
         if (!failedCellIds.empty()) {

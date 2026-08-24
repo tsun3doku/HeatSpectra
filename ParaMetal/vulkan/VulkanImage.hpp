@@ -1,19 +1,24 @@
 #pragma once
 
+#pragma once
+
 #include "VulkanDevice.hpp"
 #include "CommandBufferManager.hpp"
 #include "MemoryAllocator.hpp"
 #include <string>
 #include <vector>
 
-VkResult createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples, uint32_t mipLevels = 1);
+VkResult createImage(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, uint32_t mipLevels = 1);
+VkResult createImage3D(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 VkResult transitionImageLayout(CommandPool& commandPool, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1);
 VkResult generateImageMipmaps(const VulkanDevice& vulkanDevice, CommandPool& commandPool, VkImage image,
     VkFormat format, int32_t width, int32_t height, uint32_t mipLevels);
 
 VkResult createImageView(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView& outImageView, uint32_t mipLevels = 1);
 VkImageView createImageView(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels = 1);
+VkResult createImageView3D(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView& outImageView);
 VkImageCreateInfo createImageCreateInfo(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkSampleCountFlagBits samples, uint32_t mipLevels = 1);
 VkResult createShaderModule(const VulkanDevice& vulkanDevice, const std::vector<char>& code, VkShaderModule& outShaderModule);
 VkShaderModule createShaderModule(const VulkanDevice& vulkanDevice, const std::vector<char>& code);

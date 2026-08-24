@@ -31,7 +31,6 @@ private:
     bool applyPackage(uint64_t socketKey, const PointPackage& package);
     bool applyPackage(uint64_t socketKey, const RemeshPackage& package);
     bool applyPackage(uint64_t socketKey, const VoronoiPackage& package);
-    bool applyPackage(uint64_t socketKey, const ContactPackage& package);
     bool applyPackage(uint64_t socketKey, const HeatPackage& package);
     void removeStalePackages();
 

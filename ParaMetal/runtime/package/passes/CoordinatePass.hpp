@@ -11,7 +11,6 @@ public:
     void run(RemeshPackage& package, units::LengthUnit worldUnit) const;
     void run(PointPackage& package, units::LengthUnit worldUnit) const;
     void run(VoronoiPackage& package, units::LengthUnit worldUnit) const;
-    void run(ContactPackage& package, units::LengthUnit worldUnit) const;
     void run(HeatPackage& package, units::LengthUnit worldUnit) const;
     static void scalePositions(std::vector<float>& positions, float factor);
 

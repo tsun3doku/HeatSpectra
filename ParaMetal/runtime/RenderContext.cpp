@@ -5,7 +5,6 @@
 #include "app/ViewportTarget.hpp"
 #include "framegraph/FrameController.hpp"
 #include "framegraph/VkFrameGraphRuntime.hpp"
-#include "contact/ContactSystemComputeController.hpp"
 #include "heat/HeatSystem.hpp"
 #include "heat/HeatSystemComputeController.hpp"
 #include "voronoi/VoronoiSystemComputeController.hpp"
@@ -13,14 +12,12 @@
 #include "nodegraph/NodePayloadRegistry.hpp"
 #include "runtime/RuntimeProductManager.hpp"
 #include "runtime/ModelComputeController.hpp"
-#include "runtime/ContactDisplayController.hpp"
 #include "runtime/PointComputeRuntime.hpp"
 #include "runtime/PointDisplayController.hpp"
 #include "runtime/RemeshDisplayController.hpp"
 #include "runtime/RuntimePointComputeTransport.hpp"
 #include "runtime/RuntimePointDisplayTransport.hpp"
 #include "runtime/RemeshController.hpp"
-#include "runtime/RuntimeContactDisplayTransport.hpp"
 #include "runtime/RuntimeRemeshDisplayTransport.hpp"
 #include "runtime/RuntimeRemeshComputeTransport.hpp"
 #include "render/RenderConfig.hpp"
@@ -89,8 +86,6 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         return false;
     }
 
-    const VkRenderPass renderPass = renderRuntime->getFrameGraphRuntime().getRenderPass();
-
     payloadRegistryState = std::make_unique<NodePayloadRegistry>();
     runtimeModelComputeTransportState = std::make_unique<RuntimeModelComputeTransport>();
     runtimeModelDisplayTransportState = std::make_unique<RuntimeModelDisplayTransport>();
@@ -124,16 +119,6 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
         *modelRegistry,
         runtimeBusy);
     remeshDisplayControllerState = std::make_unique<RemeshDisplayController>();
-    contactDisplayControllerState = std::make_unique<ContactDisplayController>();
-    runtimeContactDisplayTransportState = std::make_unique<RuntimeContactDisplayTransport>();
-    runtimeContactComputeTransportState = std::make_unique<RuntimeContactComputeTransport>();
-    contactSystemComputeControllerState = std::make_unique<ContactSystemComputeController>(
-        core.device(),
-        *allocator,
-        *transferCommandPool);
-    runtimeContactComputeTransportState->setController(contactSystemComputeControllerState.get());
-    contactDisplayControllerState->setOverlayRenderer(renderRuntime->getSceneRenderer().getContactOverlayRenderer());
-    runtimeContactDisplayTransportState->setController(contactDisplayControllerState.get());
 
     voronoiDisplayControllerState = std::make_unique<VoronoiDisplayController>();
     runtimeVoronoiDisplayTransportState = std::make_unique<RuntimeVoronoiDisplayTransport>();
@@ -175,13 +160,11 @@ bool RenderContext::initialize(VulkanCoreContext& core, SceneContext& scene, Win
     runtimeConnections.pointComputeTransport = runtimePointComputeTransportState.get();
     runtimeConnections.remeshComputeTransport = runtimeRemeshTransportState.get();
     runtimeConnections.voronoiComputeTransport = runtimeVoronoiComputeTransportState.get();
-    runtimeConnections.contactComputeTransport = runtimeContactComputeTransportState.get();
     runtimeConnections.heatComputeTransport = runtimeHeatComputeTransportState.get();
     runtimeConnections.modelDisplayTransport = runtimeModelDisplayTransportState.get();
     runtimeConnections.pointDisplayTransport = runtimePointDisplayTransportState.get();
     runtimeConnections.remeshDisplayTransport = runtimeRemeshDisplayTransportState.get();
     runtimeConnections.voronoiDisplayTransport = runtimeVoronoiDisplayTransportState.get();
-    runtimeConnections.contactDisplayTransport = runtimeContactDisplayTransportState.get();
     runtimeConnections.heatDisplayTransport = runtimeHeatDisplayTransportState.get();
     nodeGraphControllerState = std::make_unique<NodeGraphController>(
         *payloadRegistryState, runtimeConnections, core.device(), *allocator);
@@ -249,15 +232,11 @@ void RenderContext::shutdown() {
     sceneControllerState.reset();
     runtimeModelDisplayTransportState.reset();
     runtimeRemeshDisplayTransportState.reset();
-    runtimeContactDisplayTransportState.reset();
     runtimeRemeshTransportState.reset();
     remeshControllerState.reset();
     remeshDisplayControllerState.reset();
-    contactDisplayControllerState.reset();
-    runtimeContactComputeTransportState.reset();
     runtimeHeatComputeTransportState.reset();
     runtimeHeatDisplayTransportState.reset();
-    contactSystemComputeControllerState.reset();
     runtimeVoronoiDisplayTransportState.reset();
     runtimeVoronoiComputeTransportState.reset();
     runtimeModelComputeTransportState.reset();
@@ -304,10 +283,6 @@ HeatSystemComputeController* RenderContext::heatSystemComputeController() {
 
 const HeatSystemComputeController* RenderContext::heatSystemComputeController() const {
     return heatSystemComputeControllerState.get();
-}
-
-ContactSystemComputeController* RenderContext::contactSystemComputeController() {
-    return contactSystemComputeControllerState.get();
 }
 
 ModelComputeController* RenderContext::modelComputeController() {

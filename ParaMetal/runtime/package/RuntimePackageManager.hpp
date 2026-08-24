@@ -16,7 +16,6 @@ public:
         collectKeys(pointPackages);
         collectKeys(remeshPackages);
         collectKeys(voronoiPackages);
-        collectKeys(contactPackages);
         collectKeys(heatPackages);
     }
 
@@ -57,7 +56,6 @@ public:
         setProductHandle(pointPackages, socketKey, handle);
         setProductHandle(remeshPackages, socketKey, handle);
         setProductHandle(voronoiPackages, socketKey, handle);
-        setProductHandle(contactPackages, socketKey, handle);
         setProductHandle(heatPackages, socketKey, handle);
     }
 
@@ -95,7 +93,6 @@ public:
     const std::unordered_map<uint64_t, PointPackage>& points() const { return pointPackages; }
     const std::unordered_map<uint64_t, RemeshPackage>& remeshes() const { return remeshPackages; }
     const std::unordered_map<uint64_t, VoronoiPackage>& voronois() const { return voronoiPackages; }
-    const std::unordered_map<uint64_t, ContactPackage>& contacts() const { return contactPackages; }
     const std::unordered_map<uint64_t, HeatPackage>& heatSystems() const { return heatPackages; }
     const std::unordered_set<uint64_t>& staleSocketKeys() const { return staleSockets; }
 
@@ -108,7 +105,6 @@ public:
         eraseStale(pointPackages);
         eraseStale(remeshPackages);
         eraseStale(voronoiPackages);
-        eraseStale(contactPackages);
         eraseStale(heatPackages);
         staleSockets.clear();
     }
@@ -120,7 +116,6 @@ private:
         else if constexpr (std::is_same_v<PackageT, PointPackage>) return pointPackages;
         else if constexpr (std::is_same_v<PackageT, RemeshPackage>) return remeshPackages;
         else if constexpr (std::is_same_v<PackageT, VoronoiPackage>) return voronoiPackages;
-        else if constexpr (std::is_same_v<PackageT, ContactPackage>) return contactPackages;
         else return heatPackages;
     }
 
@@ -130,7 +125,6 @@ private:
         else if constexpr (std::is_same_v<PackageT, PointPackage>) return pointPackages;
         else if constexpr (std::is_same_v<PackageT, RemeshPackage>) return remeshPackages;
         else if constexpr (std::is_same_v<PackageT, VoronoiPackage>) return voronoiPackages;
-        else if constexpr (std::is_same_v<PackageT, ContactPackage>) return contactPackages;
         else return heatPackages;
     }
 
@@ -166,7 +160,6 @@ private:
             pointPackages.find(socketKey) != pointPackages.end() ||
             remeshPackages.find(socketKey) != remeshPackages.end() ||
             voronoiPackages.find(socketKey) != voronoiPackages.end() ||
-            contactPackages.find(socketKey) != contactPackages.end() ||
             heatPackages.find(socketKey) != heatPackages.end();
     }
 
@@ -174,7 +167,6 @@ private:
     std::unordered_map<uint64_t, PointPackage> pointPackages;
     std::unordered_map<uint64_t, RemeshPackage> remeshPackages;
     std::unordered_map<uint64_t, VoronoiPackage> voronoiPackages;
-    std::unordered_map<uint64_t, ContactPackage> contactPackages;
     std::unordered_map<uint64_t, HeatPackage> heatPackages;
     std::unordered_set<uint64_t> staleSockets;
     std::unordered_set<uint64_t> retainedSockets;

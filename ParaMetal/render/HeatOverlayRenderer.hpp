@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderers/HeatContactLevelSetRenderer.hpp"
 #include "renderers/HeatSurfaceRenderer.hpp"
 #include "renderers/VectorArrowRenderer.hpp"
 #include "runtime/HeatDisplayController.hpp"
@@ -44,9 +45,11 @@ private:
     MemoryAllocator& memoryAllocator;
     std::unique_ptr<HeatSurfaceRenderer> surfaceRenderer;
     std::unique_ptr<VectorArrowRenderer> vectorArrowRenderer;
+    std::unique_ptr<HeatContactLevelSetRenderer> contactLevelSetRenderer;
     std::unordered_map<uint64_t, HeatDisplayController::Config> configsBySocket;
     std::vector<HeatSurfaceRenderer::SurfaceRenderBinding> surfaceBindings;
     std::vector<VectorArrowRenderer::VectorRenderBinding> fluxVectorBindings;
+    std::vector<HeatContactLevelSetRenderer::RenderBinding> contactLevelSetBindings;
     uint32_t maxFramesInFlight = 0;
     bool surfaceInitialized = false;
     bool overlayInitialized = false;

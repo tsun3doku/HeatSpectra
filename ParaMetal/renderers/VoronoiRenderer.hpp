@@ -12,7 +12,7 @@ class MemoryAllocator;
 
 class VoronoiRenderer {
 public:
-    struct VoronoiRenderBinding {
+    struct RenderBinding {
         uint64_t bindingKey = 0;
         uint32_t runtimeModelId = 0;
         uint32_t vertexCount = 0;
@@ -45,7 +45,7 @@ public:
     ~VoronoiRenderer();
 
     void initialize(VkRenderPass renderPass, uint32_t subpass, uint32_t maxFramesInFlight);
-    void render(VkCommandBuffer cmd, uint32_t frameIndex, const std::vector<VoronoiRenderBinding>& bindings);
+    void render(VkCommandBuffer cmd, uint32_t frameIndex, const std::vector<RenderBinding>& bindings);
     void cleanup();
 
 private:
@@ -65,8 +65,8 @@ private:
     bool createPipeline(VkRenderPass renderPass, uint32_t subpass);
     
     VkDescriptorSet allocateDescriptorSet(VkDescriptorPool pool);
-    void updateDescriptorSet(VkDescriptorSet set, uint32_t frameIndex, const VoronoiRenderBinding& binding);
-    void drawBinding(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const VoronoiRenderBinding& binding) const;
+    void updateDescriptorSet(VkDescriptorSet set, uint32_t frameIndex, const RenderBinding& binding);
+    void drawBinding(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const RenderBinding& binding) const;
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& allocator;

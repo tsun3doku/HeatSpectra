@@ -22,12 +22,15 @@ public:
 
     VkBuffer getBuffer() const { return buffer; }
     VkDeviceMemory getMemory() const { return memory; }
-    VkDeviceSize getSize() const { return size; }
+    VkDeviceSize getSize() const { return bufferSize; }
+    VkDeviceSize getBufferSize() const { return bufferSize; }
+    VkDeviceSize getAllocationSize() const { return allocationSize; }
     bool isValid() const { return buffer != VK_NULL_HANDLE && memory != VK_NULL_HANDLE; }
 
 private:
     VkDevice device = VK_NULL_HANDLE;
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkDeviceSize size = 0;
+    VkDeviceSize bufferSize = 0;
+    VkDeviceSize allocationSize = 0;
 };

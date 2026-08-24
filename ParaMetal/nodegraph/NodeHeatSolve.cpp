@@ -8,7 +8,6 @@
 #include "heat/HeatGpuStructs.hpp"
 #include "NodeHeatSolveParams.hpp"
 #include "nodegraph/NodePayloadRegistry.hpp"
-#include "domain/ContactData.hpp"
 #include "domain/HeatModelData.hpp"
 #include "domain/VoronoiData.hpp"
 
@@ -20,13 +19,13 @@ const char* NodeHeatSolve::typeId() const {
 }
 
 void NodeHeatSolve::execute(NodeKernelEval& eval) const {
+    NodeDataHandle domainVoronoiHandle;
     std::vector<NodeDataHandle> heatModelHandles;
-    std::vector<NodeDataHandle> voronoiHandles;
-    std::vector<NodeDataHandle> contactHandles;
+    uint32_t activeVoronoiCount = 0;
+    uint32_t activeGlobalVoronoiCount = 0;
     const HeatSolveNodeParams params = readHeatSolveNodeParams(eval.node);
 
-    const NodeGraphNodeId activeNodeId =
-        selectHeatSolveNode(eval.runtime.graph);
+    const NodeGraphNodeId activeNodeId = selectHeatSolveNode(eval.runtime.graph);
     NodePayloadRegistry* const payloadRegistry = eval.runtime.payloadRegistry;
 
     const std::size_t voronoiSocketIndex = inputIndexOf(eval.node, NodeGraphValueType::Volume);
@@ -37,46 +36,38 @@ void NodeHeatSolve::execute(NodeKernelEval& eval) const {
             }
             const VoronoiData* voronoi = payloadRegistry->get<VoronoiData>(block->payloadHandle);
             if (voronoi && voronoi->active) {
-                voronoiHandles.push_back(block->payloadHandle);
+                ++activeVoronoiCount;
+                if (voronoi->domainType == DomainType::Global) {
+                    ++activeGlobalVoronoiCount;
+                    if (domainVoronoiHandle.key == 0) {
+                        domainVoronoiHandle = block->payloadHandle;
+                    }
+                }
             }
         }
     }
 
-    const std::size_t fieldSocketIndex = inputIndexOf(eval.node, NodeGraphValueType::Field);
-    if (fieldSocketIndex < eval.inputs.size()) {
-        for (const NodeDataBlock* block : eval.inputs[fieldSocketIndex]) {
-            if (!block || block->dataType != payloadtypes::Contact || block->payloadHandle.key == 0) {
+    const std::size_t heatModelSocketIndex = inputIndexOf(eval.node, NodeGraphValueType::HeatModel);
+    if (heatModelSocketIndex < eval.inputs.size()) {
+        for (const NodeDataBlock* block : eval.inputs[heatModelSocketIndex]) {
+            if (!block || block->dataType != payloadtypes::HeatModel || block->payloadHandle.key == 0) {
                 continue;
             }
-            const ContactData* contact = payloadRegistry->get<ContactData>(block->payloadHandle);
-            if (contact && contact->active && contact->pair.hasValidContact) {
-                contactHandles.push_back(block->payloadHandle);
-            }
-        }
-    }
-
-    if (!voronoiHandles.empty() && !contactHandles.empty()) {
-        const std::size_t heatModelSocketIndex = inputIndexOf(eval.node, NodeGraphValueType::HeatModel);
-        if (heatModelSocketIndex < eval.inputs.size()) {
-            for (const NodeDataBlock* block : eval.inputs[heatModelSocketIndex]) {
-                if (!block || block->dataType != payloadtypes::HeatModel || block->payloadHandle.key == 0) {
-                    continue;
-                }
-                const HeatModelData* heatModel = payloadRegistry->get<HeatModelData>(block->payloadHandle);
-                if (heatModel && heatModel->meshHandle.key != 0) {
-                    heatModelHandles.push_back(block->payloadHandle);
-                }
+            const HeatModelData* heatModel = payloadRegistry->get<HeatModelData>(block->payloadHandle);
+            if (heatModel && heatModel->meshHandle.key != 0) {
+                heatModelHandles.push_back(block->payloadHandle);
             }
         }
     }
 
     const bool active = activeNodeId.isValid() && activeNodeId == eval.node.id;
-    const bool hasValidInputs = !voronoiHandles.empty() && !contactHandles.empty();
+    const bool hasValidInputs = domainVoronoiHandle.key != 0 && !heatModelHandles.empty();
 
     HeatData heatData{};
-    heatData.voronoiHandles = voronoiHandles;
-    heatData.contactHandles = contactHandles;
+    heatData.domainVoronoiHandle = domainVoronoiHandle;
     heatData.heatModelHandles = heatModelHandles;
+    heatData.activeVoronoiCount = activeVoronoiCount;
+    heatData.activeGlobalVoronoiCount = activeGlobalVoronoiCount;
     heatData.contactThermalConductance = static_cast<float>(params.contactThermalConductance);
     heatData.simulationDuration = static_cast<float>(params.simulationDuration);
     heatData.active = hasValidInputs && active;
@@ -99,12 +90,10 @@ void NodeHeatSolve::execute(NodeKernelEval& eval) const {
 }
 
 HashValues NodeHeatSolve::computeOutputHashes(const NodeKernelHash& hash) const {
-    const NodeGraphNodeId activeNodeId =
-        selectHeatSolveNode(hash.runtime.graph);
+    const NodeGraphNodeId activeNodeId = selectHeatSolveNode(hash.runtime.graph);
     uint64_t simulationHash = HashBuilder::start();
     HashBuilder::combineString(simulationHash, nodegraphtypes::HeatSolve);
-    HashNodeCache::combineSocketList(simulationHash, hash, NodeGraphValueType::Volume, HashDomain::Simulation);
-    HashNodeCache::combineSocketList(simulationHash, hash, NodeGraphValueType::Field, HashDomain::Simulation);
+    HashNodeCache::combineSocket(simulationHash, hash, NodeGraphValueType::Volume, HashDomain::Simulation);
     HashNodeCache::combineOptionalSocketList(simulationHash, hash, NodeGraphValueType::HeatModel, HashDomain::Simulation);
 
     const HeatSolveNodeParams params = readHeatSolveNodeParams(hash.node);

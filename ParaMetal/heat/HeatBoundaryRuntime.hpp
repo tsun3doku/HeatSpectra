@@ -27,8 +27,8 @@ public:
         uint32_t nodeCount,
         uint32_t surfacePointCount,
         const std::vector<uint32_t>& surfaceNodeIds,
-        const std::vector<float>& surfacePatchAreas);
-    bool resolveContactAreas(const std::vector<float>& coveredAreas);
+        const std::vector<float>& surfaceBoundaryAreas);
+    bool buildBoundaryBuffers();
     bool createBuffers(VulkanDevice& device, MemoryAllocator& allocator, CommandPool& commandPool);
     bool setDirichletTemperatureC(uint32_t regionId, float temperatureC);
     bool setNeumannHeatFlux(uint32_t regionId, float heatFlux);
@@ -47,9 +47,14 @@ public:
     VkDeviceSize getStateBufferOffset() const { return stateBufferOffset; }
     const std::vector<uint32_t>& getDirichletNodeIds() const { return dirichletNodeIds; }
     const std::vector<uint32_t>& getSurfaceNodeIds() const { return surfaceNodeIds; }
-    const std::vector<float>& getSurfacePatchAreas() const { return surfacePatchAreas; }
+    // legacy name: patch areas computed from clipped Voronoi surface geometry (mesh mode);
+    // the global path feeds raw fragment surfaceBoundaryAreas from the cut-cell build.
+    const std::vector<float>& getSurfaceBoundaryAreas() const { return surfaceBoundaryAreas; }
     uint32_t getDirichletRegionId(uint32_t nodeId) const;
     bool getRegionTemperatureC(uint32_t regionId, float& temperatureC) const;
+    bool getRegionAmbientTemperatureC(uint32_t regionId, float& temperatureC) const;
+    bool getRegionHeatFlux(uint32_t regionId, float& heatFlux) const;
+    bool getRegionHeatTransferCoefficient(uint32_t regionId, float& coefficient) const;
     bool hasDirichletTemperature() const { return !dirichletNodeIds.empty(); }
 
 private:
@@ -66,7 +71,7 @@ private:
     std::unordered_map<uint32_t, uint32_t> stateIndexByRegionId;
     std::vector<heat::BoundaryState> states;
     std::vector<uint32_t> surfaceNodeIds;
-    std::vector<float> surfacePatchAreas;
+    std::vector<float> surfaceBoundaryAreas;
     std::vector<uint8_t> surfaceNodeMask;
     std::vector<std::vector<uint32_t>> dirichletStateIndicesByNode;
     std::vector<std::vector<uint32_t>> dirichletStateIndicesBySurfacePoint;

@@ -5,16 +5,12 @@
 
 #include "app/AppTypes.hpp"
 #include "framegraph/FrameSync.hpp"
-#include "contact/ContactSystemComputeController.hpp"
 #include "runtime/RemeshController.hpp"
 #include "runtime/ModelComputeController.hpp"
 #include "runtime/ModelDisplayController.hpp"
 #include "runtime/PointComputeRuntime.hpp"
 #include "runtime/PointDisplayController.hpp"
 #include "runtime/RemeshDisplayController.hpp"
-#include "runtime/ContactDisplayController.hpp"
-#include "runtime/RuntimeContactComputeTransport.hpp"
-#include "runtime/RuntimeContactDisplayTransport.hpp"
 #include "runtime/HeatDisplayController.hpp"
 #include "runtime/RuntimeHeatComputeTransport.hpp"
 #include "runtime/RuntimeHeatDisplayTransport.hpp"
@@ -62,7 +58,6 @@ public:
     const RenderRuntime* runtime() const;
     HeatSystemComputeController* heatSystemComputeController();
     const HeatSystemComputeController* heatSystemComputeController() const;
-    ContactSystemComputeController* contactSystemComputeController();
     ModelComputeController* modelComputeController();
     const ModelComputeController* modelComputeController() const;
     SceneController* sceneController();
@@ -76,8 +71,6 @@ private:
     ViewportTarget viewportTarget;
     std::unique_ptr<RenderRuntime> renderRuntime;
     FrameSync frameSync;
-    std::unique_ptr<RuntimeContactComputeTransport> runtimeContactComputeTransportState;
-    std::unique_ptr<RuntimeContactDisplayTransport> runtimeContactDisplayTransportState;
     std::unique_ptr<RuntimeHeatComputeTransport> runtimeHeatComputeTransportState;
     std::unique_ptr<RuntimeHeatDisplayTransport> runtimeHeatDisplayTransportState;
     std::unique_ptr<RuntimeModelComputeTransport> runtimeModelComputeTransportState;
@@ -94,12 +87,10 @@ private:
     std::unique_ptr<PointDisplayController> pointDisplayControllerState;
     std::unique_ptr<RemeshController> remeshControllerState;
     std::unique_ptr<RemeshDisplayController> remeshDisplayControllerState;
-    std::unique_ptr<ContactDisplayController> contactDisplayControllerState;
     std::unique_ptr<HeatDisplayController> heatDisplayControllerState;
     std::unique_ptr<VoronoiDisplayController> voronoiDisplayControllerState;
     std::unique_ptr<VoronoiSystemComputeController> voronoiSystemComputeControllerState;
     std::unique_ptr<HeatSystemComputeController> heatSystemComputeControllerState;
-    std::unique_ptr<ContactSystemComputeController> contactSystemComputeControllerState;
     std::unique_ptr<SceneController> sceneControllerState;
     std::unique_ptr<InputController> inputControllerState;
     std::unique_ptr<NodeGraphController> nodeGraphControllerState;

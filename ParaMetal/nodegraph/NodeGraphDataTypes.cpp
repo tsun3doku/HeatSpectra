@@ -88,21 +88,11 @@ void populateMetadata(NodeDataBlock& dataBlock, const NodeGraphTypeRegistry* typ
         dataBlock.metadata.erase("heat.model_count");
     }
 
-    if (dataBlock.dataType == payloadtypes::Contact) {
-        const ContactData* contactData = registry ? registry->get<ContactData>(dataBlock.payloadHandle) : nullptr;
-        dataBlock.metadata["contact.active"] = (contactData && contactData->active) ? "true" : "false";
-        dataBlock.metadata["contact.binding_count"] =
-            std::to_string((contactData && contactData->pair.hasValidContact) ? 1u : 0u);
-    } else {
-        dataBlock.metadata.erase("contact.active");
-        dataBlock.metadata.erase("contact.binding_count");
-    }
-
     if (dataBlock.dataType == payloadtypes::Voronoi) {
         const VoronoiData* voronoiData = registry ? registry->get<VoronoiData>(dataBlock.payloadHandle) : nullptr;
         dataBlock.metadata["voronoi.active"] = (voronoiData && voronoiData->active) ? "true" : "false";
         dataBlock.metadata["voronoi.model_count"] =
-            std::to_string((voronoiData && voronoiData->modelMeshHandle.key != 0) ? 1u : 0u);
+            std::to_string(voronoiData ? voronoiData->modelMeshHandles.size() : 0u);
         dataBlock.metadata["voronoi.cell_size"] =
             voronoiData ? std::to_string(voronoiData->cellSize) : std::string();
         dataBlock.metadata["voronoi.voxel_resolution"] =

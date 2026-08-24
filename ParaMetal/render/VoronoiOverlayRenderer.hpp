@@ -35,7 +35,7 @@ private:
     std::unique_ptr<VoronoiRenderer> voronoiRenderer;
     std::unique_ptr<PointRenderer> pointRenderer;
     std::unordered_map<uint64_t, VoronoiDisplayController::Config> configsBySocket;
-    std::vector<VoronoiRenderer::VoronoiRenderBinding> voronoiBindings;
+    std::vector<VoronoiRenderer::RenderBinding> voronoiBindings;
     uint32_t maxFramesInFlight = 0;
     bool surfaceInitialized = false;
     bool overlayInitialized = false;

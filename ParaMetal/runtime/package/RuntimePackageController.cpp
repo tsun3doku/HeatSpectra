@@ -1,8 +1,6 @@
 #include "RuntimePackageController.hpp"
 
 #include "nodegraph/NodeGraphState.hpp"
-#include "runtime/RuntimeContactComputeTransport.hpp"
-#include "runtime/RuntimeContactDisplayTransport.hpp"
 #include "runtime/RuntimeHeatComputeTransport.hpp"
 #include "runtime/RuntimeHeatDisplayTransport.hpp"
 #include "runtime/RuntimeModelComputeTransport.hpp"
@@ -26,13 +24,11 @@ RuntimePackageController::RuntimePackageController(
     if (connections.pointComputeTransport) connections.pointComputeTransport->setProducts(products);
     if (connections.remeshComputeTransport) connections.remeshComputeTransport->setProducts(products);
     if (connections.voronoiComputeTransport) connections.voronoiComputeTransport->setProducts(products);
-    if (connections.contactComputeTransport) connections.contactComputeTransport->setProducts(products);
     if (connections.heatComputeTransport) connections.heatComputeTransport->setProducts(products);
     if (connections.modelDisplayTransport) connections.modelDisplayTransport->setProducts(products);
     if (connections.pointDisplayTransport) connections.pointDisplayTransport->setProducts(products);
     if (connections.remeshDisplayTransport) connections.remeshDisplayTransport->setProducts(products);
     if (connections.voronoiDisplayTransport) connections.voronoiDisplayTransport->setProducts(products);
-    if (connections.contactDisplayTransport) connections.contactDisplayTransport->setProducts(products);
     if (connections.heatDisplayTransport) connections.heatDisplayTransport->setProducts(products);
 }
 
@@ -57,10 +53,6 @@ bool RuntimePackageController::applyNode(const NodeGraphNode& node) {
             continue;
         }
         if (const VoronoiPackage* package = packageManager.find<VoronoiPackage>(socketKey)) {
-            if (!applyPackage(socketKey, *package)) return false;
-            continue;
-        }
-        if (const ContactPackage* package = packageManager.find<ContactPackage>(socketKey)) {
             if (!applyPackage(socketKey, *package)) return false;
             continue;
         }
@@ -103,14 +95,6 @@ bool RuntimePackageController::applyPackage(uint64_t socketKey, const VoronoiPac
     return true;
 }
 
-bool RuntimePackageController::applyPackage(uint64_t socketKey, const ContactPackage& package) {
-    if (!connections.contactComputeTransport) return true;
-    const ProductHandle handle = connections.contactComputeTransport->apply(socketKey, package);
-    if (!handle.isValid()) return false;
-    packageManager.setProductHandle(socketKey, handle);
-    return true;
-}
-
 bool RuntimePackageController::applyPackage(uint64_t socketKey, const HeatPackage& package) {
     if (!connections.heatComputeTransport) return true;
     const ProductHandle handle = connections.heatComputeTransport->apply(socketKey, package);
@@ -133,8 +117,6 @@ void RuntimePackageController::removeStalePackages() {
             connections.remeshComputeTransport->remove(key);
         } else if (connections.voronoiComputeTransport && packageManager.findStored<VoronoiPackage>(key)) {
             connections.voronoiComputeTransport->remove(key);
-        } else if (connections.contactComputeTransport && packageManager.findStored<ContactPackage>(key)) {
-            connections.contactComputeTransport->remove(key);
         } else if (connections.heatComputeTransport && packageManager.findStored<HeatPackage>(key)) {
             connections.heatComputeTransport->remove(key);
         }

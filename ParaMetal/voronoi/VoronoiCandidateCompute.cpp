@@ -1,4 +1,5 @@
 #include "VoronoiCandidateCompute.hpp"
+#include "VoronoiGpuStructs.hpp"
 
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/CommandBufferManager.hpp"
@@ -9,12 +10,8 @@
 #include <iostream>
 #include <vector>
 
-struct CandidatePushConstants {
-    uint32_t faceCount;
-    uint32_t seedCount;
-    uint32_t _pad0;
-    uint32_t _pad1;
-};
+using voronoi::CandidatePushConstants;
+
 
 VoronoiCandidateCompute::VoronoiCandidateCompute(VulkanDevice& device, CommandPool& cmdPool)
     : vulkanDevice(device), commandPool(cmdPool) {
@@ -40,18 +37,21 @@ void VoronoiCandidateCompute::initialize() {
     initialized = true;
 }
 
-void VoronoiCandidateCompute::updateDescriptors(const Bindings& bindings) {
-    currentBindings = bindings;
+void VoronoiCandidateCompute::updateDescriptors(
+    VkBuffer vertexBuffer, VkDeviceSize vertexBufferOffset,
+    VkBuffer faceIndexBuffer, VkDeviceSize faceIndexBufferOffset,
+    VkBuffer seedPositionBuffer, VkDeviceSize seedPositionBufferOffset,
+    VkBuffer candidateBuffer, VkDeviceSize candidateBufferOffset) {
     if (!initialized || descriptorSet == VK_NULL_HANDLE) {
         return;
     }
 
     std::array<VkWriteDescriptorSet, 4> writes{};
     std::array<VkDescriptorBufferInfo, 4> infos = {
-        VkDescriptorBufferInfo{currentBindings.vertexBuffer, currentBindings.vertexBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.faceIndexBuffer, currentBindings.faceIndexBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.seedPositionBuffer, currentBindings.seedPositionBufferOffset, VK_WHOLE_SIZE},
-        VkDescriptorBufferInfo{currentBindings.candidateBuffer, currentBindings.candidateBufferOffset, VK_WHOLE_SIZE},
+        VkDescriptorBufferInfo{vertexBuffer, vertexBufferOffset, VK_WHOLE_SIZE},
+        VkDescriptorBufferInfo{faceIndexBuffer, faceIndexBufferOffset, VK_WHOLE_SIZE},
+        VkDescriptorBufferInfo{seedPositionBuffer, seedPositionBufferOffset, VK_WHOLE_SIZE},
+        VkDescriptorBufferInfo{candidateBuffer, candidateBufferOffset, VK_WHOLE_SIZE},
     };
 
     for (uint32_t i = 0; i < writes.size(); ++i) {

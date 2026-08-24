@@ -73,6 +73,9 @@ void main(uint3 dtid : SV_DispatchThreadID)
     GMLSSurfaceStencil stencil = gmlsSurfaceStencilBuffer[vertexID];
     if (stencil.valueWeightCount == 0u)
     {
+        SurfacePoint p = surfaceBuffer[vertexID];
+        p.temperatureC = -1.0e30f;
+        surfaceBuffer[vertexID] = p;
         return;
     }
 
@@ -83,7 +86,13 @@ void main(uint3 dtid : SV_DispatchThreadID)
         weightSum += weight.weight;
     }
 
-    if (abs(weightSum) <= 1e-8f) return;
+    if (abs(weightSum) <= 1e-8f)
+    {
+        SurfacePoint p = surfaceBuffer[vertexID];
+        p.temperatureC = -1.0e30f;
+        surfaceBuffer[vertexID] = p;
+        return;
+    }
 
     float temperatureC = weightedTemperature / weightSum;
     uint boundaryIndex = surfaceBoundaryIndexBuffer[vertexID];

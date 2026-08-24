@@ -21,7 +21,7 @@ bool VulkanExternalBuffer::initialize(
     if (requestedSize == 0) return false;
 
     device = vulkanDevice.getDevice();
-    size = requestedSize;
+    bufferSize = requestedSize;
 
     VkExternalMemoryBufferCreateInfo externalInfo{};
     externalInfo.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
@@ -30,7 +30,7 @@ bool VulkanExternalBuffer::initialize(
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.pNext = &externalInfo;
-    bufferInfo.size = size;
+    bufferInfo.size = bufferSize;
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
@@ -40,6 +40,7 @@ bool VulkanExternalBuffer::initialize(
 
     VkMemoryRequirements requirements{};
     vkGetBufferMemoryRequirements(device, buffer, &requirements);
+    allocationSize = requirements.size;
 
     VkExportMemoryAllocateInfo exportInfo{};
     exportInfo.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
@@ -48,7 +49,7 @@ bool VulkanExternalBuffer::initialize(
     VkMemoryAllocateInfo allocationInfo{};
     allocationInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocationInfo.pNext = &exportInfo;
-    allocationInfo.allocationSize = requirements.size;
+    allocationInfo.allocationSize = allocationSize;
     allocationInfo.memoryTypeIndex = vulkanDevice.findMemoryType(
         requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     if (vkAllocateMemory(device, &allocationInfo, nullptr, &memory) != VK_SUCCESS ||
@@ -70,7 +71,8 @@ void VulkanExternalBuffer::cleanup() {
     buffer = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
     device = VK_NULL_HANDLE;
-    size = 0;
+    bufferSize = 0;
+    allocationSize = 0;
 }
 
 void* VulkanExternalBuffer::exportWin32Handle() const {

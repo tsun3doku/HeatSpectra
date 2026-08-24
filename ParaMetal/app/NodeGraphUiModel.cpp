@@ -105,7 +105,6 @@ QString NodeGraphUiModel::selectedNodeDescription() const {
     if (selectedType == QStringLiteral("group")) return QStringLiteral("Target source groups and write grouped mesh selections");
     if (selectedType == QStringLiteral("remesh")) return QStringLiteral("Intrinsically remesh an underlying 3D model while preserving its shape");
     if (selectedType == QStringLiteral("voronoi")) return QStringLiteral("Generate a volumetric Voronoi domain");
-    if (selectedType == QStringLiteral("contact")) return QStringLiteral("Assign a contact pairing between 3D models");
     if (selectedType == QStringLiteral("heat_model")) return QStringLiteral("Assign thermal properties and boundary conditions to a 3D model");
     if (selectedType == QStringLiteral("heat_solve")) return QStringLiteral("Simulate the transient transfer of heat between 3D geometry");
     if (selectedType == QStringLiteral("serial_temperature")) return QStringLiteral("Read a live Celsius value from a serial temperature sensor");

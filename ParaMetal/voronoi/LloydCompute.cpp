@@ -1,4 +1,5 @@
 #include "LloydCompute.hpp"
+#include "VoronoiGpuStructs.hpp"
 
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/MemoryAllocator.hpp"
@@ -11,12 +12,7 @@
 #include <cstring>
 #include <iostream>
 
-struct LloydParamsCPU {
-    uint32_t nodeCount;
-    float alpha;
-    float maxStep;
-    float pad0;
-};
+using voronoi::LloydParams;
 
 LloydCompute::LloydCompute(VulkanDevice& device, MemoryAllocator& allocator, CommandPool& cmdPool)
     : vulkanDevice(device), memoryAllocator(allocator), commandPool(cmdPool) {
@@ -68,7 +64,7 @@ void LloydCompute::updateDescriptors(const Bindings& bindings) {
         VkDescriptorBufferInfo{currentBindings.nodeFlagsBuffer, currentBindings.nodeFlagsBufferOffset, VK_WHOLE_SIZE},
         VkDescriptorBufferInfo{lloydAccumBuffer, lloydAccumBufferOffset, VK_WHOLE_SIZE},
         VkDescriptorBufferInfo{currentBindings.voxelGridParamsBuffer, currentBindings.voxelGridParamsBufferOffset, voxelParamsRange},
-        VkDescriptorBufferInfo{lloydParamsBuffer, lloydParamsBufferOffset, sizeof(LloydParamsCPU)},
+        VkDescriptorBufferInfo{lloydParamsBuffer, lloydParamsBufferOffset, sizeof(LloydParams)},
     };
 
     std::array<VkWriteDescriptorSet, 9> writes{};
@@ -90,8 +86,8 @@ void LloydCompute::dispatch(int numIterations, float alpha, float maxStep) {
         return;
 
     if (mappedLloydParamsData) {
-        LloydParamsCPU p{ nodeCount, alpha, maxStep, 0.0f };
-        std::memcpy(mappedLloydParamsData, &p, sizeof(LloydParamsCPU));
+        LloydParams p{ nodeCount, alpha, maxStep, 0.0f };
+        std::memcpy(mappedLloydParamsData, &p, sizeof(LloydParams));
     }
 
     VkCommandBuffer cmd = commandPool.beginCommands();
@@ -190,7 +186,7 @@ void LloydCompute::createBuffers(uint32_t newNodeCount) {
     createStorageBuffer(memoryAllocator, vulkanDevice, nullptr, accumSize, lloydAccumBuffer, lloydAccumBufferOffset, &mappedLloydAccumData);
 
     if (lloydParamsBuffer == VK_NULL_HANDLE) {
-        VkDeviceSize paramsSize = sizeof(LloydParamsCPU);
+        VkDeviceSize paramsSize = sizeof(LloydParams);
         createUniformBuffer(memoryAllocator, vulkanDevice, paramsSize, lloydParamsBuffer, lloydParamsBufferOffset, &mappedLloydParamsData);
         if (mappedLloydParamsData)
             std::memset(mappedLloydParamsData, 0, static_cast<size_t>(paramsSize));

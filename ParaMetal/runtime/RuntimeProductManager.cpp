@@ -15,7 +15,7 @@ RuntimeProductManager::RuntimeProductManager(VulkanDevice& vulkanDevice, MemoryA
 
 RuntimeProductManager::~RuntimeProductManager() {
     assert(modelProducts.empty() && remeshProducts.empty() && voronoiProducts.empty() &&
-           pointProducts.empty() && contactProducts.empty() && heatProducts.empty());
+           pointProducts.empty() && heatProducts.empty());
 }
 
 void RuntimeProductManager::destroyAll() {
@@ -25,7 +25,6 @@ void RuntimeProductManager::destroyAll() {
     destroyAllProducts(remeshProducts);
     destroyAllProducts(voronoiProducts);
     destroyAllProducts(pointProducts);
-    destroyAllProducts(contactProducts);
     destroyAllProducts(heatProducts);
 }
 
@@ -63,6 +62,11 @@ void RuntimeProductManager::destroy(RemeshProduct& product) {
 }
 
 void RuntimeProductManager::destroy(VoronoiProduct& product) {
+    for (size_t i = 0; i < product.globalDisplayRuntimeModelIds.size(); ++i) {
+        freeBuffer(memoryAllocator, product.globalDisplayVertexBuffers[i], product.globalDisplayVertexBufferOffsets[i]);
+        freeBuffer(memoryAllocator, product.globalDisplayFaceIndexBuffers[i], product.globalDisplayFaceIndexBufferOffsets[i]);
+        freeBuffer(memoryAllocator, product.globalDisplayCandidateBuffers[i], product.globalDisplayCandidateBufferOffsets[i]);
+    }
     freeBuffer(memoryAllocator, product.candidateNodeBuffer, product.candidateNodeBufferOffset);
     freeBuffer(memoryAllocator, product.candidateNeighborIndicesBuffer, product.candidateNeighborIndicesBufferOffset);
     freeBuffer(memoryAllocator, product.nodeBuffer, product.nodeBufferOffset);
@@ -73,11 +77,7 @@ void RuntimeProductManager::destroy(VoronoiProduct& product) {
     freeBuffer(memoryAllocator, product.gmlsSurfaceStencilBuffer, product.gmlsSurfaceStencilBufferOffset);
     freeBuffer(memoryAllocator, product.gmlsSurfaceWeightBuffer, product.gmlsSurfaceWeightBufferOffset);
     freeBuffer(memoryAllocator, product.gmlsSurfaceGradientWeightBuffer, product.gmlsSurfaceGradientWeightBufferOffset);
-    product = {};
-}
 
-void RuntimeProductManager::destroy(ContactProduct& product) {
-    freeBuffer(memoryAllocator, product.contactPairBuffer, product.contactPairBufferOffset);
     product = {};
 }
 

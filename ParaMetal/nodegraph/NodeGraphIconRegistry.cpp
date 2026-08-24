@@ -5,7 +5,6 @@
 #include <QString>
 
 const char* NodeGraphIconRegistry::iconFolderForType(const NodeTypeId& typeId) {
-    if (typeId == "contact") return "Contact";
     if (typeId == "heat_solve") return "HeatSystem";
     if (typeId == "model") return "Model";
     if (typeId == "heat_model") return "HeatModel";

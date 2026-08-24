@@ -1,6 +1,5 @@
 #include "HeatSurfaceRenderer.hpp"
 
-#include "heat/HeatGpuStructs.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/UniformBufferManager.hpp"
 #include "scene/Model.hpp"
@@ -139,10 +138,10 @@ void HeatSurfaceRenderer::destroyPaletteTextures() {
     if (viridisImage != VK_NULL_HANDLE) vkDestroyImage(device, viridisImage, nullptr);
     if (inferno2Image != VK_NULL_HANDLE) vkDestroyImage(device, inferno2Image, nullptr);
     if (parulaImage != VK_NULL_HANDLE) vkDestroyImage(device, parulaImage, nullptr);
-    if (infernoMemory != VK_NULL_HANDLE) vkFreeMemory(device, infernoMemory, nullptr);
-    if (viridisMemory != VK_NULL_HANDLE) vkFreeMemory(device, viridisMemory, nullptr);
-    if (inferno2Memory != VK_NULL_HANDLE) vkFreeMemory(device, inferno2Memory, nullptr);
-    if (parulaMemory != VK_NULL_HANDLE) vkFreeMemory(device, parulaMemory, nullptr);
+    if (infernoMemory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(infernoMemory);
+    if (viridisMemory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(viridisMemory);
+    if (inferno2Memory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(inferno2Memory);
+    if (parulaMemory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(parulaMemory);
     paletteSampler = VK_NULL_HANDLE;
     infernoView = viridisView = inferno2View = parulaView = VK_NULL_HANDLE;
     infernoImage = viridisImage = inferno2Image = parulaImage = VK_NULL_HANDLE;
@@ -281,7 +280,7 @@ bool HeatSurfaceRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpa
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(heat::BufferPushConstant);
+    pushConstantRange.size = sizeof(BufferPushConstant);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -333,7 +332,7 @@ bool HeatSurfaceRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpa
 void HeatSurfaceRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorSet descriptorSet, const SurfaceRenderBinding& binding) const {
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-    heat::BufferPushConstant pushConstants{};
+    BufferPushConstant pushConstants{};
     pushConstants.modelMatrix = binding.modelMatrix;
     pushConstants.sourceParams = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
     pushConstants.palette = palette;
@@ -344,7 +343,7 @@ void HeatSurfaceRenderer::drawModel(VkCommandBuffer commandBuffer, VkDescriptorS
         pipelineLayout,
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         0,
-        sizeof(heat::BufferPushConstant),
+        sizeof(BufferPushConstant),
         &pushConstants);
 
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &binding.vertexBuffer, &binding.vertexBufferOffset);
@@ -490,4 +489,3 @@ void HeatSurfaceRenderer::cleanup() {
 
     initialized = false;
 }
-

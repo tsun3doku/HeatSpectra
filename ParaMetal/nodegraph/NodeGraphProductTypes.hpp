@@ -11,7 +11,6 @@ enum class NodeProductType : uint8_t {
     Remesh,
     Voronoi,
     Point,
-    Contact,
     Heat,
 };
 

@@ -16,7 +16,9 @@ HeatSolveNodeParams readHeatSolveNodeParams(const NodeGraphNode& node) {
     params.preview.showHeatOverlay = NodeParamUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowHeatOverlay, false);
     params.preview.showFluxVectors = NodeParamUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowFluxVectors, false);
     params.preview.showHeatPalette = NodeParamUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowHeatPalette, false);
+    params.preview.showContactLevelSet = NodeParamUtils::readBoolParam(node, nodegraphparams::heatsolve::ShowContactLevelSet, false);
     params.preview.fluxVectorScale = NodeParamUtils::readFloatParam(node, nodegraphparams::heatsolve::FluxVectorScale, 1.0);
+    params.preview.contactLevelSetRange = NodeParamUtils::readFloatParam(node, nodegraphparams::heatsolve::ContactLevelSetRange, 1.0);
 
     return params;
 }
@@ -31,5 +33,7 @@ bool writeHeatSolveNodeParams(NodeGraphEditor& editor, NodeGraphNodeId nodeId, c
         editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::ShowHeatOverlay, NodeGraphParamType::Bool, 0.0, 0, params.preview.showHeatOverlay}) &&
         editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::ShowFluxVectors, NodeGraphParamType::Bool, 0.0, 0, params.preview.showFluxVectors}) &&
         editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::ShowHeatPalette, NodeGraphParamType::Bool, 0.0, 0, params.preview.showHeatPalette}) &&
-        editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::FluxVectorScale, NodeGraphParamType::Float, params.preview.fluxVectorScale});
+        editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::ShowContactLevelSet, NodeGraphParamType::Bool, 0.0, 0, params.preview.showContactLevelSet}) &&
+        editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::FluxVectorScale, NodeGraphParamType::Float, params.preview.fluxVectorScale}) &&
+        editor.setNodeParameter(nodeId, NodeGraphParamValue{nodegraphparams::heatsolve::ContactLevelSetRange, NodeGraphParamType::Float, params.preview.contactLevelSetRange});
 }

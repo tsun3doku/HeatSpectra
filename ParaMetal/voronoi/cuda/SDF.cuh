@@ -10,6 +10,14 @@
 
 namespace voronoi::sdf {
 
+bool buildUnsignedDistance(
+    const cudaGeometry::RVDGeometry& geometry,
+    const glm::vec3& sdfGridMin,
+    const glm::ivec3& sdfGridDim,
+    float nominalCellSize,
+    std::vector<float>& outValues,
+    cudaStream_t stream);
+
 bool buildAndClassify(
     const cudaGeometry::RVDGeometry& geometry,
     const std::vector<glm::vec4>& seeds,

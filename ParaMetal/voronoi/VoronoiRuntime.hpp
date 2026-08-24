@@ -18,6 +18,14 @@ class VoronoiRuntime {
 public:
     bool isReady() const { return voronoiReady; }
 
+    bool isGlobalDomain() const { return isGlobal; }
+    const std::vector<uint32_t>& getGlobalRemeshRuntimeModelIds() const { return globalRemeshRuntimeModelIds; }
+    const std::vector<std::vector<glm::vec3>>& getGlobalRemeshPositions() const { return globalRemeshPositions; }
+    const std::vector<std::vector<uint32_t>>& getGlobalRemeshTriangleIndices() const { return globalRemeshTriangleIndices; }
+    const std::vector<std::vector<glm::vec3>>& getGlobalRemeshSurfacePositions() const { return globalRemeshSurfacePositions; }
+    const std::vector<std::vector<uint32_t>>& getGlobalRemeshSurfaceTriangleIndices() const { return globalRemeshSurfaceTriangleIndices; }
+    float getGlobalSdfPadding() const { return globalSdfPadding; }
+
     VoronoiDomainRuntime* getDomainRuntime() const { return domainRuntime.get(); }
 
     VoronoiNodeDomain& getNodeDomain() { return nodeDomain; }
@@ -33,20 +41,8 @@ public:
     std::vector<glm::vec4>& getSeedPositions() { return seedPositions; }
     const std::vector<glm::vec4>& getSeedPositions() const { return seedPositions; }
     const std::array<glm::vec3, 8>& getPointDomainCorners() const { return pointDomainCorners; }
-    std::vector<std::array<glm::vec4, 3>>& getMeshTriangles() { return meshTriangles; }
-    const std::vector<std::array<glm::vec4, 3>>& getMeshTriangles() const { return meshTriangles; }
 
     void reorderSeeds();
-    void setMeshGeometry(
-        VulkanDevice& vulkanDevice,
-        MemoryAllocator& memoryAllocator,
-        CommandPool& renderCommandPool,
-        const std::vector<glm::vec3>& geometryPositions,
-        const std::vector<uint32_t>& geometryTriangleIndices,
-        const std::vector<voronoi::SurfaceVertex>& surfaceVertices,
-        const std::vector<uint32_t>& surfaceTriangleIndices,
-        uint32_t runtimeModelId,
-        const glm::mat4& meshModelMatrix);
     void setPointGeometry(
         VulkanDevice& vulkanDevice,
         MemoryAllocator& memoryAllocator,
@@ -63,6 +59,13 @@ public:
     void setSeedPositions(
         const std::vector<glm::vec4>& positions,
         const std::array<glm::vec3, 8>& domainCorners);
+    void setGlobalGeometry(
+        const std::vector<uint32_t>& runtimeModelIds,
+        const std::vector<std::vector<glm::vec3>>& positions,
+        const std::vector<std::vector<uint32_t>>& triangleIndices,
+        const std::vector<std::vector<glm::vec3>>& surfacePositions,
+        const std::vector<std::vector<uint32_t>>& surfaceTriangleIndices,
+        float sdfPadding);
 
     void cleanup();
 
@@ -79,7 +82,13 @@ private:
     std::vector<uint32_t> seedFlags;
     std::vector<glm::vec4> seedPositions;
     std::array<glm::vec3, 8> pointDomainCorners{};
-    std::vector<std::array<glm::vec4, 3>> meshTriangles;
+    std::vector<uint32_t> globalRemeshRuntimeModelIds;
+    std::vector<std::vector<glm::vec3>> globalRemeshPositions;
+    std::vector<std::vector<uint32_t>> globalRemeshTriangleIndices;
+    std::vector<std::vector<glm::vec3>> globalRemeshSurfacePositions;
+    std::vector<std::vector<uint32_t>> globalRemeshSurfaceTriangleIndices;
+    float globalSdfPadding = 0.0f;
+    bool isGlobal = false;
     VoronoiNodeDomain nodeDomain;
 
     bool voronoiReady = false;

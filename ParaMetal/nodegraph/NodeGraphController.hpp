@@ -37,8 +37,9 @@ public:
     bool runtimeModelIdsForNode(NodeGraphNodeId nodeId,
                                  std::vector<uint32_t>& outIds) const;
 
-    RuntimeProductManager* getProductManager() { return packageController.products(); }
+RuntimeProductManager* getProductManager() { return packageController.products(); }
     RuntimePackageManager* getPackageManager() { return &packageController.packages(); }
+    const std::string& lastPackageErrors() const { return lastPackageErrors_; }
 
 private:
     void rebuildForDelta(const NodeGraphDelta& delta);
@@ -55,6 +56,7 @@ private:
     NodeGraphCompiled plan{};
     NodeGraphDisplay nodeGraphDisplay{};
     RuntimePackageCompiler packageCompiler{};
-    RuntimePackageController packageController;
+RuntimePackageController packageController;
     units::LengthUnit activeWorldUnit = units::defaultLengthUnit();
+    std::string lastPackageErrors_;
 };

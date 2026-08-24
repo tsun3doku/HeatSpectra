@@ -202,8 +202,11 @@ __global__ void generateSDFKernel(
     if (!found)
         found = accumulateRadius(point, center, 4, grid, offsets, triangleIds,
                                  triangles, minimumDistanceSquared);
+    if (!found)
+        found = accumulateRadius(point, center, 8, grid, offsets, triangleIds,
+                                 triangles, minimumDistanceSquared);
     if (!found) {
-        sdf[index] = sqrtf(FLT_MAX);
+        sdf[index] = 100.0f * grid.cellSize;
         return;
     }
     sdf[index] = sqrtf(minimumDistanceSquared);
@@ -262,16 +265,14 @@ __global__ void classifyGhostsKernel(
     flags[seedId] = shouldGhost ? NodeFlags::Ghost : 0u;
 }
 
-bool buildAndClassify(
+bool buildUnsignedDistance(
     const cudaGeometry::RVDGeometry& geometry,
-    const std::vector<glm::vec4>& seeds,
     const glm::vec3& sdfGridMin,
     const glm::ivec3& sdfGridDim,
     float nominalCellSize,
-    std::vector<uint32_t>& seedFlags,
+    std::vector<float>& outValues,
     cudaStream_t stream) {
-    if (!geometry.valid() || seeds.empty() ||
-        seeds.size() != seedFlags.size() || seeds.size() > size_t(UINT32_MAX) ||
+    if (!geometry.valid() ||
         !(nominalCellSize > 0.0f) || !std::isfinite(nominalCellSize) ||
         sdfGridDim.x < 2 || sdfGridDim.y < 2 || sdfGridDim.z < 2) return false;
 
@@ -327,10 +328,38 @@ bool buildAndClassify(
         grid, geometry.triangles.get(), offsets.get(), triangleIds.get(), sdf.get());
     if (!cudaOk(cudaGetLastError(), "launch SDF generation")) return false;
 
+    outValues.resize(grid.sampleCount);
+    if (!sdf.downloadAsync(outValues.data(), outValues.size(), stream)) return false;
+    return cudaOk(cudaStreamSynchronize(stream), "synchronize SDF readback");
+}
+
+bool buildAndClassify(
+    const cudaGeometry::RVDGeometry& geometry,
+    const std::vector<glm::vec4>& seeds,
+    const glm::vec3& sdfGridMin,
+    const glm::ivec3& sdfGridDim,
+    float nominalCellSize,
+    std::vector<uint32_t>& seedFlags,
+    cudaStream_t stream) {
+    if (!geometry.valid() || seeds.empty() ||
+        seeds.size() != seedFlags.size() || seeds.size() > size_t(UINT32_MAX)) return false;
+
+    const size_t sampleCount64 = size_t(sdfGridDim.x) * sdfGridDim.y * sdfGridDim.z;
+    if (sampleCount64 == 0 || sampleCount64 > UINT32_MAX) return false;
+    const SDFGrid grid{make_float3(sdfGridMin.x, sdfGridMin.y, sdfGridMin.z), nominalCellSize,
+                       make_int3(sdfGridDim.x, sdfGridDim.y, sdfGridDim.z), uint32_t(sampleCount64)};
+
+    std::vector<float> distanceValues;
+    if (!buildUnsignedDistance(geometry, sdfGridMin, sdfGridDim, nominalCellSize,
+                               distanceValues, stream)) return false;
+
+    DeviceBuffer<float> sdf;
     DeviceBuffer<float4> deviceSeeds;
     DeviceBuffer<uint32_t> deviceFlags;
-    if (!deviceSeeds.allocate(seeds.size()) || !deviceFlags.allocate(seedFlags.size())) return false;
-    if (!deviceSeeds.uploadAsync(reinterpret_cast<const float4*>(seeds.data()), seeds.size(), stream))
+    if (!sdf.allocate(distanceValues.size()) ||
+        !deviceSeeds.allocate(seeds.size()) || !deviceFlags.allocate(seedFlags.size())) return false;
+    if (!sdf.uploadAsync(distanceValues.data(), distanceValues.size(), stream) ||
+        !deviceSeeds.uploadAsync(reinterpret_cast<const float4*>(seeds.data()), seeds.size(), stream))
         return false;
     const uint32_t seedCount = uint32_t(seeds.size());
     const uint32_t seedBlocks = (seedCount + BlockSize - 1) / BlockSize;

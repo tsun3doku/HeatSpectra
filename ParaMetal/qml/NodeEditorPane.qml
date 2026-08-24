@@ -14,7 +14,6 @@ Rectangle {
 
     function nodeIconFolder(typeId) {
         switch (String(typeId)) {
-        case "contact": return "Contact"
         case "heat_solve": return "HeatSystem"
         case "model": return "Model"
         case "heat_model": return "HeatModel"

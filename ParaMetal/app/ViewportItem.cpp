@@ -326,6 +326,15 @@ private:
             publishedSimulationPaused = simulationPaused;
             notifier.publishHeatSolveStatus(simulationActive, simulationPaused);
         }
+
+        const NodeGraphController* graphController = runtime.getNodeGraphController();
+        if (graphController) {
+            const QString packageError = QString::fromStdString(graphController->lastPackageErrors());
+            if (packageError != publishedPackageError) {
+                publishedPackageError = packageError;
+                notifier.publishHeatSolveError(packageError);
+            }
+        }
     }
 
     RuntimeSystems& runtime;
@@ -339,6 +348,7 @@ private:
     ViewportItem* viewportItemForSignals = nullptr;
     bool publishedSimulationActive = false;
     bool publishedSimulationPaused = false;
+    QString publishedPackageError;
     bool initialized = false;
     bool runtimeFresh = false;
 };
@@ -373,7 +383,7 @@ void ViewportItem::requestCameraZoomSpeed(float speed) { mailbox.requestCameraZo
 void ViewportItem::requestCameraPanSpeed(float speed) { mailbox.requestCameraPanSpeed(speed); update(); }
 void ViewportItem::requestTimelinePlaying(bool playing) { mailbox.requestTimelinePlaying(playing); update(); }
 void ViewportItem::requestTimelineReset() { mailbox.requestTimelineReset(); update(); }
-void ViewportItem::requestTimelineScrub(uint32_t frame) { mailbox.requestTimelineScrub(frame); }
+void ViewportItem::requestTimelineScrub(uint32_t frame) { mailbox.requestTimelineScrub(frame); update(); }
 void ViewportItem::requestTimelineStep(int delta) { mailbox.requestTimelineStep(delta); update(); }
 void ViewportItem::requestTimelineRange(uint32_t frameCount, float fps) { mailbox.requestTimelineRange(frameCount, fps); update(); }
 void ViewportItem::requestSelection(int nodeId) { mailbox.requestSelection(nodeId); update(); }

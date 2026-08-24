@@ -77,9 +77,6 @@ private:
         if (!computeProduct || !computeProduct->isValid()) {
             return false;
         }
-        if (package.sourceMeshHandle.key == 0) {
-            return false;
-        }
 
         const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.sourceModelProduct);
         if (!modelProduct || modelProduct->runtimeModelId == 0) {

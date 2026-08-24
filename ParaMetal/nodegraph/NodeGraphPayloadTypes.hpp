@@ -1,6 +1,5 @@
 #pragma once
 
-#include "domain/ContactData.hpp"
 #include "domain/GeometryData.hpp"
 #include "domain/HeatData.hpp"
 #include "domain/RemeshData.hpp"
@@ -16,7 +15,6 @@ namespace payloadtypes {
     extern uint8_t HeatModel;
     extern uint8_t Heat;
     extern uint8_t Voronoi;
-    extern uint8_t Contact;
     extern uint8_t Points;
     extern uint8_t SerialTemperature;
 }

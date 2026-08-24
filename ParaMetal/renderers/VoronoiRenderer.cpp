@@ -119,6 +119,7 @@ bool VoronoiRenderer::createWireframeTexture() {
 
     if (createImage(
             vulkanDevice,
+            allocator,
             width,
             height,
             wireFormat,
@@ -399,7 +400,7 @@ VkDescriptorSet VoronoiRenderer::allocateDescriptorSet(VkDescriptorPool pool) {
     return set;
 }
 
-void VoronoiRenderer::updateDescriptorSet(VkDescriptorSet set, uint32_t frameIndex, const VoronoiRenderBinding& binding) {
+void VoronoiRenderer::updateDescriptorSet(VkDescriptorSet set, uint32_t frameIndex, const RenderBinding& binding) {
     std::array<VkWriteDescriptorSet, 15> descriptorWrites{};
 
     // Binding 0: UBO
@@ -664,7 +665,7 @@ bool VoronoiRenderer::createPipeline(VkRenderPass renderPass, uint32_t subpass) 
     return true;
 }
 
-void VoronoiRenderer::drawBinding(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const VoronoiRenderBinding& binding) const {
+void VoronoiRenderer::drawBinding(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const RenderBinding& binding) const {
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
     SurfacePushConstant pushConstant{};
@@ -681,7 +682,7 @@ void VoronoiRenderer::drawBinding(VkCommandBuffer cmd, VkDescriptorSet descripto
     vkCmdDrawIndexed(cmd, binding.indexCount, 1, 0, 0, 0);
 }
 
-void VoronoiRenderer::render(VkCommandBuffer cmd, uint32_t frameIndex, const std::vector<VoronoiRenderBinding>& bindings) {
+void VoronoiRenderer::render(VkCommandBuffer cmd, uint32_t frameIndex, const std::vector<RenderBinding>& bindings) {
     if (!initialized || pipeline == VK_NULL_HANDLE || pipelineLayout == VK_NULL_HANDLE || frameIndex >= descriptorPools.size()) {
         return;
     }
@@ -690,7 +691,7 @@ void VoronoiRenderer::render(VkCommandBuffer cmd, uint32_t frameIndex, const std
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    for (const VoronoiRenderBinding& binding : bindings) {
+    for (const RenderBinding& binding : bindings) {
         if (binding.runtimeModelId == 0) {
             continue;
         }
@@ -743,7 +744,7 @@ void VoronoiRenderer::cleanup() {
         wireframeTextureImage = VK_NULL_HANDLE;
     }
     if (wireframeTextureMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, wireframeTextureMemory, nullptr);
+        allocator.freeImageMemory(wireframeTextureMemory);
         wireframeTextureMemory = VK_NULL_HANDLE;
     }
     

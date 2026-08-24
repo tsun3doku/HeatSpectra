@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -9,7 +10,6 @@
 
 #include "heat/HeatGpuStructs.hpp"
 #include "hash/HashValues.hpp"
-#include "contact/ContactTypes.hpp"
 #include "voronoi/VoronoiGpuStructs.hpp"
 
 //                                                      [ Invariant:
@@ -180,7 +180,70 @@ struct VoronoiProduct {
     size_t gmlsSurfaceGradientWeightCount = 0;
     HashValues hashes{};
 
+    // Global domain (DomainType::Global)
+    bool isGlobalDomain = false;
+    std::vector<glm::vec4> globalSeedPositions;
+    std::array<glm::vec3, 8> globalDomainCorners{};
+    glm::vec3 globalSdfGridMin{};
+    glm::ivec3 globalSdfGridDim{};
+    float globalSdfCellSize = 0.0f;
+    std::vector<float> globalSdfValues;
+    std::vector<uint32_t> globalSdfRuntimeModelIds;
+    uint32_t globalFragmentCount = 0;
+    std::vector<uint32_t> fragmentInstanceIds;
+    std::vector<uint32_t> fragmentSeedIds;
+    std::vector<float> fragmentSurfaceBoundaryAreas;
+    std::vector<float> fragmentVolumes;
+    uint32_t globalFaceCount = 0;
+    std::vector<uint32_t> faceInstanceIds;
+    std::vector<uint32_t> faceFragmentA;
+    std::vector<uint32_t> faceFragmentB;
+    std::vector<float> faceAreas;
+    uint32_t globalCutFaceCount = 0;
+    std::vector<uint32_t> cutFaceFragmentA;
+    std::vector<uint32_t> cutFaceFragmentB;
+    std::vector<float> cutFaceAreas;
+    std::vector<float> cutFaceGaps;
+    std::vector<uint32_t> instanceFragmentCounts;
+
+    std::vector<uint32_t> globalDisplayRuntimeModelIds;
+    std::vector<VkBuffer> globalDisplayVertexBuffers;
+    std::vector<VkDeviceSize> globalDisplayVertexBufferOffsets;
+    std::vector<VkBuffer> globalDisplayFaceIndexBuffers;
+    std::vector<VkDeviceSize> globalDisplayFaceIndexBufferOffsets;
+    std::vector<VkBuffer> globalDisplayCandidateBuffers;
+    std::vector<VkDeviceSize> globalDisplayCandidateBufferOffsets;
+
+    std::vector<VkImageView> globalSdfImageViews;
+    std::vector<VkImageView> globalPsiImageViews;
+    VkSampler globalSdfSampler = VK_NULL_HANDLE;
+    VkBuffer contactRegionBuffer = VK_NULL_HANDLE;
+    VkDeviceSize contactRegionBufferOffset = 0;
+    VkDeviceSize contactRegionBufferSize = 0;
+    VkBuffer indirectDrawBuffer = VK_NULL_HANDLE;
+    VkDeviceSize indirectDrawBufferOffset = 0;
+
     bool isValid() const {
+        if (isGlobalDomain) {
+            return !globalSeedPositions.empty() &&
+                globalSdfGridDim.x >= 2 && globalSdfGridDim.y >= 2 && globalSdfGridDim.z >= 2 &&
+                globalSdfValues.size() ==
+                    size_t(globalSdfGridDim.x) * globalSdfGridDim.y * globalSdfGridDim.z *
+                        instanceFragmentCounts.size() &&
+                fragmentInstanceIds.size() == globalFragmentCount &&
+                fragmentSeedIds.size() == globalFragmentCount &&
+                fragmentSurfaceBoundaryAreas.size() == globalFragmentCount &&
+                fragmentVolumes.size() == globalFragmentCount &&
+                faceInstanceIds.size() == globalFaceCount &&
+                faceFragmentA.size() == globalFaceCount &&
+                faceFragmentB.size() == globalFaceCount &&
+                faceAreas.size() == globalFaceCount &&
+                cutFaceFragmentA.size() == globalCutFaceCount &&
+                cutFaceFragmentB.size() == globalCutFaceCount &&
+                cutFaceAreas.size() == globalCutFaceCount &&
+                cutFaceGaps.size() == globalCutFaceCount &&
+                !instanceFragmentCounts.empty();
+        }
         const bool resourcesValid = candidateNodeCount != 0 &&
             nodeCount != 0 &&
             couplingCount != 0 &&
@@ -204,25 +267,6 @@ struct VoronoiProduct {
             }
         }
         return true;
-    }
-
-};
-
-struct ContactProduct {
-    ContactCoupling coupling{};
-    VkBuffer contactPairBuffer = VK_NULL_HANDLE;
-    VkDeviceSize contactPairBufferOffset = 0;
-
-    uint32_t modelARuntimeModelId = 0;
-    uint32_t modelBRuntimeModelId = 0;
-    std::vector<ContactLineVertex> outlineVertices;
-    std::vector<ContactLineVertex> correspondenceVertices;
-
-    HashValues hashes{};
-
-    bool isValid() const {
-        return coupling.isValid() &&
-            contactPairBuffer != VK_NULL_HANDLE;
     }
 
 };

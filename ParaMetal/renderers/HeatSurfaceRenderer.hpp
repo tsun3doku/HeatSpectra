@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 #include <glm/glm.hpp>
@@ -13,6 +15,14 @@ class CommandPool;
 
 class HeatSurfaceRenderer {
 public:
+    struct BufferPushConstant {
+        alignas(16) glm::mat4 modelMatrix{1.0f};
+        alignas(16) glm::vec4 sourceParams{0.0f};
+        uint32_t palette = 0;
+        float minTemperature = 0.0f;
+        float maxTemperature = 100.0f;
+    };
+
     struct SurfaceRenderBinding {
         uint32_t runtimeModelId = 0;
         VkBuffer vertexBuffer = VK_NULL_HANDLE;
@@ -75,3 +85,7 @@ private:
     float minTemperature = 0.0f;
     float maxTemperature = 100.0f;
 };
+
+static_assert(offsetof(HeatSurfaceRenderer::BufferPushConstant, palette) == 80);
+static_assert(offsetof(HeatSurfaceRenderer::BufferPushConstant, minTemperature) == 84);
+static_assert(offsetof(HeatSurfaceRenderer::BufferPushConstant, maxTemperature) == 88);

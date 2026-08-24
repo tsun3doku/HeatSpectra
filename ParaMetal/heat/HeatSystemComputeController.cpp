@@ -25,63 +25,9 @@ HeatSystemComputeController::HeatSystemComputeController(VulkanDevice& vulkanDev
 }
 
 void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const Config& config) {
-    system.clearVoronoiInputs();
-    if (!config.simNodeCounts.empty()) {
-        for (const auto& [runtimeModelId, simNodeCount] : config.simNodeCounts) {
-            const auto simNodeBufferIt = config.modelSimNodeBufferByModelId.find(runtimeModelId);
-            const auto simNodeBufferOffsetIt = config.modelSimNodeBufferOffsetByModelId.find(runtimeModelId);
-            const auto simNodeCouplingIt = config.modelSimNodeCouplingBufferByModelId.find(runtimeModelId);
-            const auto simNodeCouplingOffsetIt = config.modelSimNodeCouplingBufferOffsetByModelId.find(runtimeModelId);
-            const auto simNodeCouplingCountIt = config.simNodeCouplingCounts.find(runtimeModelId);
-            const auto gmlsStencilIt = config.modelGMLSSurfaceStencilBufferByModelId.find(runtimeModelId);
-            const auto gmlsStencilOffsetIt = config.modelGMLSSurfaceStencilBufferOffsetByModelId.find(runtimeModelId);
-            const auto gmlsWeightIt = config.modelGMLSSurfaceWeightBufferByModelId.find(runtimeModelId);
-            const auto gmlsWeightOffsetIt = config.modelGMLSSurfaceWeightBufferOffsetByModelId.find(runtimeModelId);
-            const auto gmlsWeightCountIt = config.modelGMLSSurfaceWeightCountByModelId.find(runtimeModelId);
-            const auto gmlsGradientIt = config.modelGMLSSurfaceGradientWeightBufferByModelId.find(runtimeModelId);
-            const auto gmlsGradientOffsetIt = config.modelGMLSSurfaceGradientWeightBufferOffsetByModelId.find(runtimeModelId);
-            const auto gmlsGradientCountIt = config.modelGMLSSurfaceGradientWeightCountByModelId.find(runtimeModelId);
-            const auto nodePositionsIt = config.modelNodePositionsByModelId.find(runtimeModelId);
-            const auto nodesIt = config.modelNodesByModelId.find(runtimeModelId);
-            const auto nodeCouplingsIt = config.modelNodeCouplingsByModelId.find(runtimeModelId);
-            const auto surfaceNodeIdsIt = config.modelSurfaceNodeIdsByModelId.find(runtimeModelId);
-            const auto surfacePatchAreasIt = config.modelSurfacePatchAreasByModelId.find(runtimeModelId);
-            
-            if (simNodeBufferIt == config.modelSimNodeBufferByModelId.end() ||
-                simNodeBufferOffsetIt == config.modelSimNodeBufferOffsetByModelId.end() ||
-                simNodeCouplingIt == config.modelSimNodeCouplingBufferByModelId.end() ||
-                simNodeCouplingOffsetIt == config.modelSimNodeCouplingBufferOffsetByModelId.end() ||
-                simNodeCouplingCountIt == config.simNodeCouplingCounts.end() ||
-                nodePositionsIt == config.modelNodePositionsByModelId.end() ||
-                nodesIt == config.modelNodesByModelId.end() ||
-                nodeCouplingsIt == config.modelNodeCouplingsByModelId.end() ||
-                surfaceNodeIdsIt == config.modelSurfaceNodeIdsByModelId.end() ||
-                surfacePatchAreasIt == config.modelSurfacePatchAreasByModelId.end()) {
-                continue;
-            }
-
-            system.addVoronoiModelInput(
-                runtimeModelId,
-                simNodeCount,
-                simNodeBufferIt->second,
-                simNodeBufferOffsetIt->second,
-                simNodeCouplingIt->second,
-                simNodeCouplingOffsetIt->second,
-                simNodeCouplingCountIt->second,
-                (gmlsStencilIt != config.modelGMLSSurfaceStencilBufferByModelId.end()) ? gmlsStencilIt->second : VK_NULL_HANDLE,
-                (gmlsStencilOffsetIt != config.modelGMLSSurfaceStencilBufferOffsetByModelId.end()) ? gmlsStencilOffsetIt->second : 0,
-                (gmlsWeightIt != config.modelGMLSSurfaceWeightBufferByModelId.end()) ? gmlsWeightIt->second : VK_NULL_HANDLE,
-                (gmlsWeightOffsetIt != config.modelGMLSSurfaceWeightBufferOffsetByModelId.end()) ? gmlsWeightOffsetIt->second : 0,
-                (gmlsWeightCountIt != config.modelGMLSSurfaceWeightCountByModelId.end()) ? gmlsWeightCountIt->second : 0,
-                (gmlsGradientIt != config.modelGMLSSurfaceGradientWeightBufferByModelId.end()) ? gmlsGradientIt->second : VK_NULL_HANDLE,
-                (gmlsGradientOffsetIt != config.modelGMLSSurfaceGradientWeightBufferOffsetByModelId.end()) ? gmlsGradientOffsetIt->second : 0,
-                (gmlsGradientCountIt != config.modelGMLSSurfaceGradientWeightCountByModelId.end()) ? gmlsGradientCountIt->second : 0,
-                nodePositionsIt->second,
-                nodesIt->second,
-                nodeCouplingsIt->second,
-                surfaceNodeIdsIt->second,
-                surfacePatchAreasIt->second);
-        }
+    system.clearGlobalVoronoiInput();
+    if (config.domainVoronoiProduct.isValid()) {
+        system.setGlobalVoronoiInput(config.domainVoronoiProduct, config.modelLocalToWorldByModelId);
     }
     system.setHeatModels(
         config.modelSurfacePositions,
@@ -99,7 +45,6 @@ void HeatSystemComputeController::configureHeatSystem(HeatSystem& system, const 
         config.modelConductivity,
         config.worldUnit);
     system.setParams(config.contactThermalConductance, config.simulationDuration);
-    system.setContactCouplings(config.contactCouplings);
 }
 
 void HeatSystemComputeController::applyRuntimeState(HeatSystem& system, const Config& config) {

@@ -25,7 +25,7 @@ This project is a work in progress. Functionality, performance and physical accu
 - NVIDIA GPU with CUDA compute capability 7.5 or newer
 - Vulkan 1.3 or higher support ([Check GPU compatibility](https://vulkan.gpuinfo.org/))
 
-The downloadable release includes the required CUDA and AMGX runtime libraries. Building ParaMetal from source additionally requires the development tools below.
+The downloadable release includes the required CUDA runtime libraries. Building ParaMetal from source additionally requires the development tools below.
 
 ### Source Build Prerequisites
 - [CMake](https://cmake.org/download/)
@@ -35,7 +35,7 @@ The downloadable release includes the required CUDA and AMGX runtime libraries. 
 - [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) 12.0 or higher
 - [Python 3](https://www.python.org/downloads/) (Development headers required)
 
-Eigen, the AMGX headers, Pybind11 and the remaining dependencies are included as Git submodules. A matching prebuilt AMGX shared library is included under `ParaMetal/libs/amgx_prebuilt/windows-x64`; you do not need to compile AMGX yourself.
+Eigen, Pybind11 and the remaining dependencies are included as Git submodules.
 
 ### Build From Source
 

@@ -58,8 +58,8 @@ C:/VulkanSDK/1.3.283.0/Bin/glslc.exe pick_gizmo.frag -o pick_gizmo_frag.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe point_cloud.vert -o point_cloud_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe point_cloud.frag -o point_cloud_frag.spv
 
-C:/VulkanSDK/1.3.283.0/Bin/glslc.exe contact_lines.vert -o contact_lines_vert.spv
-C:/VulkanSDK/1.3.283.0/Bin/glslc.exe contact_lines.frag -o contact_lines_frag.spv
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe heat_contact_levelset.vert -o heat_contact_levelset_vert.spv
+C:/VulkanSDK/1.3.283.0/Bin/glslc.exe heat_contact_levelset.frag -o heat_contact_levelset_frag.spv
 
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe vector_arrow.vert -o vector_arrow_vert.spv
 C:/VulkanSDK/1.3.283.0/Bin/glslc.exe vector_arrow.frag -o vector_arrow_frag.spv

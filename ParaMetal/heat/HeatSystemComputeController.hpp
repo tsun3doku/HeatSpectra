@@ -3,10 +3,12 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <array>
 #include <glm/glm.hpp>
 
 #include "HeatSystem.hpp"
@@ -68,7 +70,9 @@ public:
         std::unordered_map<uint32_t, std::vector<voronoi::Node>> modelNodesByModelId;
         std::unordered_map<uint32_t, std::vector<voronoi::NodeCoupling>> modelNodeCouplingsByModelId;
         std::unordered_map<uint32_t, std::vector<uint32_t>> modelSurfaceNodeIdsByModelId;
-        std::unordered_map<uint32_t, std::vector<float>> modelSurfacePatchAreasByModelId;
+        std::unordered_map<uint32_t, std::vector<float>> modelSurfaceBoundaryAreasByModelId;
+        HeatDomainRuntime::GlobalThermalDomain domainVoronoiProduct;
+        std::unordered_map<uint32_t, std::array<float, 16>> modelLocalToWorldByModelId;
         std::unordered_map<uint32_t, VkBuffer> modelGMLSSurfaceStencilBufferByModelId;
         std::unordered_map<uint32_t, VkDeviceSize> modelGMLSSurfaceStencilBufferOffsetByModelId;
         std::unordered_map<uint32_t, VkBuffer> modelGMLSSurfaceWeightBufferByModelId;
@@ -77,7 +81,6 @@ public:
         std::unordered_map<uint32_t, VkBuffer> modelGMLSSurfaceGradientWeightBufferByModelId;
         std::unordered_map<uint32_t, VkDeviceSize> modelGMLSSurfaceGradientWeightBufferOffsetByModelId;
         std::unordered_map<uint32_t, size_t> modelGMLSSurfaceGradientWeightCountByModelId;
-        std::vector<ContactCoupling> contactCouplings;
         uint64_t computeHash = 0;
         uint64_t structuralHash = 0;
         uint64_t authoredSimulationHash = 0;
@@ -90,39 +93,41 @@ public:
         CommandPool& transferCommandPool,
         uint32_t maxFramesInFlight);
 
+    void apply(uint64_t socketKey, const Config& config);
+    void remove(uint64_t socketKey);
+    void disableAll();
+    void syncSerialInputs();
+    void updateSerialInputs();
+    bool getSerialTemperatureStatus(uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const;
     bool isAnyHeatSystemActive() const;
     bool isAnyHeatSystemPaused() const;
+
     void setTimelinePlaying(bool playing) override;
     void resetTimeline() override;
     void scrubTimeline(uint32_t frame) override;
 
-    void apply(uint64_t socketKey, const Config& config);
-    bool buildProduct(uint64_t socketKey, HeatProduct& product);
-    void remove(uint64_t socketKey);
-    void disableAll();
     std::vector<ComputePass*> getActiveSystems() const;
+    bool buildProduct(uint64_t socketKey, HeatProduct& outProduct);
     const HeatSystem* getSystem(uint64_t socketKey) const;
     const Config* getConfig(uint64_t socketKey) const;
-    void updateSerialInputs();
-    bool getSerialTemperatureStatus(uint64_t sourceKey, SerialTemperatureRuntime::Status& outStatus) const;
 
 private:
-    std::unique_ptr<HeatSystem> buildHeatSystem();
     void configureHeatSystem(HeatSystem& system, const Config& config);
     void applyRuntimeState(HeatSystem& system, const Config& config);
-    void syncSerialInputs();
+    std::unique_ptr<HeatSystem> buildHeatSystem();
 
     VulkanDevice& vulkanDevice;
     MemoryAllocator& memoryAllocator;
     CommandPool& renderCommandPool;
     CommandPool& transferCommandPool;
+    uint32_t maxFramesInFlight;
+
+    bool timelinePlaying = false;
+    uint32_t timelineResetCounter = 0;
+    uint32_t timelineScrubFrame = std::numeric_limits<uint32_t>::max();
 
     std::unordered_map<uint64_t, std::unique_ptr<HeatSystem>> systemsBySocket;
     std::unordered_map<uint64_t, Config> configuredConfigs;
     std::unordered_map<uint64_t, std::unique_ptr<SerialTemperatureRuntime>> serialRuntimes;
     std::unordered_map<uint64_t, uint64_t> lastSerialRevisions;
-    bool timelinePlaying = false;
-    uint32_t timelineResetCounter = 0;
-    uint32_t timelineScrubFrame = heat::NoRewindFrame;
-    const uint32_t maxFramesInFlight;
 };

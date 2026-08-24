@@ -7,14 +7,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 bool HeatBoundaryRuntime::configureRegions(
     const std::vector<Region>& configuredRegions,
     uint32_t nodeCount,
     uint32_t surfacePointCount,
     const std::vector<uint32_t>& surfaceNodeIds,
-    const std::vector<float>& patchAreas) {
-    if (nodeCount == 0 || patchAreas.size() != nodeCount) {
+    const std::vector<float>& surfaceBoundaryAreas) {
+    if (nodeCount == 0 || surfaceBoundaryAreas.size() != nodeCount) {
+        std::cerr << "[HeatBoundary-Diag] configureRegions rejected size"
+                  << " nodeCount=" << nodeCount
+                  << " areaCount=" << surfaceBoundaryAreas.size()
+                  << " surfacePointCount=" << surfacePointCount << std::endl;
         return false;
     }
 
@@ -22,7 +27,7 @@ bool HeatBoundaryRuntime::configureRegions(
     stateIndexByRegionId.clear();
     states.clear();
     this->surfaceNodeIds = surfaceNodeIds;
-    surfacePatchAreas = patchAreas;
+    this->surfaceBoundaryAreas = surfaceBoundaryAreas;
     surfaceNodeMask.assign(nodeCount, 0u);
     dirichletStateIndicesByNode.assign(nodeCount, {});
     dirichletStateIndicesBySurfacePoint.assign(surfacePointCount, {});
@@ -34,7 +39,14 @@ bool HeatBoundaryRuntime::configureRegions(
 
     for (uint32_t nodeId : surfaceNodeIds) {
         if (nodeId >= nodeCount || surfaceNodeMask[nodeId] != 0u ||
-            !std::isfinite(patchAreas[nodeId]) || patchAreas[nodeId] <= 0.0f) {
+            !std::isfinite(surfaceBoundaryAreas[nodeId]) || surfaceBoundaryAreas[nodeId] <= 0.0f) {
+            std::cerr << "[HeatBoundary-Diag] configureRegions rejected surface node"
+                      << " nodeId=" << nodeId
+                      << " nodeCount=" << nodeCount
+                      << " area=" << (nodeId < surfaceBoundaryAreas.size() ? surfaceBoundaryAreas[nodeId] : 0.0f)
+                      << " masked=" << (nodeId < surfaceNodeMask.size() ? static_cast<int>(surfaceNodeMask[nodeId]) : -1)
+                      << " areaCount=" << surfaceBoundaryAreas.size()
+                      << " surfaceCount=" << surfaceNodeIds.size() << std::endl;
             return false;
         }
         surfaceNodeMask[nodeId] = 1u;
@@ -121,25 +133,8 @@ bool HeatBoundaryRuntime::configureRegions(
     return true;
 }
 
-bool HeatBoundaryRuntime::resolveContactAreas(const std::vector<float>& coveredAreas) {
-    const uint32_t nodeCount = static_cast<uint32_t>(surfacePatchAreas.size());
-    if (!coveredAreas.empty() && coveredAreas.size() != nodeCount) {
-        return false;
-    }
-
-    std::vector<float> exposure(nodeCount, 1.0f);
-    for (uint32_t nodeId = 0; nodeId < nodeCount; ++nodeId) {
-        const float coveredArea = coveredAreas.empty() ? 0.0f : coveredAreas[nodeId];
-        if (!std::isfinite(coveredArea) || coveredArea < 0.0f) {
-            return false;
-        }
-        if (surfaceNodeMask[nodeId] != 0u) {
-            exposure[nodeId] = std::max(0.0f, 1.0f - coveredArea / surfacePatchAreas[nodeId]);
-        } else if (coveredArea > 0.0f) {
-            return false;
-        }
-    }
-
+bool HeatBoundaryRuntime::buildBoundaryBuffers() {
+    const uint32_t nodeCount = static_cast<uint32_t>(surfaceBoundaryAreas.size());
     std::vector<std::vector<heat::BoundaryContribution>> byNode(nodeCount);
     for (const Region& region : regions) {
         if (region.state.conditionType == DirichletTemperature) {
@@ -150,7 +145,7 @@ bool HeatBoundaryRuntime::resolveContactAreas(const std::vector<float>& coveredA
             return false;
         }
         for (uint32_t nodeId : region.nodeIds) {
-            const float area = surfacePatchAreas[nodeId] * exposure[nodeId];
+            const float area = surfaceBoundaryAreas[nodeId];
             if (area > 0.0f) {
                 byNode[nodeId].push_back({stateIndex, area});
             }
@@ -286,6 +281,33 @@ bool HeatBoundaryRuntime::getRegionTemperatureC(uint32_t regionId, float& temper
         return false;
     }
     temperatureC = states[stateIndex].temperatureC;
+    return true;
+}
+
+bool HeatBoundaryRuntime::getRegionAmbientTemperatureC(uint32_t regionId, float& temperatureC) const {
+    const uint32_t stateIndex = findStateIndex(regionId);
+    if (stateIndex == NoBoundary) {
+        return false;
+    }
+    temperatureC = states[stateIndex].temperatureC;
+    return true;
+}
+
+bool HeatBoundaryRuntime::getRegionHeatFlux(uint32_t regionId, float& heatFlux) const {
+    const uint32_t stateIndex = findStateIndex(regionId);
+    if (stateIndex == NoBoundary || states[stateIndex].conditionType != NeumannHeatFlux) {
+        return false;
+    }
+    heatFlux = states[stateIndex].heatFlux;
+    return true;
+}
+
+bool HeatBoundaryRuntime::getRegionHeatTransferCoefficient(uint32_t regionId, float& coefficient) const {
+    const uint32_t stateIndex = findStateIndex(regionId);
+    if (stateIndex == NoBoundary || states[stateIndex].conditionType != RobinConvection) {
+        return false;
+    }
+    coefficient = states[stateIndex].heatTransferCoefficient;
     return true;
 }
 

@@ -115,9 +115,6 @@ bool VoronoiNodeDomain::buildSurfaceMappings(
                 return false;
             }
             const glm::vec3& nodePosition = nodeIndex.getNodePositions()[nodeId];
-            if (!voxelGrid.segmentStaysInside(surfacePoints[vertexId], nodePosition, 8)) {
-                continue;
-            }
             sourceNodeIds.push_back(nodeId);
             sourcePositions.push_back(glm::dvec3(nodePosition));
             maximumDistanceSquared = std::max(maximumDistanceSquared, distanceSquared[index]);

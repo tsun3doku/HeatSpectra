@@ -29,18 +29,7 @@ void runtimepackage::CoordinatePass::run(
     const float factor = units::canonicalToWorldScale(worldUnit);
     package.canonicalToWorldScale = factor;
     package.authored.cellSize *= factor;
-    if (package.domainType == DomainType::Mesh) {
-        scaleTranslation(package.localToWorld, factor);
-    }
-}
-
-void runtimepackage::CoordinatePass::run(
-    ContactPackage& package,
-    units::LengthUnit worldUnit) const {
-    const float factor = units::canonicalToWorldScale(worldUnit);
-    scaleTranslation(package.modelALocalToWorld, factor);
-    scaleTranslation(package.modelBLocalToWorld, factor);
-    package.authored.pair.contactRadius *= factor;
+    package.authored.sdfPadding *= factor;
 }
 
 void runtimepackage::CoordinatePass::run(HeatPackage& package, units::LengthUnit worldUnit) const {

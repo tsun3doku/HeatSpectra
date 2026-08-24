@@ -22,7 +22,7 @@ public:
         cudaExternalMemoryHandleDesc memoryDescription{};
         memoryDescription.type = cudaExternalMemoryHandleTypeOpaqueWin32;
         memoryDescription.handle.win32.handle = handle;
-        memoryDescription.size = buffer.getSize();
+        memoryDescription.size = buffer.getAllocationSize();
         const cudaError_t importResult = cudaImportExternalMemory(&memory, &memoryDescription);
         DWORD handleFlags = 0;
         if (GetHandleInformation(handle, &handleFlags)) CloseHandle(handle);
@@ -32,7 +32,7 @@ public:
         }
 
         cudaExternalMemoryBufferDesc bufferDescription{};
-        bufferDescription.size = buffer.getSize();
+        bufferDescription.size = buffer.getBufferSize();
         const cudaError_t mapResult = cudaExternalMemoryGetMappedBuffer(
             reinterpret_cast<void**>(&pointer), memory, &bufferDescription);
         if (mapResult != cudaSuccess) {

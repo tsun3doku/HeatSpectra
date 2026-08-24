@@ -355,7 +355,7 @@ void NavigationGizmoRenderer::cleanup() {
     if (labelAtlasSampler != VK_NULL_HANDLE) vkDestroySampler(device, labelAtlasSampler, nullptr);
     if (labelAtlasView != VK_NULL_HANDLE) vkDestroyImageView(device, labelAtlasView, nullptr);
     if (labelAtlasImage != VK_NULL_HANDLE) vkDestroyImage(device, labelAtlasImage, nullptr);
-    if (labelAtlasMemory != VK_NULL_HANDLE) vkFreeMemory(device, labelAtlasMemory, nullptr);
+    if (labelAtlasMemory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(labelAtlasMemory);
     if (vertexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, vertexBuffer, nullptr);
     if (vertexMemory != VK_NULL_HANDLE) vkFreeMemory(device, vertexMemory, nullptr);
     if (indexBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, indexBuffer, nullptr);

@@ -120,10 +120,9 @@ vec3 safeNormalize(vec3 v, vec3 fallback) {
     return v * inversesqrt(len2);
 }
 
-vec3 modelSpaceViewRay(vec3 worldPosition, mat3 invModelMatrix) {
+vec3 worldSpaceViewRay(vec3 worldPosition) {
     vec3 cameraPos = inverse(ubo.view)[3].xyz;
-    vec3 viewRayWorld = worldPosition - cameraPos;
-    return normalize(invModelMatrix * viewRayWorld);
+    return normalize(worldPosition - cameraPos);
 }
 
 bool seedBisectorPlane(vec3 cellPos, uint neighborID, out vec3 planeNormal, out vec3 midpoint) {
@@ -134,14 +133,14 @@ bool seedBisectorPlane(vec3 cellPos, uint neighborID, out vec3 planeNormal, out 
     return dot(planeNormal, planeNormal) > 0.0;
 }
 
-vec3 applyExitPlaneShading(vec3 baseColor, float exitDepth, vec3 exitPlaneNormal, float seedDistanceHint, mat3 normalMatrix, vec3 viewRayModel) {
+vec3 applyExitPlaneShading(vec3 baseColor, float exitDepth, vec3 exitPlaneNormal, float seedDistanceHint, vec3 viewRayWorld) {
     float depth01 = clamp(exitDepth / max(seedDistanceHint * EXIT_PLANE_DEPTH_SCALE, 1e-6), 0.0, 1.0);
     if (exitDepth >= 1e30 || depth01 < EXIT_PLANE_MIN_DEPTH) {
         return baseColor;
     }
 
-    vec3 wallNormal = safeNormalize(normalMatrix * exitPlaneNormal, vec3(0.0, 0.0, 1.0));
-    float viewFacing = abs(dot(wallNormal, safeNormalize(-viewRayModel, vec3(0.0, 0.0, 1.0))));
+    vec3 wallNormal = safeNormalize(exitPlaneNormal, vec3(0.0, 0.0, 1.0));
+    float viewFacing = abs(dot(wallNormal, safeNormalize(-viewRayWorld, vec3(0.0, 0.0, 1.0))));
     float wallLight = mix(0.62, 0.94, viewFacing);
     float luminance = dot(baseColor, vec3(0.2126, 0.7152, 0.0722));
     return mix(vec3(luminance), baseColor, 1.10) * wallLight;
@@ -343,13 +342,14 @@ int findIntrinsicTriangle(int inputTri, vec2 p) {
 }
 
 void main() {
-    vec3 modelSpacePos = vModelPosition;
     int inputTri = gl_PrimitiveID;
     int intrinsicTri = findIntrinsicTriangle(inputTri, vIntrinsicCoord);
     if (intrinsicTri < 0) {
         writeVoronoiSurface(vec3(1, 0, 1));
         return;
     }
+
+    vec3 samplePos = vWorldPosition;
 
     uint bestCellID = 0xFFFFFFFF;
     float minDistSq = 3.402823466e+38;
@@ -359,7 +359,7 @@ void main() {
     for (uint i = 0; i < limit; ++i) {
         uint cid = candidates[candBase + i];
         if (cid != 0xFFFFFFFF && cid < seeds.length()) {
-            vec3 d = modelSpacePos - seeds[cid].xyz;
+            vec3 d = samplePos - seeds[cid].xyz;
             float distSq = dot(d, d);
             if (distSq < minDistSq) {
                 minDistSq = distSq;
@@ -374,7 +374,7 @@ void main() {
     }
 
     float hintSeedDist = sqrt(max(minDistSq, 1e-12));
-    float pixelScale = length(dFdx(modelSpacePos)) + length(dFdy(modelSpacePos));
+    float pixelScale = length(dFdx(samplePos)) + length(dFdy(samplePos));
     float distScale = hintSeedDist / max(pixelScale, 1e-6);
     float tIter = clamp(distScale * ITER_DIST_SCALE, 0.0, 1.0);
     int maxIters = int(mix(float(MIN_WALK_ITERATIONS), float(MAX_WALK_ITERATIONS), tIter) + 0.5);
@@ -393,7 +393,7 @@ void main() {
             if (neighborID == 0xFFFFFFFF) break;
             if (neighborID >= seeds.length()) continue;
 
-            vec3 diff = modelSpacePos - seeds[neighborID].xyz;
+            vec3 diff = samplePos - seeds[neighborID].xyz;
             float distSq = dot(diff, diff); 
             if (distSq < minDistSq) {
                 minDistSq = distSq;
@@ -406,11 +406,9 @@ void main() {
     }
 
     vec3 bestPos = seeds[bestCellID].xyz;
-    vec3 dPosDx = dFdx(modelSpacePos);
-    vec3 dPosDy = dFdy(modelSpacePos);
-    mat3 invModelMatrix = inverse(mat3(pc.modelMatrix));
-    mat3 normalMatrix = transpose(invModelMatrix);
-    vec3 viewRayModel = modelSpaceViewRay(vWorldPosition, invModelMatrix);
+    vec3 dPosDx = dFdx(samplePos);
+    vec3 dPosDy = dFdy(samplePos);
+    vec3 viewRayWorld = worldSpaceViewRay(vWorldPosition);
 
     float minBoundaryDist = 3.402823466e+38;
     float exitPlaneDepth = 3.402823466e+38;
@@ -429,8 +427,8 @@ void main() {
         vec3 planeNormal, midpoint;
         if (!seedBisectorPlane(bestPos, neighborID, planeNormal, midpoint)) continue;
 
-        float boundaryDist = dot(planeNormal, modelSpacePos - midpoint);
-        float rayRate = dot(planeNormal, viewRayModel);
+        float boundaryDist = dot(planeNormal, samplePos - midpoint);
+        float rayRate = dot(planeNormal, viewRayWorld);
         if (rayRate < -1e-5) {
             float exitT = max(boundaryDist, 0.0) / -rayRate;
             if (exitT < exitPlaneDepth) {
@@ -456,7 +454,7 @@ void main() {
             
             vec3 planeNormal2, midpoint2;
             if (seedBisectorPlane(bestPos, neighborID2, planeNormal2, midpoint2)) {
-                float absBoundaryDist2 = abs(dot(planeNormal2, modelSpacePos - midpoint2));
+                float absBoundaryDist2 = abs(dot(planeNormal2, samplePos - midpoint2));
                 if (absBoundaryDist2 < minBoundaryDist) {
                     minBoundaryDist = absBoundaryDist2;
                     bestCompetitorID = neighborID2;
@@ -466,7 +464,7 @@ void main() {
     }
 
     vec3 cellColor = paletteColor(bestCellID);
-    vec3 depthShadedColor = applyExitPlaneShading(cellColor, exitPlaneDepth, exitPlaneNormal, hintSeedDist, normalMatrix, viewRayModel);
+    vec3 depthShadedColor = applyExitPlaneShading(cellColor, exitPlaneDepth, exitPlaneNormal, hintSeedDist, viewRayWorld);
 
     float invW = 1.0 / max(WIRE_DIST_WIDTH * pc.canonicalToWorldScale, 1e-6);
     vec3 competitorPos = seeds[bestCompetitorID].xyz;
@@ -482,7 +480,7 @@ void main() {
     vec4 boundaryWire = textureGrad(wireframe, vec2(min(u, 0.5), 0.5), gradX, gradY);
     
     if (exitPlaneDepth < 1e30) {
-        vec3 hitPos = modelSpacePos + viewRayModel * exitPlaneDepth;
+        vec3 hitPos = samplePos + viewRayWorld * exitPlaneDepth;
         // Screen space derivatives of the hit position for wall edge filtering
         vec3 dHitPosDx = dFdx(hitPos);
         vec3 dHitPosDy = dFdy(hitPos);

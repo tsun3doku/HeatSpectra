@@ -13,6 +13,7 @@ struct VoronoiPreviewSettings {
 struct VoronoiNodeParams {
     double sdfSize = 0.005;
     int voxelResolution = 128;
+    double sdfPadding = 0.01;
     VoronoiPreviewSettings preview{};
 };
 

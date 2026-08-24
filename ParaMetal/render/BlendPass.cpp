@@ -436,6 +436,7 @@ bool BlendPass::createBackgroundResources() {
 
     if (createImage(
         vulkanDevice,
+        memoryAllocator,
         static_cast<uint32_t>(width),
         static_cast<uint32_t>(height),
         VK_FORMAT_R8G8B8A8_SRGB,
@@ -527,7 +528,7 @@ void BlendPass::destroyBackgroundResources() {
         backgroundImage = VK_NULL_HANDLE;
     }
     if (backgroundImageMemory != VK_NULL_HANDLE) {
-        vkFreeMemory(vulkanDevice.getDevice(), backgroundImageMemory, nullptr);
+        memoryAllocator.freeImageMemory(backgroundImageMemory);
         backgroundImageMemory = VK_NULL_HANDLE;
     }
 }

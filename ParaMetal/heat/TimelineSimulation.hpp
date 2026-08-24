@@ -16,7 +16,12 @@ public:
 
     void setPosition(float seconds) { currentPosition = seconds; }
     void setDuration(float seconds) { duration = seconds; }
-    void setPlaying(bool isPlaying) { playing = isPlaying; }
+    void setPlaying(bool isPlaying) {
+        playing = isPlaying;
+        if (isPlaying) {
+            scrubFrame = std::numeric_limits<uint32_t>::max();
+        }
+    }
     void setScrubFrame(uint32_t frame) { scrubFrame = frame; }
     void setResetCounter(uint32_t counter) { resetCounter = counter; }
 

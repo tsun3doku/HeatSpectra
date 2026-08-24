@@ -9,7 +9,6 @@
 #include "framegraph/FrameGraphPasses.hpp"
 #include "util/file_utils.h"
 #include "GeometryPass.hpp"
-#include "ContactOverlayRenderer.hpp"
 #include "HeatOverlayRenderer.hpp"
 #include "PointOverlayRenderer.hpp"
 #include "VoronoiOverlayRenderer.hpp"
@@ -100,14 +99,6 @@ void OverlayPass::create() {
         return;
     }
 
-    contactOverlayRenderer = std::make_unique<ContactOverlayRenderer>(vulkanDevice, memoryAllocator, uniformBufferManager, renderCommandPool);
-    if (!contactOverlayRenderer) {
-        std::cerr << "[OverlayPass] Failed to create contact overlay renderer" << std::endl;
-        destroy();
-        return;
-    }
-
-    contactOverlayRenderer->initialize(frameGraphRuntime.getRenderPass(), framegraph::toIndex(passId), maxFramesInFlight);
     heatOverlayRenderer.initializeOverlay(frameGraphRuntime.getRenderPass(), framegraph::toIndex(passId), maxFramesInFlight);
     voronoiOverlayRenderer.initializeOverlay(frameGraphRuntime.getRenderPass(), framegraph::toIndex(passId), maxFramesInFlight);
 
@@ -172,10 +163,6 @@ IntrinsicRenderer* OverlayPass::getIntrinsicRenderer() const {
     return &intrinsicRenderer;
 }
 
-ContactOverlayRenderer* OverlayPass::getContactOverlayRenderer() const {
-    return contactOverlayRenderer.get();
-}
-
 HeatOverlayRenderer* OverlayPass::getHeatOverlayRenderer() const {
     return &heatOverlayRenderer;
 }
@@ -203,9 +190,6 @@ void OverlayPass::record(const FrameContext& context, const SceneView& view, con
     const uint32_t currentFrame = context.currentFrame;
     screenTextRenderer.beginFrame(currentFrame);
     const VkExtent2D extent = context.extent;
-    if (contactOverlayRenderer) {
-        contactOverlayRenderer->render(commandBuffer, currentFrame, extent);
-    }
     heatOverlayRenderer.renderOverlay(commandBuffer, currentFrame);
     voronoiOverlayRenderer.renderPoints(commandBuffer, currentFrame, extent);
     if (pointOverlayRenderer) {
@@ -293,10 +277,6 @@ void OverlayPass::destroy() {
         outlineRenderer->cleanup();
         outlineRenderer.reset();
     }
-    if (contactOverlayRenderer) {
-        contactOverlayRenderer->cleanup();
-        contactOverlayRenderer.reset();
-    }
     if (pointOverlayRenderer) {
         pointOverlayRenderer->cleanup();
         pointOverlayRenderer.reset();
@@ -312,6 +292,3 @@ void OverlayPass::destroy() {
 }
 
 } // namespace render
-
-
-

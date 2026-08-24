@@ -273,7 +273,6 @@ void SceneRenderer::recordPasses(
     const render::FrameContext& frameContext,
     const render::SceneView& sceneView,
     const render::RenderFlags& flags,
-
     render::RenderServices& services,
     VkQueryPool passTimingQueryPool,
     uint32_t passTimingQueryBase) {
@@ -355,10 +354,6 @@ void SceneRenderer::updateDescriptorSets() {
 
 IntrinsicRenderer* SceneRenderer::getIntrinsicRenderer() const {
     return intrinsicRenderer.get();
-}
-
-render::ContactOverlayRenderer* SceneRenderer::getContactOverlayRenderer() const {
-    return overlayPass ? overlayPass->getContactOverlayRenderer() : nullptr;
 }
 
 render::HeatOverlayRenderer* SceneRenderer::getHeatOverlayRenderer() const {
@@ -557,7 +552,6 @@ bool SceneRenderer::recordCommands(
         frameContext,
         frameRequest.sceneView,
         frameRequest.flags,
-
         services,
         gpuTimingQueryPool,
         timingQueryBase + 2);

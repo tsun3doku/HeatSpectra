@@ -3,7 +3,6 @@
 #include "domain/HeatModelData.hpp"
 #include "domain/PointData.hpp"
 #include "hash/HashPackage.hpp"
-#include "nodegraph/NodeContactParams.hpp"
 #include "nodegraph/NodeGraphEvaluation.hpp"
 #include "nodegraph/NodeGraphPayloadTypes.hpp"
 #include "nodegraph/NodeGraphRegistry.hpp"
@@ -79,8 +78,6 @@ bool RuntimePackageCompiler::compileNode(
             compiled = compileRemeshPackage(node, outputSocketKey, output, payloads, worldUnit, packages, errors);
         else if (typeId == nodegraphtypes::Voronoi)
             compiled = compileVoronoiPackage(node, outputSocketKey, output, payloads, worldUnit, packages, errors);
-        else if (typeId == nodegraphtypes::Contact)
-            compiled = compileContactPackage(node, outputSocketKey, output, payloads, worldUnit, packages, errors);
         else if (typeId == nodegraphtypes::HeatSolve)
             compiled = compileHeatPackage(node, outputSocketKey, output, payloads, worldUnit, packages, errors);
         else if (output.dataType == payloadtypes::Points)
@@ -193,92 +190,115 @@ bool RuntimePackageCompiler::compileVoronoiPackage(
     package.authored = *voronoi;
     package.voronoiHandle = output.payloadHandle;
     package.domainType = voronoi->domainType;
-    package.modelRemeshHandle = voronoi->modelMeshHandle;
     package.pointsPayloadHandle = voronoi->pointsPayloadHandle;
     const VoronoiNodeParams params = readVoronoiNodeParams(node);
     package.display.showVoronoi = params.preview.showVoronoi;
     package.display.showPoints = params.preview.showPoints;
 
-    if (package.domainType == DomainType::Mesh) {
-        const GeometryData* geometry = payloads.resolveGeometry(voronoi->modelMeshHandle);
-        const RemeshPackage* remesh = packages.findAny<RemeshPackage>(voronoi->modelMeshHandle.key);
-        const ModelPackage* model = remesh
-            ? packages.findAny<ModelPackage>(remesh->sourceMeshHandle.key)
-            : nullptr;
-        if (!geometry || !model || !remesh ||
-            !model->productHandle.isValid() || !remesh->productHandle.isValid()) {
-            errors.push_back("Voronoi package is missing its upstream mesh products.");
+    if (package.domainType == DomainType::Global) {
+        if (voronoi->modelMeshHandles.empty()) {
+            errors.push_back("Voronoi Global domain requires at least one unique Remeshes input.");
             return false;
         }
-        package.modelMeshHandle = remesh->sourceMeshHandle;
-        if (!payloads.resolveLocalToWorld(voronoi->modelMeshHandle, package.localToWorld)) {
-            errors.push_back("Voronoi package cannot resolve model placement.");
-            return false;
+        std::unordered_set<uint64_t> seenRemeshKeys;
+        for (const NodeDataHandle& remeshHandle : voronoi->modelMeshHandles) {
+            if (remeshHandle.key == 0 ||
+                !seenRemeshKeys.insert(remeshHandle.key).second) {
+                errors.push_back("Voronoi Global domain contains an empty or duplicate remesh payload.");
+                return false;
+            }
+            const RemeshPackage* remesh = packages.findAny<RemeshPackage>(remeshHandle.key);
+            const ModelPackage* model = remesh
+                ? packages.findAny<ModelPackage>(remesh->sourceMeshHandle.key)
+                : nullptr;
+            if (!remesh || !model ||
+                !remesh->productHandle.isValid() || !model->productHandle.isValid()) {
+                errors.push_back("Voronoi Global domain is missing an upstream remesh product.");
+                return false;
+            }
+            package.globalRemeshHandles.push_back(remeshHandle);
+            package.globalRemeshProducts.push_back(remesh->productHandle);
+            package.globalModelProducts.push_back(model->productHandle);
         }
-        package.modelProduct = model->productHandle;
-        package.remeshProduct = remesh->productHandle;
     }
 
     runtimepackage::CoordinatePass{}.run(package, worldUnit);
+    const glm::mat4 pointTransform = toMat4(points->localToWorld);
     package.pointPositions = points->positions;
+    for (glm::vec4& position : package.pointPositions) {
+        position = pointTransform * position;
+    }
+
+    glm::vec3 worldDomainMin(std::numeric_limits<float>::max());
+    glm::vec3 worldDomainMax(-std::numeric_limits<float>::max());
     for (uint32_t corner = 0; corner < 8; ++corner) {
-        package.pointDomainCorners[corner] = glm::vec3(
+        const glm::vec3 localCorner(
             (corner & 1u) ? points->domainMaximum.x : points->domainMinimum.x,
             (corner & 2u) ? points->domainMaximum.y : points->domainMinimum.y,
             (corner & 4u) ? points->domainMaximum.z : points->domainMinimum.z);
+        const glm::vec3 worldCorner = glm::vec3(pointTransform * glm::vec4(localCorner, 1.0f));
+        package.pointDomainCorners[corner] = worldCorner;
+        worldDomainMin = glm::min(worldDomainMin, worldCorner);
+        worldDomainMax = glm::max(worldDomainMax, worldCorner);
     }
-    if (package.domainType == DomainType::Mesh) {
-        const glm::mat4 pointsToMesh =
-            glm::inverse(toMat4(package.localToWorld)) * toMat4(points->localToWorld);
-        for (glm::vec4& position : package.pointPositions) position = pointsToMesh * position;
-        for (glm::vec3& corner : package.pointDomainCorners)
-            corner = glm::vec3(pointsToMesh * glm::vec4(corner, 1.0f));
+
+    if (package.domainType == DomainType::Global) {
+        if (package.authored.voxelResolution < 2) {
+            errors.push_back("Voronoi Global domain requires voxelResolution >= 2.");
+            return false;
+        }
+        const glm::vec3 physicalExtent = worldDomainMax - worldDomainMin;
+        const float longestExtent = std::max(std::max(physicalExtent.x, physicalExtent.y), physicalExtent.z);
+        const float spacing = longestExtent /
+            static_cast<float>(package.authored.voxelResolution - 1);
+        if (spacing > 0.5f * package.authored.cellSize) {
+            errors.push_back(
+                "Voronoi Global domain violates the resolution rule: spacing (" +
+                std::to_string(spacing) +
+                ") must be <= 0.5 * cell size (" +
+                std::to_string(0.5f * package.authored.cellSize) + ").");
+            return false;
+        }
+
+        const glm::mat4 worldToPoint = glm::inverse(pointTransform);
+        constexpr float epsilon = 1e-4f;
+        const glm::vec3 localDomainMin = points->domainMinimum - glm::vec3(epsilon);
+        const glm::vec3 localDomainMax = points->domainMaximum + glm::vec3(epsilon);
+
+        for (std::size_t i = 0; i < package.globalRemeshHandles.size(); ++i) {
+            std::array<float, 16> remeshToWorld{};
+            if (!payloads.resolveLocalToWorld(package.globalRemeshHandles[i], remeshToWorld)) {
+                errors.push_back("Voronoi Global domain cannot resolve a model placement.");
+                return false;
+            }
+            package.globalRemeshLocalToWorld.push_back(remeshToWorld);
+            const RemeshPackage* remesh = packages.findAny<RemeshPackage>(
+                package.globalRemeshHandles[i].key);
+            if (!remesh) {
+                errors.push_back("Voronoi Global domain cannot resolve remesh package.");
+                return false;
+            }
+
+            const glm::mat4 remeshToWorldMat = toMat4(remeshToWorld);
+            const glm::mat4 remeshToPointLocal = worldToPoint * remeshToWorldMat;
+            const std::vector<float>& positions = remesh->sourceGeometry.pointPositions;
+
+            for (std::size_t p = 0; p + 2 < positions.size(); p += 3) {
+                const glm::vec3 pointLocalPos = glm::vec3(
+                    remeshToPointLocal * glm::vec4(positions[p], positions[p + 1], positions[p + 2], 1.0f));
+
+                if (glm::any(glm::lessThan(pointLocalPos, localDomainMin)) ||
+                    glm::any(glm::greaterThan(pointLocalPos, localDomainMax))) {
+                    errors.push_back(
+                        "Voronoi Global domain remesh " + std::to_string(package.globalRemeshHandles[i].key) +
+                        " lies outside the PointData domain bounds.");
+                    return false;
+                }
+            }
+        }
     }
     HashPackage::seal(package, output.hashes);
     packages.apply<VoronoiPackage>(outputSocketKey, package);
-    return true;
-}
-
-bool RuntimePackageCompiler::compileContactPackage(
-    const NodeGraphNode& node,
-    uint64_t outputSocketKey,
-    const NodeDataBlock& output,
-    const NodePayloadRegistry& payloads,
-    units::LengthUnit worldUnit,
-    RuntimePackageManager& packages,
-    std::vector<std::string>& errors) const {
-    const ContactData* contact = payloads.get<ContactData>(output.payloadHandle);
-    if (!contact || !contact->active || !contact->pair.hasValidContact) return true;
-    const GeometryData* geometryA = payloads.resolveGeometry(contact->pair.endpointA.meshHandle);
-    const GeometryData* geometryB = payloads.resolveGeometry(contact->pair.endpointB.meshHandle);
-    const RemeshPackage* remeshA = packages.findAny<RemeshPackage>(
-        contact->pair.endpointA.meshHandle.key);
-    const RemeshPackage* remeshB = packages.findAny<RemeshPackage>(
-        contact->pair.endpointB.meshHandle.key);
-    if (!geometryA || !geometryB || !remeshA || !remeshB ||
-        !remeshA->productHandle.isValid() || !remeshB->productHandle.isValid()) {
-        errors.push_back("Contact package is missing an upstream remesh product.");
-        return false;
-    }
-
-    ContactPackage package{};
-    const ContactPackage* previous = packages.findStored<ContactPackage>(outputSocketKey);
-    package.productHandle = previous ? previous->productHandle : ProductHandle{};
-    package.authored = *contact;
-    package.contactHandle = output.payloadHandle;
-    package.display.showContactLines = readContactNodeParams(node).preview.showContactLines;
-    if (!payloads.resolveLocalToWorld(
-            contact->pair.endpointA.meshHandle, package.modelALocalToWorld) ||
-        !payloads.resolveLocalToWorld(
-            contact->pair.endpointB.meshHandle, package.modelBLocalToWorld)) {
-        errors.push_back("Contact package cannot resolve model placement.");
-        return false;
-    }
-    package.modelARemeshProduct = remeshA->productHandle;
-    package.modelBRemeshProduct = remeshB->productHandle;
-    runtimepackage::CoordinatePass{}.run(package, worldUnit);
-    HashPackage::seal(package, output.hashes);
-    packages.apply<ContactPackage>(outputSocketKey, package);
     return true;
 }
 
@@ -298,55 +318,109 @@ bool RuntimePackageCompiler::compileHeatPackage(
     package.productHandle = previous ? previous->productHandle : ProductHandle{};
     package.authored = *heat;
     package.heatHandle = output.payloadHandle;
+    package.domainVoronoiHandle = heat->domainVoronoiHandle;
     const HeatSolveNodeParams params = readHeatSolveNodeParams(node);
     package.display.showHeatOverlay = params.preview.showHeatOverlay;
     package.display.showFluxVectors = params.preview.showFluxVectors;
     package.display.showHeatPalette = params.preview.showHeatPalette;
+    package.display.showContactLevelSet = params.preview.showContactLevelSet;
     package.display.fluxVectorScale = static_cast<float>(params.preview.fluxVectorScale);
+    package.display.contactLevelSetRange = static_cast<float>(params.preview.contactLevelSetRange);
 
     std::unordered_map<uint64_t, const HeatModelData*> modelsByRemesh;
     for (const NodeDataHandle& handle : heat->heatModelHandles) {
         const HeatModelData* model = payloads.get<HeatModelData>(handle);
-        if (!model || model->meshHandle.key == 0 ||
-            !modelsByRemesh.emplace(model->meshHandle.key, model).second) {
-            errors.push_back("Heat package contains an invalid heat model.");
+        if (model && model->meshHandle.key != 0) {
+            modelsByRemesh.emplace(model->meshHandle.key, model);
+        }
+    }
+
+    const bool canResolveDomain = heat->domainVoronoiHandle.key != 0 &&
+        heat->activeGlobalVoronoiCount == 1 &&
+        heat->activeVoronoiCount == heat->activeGlobalVoronoiCount;
+
+    if (heat->active) {
+        if (!canResolveDomain) {
+            if (heat->activeVoronoiCount == 0) {
+                errors.push_back("HeatSolve requires exactly one active DomainType::Global Voronoi input (none found).");
+            } else {
+                errors.push_back("HeatSolve requires a DomainType::Global Voronoi input; Mesh and Points domain products are rejected.");
+            }
+            return false;
+        }
+
+        const VoronoiData* voronoi = payloads.get<VoronoiData>(heat->domainVoronoiHandle);
+        if (!voronoi || !voronoi->active || voronoi->domainType != DomainType::Global) {
+            errors.push_back("HeatSolve's domain Voronoi input is invalid.");
             return false;
         }
     }
 
-    std::unordered_set<uint64_t> usedModels;
-    for (const NodeDataHandle& voronoiHandle : heat->voronoiHandles) {
-        const VoronoiData* voronoi = payloads.get<VoronoiData>(voronoiHandle);
-        if (!voronoi || !voronoi->active) {
-            errors.push_back("Heat package contains an invalid Voronoi domain.");
+    const VoronoiPackage* domainPackage = canResolveDomain
+        ? packages.findAny<VoronoiPackage>(heat->domainVoronoiHandle.key)
+        : nullptr;
+    if (canResolveDomain && (!domainPackage || !domainPackage->productHandle.isValid() ||
+        domainPackage->domainType != DomainType::Global)) {
+        if (heat->active) {
+            errors.push_back("HeatSolve is missing its global Voronoi domain product.");
             return false;
         }
-        const auto modelIt = modelsByRemesh.find(voronoi->modelMeshHandle.key);
-        if (modelIt == modelsByRemesh.end()) {
-            errors.push_back("Heat package cannot match a Voronoi domain to a heat model.");
+        domainPackage = nullptr;
+    }
+
+    if (heat->active) {
+        if (modelsByRemesh.empty()) {
+            errors.push_back("HeatSolve requires at least one heat model.");
             return false;
         }
 
-        const HeatModelData* model = modelIt->second;
+        std::unordered_set<uint64_t> domainRemeshKeys;
+        for (const NodeDataHandle& handle : domainPackage->globalRemeshHandles) {
+            domainRemeshKeys.insert(handle.key);
+        }
+        if (domainRemeshKeys.size() != modelsByRemesh.size()) {
+            errors.push_back("Heat package requires the heat-model remesh set to exactly equal the global Voronoi domain's Remeshes set.");
+            return false;
+        }
+    }
+
+    for (const auto& [remeshKey, model] : modelsByRemesh) {
+        (void)remeshKey;
         const RemeshPackage* remeshPackage = packages.findAny<RemeshPackage>(model->meshHandle.key);
-        const VoronoiPackage* voronoiPackage = packages.findAny<VoronoiPackage>(voronoiHandle.key);
         const ModelPackage* modelPackage = remeshPackage
             ? packages.findAny<ModelPackage>(remeshPackage->sourceMeshHandle.key)
             : nullptr;
-        if (!modelPackage || !remeshPackage || !voronoiPackage ||
+        if (!modelPackage || !remeshPackage ||
             !modelPackage->productHandle.isValid() ||
-            !remeshPackage->productHandle.isValid() ||
-            !voronoiPackage->productHandle.isValid() ||
-            !(voronoiPackage->remeshProduct == remeshPackage->productHandle)) {
-            errors.push_back("Heat package is missing an upstream runtime product.");
-            return false;
+            !remeshPackage->productHandle.isValid()) {
+            if (heat->active) {
+                errors.push_back("Heat package is missing an upstream runtime product.");
+                return false;
+            }
+            continue;
+        }
+        if (heat->active) {
+            bool inDomain = false;
+            for (const ProductHandle& handle : domainPackage->globalRemeshProducts) {
+                inDomain = inDomain || handle == remeshPackage->productHandle;
+            }
+            if (!inDomain) {
+                errors.push_back("Heat package contains a heat model outside the global Voronoi domain.");
+                return false;
+            }
         }
 
         HeatModelPackage compiledModel{};
         compiledModel.modelProduct = modelPackage->productHandle;
         compiledModel.remeshProduct = remeshPackage->productHandle;
-        compiledModel.voronoiProduct = voronoiPackage->productHandle;
         compiledModel.localToWorld = modelPackage->localToWorld;
+        if (!payloads.resolveLocalToWorld(model->meshHandle, compiledModel.remeshLocalToWorld)) {
+            if (heat->active) {
+                errors.push_back("Heat package is missing the remesh placement for a heat model.");
+                return false;
+            }
+            continue;
+        }
         compiledModel.density = model->density;
         compiledModel.specificHeat = model->specificHeat;
         compiledModel.conductivity = model->conductivity;
@@ -370,32 +444,13 @@ bool RuntimePackageCompiler::compileHeatPackage(
             }
         }
 
-        usedModels.insert(modelIt->first);
         package.models.push_back(compiledModel);
-    }
-    if (usedModels.size() != modelsByRemesh.size()) {
-        errors.push_back("Heat package has an unused heat model.");
-        return false;
-    }
-
-    for (const NodeDataHandle& contactHandle : heat->contactHandles) {
-        const ContactPackage* contactPackage = packages.findAny<ContactPackage>(contactHandle.key);
-        bool hasA = false;
-        bool hasB = false;
-        if (contactPackage) {
-            for (const HeatModelPackage& model : package.models) {
-                hasA = hasA || model.remeshProduct == contactPackage->modelARemeshProduct;
-                hasB = hasB || model.remeshProduct == contactPackage->modelBRemeshProduct;
-            }
-        }
-        if (!contactPackage || !contactPackage->productHandle.isValid() || !hasA || !hasB) {
-            errors.push_back("Heat package contains an invalid contact dependency.");
-            return false;
-        }
-        package.contactProducts.push_back(contactPackage->productHandle);
     }
 
     runtimepackage::CoordinatePass{}.run(package, worldUnit);
+    if (domainPackage) {
+        package.domainVoronoiProduct = domainPackage->productHandle;
+    }
     HashPackage::seal(package, output.hashes);
     packages.apply<HeatPackage>(outputSocketKey, package);
     return true;

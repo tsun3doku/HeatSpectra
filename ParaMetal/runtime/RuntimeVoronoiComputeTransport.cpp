@@ -20,32 +20,43 @@ ProductHandle RuntimeVoronoiComputeTransport::apply(uint64_t socketKey, const Vo
     config.voxelResolution = package.authored.voxelResolution;
     config.pointDomainCorners = package.pointDomainCorners;
 
-    if (package.domainType == DomainType::Mesh) {
-        if (package.modelMeshHandle.key == 0 || package.modelRemeshHandle.key == 0) {
+    if (package.domainType == DomainType::Global) {
+        if (package.pointPositions.empty() ||
+            package.globalRemeshProducts.size() != package.globalRemeshLocalToWorld.size()) {
             remove(socketKey);
             return {};
         }
-
-        const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(package.remeshProduct);
-        const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.modelProduct);
-        if (!remeshProduct || !modelProduct || remeshProduct->runtimeModelId == 0) {
-            remove(socketKey);
-            return {};
-        }
-
-        config.runtimeModelId = remeshProduct->runtimeModelId;
-        config.geometryPositions = remeshProduct->geometryPositions;
-        config.geometryTriangleIndices = remeshProduct->geometryTriangleIndices;
-        config.surfaceVertices.reserve(remeshProduct->surfacePositions.size());
-        for (size_t vertexId = 0; vertexId < remeshProduct->surfacePositions.size(); ++vertexId) {
-            voronoi::SurfaceVertex vertex{};
-            vertex.position = glm::vec4(remeshProduct->surfacePositions[vertexId], 1.0f);
-            vertex.normal = glm::vec4(remeshProduct->surfaceNormals[vertexId], 0.0f);
-            config.surfaceVertices.push_back(vertex);
-        }
-        config.surfaceTriangleIndices = remeshProduct->surfaceTriangleIndices;
-        config.meshModelMatrix = toMat4(package.localToWorld);
+        config.isGlobalDomain = true;
+        config.sdfPadding = package.authored.sdfPadding;
         config.pointPositions = package.pointPositions;
+        config.globalRemeshRuntimeModelIds.reserve(package.globalRemeshProducts.size());
+        config.globalRemeshPositions.reserve(package.globalRemeshProducts.size());
+        config.globalRemeshTriangleIndices.reserve(package.globalRemeshProducts.size());
+        config.globalRemeshSurfacePositions.reserve(package.globalRemeshProducts.size());
+        config.globalRemeshSurfaceTriangleIndices.reserve(package.globalRemeshProducts.size());
+        for (size_t i = 0; i < package.globalRemeshProducts.size(); ++i) {
+            const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(package.globalRemeshProducts[i]);
+            if (!remeshProduct || remeshProduct->runtimeModelId == 0) {
+                remove(socketKey);
+                return {};
+            }
+            const glm::mat4 transform = toMat4(package.globalRemeshLocalToWorld[i]);
+            std::vector<glm::vec3> positions;
+            positions.reserve(remeshProduct->geometryPositions.size());
+            for (const glm::vec3& position : remeshProduct->geometryPositions) {
+                positions.push_back(glm::vec3(transform * glm::vec4(position, 1.0f)));
+            }
+            std::vector<glm::vec3> surfacePositions;
+            surfacePositions.reserve(remeshProduct->surfacePositions.size());
+            for (const glm::vec3& position : remeshProduct->surfacePositions) {
+                surfacePositions.push_back(glm::vec3(transform * glm::vec4(position, 1.0f)));
+            }
+            config.globalRemeshRuntimeModelIds.push_back(remeshProduct->runtimeModelId);
+            config.globalRemeshPositions.push_back(std::move(positions));
+            config.globalRemeshTriangleIndices.push_back(remeshProduct->geometryTriangleIndices);
+            config.globalRemeshSurfacePositions.push_back(std::move(surfacePositions));
+            config.globalRemeshSurfaceTriangleIndices.push_back(remeshProduct->surfaceTriangleIndices);
+        }
     } else if (package.domainType == DomainType::Points) {
         if (package.pointPositions.empty()) {
             controller->remove(socketKey);

@@ -12,6 +12,7 @@ Item {
     required property QtObject runtimeNotifier
     property bool heatSolveActive: false
     property bool heatSolvePaused: false
+    property string heatSolveErrorText: ""
     property string serialConnectionText: "Not used by an active Heat Solve"
     property string serialTemperatureText: "--"
     property string serialPollingRateText: "--"
@@ -21,6 +22,9 @@ Item {
         function onHeatSolveStatusChanged(active, paused) {
             root.heatSolveActive = active
             root.heatSolvePaused = paused
+        }
+        function onHeatSolveErrorChanged(error) {
+            root.heatSolveErrorText = error
         }
         function onSerialStatusChanged(connection, temperature, pollingRate) {
             root.serialConnectionText = connection
@@ -32,6 +36,7 @@ Item {
     Component.onCompleted: {
         root.heatSolveActive = root.runtimeNotifier.heatSolveActive()
         root.heatSolvePaused = root.runtimeNotifier.heatSolvePaused()
+        root.heatSolveErrorText = root.runtimeNotifier.heatSolveError()
         root.serialConnectionText = root.runtimeNotifier.serialConnectionText()
         root.serialTemperatureText = root.runtimeNotifier.serialTemperatureText()
         root.serialPollingRateText = root.runtimeNotifier.serialPollingRateText()
@@ -52,7 +57,6 @@ Item {
         case "group": return groupPanel
         case "remesh": return remeshPanel
         case "voronoi": return voronoiPanel
-        case "contact": return contactPanel
         case "heat_model": return heatModelPanel
         case "heat_solve": return heatSolvePanel
         case "serial_temperature": return serialTemperaturePanel
@@ -229,16 +233,6 @@ Item {
     }
 
     Component {
-        id: contactPanel
-        Column {
-            width: panelLoader.width; spacing: 8
-            InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Min Normal Dot"); parameter: root.parameter(1); minimum: -1; maximum: 1; decimals: 3; onValueEdited: value => root.setValue(1, value) }
-            InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Contact Radius"); parameter: root.parameter(2); minimum: .0001; maximum: .1; decimals: 4; onValueEdited: value => root.setValue(2, value) }
-            InspectorField { width: parent.width; theme: root.theme; editor: "bool"; label: qsTr("Show Contact Lines"); parameter: root.parameter(3); onValueEdited: value => root.setValue(3, value) }
-        }
-    }
-
-    Component {
         id: heatModelPanel
         Column {
             width: panelLoader.width; spacing: 8
@@ -273,12 +267,22 @@ Item {
                     font: root.theme.regularFont
                 }
             }
-            InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Contact Thermal Conductance"); parameter: root.parameter(6); minimum: 0; maximum: 100000; decimals: 0; onValueEdited: value => root.setValue(6, value) }
+            InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Thermal Contact Conductance"); parameter: root.parameter(6); minimum: 0; maximum: 100000; decimals: 0; onValueEdited: value => root.setValue(6, value) }
             InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Simulation Duration (s)"); parameter: root.parameter(11); minimum: .1; maximum: 60; decimals: 1; onValueEdited: value => root.setValue(11, value) }
             InspectorField { width: parent.width; theme: root.theme; editor: "bool"; label: qsTr("Heat Overlay"); parameter: root.parameter(5); onValueEdited: value => root.setValue(5, value) }
             InspectorField { width: parent.width; theme: root.theme; editor: "bool"; label: qsTr("Flux Vectors"); parameter: root.parameter(7); onValueEdited: value => root.setValue(7, value) }
             InspectorField { width: parent.width; theme: root.theme; editor: "bool"; label: qsTr("Heat Palette"); parameter: root.parameter(9); onValueEdited: value => root.setValue(9, value) }
             InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Flux Vector Scale"); parameter: root.parameter(8); minimum: 0; maximum: 10; decimals: 2; onValueEdited: value => root.setValue(8, value) }
+            InspectorField { width: parent.width; theme: root.theme; editor: "bool"; label: qsTr("Contact Manifold"); parameter: root.parameter(12); onValueEdited: value => root.setValue(12, value) }
+            InspectorField { width: parent.width; theme: root.theme; editor: "slider"; label: qsTr("Contact Manifold Range"); parameter: root.parameter(13); minimum: 0.1; maximum: 5.0; decimals: 2; onValueEdited: value => root.setValue(13, value) }
+            Text {
+                width: parent.width
+                visible: root.heatSolveErrorText !== ""
+                text: qsTr("Error: %1").arg(root.heatSolveErrorText)
+                color: "#ff7a7a"
+                font: root.theme.descriptionFont
+                wrapMode: Text.Wrap
+            }
         }
     }
 

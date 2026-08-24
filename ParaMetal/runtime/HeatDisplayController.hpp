@@ -1,10 +1,12 @@
 #pragma once
 
 #include "hash/HashBuilder.hpp"
+#include "heat/HeatGpuStructs.hpp"
 
 #include <array>
 #include <cstdint>
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -20,7 +22,9 @@ public:
         bool showHeatOverlay = false;
         bool showFluxVectors = false;
         bool showHeatPalette = false;
+        bool showContactLevelSet = false;
         float fluxVectorScale = 1.0f;
+        float contactLevelSetRange = 1.0f;
         bool authoredActive = false;
         bool active = false;
         std::vector<uint32_t> modelRuntimeIds;
@@ -40,10 +44,23 @@ public:
         std::vector<std::array<VkBufferView, 11>> modelBufferViews;
         std::vector<VkBuffer> modelSurfaceGradientBuffers;
         std::vector<VkDeviceSize> modelSurfaceGradientBufferOffsets;
+
+        glm::vec3 globalSdfGridMin{0.0f};
+        glm::ivec3 globalSdfGridDim{0};
+        float globalSdfCellSize = 0.0f;
+        std::vector<VkImageView> globalSdfImageViews;
+        std::vector<VkImageView> globalPsiImageViews;
+        VkSampler globalSdfSampler = VK_NULL_HANDLE;
+        VkBuffer contactRegionBuffer = VK_NULL_HANDLE;
+        VkDeviceSize contactRegionBufferOffset = 0;
+        VkDeviceSize contactRegionBufferSize = 0;
+        VkBuffer indirectDrawBuffer = VK_NULL_HANDLE;
+        VkDeviceSize indirectDrawBufferOffset = 0;
+
         uint64_t displayHash = 0;
 
         bool anyVisible() const {
-            return showHeatOverlay || showFluxVectors || showHeatPalette;
+            return showHeatOverlay || showFluxVectors || showHeatPalette || showContactLevelSet;
         }
 
         bool isValid() const {
@@ -84,7 +101,9 @@ inline uint64_t buildDisplayHash(const HeatDisplayController::Config& config, ui
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showHeatOverlay ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showFluxVectors ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showHeatPalette ? 1u : 0u));
+    HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showContactLevelSet ? 1u : 0u));
     HashBuilder::combinePod(hash, config.fluxVectorScale);
+    HashBuilder::combinePod(hash, config.contactLevelSetRange);
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.authoredActive ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.active ? 1u : 0u));
     HashBuilder::combinePod(hash, config.canonicalToWorldScale);

@@ -16,6 +16,4 @@
 [submodule "ParaMetal/libs/eigen"]
 	path = ParaMetal/libs/eigen
 	url = https://gitlab.com/libeigen/eigen.git
-[submodule "ParaMetal/libs/amgx"]
-	path = ParaMetal/libs/amgx
-	url = https://github.com/NVIDIA/AMGX.git
+

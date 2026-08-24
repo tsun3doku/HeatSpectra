@@ -147,7 +147,7 @@ void GridLabel::createFontAtlas(VulkanDevice& vulkanDevice) {
     stbi_image_free(pixels);
 
     // Create Image with mip levels
-    createImage(vulkanDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+    createImage(vulkanDevice, allocator, texWidth, texHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, fontAtlasImage, fontAtlasMemory,
                 VK_SAMPLE_COUNT_1_BIT, mipLevels);
@@ -672,7 +672,7 @@ void GridLabel::cleanup(VulkanDevice& vulkanDevice) {
     if (fontSampler != VK_NULL_HANDLE) { vkDestroySampler(device, fontSampler, nullptr); fontSampler = VK_NULL_HANDLE; }
     if (fontAtlasView != VK_NULL_HANDLE) { vkDestroyImageView(device, fontAtlasView, nullptr); fontAtlasView = VK_NULL_HANDLE; }
     if (fontAtlasImage != VK_NULL_HANDLE) { vkDestroyImage(device, fontAtlasImage, nullptr); fontAtlasImage = VK_NULL_HANDLE; }
-    if (fontAtlasMemory != VK_NULL_HANDLE) { vkFreeMemory(device, fontAtlasMemory, nullptr); fontAtlasMemory = VK_NULL_HANDLE; }
+    if (fontAtlasMemory != VK_NULL_HANDLE) { allocator.freeImageMemory(fontAtlasMemory); fontAtlasMemory = VK_NULL_HANDLE; }
 
     for (size_t i = 0; i < instanceBuffers.size(); i++) {
         if (instanceBuffers[i] != VK_NULL_HANDLE) {

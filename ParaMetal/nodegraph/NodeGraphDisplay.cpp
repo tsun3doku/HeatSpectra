@@ -28,7 +28,6 @@ std::unordered_set<uint64_t> NodeGraphDisplay::computeDisplayKeys(
             const EvaluatedSocketValue* value = evaluation.outputFor(socketKey);
             const NodeDataBlock* block = (value && value->status == EvaluatedSocketStatus::Value) ? &value->data : nullptr;
 
-
             addDisplayKeys(socketKey, block, packages, payloadRegistry, selectedKeys);
         }
     }
@@ -54,27 +53,8 @@ void NodeGraphDisplay::addDisplayKeys(
 
     if (const RemeshPackage* remeshPkg = packages.findAny<RemeshPackage>(socketKey)) {
         selectedKeys.insert(socketKey);
-        if (remeshPkg->sourceMeshHandle.key != 0) {
-            selectedKeys.insert(remeshPkg->sourceMeshHandle.key);
-        }
-        return;
-    }
-
-    if (block && block->dataType == payloadtypes::HeatModel && payloadRegistry) {
-        NodeDataHandle currentMeshHandle{};
-        payloadRegistry->resolveRemesh(block->payloadHandle, &currentMeshHandle);
-        const RemeshPackage* remeshPackage =
-            packages.findAny<RemeshPackage>(currentMeshHandle.key);
-        const NodeDataHandle sourceModelHandle = remeshPackage
-            ? remeshPackage->sourceMeshHandle
-            : currentMeshHandle;
-        if (sourceModelHandle.key != 0) {
-            selectedKeys.insert(sourceModelHandle.key);
-        }
-        if (currentMeshHandle.key != 0 &&
-            currentMeshHandle.key != sourceModelHandle.key &&
-            packages.findAny<RemeshPackage>(currentMeshHandle.key)) {
-            selectedKeys.insert(currentMeshHandle.key);
+        if (remeshPkg->sourceModelProduct.isValid()) {
+            selectedKeys.insert(remeshPkg->sourceModelProduct.outputSocketKey);
         }
         return;
     }
@@ -86,22 +66,15 @@ void NodeGraphDisplay::addDisplayKeys(
 
     if (const VoronoiPackage* voronoiPkg = packages.findAny<VoronoiPackage>(socketKey)) {
         selectedKeys.insert(socketKey);
-        if (voronoiPkg->modelMeshHandle.key != 0) {
-            selectedKeys.insert(voronoiPkg->modelMeshHandle.key);
+        for (const ProductHandle& handle : voronoiPkg->globalRemeshProducts) {
+            selectedKeys.insert(handle.outputSocketKey);
         }
-        if (voronoiPkg->modelRemeshHandle.key != 0) {
-            selectedKeys.insert(voronoiPkg->modelRemeshHandle.key);
+        for (const ProductHandle& handle : voronoiPkg->globalModelProducts) {
+            selectedKeys.insert(handle.outputSocketKey);
         }
         if (voronoiPkg->pointsPayloadHandle.key != 0) {
             selectedKeys.insert(voronoiPkg->pointsPayloadHandle.key);
         }
-        return;
-    }
-
-    if (const ContactPackage* contactPkg = packages.findAny<ContactPackage>(socketKey)) {
-        selectedKeys.insert(socketKey);
-        selectedKeys.insert(contactPkg->modelARemeshProduct.outputSocketKey);
-        selectedKeys.insert(contactPkg->modelBRemeshProduct.outputSocketKey);
         return;
     }
 
@@ -110,12 +83,27 @@ void NodeGraphDisplay::addDisplayKeys(
         for (const HeatModelPackage& model : heatPkg->models) {
             selectedKeys.insert(model.modelProduct.outputSocketKey);
             selectedKeys.insert(model.remeshProduct.outputSocketKey);
-            selectedKeys.insert(model.voronoiProduct.outputSocketKey);
         }
-        for (const ProductHandle& handle : heatPkg->contactProducts) {
-            selectedKeys.insert(handle.outputSocketKey);
+        if (heatPkg->domainVoronoiProduct.isValid()) {
+            selectedKeys.insert(heatPkg->domainVoronoiProduct.outputSocketKey);
         }
         return;
     }
 
+    // Fallback for non-package authoring nodes (e.g. previewing a HeatModel node directly)
+    if (block && block->dataType == payloadtypes::HeatModel && payloadRegistry) {
+        NodeDataHandle currentMeshHandle{};
+        if (payloadRegistry->resolveRemesh(block->payloadHandle, &currentMeshHandle) &&
+            currentMeshHandle.key != 0) {
+            if (const RemeshPackage* remesh = packages.findAny<RemeshPackage>(currentMeshHandle.key)) {
+                selectedKeys.insert(currentMeshHandle.key);
+                if (remesh->sourceModelProduct.isValid()) {
+                    selectedKeys.insert(remesh->sourceModelProduct.outputSocketKey);
+                }
+            } else {
+                selectedKeys.insert(currentMeshHandle.key);
+            }
+        }
+        return;
+    }
 }

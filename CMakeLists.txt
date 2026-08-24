@@ -32,29 +32,9 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(CUDAToolkit 12.0 REQUIRED)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/libs/pybind11)
 
-set(AMGX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/amgx" CACHE PATH "AMGX source directory")
-set(AMGX_PREBUILT "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/amgx_prebuilt/windows-x64" CACHE PATH "Prebuilt AMGX runtime directory")
-find_library(AMGX_LIBRARY
-    NAMES amgxsh
-    HINTS "${AMGX_PREBUILT}" "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
-    PATH_SUFFIXES Release lib lib/Release
-    REQUIRED)
-
 if(WIN32)
-    find_file(AMGX_RUNTIME
-        NAMES amgxsh.dll
-        HINTS "${AMGX_PREBUILT}" "${AMGX_ROOT}/build-ninja" "${AMGX_ROOT}/build"
-        PATH_SUFFIXES Release bin bin/Release
-        REQUIRED)
-
     set(CUDA_RUNTIME_FILES)
-    foreach(CUDA_RUNTIME_PATTERN IN ITEMS
-        "cudart64_*.dll"
-        "cublas64_*.dll"
-        "cublasLt64_*.dll"
-        "cusparse64_*.dll"
-        "cusolver64_*.dll"
-        "nvJitLink_*.dll")
+    foreach(CUDA_RUNTIME_PATTERN IN ITEMS "cudart64_*.dll")
         file(GLOB CUDA_RUNTIME_MATCHES "${CUDAToolkit_BIN_DIR}/${CUDA_RUNTIME_PATTERN}")
         if(NOT CUDA_RUNTIME_MATCHES)
             message(FATAL_ERROR "Missing CUDA runtime file: ${CUDA_RUNTIME_PATTERN}")
@@ -62,6 +42,7 @@ if(WIN32)
         list(APPEND CUDA_RUNTIME_FILES ${CUDA_RUNTIME_MATCHES})
     endforeach()
 endif()
+
 
 file(GLOB SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/*.cpp")
 file(GLOB HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/*.hpp"
@@ -138,7 +119,6 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${NODEGRAPH_SOURCES} ${NODE
 # Include dir
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal
-    ${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/amgx/include
     ${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/eigen
     ${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/glm
     ${CMAKE_CURRENT_SOURCE_DIR}/ParaMetal/libs/stb
@@ -156,7 +136,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pybind11::embed
     Python3::Python
     CUDA::cudart
-    ${AMGX_LIBRARY}
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -169,13 +148,10 @@ if(WIN32)
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${AMGX_RUNTIME}"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CUDA_RUNTIME_FILES}
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
         COMMAND_EXPAND_LISTS
-        COMMENT "Copying AMGX and CUDA runtime files..."
+        COMMENT "Copying CUDA runtime files..."
     )
 endif()
 

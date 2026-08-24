@@ -4,9 +4,11 @@
 #include "runtime/package/RuntimePackages.hpp"
 #include "runtime/RuntimeProducts.hpp"
 
+#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace render {
 class VoronoiOverlayRenderer;
@@ -29,30 +31,18 @@ public:
         VkDeviceSize occupancyPointBufferOffset = 0;
         uint32_t occupancyPointCount = 0;
 
-        uint64_t bindingKey = 0;
-        uint32_t runtimeModelId = 0;
-        VkBuffer candidateBuffer = VK_NULL_HANDLE;
-        VkDeviceSize candidateBufferOffset = 0;
-
-        VkBufferView supportingHalfedgeView = VK_NULL_HANDLE;
-        VkBufferView supportingAngleView = VK_NULL_HANDLE;
-        VkBufferView halfedgeView = VK_NULL_HANDLE;
-        VkBufferView edgeView = VK_NULL_HANDLE;
-        VkBufferView triangleView = VK_NULL_HANDLE;
-        VkBufferView lengthView = VK_NULL_HANDLE;
-        VkBufferView inputHalfedgeView = VK_NULL_HANDLE;
-        VkBufferView inputEdgeView = VK_NULL_HANDLE;
-        VkBufferView inputTriangleView = VK_NULL_HANDLE;
-        VkBufferView inputLengthView = VK_NULL_HANDLE;
-        size_t intrinsicVertexCount = 0;
-
-        VkBuffer vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceSize vertexBufferOffset = 0;
-        VkBuffer indexBuffer = VK_NULL_HANDLE;
-        VkDeviceSize indexBufferOffset = 0;
-        uint32_t indexCount = 0;
-        glm::mat4 modelMatrix{1.0f};
-        float canonicalToWorldScale = 1.0f;
+        std::vector<uint32_t> modelRuntimeIds;
+        std::vector<VkBuffer> candidateBuffers;
+        std::vector<VkDeviceSize> candidateBufferOffsets;
+        std::vector<std::array<VkBufferView, 10>> modelBufferViews;
+        std::vector<size_t> intrinsicVertexCounts;
+        std::vector<VkBuffer> modelVertexBuffers;
+        std::vector<VkDeviceSize> modelVertexBufferOffsets;
+        std::vector<VkBuffer> modelIndexBuffers;
+        std::vector<VkDeviceSize> modelIndexBufferOffsets;
+        std::vector<uint32_t> modelIndexCounts;
+        std::vector<glm::mat4> modelMatrices;
+        std::vector<float> modelCanonicalToWorldScales;
 
         uint64_t displayHash = 0;
 
@@ -61,11 +51,23 @@ public:
         }
 
         bool isValid() const {
+            const size_t modelCount = modelRuntimeIds.size();
             return candidateNodeCount != 0 &&
                 candidateNodeBuffer != VK_NULL_HANDLE &&
                 seedPositionBuffer != VK_NULL_HANDLE &&
                 candidateNeighborIndicesBuffer != VK_NULL_HANDLE &&
-                runtimeModelId != 0;
+                (!showVoronoi || (modelCount != 0 &&
+                    modelCount == candidateBuffers.size() &&
+                    modelCount == candidateBufferOffsets.size() &&
+                    modelCount == modelBufferViews.size() &&
+                    modelCount == intrinsicVertexCounts.size() &&
+                    modelCount == modelVertexBuffers.size() &&
+                    modelCount == modelVertexBufferOffsets.size() &&
+                    modelCount == modelIndexBuffers.size() &&
+                    modelCount == modelIndexBufferOffsets.size() &&
+                    modelCount == modelIndexCounts.size() &&
+                    modelCount == modelMatrices.size() &&
+                    modelCount == modelCanonicalToWorldScales.size()));
         }
 
     };
@@ -85,8 +87,13 @@ inline uint64_t buildDisplayHash(const VoronoiDisplayController::Config& config,
     uint64_t hash = HashBuilder::start();
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showVoronoi ? 1u : 0u));
     HashBuilder::combinePod(hash, static_cast<uint64_t>(config.showPoints ? 1u : 0u));
-    HashBuilder::combinePod(hash, config.modelMatrix);
-    HashBuilder::combineFloat(hash, config.canonicalToWorldScale);
+    HashBuilder::combine(hash, static_cast<uint64_t>(config.modelRuntimeIds.size()));
+    for (size_t i = 0; i < config.modelRuntimeIds.size(); ++i) {
+        HashBuilder::combine(hash, config.modelRuntimeIds[i]);
+        HashBuilder::combinePod(hash, config.modelMatrices[i]);
+        HashBuilder::combineFloat(hash, config.modelCanonicalToWorldScales[i]);
+        HashBuilder::combine(hash, config.modelIndexCounts[i]);
+    }
     HashBuilder::combine(hash, productDisplayHash);
     return hash;
 }

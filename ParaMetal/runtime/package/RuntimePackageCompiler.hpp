@@ -74,14 +74,7 @@ private:
         units::LengthUnit worldUnit,
         RuntimePackageManager& packages,
         std::vector<std::string>& errors) const;
-    bool compileContactPackage(
-        const NodeGraphNode& node,
-        uint64_t outputSocketKey,
-        const NodeDataBlock& output,
-        const NodePayloadRegistry& payloads,
-        units::LengthUnit worldUnit,
-        RuntimePackageManager& packages,
-        std::vector<std::string>& errors) const;
+
     bool compileHeatPackage(
         const NodeGraphNode& node,
         uint64_t outputSocketKey,

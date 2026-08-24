@@ -10,7 +10,9 @@ struct HeatPreviewSettings {
     bool showHeatOverlay = false;
     bool showFluxVectors = false;
     bool showHeatPalette = false;
+    bool showContactLevelSet = false;
     double fluxVectorScale = 1.0;
+    double contactLevelSetRange = 1.0;
 };
 
 struct HeatSolveNodeParams {

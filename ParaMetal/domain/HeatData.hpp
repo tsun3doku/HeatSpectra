@@ -15,11 +15,11 @@
 //                                                        - This header must not be included in any backend ]
 
 struct HeatData {
-    std::vector<NodeDataHandle> voronoiHandles;
-    std::vector<NodeDataHandle> contactHandles;
+    NodeDataHandle domainVoronoiHandle;
     std::vector<NodeDataHandle> heatModelHandles;
+    uint32_t activeVoronoiCount = 0;
+    uint32_t activeGlobalVoronoiCount = 0;
     float contactThermalConductance = 16000.0f;
     float simulationDuration = 5.0f;
     bool active = false;
-
 };

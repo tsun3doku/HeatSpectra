@@ -8,25 +8,15 @@ class CommandPool;
 
 class VoronoiCandidateCompute {
 public:
-    struct Bindings {
-        VkBuffer vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceSize vertexBufferOffset = 0;
-
-        VkBuffer faceIndexBuffer = VK_NULL_HANDLE;
-        VkDeviceSize faceIndexBufferOffset = 0;
-
-        VkBuffer seedPositionBuffer = VK_NULL_HANDLE;
-        VkDeviceSize seedPositionBufferOffset = 0;
-
-        VkBuffer candidateBuffer = VK_NULL_HANDLE;
-        VkDeviceSize candidateBufferOffset = 0;
-    };
-
     VoronoiCandidateCompute(VulkanDevice& device, CommandPool& commandPool);
     ~VoronoiCandidateCompute();
 
     void initialize();
-    void updateDescriptors(const Bindings& bindings);
+    void updateDescriptors(
+        VkBuffer vertexBuffer, VkDeviceSize vertexBufferOffset,
+        VkBuffer faceIndexBuffer, VkDeviceSize faceIndexBufferOffset,
+        VkBuffer seedPositionBuffer, VkDeviceSize seedPositionBufferOffset,
+        VkBuffer candidateBuffer, VkDeviceSize candidateBufferOffset);
     void dispatch(uint32_t faceCount, uint32_t seedCount);
 
     void cleanupResources();
@@ -42,7 +32,6 @@ private:
     CommandPool& commandPool;
 
     bool initialized = false;
-    Bindings currentBindings{};
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;

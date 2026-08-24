@@ -72,40 +72,39 @@ inline bool computeSurfaceWeights(
     std::vector<glm::dvec3>& gradientWeights) {
     valueWeights.clear();
     gradientWeights.clear();
-    if (sourcePositions.size() < 3 || kernelRadius <= 0.0) {
+    if (sourcePositions.empty() || kernelRadius <= 0.0) {
         return false;
     }
 
-    const double normalLength = glm::length(targetNormal);
-    if (!std::isfinite(normalLength) || normalLength <= 1e-12) {
-        return false;
+    if (sourcePositions.size() < 4) {
+        valueWeights.resize(sourcePositions.size(), 0.0);
+        gradientWeights.resize(sourcePositions.size(), glm::dvec3(0.0));
+        double weightSum = 0.0;
+        for (size_t i = 0; i < sourcePositions.size(); ++i) {
+            const double dist = std::max(glm::length(sourcePositions[i] - targetPosition), 1e-7);
+            const double w = 1.0 / dist;
+            valueWeights[i] = w;
+            weightSum += w;
+        }
+        if (weightSum > 1e-12) {
+            for (double& w : valueWeights) w /= weightSum;
+        }
+        return true;
     }
-    const glm::dvec3 normal = targetNormal / normalLength;
-    glm::dvec3 referenceAxis;
-    if (std::abs(normal.x) <= std::abs(normal.y) && std::abs(normal.x) <= std::abs(normal.z)) {
-        referenceAxis = glm::dvec3(1.0, 0.0, 0.0);
-    } else if (std::abs(normal.y) <= std::abs(normal.z)) {
-        referenceAxis = glm::dvec3(0.0, 1.0, 0.0);
-    } else {
-        referenceAxis = glm::dvec3(0.0, 0.0, 1.0);
-    }
-    const glm::dvec3 tangentU = glm::normalize(glm::cross(normal, referenceAxis));
-    const glm::dvec3 tangentV = glm::cross(normal, tangentU);
 
-    Eigen::MatrixXd basis(sourcePositions.size(), 3);
+    Eigen::MatrixXd basis(sourcePositions.size(), 4);
     Eigen::VectorXd kernelWeights(sourcePositions.size());
     for (size_t index = 0; index < sourcePositions.size(); ++index) {
-        const glm::dvec3 delta = sourcePositions[index] - targetPosition;
-        const double u = glm::dot(delta, tangentU) / kernelRadius;
-        const double v = glm::dot(delta, tangentV) / kernelRadius;
-        basis.row(index) << 1.0, u, v;
-        kernelWeights(index) = wendlandC2(std::sqrt(u * u + v * v));
+        const glm::dvec3 delta = (sourcePositions[index] - targetPosition) / kernelRadius;
+        basis.row(index) << 1.0, delta.x, delta.y, delta.z;
+        kernelWeights(index) = wendlandC2(glm::length(delta));
     }
 
-    std::vector<Eigen::VectorXd> functionals(3, Eigen::VectorXd::Zero(3));
+    std::vector<Eigen::VectorXd> functionals(4, Eigen::VectorXd::Zero(4));
     functionals[0](0) = 1.0;
     functionals[1](1) = 1.0;
     functionals[2](2) = 1.0;
+    functionals[3](3) = 1.0;
     std::vector<Eigen::VectorXd> solvedWeights;
     if (!solveWeights(basis, kernelWeights, functionals, solvedWeights)) {
         return false;
@@ -113,10 +112,26 @@ inline bool computeSurfaceWeights(
 
     valueWeights.resize(sourcePositions.size());
     gradientWeights.resize(sourcePositions.size());
+    double positiveSum = 0.0;
     for (size_t index = 0; index < sourcePositions.size(); ++index) {
-        valueWeights[index] = solvedWeights[0](index);
-        gradientWeights[index] =
-            (solvedWeights[1](index) * tangentU + solvedWeights[2](index) * tangentV) / kernelRadius;
+        const double w = std::max(0.0, solvedWeights[0](index));
+        valueWeights[index] = w;
+        positiveSum += w;
+        gradientWeights[index] = glm::dvec3(
+            solvedWeights[1](index),
+            solvedWeights[2](index),
+            solvedWeights[3](index)) / kernelRadius;
+    }
+
+    if (positiveSum > 1e-12) {
+        for (double& w : valueWeights) {
+            w /= positiveSum;
+        }
+    } else {
+        const double uniform = 1.0 / static_cast<double>(sourcePositions.size());
+        for (double& w : valueWeights) {
+            w = uniform;
+        }
     }
     return true;
 }

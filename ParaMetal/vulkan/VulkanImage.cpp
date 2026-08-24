@@ -7,7 +7,7 @@
 #include "VulkanBuffer.hpp"
 #include <iostream>
 
-VkResult createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+VkResult createImage(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
     VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory, VkSampleCountFlagBits samples, uint32_t mipLevels) {
     image = VK_NULL_HANDLE;
     imageMemory = VK_NULL_HANDLE;
@@ -35,34 +35,49 @@ VkResult createImage(const VulkanDevice& vulkanDevice, uint32_t width, uint32_t 
         return createImageResult;
     }
 
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(vulkanDevice.getDevice(), image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    uint32_t memoryTypeIndex = UINT32_MAX;
-    if (!vulkanDevice.findMemoryType(memRequirements.memoryTypeBits, properties, memoryTypeIndex)) {
+    imageMemory = memoryAllocator.allocateImageMemory(image, properties);
+    if (imageMemory == VK_NULL_HANDLE) {
         vkDestroyImage(vulkanDevice.getDevice(), image, nullptr);
         image = VK_NULL_HANDLE;
-        return VK_ERROR_FEATURE_NOT_PRESENT;
-    }
-    allocInfo.memoryTypeIndex = memoryTypeIndex;
-
-    const VkResult allocateMemoryResult = vkAllocateMemory(vulkanDevice.getDevice(), &allocInfo, nullptr, &imageMemory);
-    if (allocateMemoryResult != VK_SUCCESS) {
-        vkDestroyImage(vulkanDevice.getDevice(), image, nullptr);
-        image = VK_NULL_HANDLE;
-        return allocateMemoryResult;
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
-    const VkResult bindResult = vkBindImageMemory(vulkanDevice.getDevice(), image, imageMemory, 0);
-    if (bindResult != VK_SUCCESS) {
-        vkFreeMemory(vulkanDevice.getDevice(), imageMemory, nullptr);
+    return VK_SUCCESS;
+}
+
+VkResult createImage3D(const VulkanDevice& vulkanDevice, MemoryAllocator& memoryAllocator, uint32_t width, uint32_t height, uint32_t depth, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
+    VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
+    image = VK_NULL_HANDLE;
+    imageMemory = VK_NULL_HANDLE;
+    if (vulkanDevice.getDevice() == VK_NULL_HANDLE || width == 0 || height == 0 || depth == 0) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_3D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = depth;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = format;
+    imageInfo.tiling = tiling;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    const VkResult createImageResult = vkCreateImage(vulkanDevice.getDevice(), &imageInfo, nullptr, &image);
+    if (createImageResult != VK_SUCCESS) {
+        return createImageResult;
+    }
+
+    imageMemory = memoryAllocator.allocateImageMemory(image, properties);
+    if (imageMemory == VK_NULL_HANDLE) {
         vkDestroyImage(vulkanDevice.getDevice(), image, nullptr);
-        imageMemory = VK_NULL_HANDLE;
         image = VK_NULL_HANDLE;
-        return bindResult;
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
     return VK_SUCCESS;
@@ -240,6 +255,26 @@ VkImageView createImageView(const VulkanDevice& vulkanDevice, VkImage image, VkF
     return imageView;
 }
 
+VkResult createImageView3D(const VulkanDevice& vulkanDevice, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView& outImageView) {
+    outImageView = VK_NULL_HANDLE;
+    if (vulkanDevice.getDevice() == VK_NULL_HANDLE || image == VK_NULL_HANDLE) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    return vkCreateImageView(vulkanDevice.getDevice(), &viewInfo, nullptr, &outImageView);
+}
+
 VkImageCreateInfo createImageCreateInfo(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
     VkSampleCountFlagBits samples, uint32_t mipLevels) {
     VkImageCreateInfo imageInfo{};
@@ -316,7 +351,7 @@ VkResult createTextureImage(VulkanDevice& vulkanDevice, MemoryAllocator& memoryA
     stbi_image_free(pixels);
 
     VkResult imageResult = createImage(
-        vulkanDevice, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        vulkanDevice, memoryAllocator, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         textureImage, textureImageMemory, VK_SAMPLE_COUNT_1_BIT, mipLevels);
@@ -372,7 +407,7 @@ VkResult createTextureImage16(VulkanDevice& vulkanDevice, MemoryAllocator& memor
     }
     memcpy(mapped, pixels, static_cast<size_t>(imageSize));
     stbi_image_free(pixels);
-    VkResult result = createImage(vulkanDevice, static_cast<uint32_t>(width), static_cast<uint32_t>(height), VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, VK_SAMPLE_COUNT_1_BIT);
+    VkResult result = createImage(vulkanDevice, memoryAllocator, static_cast<uint32_t>(width), static_cast<uint32_t>(height), VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory, VK_SAMPLE_COUNT_1_BIT);
     if (result == VK_SUCCESS) result = transitionImageLayout(commandPool, textureImage, VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     if (result == VK_SUCCESS) {
         commandPool.copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
@@ -381,7 +416,7 @@ VkResult createTextureImage16(VulkanDevice& vulkanDevice, MemoryAllocator& memor
     memoryAllocator.free(stagingBuffer, stagingOffset);
     if (result != VK_SUCCESS) {
         if (textureImage != VK_NULL_HANDLE) vkDestroyImage(vulkanDevice.getDevice(), textureImage, nullptr);
-        if (textureImageMemory != VK_NULL_HANDLE) vkFreeMemory(vulkanDevice.getDevice(), textureImageMemory, nullptr);
+        if (textureImageMemory != VK_NULL_HANDLE) memoryAllocator.freeImageMemory(textureImageMemory);
         textureImage = VK_NULL_HANDLE;
         textureImageMemory = VK_NULL_HANDLE;
     }

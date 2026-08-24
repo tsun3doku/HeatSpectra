@@ -89,7 +89,10 @@ private:
         }
 
         outConfig = {};
-        outConfig.showVoronoi = package.display.showVoronoi && package.domainType != DomainType::Points;
+        outConfig.showVoronoi = package.display.showVoronoi &&
+            package.domainType == DomainType::Global &&
+            computeProduct->candidateNodeCount != 0 &&
+            computeProduct->candidateNodeBuffer != VK_NULL_HANDLE;
         outConfig.showPoints = package.display.showPoints;
         outConfig.candidateNodeCount = computeProduct->candidateNodeCount;
         outConfig.mappedCandidateNodes = nullptr;
@@ -103,44 +106,44 @@ private:
         outConfig.occupancyPointBufferOffset = computeProduct->occupancyPointBufferOffset;
         outConfig.occupancyPointCount = computeProduct->occupancyPointCount;
         if (outConfig.showVoronoi) {
-            const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.modelProduct);
-            const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(package.remeshProduct);
-            if (!modelProduct) {
-                std::cerr << "[VoronoiDisplayTransport] missing ModelProduct for modelMeshHandle=" << package.modelMeshHandle.key << std::endl;
+            if (package.globalRemeshProducts.size() != computeProduct->globalDisplayCandidateBuffers.size()) {
+                std::cerr << "[VoronoiDisplayTransport] display instance mismatch for socketKey=" << socketKey
+                          << " remeshes=" << package.globalRemeshProducts.size()
+                          << " display=" << computeProduct->globalDisplayCandidateBuffers.size() << std::endl;
                 return false;
             }
-            if (!remeshProduct) {
-                std::cerr << "[VoronoiDisplayTransport] missing RemeshProduct for modelRemeshHandle=" << package.modelRemeshHandle.key << std::endl;
-                return false;
-            }
-            if (modelProduct->runtimeModelId != computeProduct->runtimeModelId) {
-                std::cerr << "[VoronoiDisplayTransport] runtimeModelId mismatch: model=" << modelProduct->runtimeModelId
-                          << " compute=" << computeProduct->runtimeModelId << std::endl;
-                return false;
-            }
+            for (size_t i = 0; i < package.globalRemeshProducts.size(); ++i) {
+                const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(package.globalRemeshProducts[i]);
+                const ModelProduct* modelProduct = products->resolve<ModelProduct>(package.globalModelProducts[i]);
+                if (!remeshProduct || !modelProduct) {
+                    std::cerr << "[VoronoiDisplayTransport] missing remesh/model product for global instance=" << i << std::endl;
+                    return false;
+                }
 
-            outConfig.bindingKey = socketKey;
-            outConfig.runtimeModelId = computeProduct->runtimeModelId;
-            outConfig.candidateBuffer = computeProduct->candidateBuffer;
-            outConfig.candidateBufferOffset = computeProduct->candidateBufferOffset;
-            outConfig.supportingHalfedgeView = remeshProduct->supportingHalfedgeView;
-            outConfig.supportingAngleView = remeshProduct->supportingAngleView;
-            outConfig.halfedgeView = remeshProduct->halfedgeView;
-            outConfig.edgeView = remeshProduct->edgeView;
-            outConfig.triangleView = remeshProduct->triangleView;
-            outConfig.lengthView = remeshProduct->lengthView;
-            outConfig.inputHalfedgeView = remeshProduct->inputHalfedgeView;
-            outConfig.inputEdgeView = remeshProduct->inputEdgeView;
-            outConfig.inputTriangleView = remeshProduct->inputTriangleView;
-            outConfig.inputLengthView = remeshProduct->inputLengthView;
-            outConfig.intrinsicVertexCount = remeshProduct->intrinsicVertexCount;
-            outConfig.vertexBuffer = modelProduct->vertexBuffer;
-            outConfig.vertexBufferOffset = modelProduct->vertexBufferOffset;
-            outConfig.indexBuffer = modelProduct->indexBuffer;
-            outConfig.indexBufferOffset = modelProduct->indexBufferOffset;
-            outConfig.indexCount = modelProduct->indexCount;
-            outConfig.modelMatrix = toMat4(package.localToWorld);
-            outConfig.canonicalToWorldScale = package.canonicalToWorldScale;
+                outConfig.modelRuntimeIds.push_back(remeshProduct->runtimeModelId);
+                outConfig.candidateBuffers.push_back(computeProduct->globalDisplayCandidateBuffers[i]);
+                outConfig.candidateBufferOffsets.push_back(computeProduct->globalDisplayCandidateBufferOffsets[i]);
+                outConfig.modelBufferViews.push_back({
+                    remeshProduct->supportingHalfedgeView,
+                    remeshProduct->supportingAngleView,
+                    remeshProduct->halfedgeView,
+                    remeshProduct->edgeView,
+                    remeshProduct->triangleView,
+                    remeshProduct->lengthView,
+                    remeshProduct->inputHalfedgeView,
+                    remeshProduct->inputEdgeView,
+                    remeshProduct->inputTriangleView,
+                    remeshProduct->inputLengthView,
+                });
+                outConfig.intrinsicVertexCounts.push_back(remeshProduct->intrinsicVertexCount);
+                outConfig.modelVertexBuffers.push_back(modelProduct->vertexBuffer);
+                outConfig.modelVertexBufferOffsets.push_back(modelProduct->vertexBufferOffset);
+                outConfig.modelIndexBuffers.push_back(modelProduct->indexBuffer);
+                outConfig.modelIndexBufferOffsets.push_back(modelProduct->indexBufferOffset);
+                outConfig.modelIndexCounts.push_back(modelProduct->indexCount);
+                outConfig.modelMatrices.push_back(toMat4(package.globalRemeshLocalToWorld[i]));
+                outConfig.modelCanonicalToWorldScales.push_back(package.canonicalToWorldScale);
+            }
         }
         outConfig.displayHash = buildDisplayHash(outConfig, computeProduct->hashes.display);
         return true;

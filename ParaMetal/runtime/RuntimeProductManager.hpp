@@ -59,7 +59,6 @@ private:
     void destroy(RemeshProduct& product);
     void destroy(VoronoiProduct& product);
     void destroy(PointProduct& product);
-    void destroy(ContactProduct& product);
     void destroy(HeatProduct& product);
 
     template <typename ProductT>
@@ -68,7 +67,6 @@ private:
         else if constexpr (std::is_same_v<ProductT, RemeshProduct>) return NodeProductType::Remesh;
         else if constexpr (std::is_same_v<ProductT, VoronoiProduct>) return NodeProductType::Voronoi;
         else if constexpr (std::is_same_v<ProductT, PointProduct>) return NodeProductType::Point;
-        else if constexpr (std::is_same_v<ProductT, ContactProduct>) return NodeProductType::Contact;
         else if constexpr (std::is_same_v<ProductT, HeatProduct>) return NodeProductType::Heat;
         else return NodeProductType::None;
     }
@@ -79,7 +77,6 @@ private:
         else if constexpr (std::is_same_v<ProductT, RemeshProduct>) return "Remesh";
         else if constexpr (std::is_same_v<ProductT, VoronoiProduct>) return "Voronoi";
         else if constexpr (std::is_same_v<ProductT, PointProduct>) return "Point";
-        else if constexpr (std::is_same_v<ProductT, ContactProduct>) return "Contact";
         else if constexpr (std::is_same_v<ProductT, HeatProduct>) return "Heat";
         else return "Unknown";
     }
@@ -119,7 +116,6 @@ private:
         else if constexpr (std::is_same_v<ProductT, RemeshProduct>) return remeshProducts;
         else if constexpr (std::is_same_v<ProductT, VoronoiProduct>) return voronoiProducts;
         else if constexpr (std::is_same_v<ProductT, PointProduct>) return pointProducts;
-        else if constexpr (std::is_same_v<ProductT, ContactProduct>) return contactProducts;
         else return heatProducts;
     }
 
@@ -129,7 +125,6 @@ private:
         else if constexpr (std::is_same_v<ProductT, RemeshProduct>) return remeshProducts;
         else if constexpr (std::is_same_v<ProductT, VoronoiProduct>) return voronoiProducts;
         else if constexpr (std::is_same_v<ProductT, PointProduct>) return pointProducts;
-        else if constexpr (std::is_same_v<ProductT, ContactProduct>) return contactProducts;
         else return heatProducts;
     }
 
@@ -140,7 +135,6 @@ private:
     std::unordered_map<uint64_t, std::vector<RemeshProduct>> remeshProducts;
     std::unordered_map<uint64_t, std::vector<VoronoiProduct>> voronoiProducts;
     std::unordered_map<uint64_t, std::vector<PointProduct>> pointProducts;
-    std::unordered_map<uint64_t, std::vector<ContactProduct>> contactProducts;
     std::unordered_map<uint64_t, std::vector<HeatProduct>> heatProducts;
 
 };

@@ -119,6 +119,7 @@ bool ScreenTextRenderer::createFontAtlas() {
     stbi_image_free(pixels);
     createImage(
         vulkanDevice,
+        allocator,
         static_cast<uint32_t>(width),
         static_cast<uint32_t>(height),
         VK_FORMAT_R8G8B8A8_UNORM,
@@ -328,7 +329,7 @@ void ScreenTextRenderer::cleanup() {
     if (fontSampler != VK_NULL_HANDLE) vkDestroySampler(device, fontSampler, nullptr);
     if (fontAtlasView != VK_NULL_HANDLE) vkDestroyImageView(device, fontAtlasView, nullptr);
     if (fontAtlasImage != VK_NULL_HANDLE) vkDestroyImage(device, fontAtlasImage, nullptr);
-    if (fontAtlasMemory != VK_NULL_HANDLE) vkFreeMemory(device, fontAtlasMemory, nullptr);
+    if (fontAtlasMemory != VK_NULL_HANDLE) allocator.freeImageMemory(fontAtlasMemory);
     for (size_t frame = 0; frame < instanceBuffers.size(); ++frame) {
         if (instanceBuffers[frame] != VK_NULL_HANDLE) {
             allocator.free(instanceBuffers[frame], instanceBufferOffsets[frame]);

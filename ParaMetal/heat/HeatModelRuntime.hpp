@@ -57,11 +57,21 @@ public:
     uint32_t getBoundaryConditionType() const { return boundaryConditionType; }
     const std::vector<uint32_t>& getDirichletNodeIds() const { return boundaryRuntime.getDirichletNodeIds(); }
     const std::vector<uint32_t>& getSurfaceNodeIds() const { return boundaryRuntime.getSurfaceNodeIds(); }
-    const std::vector<float>& getSurfacePatchAreas() const { return boundaryRuntime.getSurfacePatchAreas(); }
+    const std::vector<float>& getSurfaceBoundaryAreas() const { return boundaryRuntime.getSurfaceBoundaryAreas(); }
     uint32_t getDirichletRegionId(uint32_t nodeId) const { return boundaryRuntime.getDirichletRegionId(nodeId); }
     bool getBoundaryRegionTemperatureC(uint32_t regionId, float& temperatureC) const {
         return boundaryRuntime.getRegionTemperatureC(regionId, temperatureC);
     }
+    bool getBoundaryRegionAmbientTemperatureC(uint32_t regionId, float& temperatureC) const {
+        return boundaryRuntime.getRegionAmbientTemperatureC(regionId, temperatureC);
+    }
+    bool getBoundaryRegionHeatFlux(uint32_t regionId, float& heatFlux) const {
+        return boundaryRuntime.getRegionHeatFlux(regionId, heatFlux);
+    }
+    bool getBoundaryRegionHeatTransferCoefficient(uint32_t regionId, float& coefficient) const {
+        return boundaryRuntime.getRegionHeatTransferCoefficient(regionId, coefficient);
+    }
+    float getVolumetricPowerDensity() const { return volumetricPowerDensity; }
 
     size_t getSurfaceVertexCount() const { return surfacePositions.size(); }
 
@@ -83,8 +93,6 @@ public:
         VkDescriptorSetLayout surfaceLayout,
         VkDescriptorSetLayout gradientLayout,
         VkDescriptorPool surfacePool,
-        VkDescriptorSetLayout voronoiLayout,
-        VkDescriptorPool voronoiPool,
         VkBuffer playbackBuffer,
         VkDeviceSize playbackBufferOffset,
         bool forceReallocate = false);
@@ -102,35 +110,12 @@ public:
     const std::vector<glm::vec3>& getSurfaceNormals() const { return surfaceNormals; }
     const std::vector<uint32_t>& getSurfaceTriangleIndices() const { return surfaceTriangleIndices; }
 
-    bool createMaterialBuffer(const std::vector<heat::MaterialNode>& materialNodes);
-    VkBuffer getMaterialBuffer() const { return materialBuffer; }
-    VkDeviceSize getMaterialBufferOffset() const { return materialBufferOffset; }
-
-    void setSimResources(
-        VkBuffer nodeBuffer, VkDeviceSize nodeOffset, uint32_t nodeCount,
-        VkBuffer couplingBuffer, VkDeviceSize couplingOffset, uint32_t couplingCount);
     void setNodePositions(const std::vector<glm::vec3>& nodePositions) { nodeIndex.rebuild(nodePositions); }
     const VoronoiNodeIndex& getNodeIndex() const { return nodeIndex; }
-    void setNodeTopology(
-        std::vector<voronoi::Node> nodes,
-        std::vector<voronoi::NodeCoupling> couplings) {
-        simNodes = std::move(nodes);
-        simNodeCouplings = std::move(couplings);
-    }
-    const std::vector<voronoi::Node>& getNodes() const { return simNodes; }
-    const std::vector<voronoi::NodeCoupling>& getNodeCouplings() const { return simNodeCouplings; }
     void setHistoryBuffer(VkBuffer buffer, VkDeviceSize offset, uint32_t frameCapacity);
 
     void initializePlayback(VulkanDevice& device, MemoryAllocator& allocator, uint32_t frameCapacity);
     HeatSystemPlayback* getPlayback() const { return playback.get(); }
-
-    VkBuffer getSimNodeBuffer() const { return simNodeBuffer; }
-    VkDeviceSize getSimNodeOffset() const { return simNodeOffset; }
-    VkBuffer getSimNodeCouplingBuffer() const { return simNodeCouplingBuffer; }
-    VkDeviceSize getSimNodeCouplingOffset() const { return simNodeCouplingOffset; }
-
-    VkDescriptorSet getVoronoiDescriptorSetA() const { return voronoiDescriptorSetA; }
-    VkDescriptorSet getVoronoiDescriptorSetB() const { return voronoiDescriptorSetB; }
 
     bool ensureSimulationBuffers(uint32_t nodeCount);
     void cleanupSimulationBuffers();
@@ -146,8 +131,8 @@ public:
     void setNodalThermalMasses(std::vector<float> masses) { nodalThermalMasses = std::move(masses); }
 
     void updateHistoryDescriptorOffset(uint32_t displayFrame, VkDeviceSize frameStride, uint32_t currentFrame);
-    bool configureBoundary(const std::vector<uint32_t>& nodeIds, const std::vector<float>& surfacePatchAreas);
-    bool resolveBoundaryContactAreas(const std::vector<float>& coveredAreas);
+    bool configureBoundary(const std::vector<uint32_t>& nodeIds, const std::vector<float>& surfaceBoundaryAreas);
+    bool buildBoundaryBuffers();
     bool configureVolumetricSource(float powerDensity);
 
     bool setRuntimeDirichletTemperatureC(uint32_t regionId, float temperatureC) {
@@ -204,16 +189,7 @@ private:
     VkDescriptorSet surfaceGradientHistorySetA = VK_NULL_HANDLE;
     VkDescriptorSet surfaceGradientHistorySetB = VK_NULL_HANDLE;
 
-    VkBuffer materialBuffer = VK_NULL_HANDLE;
-    VkDeviceSize materialBufferOffset = 0;
-
-    VkBuffer simNodeBuffer = VK_NULL_HANDLE;
-    VkDeviceSize simNodeOffset = 0;
-    VkBuffer simNodeCouplingBuffer = VK_NULL_HANDLE;
-    VkDeviceSize simNodeCouplingOffset = 0;
     VoronoiNodeIndex nodeIndex;
-    std::vector<voronoi::Node> simNodes;
-    std::vector<voronoi::NodeCoupling> simNodeCouplings;
     HeatBoundaryRuntime boundaryRuntime;
     std::vector<float> volumetricPowerDensities;
     bool volumetricPowerDensityDirty = false;
@@ -223,9 +199,6 @@ private:
     VkDeviceSize volumetricPowerDensityStagingBufferOffset = 0;
     void* volumetricPowerDensityStagingMapped = nullptr;
 
-    VkDescriptorSet voronoiDescriptorSetA = VK_NULL_HANDLE;
-    VkDescriptorSet voronoiDescriptorSetB = VK_NULL_HANDLE;
-
     VulkanExternalBuffer tempBufferA;
     VulkanExternalBuffer tempBufferB;
     CudaExternalBuffer cudaTempBufferA;
@@ -234,7 +207,6 @@ private:
     VkDeviceSize historyBufferOffset = 0;
     uint32_t historyBufferFrameCapacity = 0;
     uint32_t simNodeCount = 0;
-    uint32_t simNodeCouplingCount = 0;
     std::vector<float> nodalThermalMasses;
     bool initialized = false;
 

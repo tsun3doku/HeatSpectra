@@ -5,7 +5,6 @@
 #include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "voronoi/VoronoiCandidateCompute.hpp"
-#include "voronoi/VoronoiModelRuntime.hpp"
 
 #include <glm/mat4x4.hpp>
 #include <iostream>
@@ -24,26 +23,6 @@ VoronoiSystem::VoronoiSystem(
 
 VoronoiSystem::~VoronoiSystem() = default;
 
-void VoronoiSystem::setMeshGeometry(
-    const std::vector<glm::vec3>& geometryPositions,
-    const std::vector<uint32_t>& geometryTriangleIndices,
-    const std::vector<voronoi::SurfaceVertex>& surfaceVertices,
-    const std::vector<uint32_t>& surfaceTriangleIndices,
-    uint32_t runtimeModelId,
-    const glm::mat4& meshModelMatrix) {
-    runtime.setMeshGeometry(
-        vulkanDevice,
-        memoryAllocator,
-        commandPool,
-        geometryPositions,
-        geometryTriangleIndices,
-        surfaceVertices,
-        surfaceTriangleIndices,
-        runtimeModelId,
-        meshModelMatrix);
-
-}
-
 void VoronoiSystem::setPointGeometry(
     const std::vector<glm::vec4>& positions,
     const std::array<glm::vec3, 8>& domainCorners) {
@@ -60,6 +39,16 @@ void VoronoiSystem::setSeedPositions(
     const std::vector<glm::vec4>& positions,
     const std::array<glm::vec3, 8>& domainCorners) {
     runtime.setSeedPositions(positions, domainCorners);
+}
+
+void VoronoiSystem::setGlobalGeometry(
+    const std::vector<uint32_t>& runtimeModelIds,
+    const std::vector<std::vector<glm::vec3>>& positions,
+    const std::vector<std::vector<uint32_t>>& triangleIndices,
+    const std::vector<std::vector<glm::vec3>>& surfacePositions,
+    const std::vector<std::vector<uint32_t>>& surfaceTriangleIndices,
+    float sdfPadding) {
+    runtime.setGlobalGeometry(runtimeModelIds, positions, triangleIndices, surfacePositions, surfaceTriangleIndices, sdfPadding);
 }
 
 void VoronoiSystem::clearGeometry() {
@@ -83,12 +72,18 @@ bool VoronoiSystem::ensureConfigured() {
 }
 
 bool VoronoiSystem::rebuildVoronoiRuntime() {
-    if (!voronoiSystemBuildStage->prepareDomainGeometry(
-            runtime, runtime.getCellSize(), runtime.getVoxelResolution())) {
-        std::cerr << "[VoronoiSystem] prepareDomainGeometry returned false" << std::endl;
-        return false;
+    if (runtime.isGlobalDomain()) {
+        if (!voronoiSystemBuildStage->buildGlobalDomain(runtime)) {
+            std::cerr << "[VoronoiSystem] buildGlobalDomain returned false" << std::endl;
+            return false;
+        }
+        voronoiSystemBuildStage->buildGlobalDisplayCandidates(runtime);
+        runtime.markReady();
+        return true;
     }
 
+    runtime.getSeedFlags().assign(runtime.getSeedPositions().size(), 0u);
+    runtime.setVoxelGridBuilt(false);
     runtime.reorderSeeds();
     if (!voronoiSystemBuildStage->buildNodeDomain(runtime, K_NEIGHBORS)) {
         std::cerr << "[VoronoiSystem] buildNodeDomain returned false" << std::endl;
@@ -97,15 +92,6 @@ bool VoronoiSystem::rebuildVoronoiRuntime() {
 
     if (voronoiSystemBuildStage->getCandidateNodeCount() == 0) {
         return false;
-    }
-
-    VoronoiDomainRuntime* domainRuntime = runtime.getDomainRuntime();
-    if (!domainRuntime) return false;
-    if (!domainRuntime->isPointDomain()) {
-        auto* modelRuntime = static_cast<VoronoiModelRuntime*>(domainRuntime);
-        if (!modelRuntime->buildAndStageSurfaceMappings(runtime.getNodeDomain(), runtime.getVoxelGrid())) {
-            return false;
-        }
     }
 
     runtime.markReady();
@@ -117,41 +103,36 @@ void VoronoiSystem::dispatchVoronoiCandidateUpdates() {
         return;
     }
 
-    VoronoiDomainRuntime* domainRuntime = runtime.getDomainRuntime();
-    if (!domainRuntime) {
+    if (!runtime.isGlobalDomain()) {
         return;
     }
 
-    // Point domains have no triangle faces 
-    if (domainRuntime->isPointDomain()) {
+    const auto* candidate = voronoiSystemBuildStage->getCandidate();
+    if (!candidate) {
         return;
     }
 
-    VoronoiModelRuntime* modelRuntime = static_cast<VoronoiModelRuntime*>(domainRuntime);
-    uint32_t faceCount = static_cast<uint32_t>(modelRuntime->getSurfaceTriangleCount());
-    if (modelRuntime->getSurfaceBuffer() == VK_NULL_HANDLE) {
-        return;
-    }
-    if (faceCount == 0) {
-        return;
-    }
-    if (modelRuntime->getCandidateBuffer() == VK_NULL_HANDLE) {
-        return;
-    }
+    const VkBuffer seedPositionBuffer = voronoiSystemBuildStage->getSeedPositionBuffer();
+    const VkDeviceSize seedPositionBufferOffset = voronoiSystemBuildStage->getSeedPositionBufferOffset();
+    const uint32_t seedCount = voronoiSystemBuildStage->getCandidateNodeCount();
 
-    VoronoiCandidateCompute::Bindings bindings{};
-    bindings.vertexBuffer = modelRuntime->getSurfaceBuffer();
-    bindings.vertexBufferOffset = modelRuntime->getSurfaceBufferOffset();
-    bindings.faceIndexBuffer = modelRuntime->getTriangleIndicesBuffer();
-    bindings.faceIndexBufferOffset = modelRuntime->getTriangleIndicesBufferOffset();
-    bindings.seedPositionBuffer = voronoiSystemBuildStage->getSeedPositionBuffer();
-    bindings.seedPositionBufferOffset = voronoiSystemBuildStage->getSeedPositionBufferOffset();
-    bindings.candidateBuffer = modelRuntime->getCandidateBuffer();
-    bindings.candidateBufferOffset = modelRuntime->getCandidateBufferOffset();
+    for (size_t i = 0; i < candidate->getModelCount(); ++i) {
+        if (candidate->getFaceCount(i) == 0 || candidate->getCandidateBuffer(i) == VK_NULL_HANDLE) {
+            continue;
+        }
 
-    voronoiCandidateCompute->updateDescriptors(bindings);
-    voronoiCandidateCompute->dispatch(faceCount, voronoiSystemBuildStage->getCandidateNodeCount());
+        voronoiCandidateCompute->updateDescriptors(
+            candidate->getVertexBuffer(i),
+            candidate->getVertexBufferOffset(i),
+            candidate->getFaceIndexBuffer(i),
+            candidate->getFaceIndexBufferOffset(i),
+            seedPositionBuffer,
+            seedPositionBufferOffset,
+            candidate->getCandidateBuffer(i),
+            candidate->getCandidateBufferOffset(i));
 
+        voronoiCandidateCompute->dispatch(candidate->getFaceCount(i), seedCount);
+    }
 }
 
 void VoronoiSystem::cleanupResources() {

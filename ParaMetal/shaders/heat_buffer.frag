@@ -122,22 +122,22 @@ vec3 heatColorFromTemperature(float temperature) {
     return samplePaletteLut(infernoLut, paletteCoordinate);
 }
 
-float heatContourMask(float temperature) {
-    const float flatFieldTolerance = 1e-4;
-    float pixelGradient = fwidth(temperature);
-    if (pixelGradient <= flatFieldTolerance) {
-        return 1.0;
-    }
-
+float heatContourMask(float temperature, float temperatureGradient) {
     float contourPhase = temperature / HEAT_CONTOUR_SPACING;
     float distanceToContour = abs(fract(contourPhase + 0.5) - 0.5) * HEAT_CONTOUR_SPACING;
-    float contourHalfWidth = max(pixelGradient * 1.5, flatFieldTolerance);
-    return smoothstep(0.0, contourHalfWidth, distanceToContour);
+    
+    // Smoothly fade out contour lines in flat plateaus to avoid divide-by-zero shadow
+    float gradientFactor = smoothstep(0.02, 0.10, temperatureGradient);
+    float contourHalfWidth = 1.6 * max(temperatureGradient, 1e-4);
+    float lineIntensity = (1.0 - smoothstep(0.0, contourHalfWidth, distanceToContour)) * gradientFactor;
+    
+    return 1.0 - lineIntensity;
 }
 
-vec3 heatAlbedo(float temperature) {
+vec3 heatAlbedo(float temperature, float temperatureGradient) {
     vec3 heatColor = heatColorFromTemperature(temperature);
-    return mix(vec3(0.0), heatColor, heatContourMask(temperature));
+    float contourMask = heatContourMask(temperature, temperatureGradient);
+    return mix(vec3(0.0), heatColor, contourMask);
 }
 
 struct WalkResult {
@@ -417,7 +417,9 @@ void main() {
     }
 
     vec2 p = inputChartPoint(triCoords, fragBaryCoord);
-    WalkResult walk = locateIntrinsicTriangle(faceHEs, triCoords, p, p, p, false);
+    vec2 px = p + dFdx(p);
+    vec2 py = p + dFdy(p);
+    WalkResult walk = locateIntrinsicTriangle(faceHEs, triCoords, p, px, py, true);
     if (walk.status != WALK_SUCCESS) {
         writeHeatSurface(errorColor);
         return;
@@ -447,6 +449,21 @@ void main() {
     float temp1 = heatColors.surfacePoints[v1].temperatureC;
     float temp2 = heatColors.surfacePoints[v2].temperatureC;
 
-    float interpolatedTemp = walk.bary.x * temp0 + walk.bary.y * temp1 + walk.bary.z * temp2;
-    writeHeatSurface(heatAlbedo(interpolatedTemp));
+    if (temp0 < -1.0e20 || temp1 < -1.0e20 || temp2 < -1.0e20 || isnan(temp0) || isnan(temp1) || isnan(temp2)) {
+        writeHeatSurface(vec3(1.0, 0.0, 1.0)); // Diagnostic magenta for GMLS failure
+        return;
+    }
+
+    vec3 triTemps = vec3(temp0, temp1, temp2);
+
+    float interpolatedTemp = dot(walk.bary, triTemps);
+
+    vec3 dBaryDx = walk.baryDx - walk.bary;
+    vec3 dBaryDy = walk.baryDy - walk.bary;
+
+    float dTdx = dot(dBaryDx, triTemps);
+    float dTdy = dot(dBaryDy, triTemps);
+    float temperatureGradient = length(vec2(dTdx, dTdy));
+
+    writeHeatSurface(heatAlbedo(interpolatedTemp, temperatureGradient));
 }

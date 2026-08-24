@@ -5,9 +5,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "contact/ContactTypes.hpp"
+#include <glm/glm.hpp>
+
 #include "domain/GeometryData.hpp"
-#include "domain/ContactData.hpp"
 #include "domain/HeatData.hpp"
 #include "domain/RemeshData.hpp"
 #include "domain/VoronoiData.hpp"
@@ -99,14 +99,14 @@ struct VoronoiPackage {
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f
     };
-    DomainType domainType = DomainType::Mesh;
-    NodeDataHandle modelMeshHandle{};
-    NodeDataHandle modelRemeshHandle{};
+    DomainType domainType = DomainType::Points;
     NodeDataHandle pointsPayloadHandle{};
     std::vector<glm::vec4> pointPositions;
     std::array<glm::vec3, 8> pointDomainCorners{};
-    ProductHandle modelProduct{};
-    ProductHandle remeshProduct{};
+    std::vector<NodeDataHandle> globalRemeshHandles;
+    std::vector<ProductHandle> globalRemeshProducts;
+    std::vector<ProductHandle> globalModelProducts;
+    std::vector<std::array<float, 16>> globalRemeshLocalToWorld;
 
     uint64_t computeHash() const { return hashes.simulation; }
     uint64_t displayHash() const { return hashes.display; }
@@ -136,8 +136,13 @@ struct PointPackage {
 struct HeatModelPackage {
     ProductHandle modelProduct{};
     ProductHandle remeshProduct{};
-    ProductHandle voronoiProduct{};
     std::array<float, 16> localToWorld{
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    std::array<float, 16> remeshLocalToWorld{
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
@@ -162,10 +167,12 @@ struct HeatPackage {
         bool showHeatOverlay = false;
         bool showFluxVectors = false;
         bool showHeatPalette = false;
+        bool showContactLevelSet = false;
         float fluxVectorScale = 1.0f;
+        float contactLevelSetRange = 1.0f;
 
         bool anyVisible() const {
-            return showHeatOverlay || showFluxVectors || showHeatPalette;
+            return showHeatOverlay || showFluxVectors || showHeatPalette || showContactLevelSet;
         }
     };
 
@@ -178,44 +185,11 @@ struct HeatPackage {
     DisplaySettings display{};
 
     std::vector<HeatModelPackage> models;
-    std::vector<ProductHandle> contactProducts;
+    NodeDataHandle domainVoronoiHandle{};
+    ProductHandle domainVoronoiProduct{};
     std::unordered_map<uint64_t, SerialTemperatureData> resolvedSerialSources;
 
     uint64_t computeHash() const { return hashes.full; }
     uint64_t displayHash() const { return hashes.display; }
     bool hasValidProduct() const { return productHandle.isValid(); }
-};
-
-struct ContactPackage {
-    struct DisplaySettings {
-        bool showContactLines = false;
-
-        bool anyVisible() const {
-            return showContactLines;
-        }
-    };
-
-    uint64_t computeHash() const { return hashes.simulation; }
-    uint64_t displayHash() const { return hashes.display; }
-    bool hasValidProduct() const { return productHandle.isValid(); }
-
-    HashValues hashes{};
-    ProductHandle productHandle{};
-    ContactData authored;
-    NodeDataHandle contactHandle{};
-    DisplaySettings display{};
-    std::array<float, 16> modelALocalToWorld{
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    std::array<float, 16> modelBLocalToWorld{
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    ProductHandle modelARemeshProduct{};
-    ProductHandle modelBRemeshProduct{};
 };

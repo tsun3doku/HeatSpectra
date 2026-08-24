@@ -62,6 +62,56 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
         outConfig.serialBaudRatesBySourceKey[sourceKey] = data.baudRate;
     }
 
+    const VoronoiProduct* domainProduct = products->resolve<VoronoiProduct>(
+        package.domainVoronoiProduct);
+    if (!domainProduct) {
+        return false;
+    }
+    if (!domainProduct->isGlobalDomain || !domainProduct->isValid()) {
+        return false;
+    }
+
+    HeatDomainRuntime::GlobalThermalDomain& globalDomain = outConfig.domainVoronoiProduct;
+    globalDomain.fragments.reserve(domainProduct->globalFragmentCount);
+    for (uint32_t fragmentId = 0; fragmentId < domainProduct->globalFragmentCount; ++fragmentId) {
+        HeatDomainRuntime::GlobalFragment fragment{};
+        fragment.instanceId = domainProduct->fragmentInstanceIds[fragmentId];
+        fragment.seedId = domainProduct->fragmentSeedIds[fragmentId];
+        fragment.materialId = fragment.instanceId; // Initial default: 1 material per model instance
+        fragment.surfaceBoundaryArea = domainProduct->fragmentSurfaceBoundaryAreas[fragmentId];
+        fragment.volume = domainProduct->fragmentVolumes[fragmentId];
+        globalDomain.fragments.push_back(fragment);
+    }
+    globalDomain.faces.reserve(domainProduct->globalFaceCount);
+    for (uint32_t faceId = 0; faceId < domainProduct->globalFaceCount; ++faceId) {
+        HeatDomainRuntime::GlobalFace face{};
+        face.instanceId = domainProduct->faceInstanceIds[faceId];
+        face.fragmentA = domainProduct->faceFragmentA[faceId];
+        face.fragmentB = domainProduct->faceFragmentB[faceId];
+        face.area = domainProduct->faceAreas[faceId];
+        globalDomain.faces.push_back(face);
+    }
+    globalDomain.cutFaces.reserve(domainProduct->globalCutFaceCount);
+    for (uint32_t cutFaceId = 0; cutFaceId < domainProduct->globalCutFaceCount; ++cutFaceId) {
+        HeatDomainRuntime::GlobalCutFace cutFace{};
+        cutFace.fragmentA = domainProduct->cutFaceFragmentA[cutFaceId];
+        cutFace.fragmentB = domainProduct->cutFaceFragmentB[cutFaceId];
+        cutFace.area = domainProduct->cutFaceAreas[cutFaceId];
+        cutFace.gap = domainProduct->cutFaceGaps[cutFaceId];
+        globalDomain.cutFaces.push_back(cutFace);
+    }
+    globalDomain.instanceFragmentCounts = domainProduct->instanceFragmentCounts;
+    globalDomain.seedPositions.reserve(domainProduct->globalSeedPositions.size());
+    for (const glm::vec4& position : domainProduct->globalSeedPositions) {
+        globalDomain.seedPositions.push_back(glm::vec3(position));
+    }
+    globalDomain.domainCorners = domainProduct->globalDomainCorners[0];
+    globalDomain.sdfGridMin = domainProduct->globalSdfGridMin;
+    globalDomain.sdfGridDim = domainProduct->globalSdfGridDim;
+    globalDomain.sdfCellSize = domainProduct->globalSdfCellSize;
+    globalDomain.sdfValues = domainProduct->globalSdfValues;
+    globalDomain.sdfRuntimeModelIds = domainProduct->globalSdfRuntimeModelIds;
+
     const size_t modelCount = package.models.size();
     outConfig.modelSurfacePositions.reserve(modelCount);
     outConfig.modelSurfaceNormals.reserve(modelCount);
@@ -88,12 +138,8 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
         const HeatModelPackage& model = package.models[i];
         const RemeshProduct* remeshProduct = products->resolve<RemeshProduct>(
             model.remeshProduct);
-        const VoronoiProduct* voronoiProduct = products->resolve<VoronoiProduct>(
-            model.voronoiProduct);
-        if (!remeshProduct || !voronoiProduct ||
-            !voronoiProduct->isValid() ||
-            remeshProduct->runtimeModelId == 0 ||
-            voronoiProduct->runtimeModelId != remeshProduct->runtimeModelId) {
+        if (!remeshProduct ||
+            remeshProduct->runtimeModelId == 0) {
             return false;
         }
 
@@ -113,6 +159,7 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
         outConfig.modelDensity[runtimeModelId] = model.density;
         outConfig.modelSpecificHeat[runtimeModelId] = model.specificHeat;
         outConfig.modelConductivity[runtimeModelId] = model.conductivity;
+        outConfig.modelLocalToWorldByModelId[runtimeModelId] = model.remeshLocalToWorld;
         if (model.robinSourceKey != 0) {
             outConfig.modelRobinSourceKeys[runtimeModelId] = model.robinSourceKey;
         }
@@ -127,35 +174,6 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
         outConfig.inputEdgeViews[i] = remeshProduct->inputEdgeView;
         outConfig.inputTriangleViews[i] = remeshProduct->inputTriangleView;
         outConfig.inputLengthViews[i] = remeshProduct->inputLengthView;
-
-        outConfig.modelSimNodeBufferByModelId[runtimeModelId] = voronoiProduct->nodeBuffer;
-        outConfig.modelSimNodeBufferOffsetByModelId[runtimeModelId] = voronoiProduct->nodeBufferOffset;
-        outConfig.modelSimNodeCouplingBufferByModelId[runtimeModelId] = voronoiProduct->couplingBuffer;
-        outConfig.modelSimNodeCouplingBufferOffsetByModelId[runtimeModelId] = voronoiProduct->couplingBufferOffset;
-        outConfig.simNodeCouplingCounts[runtimeModelId] = voronoiProduct->couplingCount;
-        outConfig.simNodeCounts[runtimeModelId] = voronoiProduct->nodeCount;
-        outConfig.modelNodePositionsByModelId[runtimeModelId] = voronoiProduct->nodePositions;
-        outConfig.modelNodesByModelId[runtimeModelId] = voronoiProduct->nodes;
-        outConfig.modelNodeCouplingsByModelId[runtimeModelId] = voronoiProduct->couplings;
-        outConfig.modelSurfaceNodeIdsByModelId[runtimeModelId] = voronoiProduct->surfaceNodeIds;
-        outConfig.modelSurfacePatchAreasByModelId[runtimeModelId] = voronoiProduct->surfacePatchAreas;
-        outConfig.modelGMLSSurfaceStencilBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceStencilBuffer;
-        outConfig.modelGMLSSurfaceStencilBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceStencilBufferOffset;
-        outConfig.modelGMLSSurfaceWeightBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightBuffer;
-        outConfig.modelGMLSSurfaceWeightBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightBufferOffset;
-        outConfig.modelGMLSSurfaceWeightCountByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceWeightCount;
-        outConfig.modelGMLSSurfaceGradientWeightBufferByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightBuffer;
-        outConfig.modelGMLSSurfaceGradientWeightBufferOffsetByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightBufferOffset;
-        outConfig.modelGMLSSurfaceGradientWeightCountByModelId[runtimeModelId] = voronoiProduct->gmlsSurfaceGradientWeightCount;
-    }
-
-    for (const ProductHandle& contactProduct : package.contactProducts) {
-        const ContactProduct* product = products->resolve<ContactProduct>(contactProduct);
-        if (!product) {
-            return false;
-        }
-
-        outConfig.contactCouplings.push_back(product->coupling);
     }
 
     uint64_t structuralHash = HashBuilder::start();
@@ -163,16 +181,13 @@ bool RuntimeHeatComputeTransport::tryBuildConfig(
     for (const HeatModelPackage& model : package.models) {
         HashBuilder::combine(structuralHash, model.remeshProduct.hashes.geometry);
         HashBuilder::combine(structuralHash, model.modelProduct.hashes.geometry);
-        HashBuilder::combine(structuralHash, model.voronoiProduct.hashes.simulation);
         HashBuilder::combineFloat(structuralHash, model.density);
         HashBuilder::combineFloat(structuralHash, model.specificHeat);
         HashBuilder::combineFloat(structuralHash, model.conductivity);
         HashBuilder::combineFloat(structuralHash, model.initialTemperatureC);
         HashBuilder::combine(structuralHash, model.boundaryConditionType);
     }
-    for (const ProductHandle& handle : package.contactProducts) {
-        HashBuilder::combine(structuralHash, handle.hashes.simulation);
-    }
+    HashBuilder::combine(structuralHash, domainProduct->hashes.geometry);
     HashBuilder::combineFloat(structuralHash, package.authored.contactThermalConductance);
     HashBuilder::combineFloat(structuralHash, package.authored.simulationDuration);
     outConfig.structuralHash = structuralHash;
